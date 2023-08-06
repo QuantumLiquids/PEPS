@@ -16,6 +16,7 @@
 #include "gqmps2/utilities.h"             //CreatPath
 #include "gqpeps/consts.h"              //kPepsPath
 #include "gqpeps/two_dim_tn/tps/tps.h"  //ToTPS()
+#include "gqpeps/basic.h"               //BondDirection, TruncatePara
 
 namespace gqpeps {
 using namespace gqten;
@@ -28,19 +29,6 @@ using HilbertSpaces = std::vector<std::vector<Index<QNT>>>;
 //Inner vector indices correspond to column indices
 //Direction out
 
-enum BondDirection {
-  HORIZONTAL,
-  VERTICAL
-};
-
-struct TruncatePara {
-  size_t D_min;
-  size_t D_max;
-  double trunc_err;
-
-  TruncatePara(size_t d_min, size_t d_max, double trunc_error)
-      : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
-};
 
 /**
  *           3
@@ -128,6 +116,8 @@ class PEPS {
   }
 
   size_t GetMaxBondDimension(void) const;
+  // if the bond dimension of each lambda is the same, except boundary gamma
+  bool IsBondDimensionEven(void) const;
 
   double NearestNeighborSiteProject(
       const GateT &gate,

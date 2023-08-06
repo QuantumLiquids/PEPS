@@ -14,8 +14,8 @@
 
 
 
-#ifndef GQPEPS_VMC_PEPS_CONSTS_H
-#define GQPEPS_VMC_PEPS_CONSTS_H
+#ifndef GQPEPS_CONSTS_H
+#define GQPEPS_CONSTS_H
 
 #include <string>     // string
 #include <vector>     // vector
@@ -34,4 +34,4 @@ const int kEnergyOutputPrecision = 10;
 } /* gqpeps */
 
 
-#endif //GQPEPS_VMC_PEPS_CONSTS_H
+#endif //GQPEPS_CONSTS_H

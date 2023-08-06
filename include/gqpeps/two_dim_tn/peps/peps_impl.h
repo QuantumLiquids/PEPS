@@ -86,6 +86,29 @@ size_t PEPS<TenElemT, QNT>::GetMaxBondDimension(void) const {
 }
 
 template<typename TenElemT, typename QNT>
+bool PEPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
+  size_t d = lambda_vert({1, 0}).GetShape()[0];
+
+  for (size_t row = 1; row < rows_; row++) {
+    for (size_t col = 0; col < cols_; col++) {
+      if (d != lambda_vert({row, col}).GetShape()[0]) {
+        return false;
+      }
+    }
+  }
+
+  for (size_t row = 0; row < rows_; row++) {
+    for (size_t col = 1; col < cols_; col++) {
+      if (d != lambda_horiz({row, col}).GetShape()[0]) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+template<typename TenElemT, typename QNT>
 bool PEPS<TenElemT, QNT>::operator==(const PEPS<TenElemT, QNT> &rhs) const {
   // Check if the number of rows and columns are the same
   if (rows_ != rhs.rows_ || cols_ != rhs.cols_) {
@@ -532,7 +555,7 @@ TPS<TenElemT, QNT> PEPS<TenElemT, QNT>::ToTPS(void) const {
   auto tps = TPS<TenElemT, QNT>(rows_, cols_);
   for (size_t row = 0; row < rows_; row++) {
     for (size_t col = 0; col < cols_; col++) {
-      tps(row, col)->alloc();
+      tps.alloc(row, col);
       const TenT lam_left_sqrt = ElementWiseSqrt(lambda_horiz({row, col}));
       const TenT lam_right_sqrt = ElementWiseSqrt(lambda_horiz({row, col + 1}));
       const TenT lam_up_sqrt = ElementWiseSqrt(lambda_vert({row, col}));

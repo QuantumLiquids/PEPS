@@ -46,6 +46,9 @@ class SimpleUpdateExecutor : public Executor {
                        const PEPST &peps_initial);
 
   void Execute(void) override;
+  const PEPST &GetPEPS(void) const {
+    return peps_;
+  }
   bool DumpResult(std::string path, bool release_mem) {
     return peps_.Dump(path, release_mem);
   }
@@ -65,8 +68,8 @@ class SimpleUpdateExecutor : public Executor {
 
   LocalTenT ham_nn_;
   PEPST peps_;
-  const size_t lx;
-  const size_t ly;
+  const size_t lx_;
+  const size_t ly_;
 
   std::pair<LocalTenT, LocalTenT> evolve_gate_;
 };
@@ -98,8 +101,8 @@ template<typename TenElemT, typename QNT>
 SimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateExecutor(const SimpleUpdatePara &update_para,
                                                           const LocalTenT &ham_nn,
                                                           const PEPST &peps_initial)
-    : Executor(), update_para(update_para), ham_nn_(ham_nn), peps_(peps_initial), lx(peps_initial.Cols()),
-      ly(peps_initial.Rows()) {
+    : Executor(), update_para(update_para), ham_nn_(ham_nn), peps_(peps_initial), lx_(peps_initial.Cols()),
+      ly_(peps_initial.Rows()) {
   TaylorExpMatrix_(update_para.tau, ham_nn);
   SetStatus(gqten::INITED);
 }
@@ -155,8 +158,8 @@ double SimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep(void) {
 #ifdef GQPEPS_TIMING_MODE
   Timer vertical_nn_projection_timer("vertical_nn_projection");
 #endif
-  for (size_t col = 0; col < lx; col++) {
-    for (size_t row = 0; row < ly - 1; row++) {
+  for (size_t col = 0; col < lx_; col++) {
+    for (size_t row = 0; row < ly_ - 1; row++) {
       norm = peps_.NearestNeighborSiteProject(evolve_gate_, {row, col}, VERTICAL, para);
       e0 += -std::log(norm) / update_para.tau;
     }
@@ -165,8 +168,8 @@ double SimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep(void) {
   vertical_nn_projection_timer.PrintElapsed();
   Timer horizontal_nn_projection_timer("horizontal_nn_projection");
 #endif
-  for (size_t col = 0; col < lx - 1; col++) {
-    for (size_t row = 0; row < ly; row++) {
+  for (size_t col = 0; col < lx_ - 1; col++) {
+    for (size_t row = 0; row < ly_; row++) {
       norm = peps_.NearestNeighborSiteProject(evolve_gate_, {row, col}, HORIZONTAL, para);
       e0 += -std::log(norm) / update_para.tau;
     }

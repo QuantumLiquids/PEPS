@@ -51,6 +51,8 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
   ZGQTensor zsp = ZGQTensor({pb_in, pb_out});
   ZGQTensor zsm = ZGQTensor({pb_in, pb_out});
 
+  DGQTensor ham_hei_nn = DGQTensor({pb_in, pb_out, pb_in, pb_out});
+
   void SetUp(void) {
     did({0, 0}) = 1;
     did({1, 1}) = 1;
@@ -58,6 +60,13 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
     dsz({1, 1}) = -0.5;
     dsp({0, 1}) = 1;
     dsm({1, 0}) = 1;
+
+    ham_hei_nn({0, 0, 0, 0}) = 0.25;
+    ham_hei_nn({1, 1, 1, 1}) = 0.25;
+    ham_hei_nn({1, 1, 0, 0}) = -0.25;
+    ham_hei_nn({0, 0, 1, 1}) = -0.25;
+    ham_hei_nn({0, 1, 1, 0}) = 0.5;
+    ham_hei_nn({1, 0, 0, 1}) = 0.5;
 
     zid({0, 0}) = 1;
     zid({1, 1}) = 1;
@@ -81,11 +90,6 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
   peps0.Initial(activates);
 
   SimpleUpdatePara update_para(5, 0.01, 1, 4, 1e-5);
-//  DGQTensor ham_nn({pb_in, pb_out, pb_in, pb_out});
-//  ham_nn({0, 0, 0, 0}) = 0.25;
-//  ham_nn({1, 1, 1, 1}) = 0.25;
-//  ham_nn({1, 1, 0, 0}) = -0.25;
-//  ham_nn({0, 0, 1, 1}) = -0.25;
   DGQTensor ham_nn;
   Contract(&dsz, {}, &dsz, {}, &ham_nn);
 
@@ -95,6 +99,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
 
 TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
   gqten::hp_numeric::SetTensorManipulationThreads(1);
+  gqten::hp_numeric::SetTensorTransposeNumThreads(1);
 
   PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
@@ -108,71 +113,42 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
   peps0.Initial(activates);
 
   SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
-  DGQTensor ham_nn({pb_in, pb_out, pb_in, pb_out});
-  ham_nn({0, 0, 0, 0}) = 0.25;
-  ham_nn({1, 1, 1, 1}) = 0.25;
-  ham_nn({1, 1, 0, 0}) = -0.25;
-  ham_nn({0, 0, 1, 1}) = -0.25;
-  ham_nn({0, 1, 1, 0}) = 0.5;
-  ham_nn({1, 0, 0, 1}) = 0.5;
 
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_nn, peps0);
+  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
   su_exe.Execute();
 
   su_exe.update_para.Dmax = 4;
-  su_exe.Execute();
-
-  su_exe.update_para.Dmax = 8;
   su_exe.update_para.Trunc_err = 1e-6;
+  su_exe.SetStepLenth(0.05);
   su_exe.Execute();
 
-  su_exe.SetStepLenth(0.01);
-  su_exe.update_para.Trunc_err = 1e-8;
-  su_exe.Execute();
+  auto tps4 = su_exe.GetPEPS().ToTPS();
 
-  su_exe.SetStepLenth(0.001);
-  su_exe.update_para.Trunc_err = 1e-10;
-  su_exe.Execute();
+  su_exe.DumpResult("su_update_resultD4", true);
 
-  su_exe.DumpResult("su_update_result", true);
 
+  tps4.Dump("tps_heisenberg_D4");
 }
 
-
-TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergLargeD) {
+TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD8) {
   PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
-  peps0.Load("su_update_result");
+  peps0.Load("su_update_resultD4");
 
   SimpleUpdatePara update_para(10, 0.1, 1, 8, 1e-10);
-  DGQTensor ham_nn({pb_in, pb_out, pb_in, pb_out});
-  ham_nn({0, 0, 0, 0}) = 0.25;
-  ham_nn({1, 1, 1, 1}) = 0.25;
-  ham_nn({1, 1, 0, 0}) = -0.25;
-  ham_nn({0, 0, 1, 1}) = -0.25;
-  ham_nn({0, 1, 1, 0}) = 0.5;
-  ham_nn({1, 0, 0, 1}) = 0.5;
 
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_nn, peps0);
+  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
   su_exe.Execute();
 
   su_exe.DumpResult("su_update_resultD8", true);
 }
 
-
-TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergLargeLargeD) {
+TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
   PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   peps0.Load("su_update_resultD8");
 
   SimpleUpdatePara update_para(10, 0.05, 1, 16, 1e-10);
-  DGQTensor ham_nn({pb_in, pb_out, pb_in, pb_out});
-  ham_nn({0, 0, 0, 0}) = 0.25;
-  ham_nn({1, 1, 1, 1}) = 0.25;
-  ham_nn({1, 1, 0, 0}) = -0.25;
-  ham_nn({0, 0, 1, 1}) = -0.25;
-  ham_nn({0, 1, 1, 0}) = 0.5;
-  ham_nn({1, 0, 0, 1}) = 0.5;
 
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_nn, peps0);
+  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
   su_exe.Execute();
 
   su_exe.DumpResult("su_update_resultD16", true);

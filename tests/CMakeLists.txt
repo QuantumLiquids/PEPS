@@ -179,6 +179,18 @@ add_unittest(test_simple_update
         "test_algorithm/test_simple_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
         )
+# Test vmc-peps
+add_unittest(test_vmc_peps
+        "test_algorithm/test_vmc_peps.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        )
+add_unittest(test_tn2d
+        "test_2d_tn/test_tensornetwork2d.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        )
+
+
+
 #
 ## Test mpi two site update
 #add_mpi_unittest(test_mpi_two_site_update_finite_vmps
