@@ -9,46 +9,28 @@
 #define GQPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
 
 #include "gqten/gqten.h"
-#include "gqpeps/two_dim_tn/tps/tps.h"
-#include "gqpeps/two_dim_tn/tps/tensor_network_2d.h"
+#include "gqpeps/two_dim_tn/tps/split_index_tps.h"      //SplitIndexTPS
+#include "gqpeps/algorithm/vmc_update/tps_sample.h"     //TPSSample
 
 namespace gqpeps {
-using namespace gqten;
 
 template<typename TenElemT, typename QNT>
 class ModelEnergySolver {
-  using TenT = GQTensor<TenElemT, QNT>;
-  using TPST = TPS<TenElemT, QNT>;
+  using SITPS = SplitIndexTPS<TenElemT, QNT>;
  public:
-  ModelEnergySolver(const TPST *tps,
-                    const TensorNetwork2D<TenElemT, QNT> *proj_tn,
-                    const Configuration *config,
-                    std::vector<BMPS<TenElemT, QNT>> *bmps_down_set,
-                    std::vector<BMPS<TenElemT, QNT>> *bmps_up_set,
-                    std::vector<BMPS<TenElemT, QNT>> *bmps_left_set,
-                    std::vector<BMPS<TenElemT, QNT>> *bmps_right_set)
-      : tps_(tps),
-        proj_tn_(proj_tn),
-        config_(config),
-        bmps_down_set_(bmps_down_set),
-        bmps_up_set_(bmps_up_set),
-        bmps_left_set_(bmps_left_set),
-        bmps_right_set_(bmps_right_set) {
-  }
+  ModelEnergySolver(const SITPS *sitps,
+                    TPSSample<TenElemT, QNT> *tps_sample)
+      : split_index_tps_(sitps), tps_sample_(tps_sample) {}
 
-  virtual TenElemT GetEnergy(void);
+  virtual TenElemT CalEnergyAndHoles(
+      TensorNetwork2D<TenElemT, QNT> &hole_res  // the return value
+  ) {}
 
- private:
-  const TPST *tps_;
-  const TensorNetwork2D<TenElemT, QNT> *proj_tn_;
-  const Configuration *config_;
-
-  std::vector<BMPS<TenElemT, QNT>> *bmps_down_set_;
-  std::vector<BMPS<TenElemT, QNT>> *bmps_up_set_;
-  std::vector<BMPS<TenElemT, QNT>> *bmps_left_set_;
-  std::vector<BMPS<TenElemT, QNT>> *bmps_right_set_;
+ protected:
+  const SITPS *split_index_tps_;
+  TPSSample<TenElemT, QNT> *tps_sample_;
 };
 
-}
+}//gqpeps
 
 #endif //GQPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H

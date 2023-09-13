@@ -16,7 +16,7 @@
 #include "gqmps2/utilities.h"             //CreatPath
 #include "gqpeps/consts.h"              //kPepsPath
 #include "gqpeps/two_dim_tn/tps/tps.h"  //ToTPS()
-#include "gqpeps/basic.h"               //BondDirection, TruncatePara
+#include "gqpeps/basic.h"               //BondOrientation, TruncatePara
 
 namespace gqpeps {
 using namespace gqten;
@@ -122,7 +122,7 @@ class PEPS {
   double NearestNeighborSiteProject(
       const GateT &gate,
       const SiteIdx &site,
-      const BondDirection &direction,
+      const BondOrientation &direction,
       const TruncatePara &trunc_para
   );
 

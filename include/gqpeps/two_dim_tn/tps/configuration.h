@@ -15,6 +15,14 @@ namespace gqpeps {
 class Configuration : public DuoMatrix<size_t> {
  public:
 
+  using DuoMatrix<size_t>::DuoMatrix;
+  using DuoMatrix<size_t>::operator();
+  /**
+   * Random generate a configuration
+   *
+   * @param occupancy_num  a vector with length dim, where dim is the dimension of loccal hilbert space
+   *                  occupancy_num[i] indicates how many sites occupy the i-th state.
+   */
   void Random(const std::vector<size_t> &occupancy_num) {
     size_t dim = occupancy_num.size();
     size_t rows = this->rows();
@@ -35,7 +43,7 @@ class Configuration : public DuoMatrix<size_t> {
     std::shuffle(data.begin(), data.end(), g);
 
     for (size_t row = 0; row < rows; row++) {
-      for (size_t col = 0; row < cols; col++) {
+      for (size_t col = 0; col < cols; col++) {
         (*this)({row, col}) = data[row * cols + col];
       }
     }

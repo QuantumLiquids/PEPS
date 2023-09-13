@@ -16,10 +16,10 @@
 #define GQPEPS_VMC_PEPS_TWO_DIM_TN_TPS_TPS_H
 
 #include "gqten/gqten.h"
-#include "gqpeps/two_dim_tn/framework/ten_matrix.h"
-#include "gqmps2/utilities.h"             //CreatPath
-#include "gqpeps/consts.h"              //kTpsPath
-#include "gqpeps/two_dim_tn/tps/tensor_network_2d.h"
+#include "gqpeps/two_dim_tn/framework/ten_matrix.h"     // TenMatrix
+#include "gqmps2/utilities.h"                           // CreatPath
+#include "gqpeps/consts.h"                              // kTpsPath
+#include "gqpeps/algorithm/vmc_update/tensor_network_2d.h"
 #include "gqpeps/two_dim_tn/tps/configuration.h"
 
 namespace gqpeps {
@@ -38,12 +38,18 @@ class TPS : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   TPS(const size_t rows, const size_t cols) : TenMatrix<GQTensor<TenElemT, QNT>>(rows, cols) {}
 
-  TensorNetwork2D<TenElemT, QNT> ProjectToConfiguration(const Configuration &config) const;
+  operator SplitIndexTPS<TenElemT, QNT>() {
+    return SplitIndexTPS<TenElemT, QNT>::SplitIndexTPS(*this);
+  }
+
+  TensorNetwork2D<TenElemT, QNT> Project(const Configuration &config) const;
+
   void UpdateConfigurationTN(const std::vector<SiteIdx> &site_set,
                              const std::vector<size_t> &config,
                              TensorNetwork2D<TenElemT, QNT> &tn2d) const;
 
   size_t GetMaxBondDimension(void) const;
+
   // if the bond dimension of each lambda is the same, except boundary gamma
   bool IsBondDimensionEven(void) const;
 
@@ -60,7 +66,7 @@ class TPS : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   @param tps_path Path to the TPS directory.
   */
-  void Load(const std::string &tps_path = kTpsPath);
+  bool Load(const std::string &tps_path = kTpsPath);
 };
 
 } // gqpeps

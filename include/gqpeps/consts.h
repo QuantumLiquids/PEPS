@@ -29,7 +29,7 @@ const std::string kEnvFileBaseName = "env";
 const std::string kTpsTenBaseName = "tps_ten";
 const std::string kBoundaryMpsTenBaseName = "bmps_ten";
 
-const int kEnergyOutputPrecision = 10;
+const int kEnergyOutputPrecision = 8;
 
 } /* gqpeps */
 

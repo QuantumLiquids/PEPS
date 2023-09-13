@@ -15,7 +15,7 @@
 namespace gqpeps {
 
 template<typename TenElemT, typename QNT>
-TensorNetwork2D<TenElemT, QNT> TPS<TenElemT, QNT>::ProjectToConfiguration(const Configuration &config) const {
+TensorNetwork2D<TenElemT, QNT> TPS<TenElemT, QNT>::Project(const Configuration &config) const {
   const size_t rows = this->rows();
   const size_t cols = this->cols();
   TensorNetwork2D<TenElemT, QNT> tn(rows, cols);
@@ -57,7 +57,7 @@ void TPS<TenElemT, QNT>::UpdateConfigurationTN(const std::vector<SiteIdx> &site_
 
 
   for (size_t i = 0; i < site_set.size(); i++) {
-    const SiteIdx&  site = site_set[i];
+    const SiteIdx &site = site_set[i];
     size_t local_config = config[i];
     tn2d(site).alloc();
     Contract(&(*this)(site), 4, project_tens[local_config], 0, &tn2d(site));
@@ -74,6 +74,7 @@ size_t TPS<TenElemT, QNT>::GetMaxBondDimension(void) const {
       dmax = std::max(dmax, tensor->GetShape()[1]);
     }
   }
+  return dmax;
 }
 
 ///< OBC
@@ -107,14 +108,17 @@ void TPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool release_me
 }
 
 template<typename TenElemT, typename QNT>
-void TPS<TenElemT, QNT>::Load(const std::string &tps_path) {
+bool TPS<TenElemT, QNT>::Load(const std::string &tps_path) {
   std::string file;
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
       file = GenTPSTenName(tps_path, row, col);
-      this->LoadTen(row, col, file);
+      if (!(this->LoadTen(row, col, file))) {
+        return false;
+      };
     }
   }
+  return true;
 }
 
 } // gqpeps

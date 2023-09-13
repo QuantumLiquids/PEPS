@@ -8,7 +8,6 @@
 #ifndef GQPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_IMPL_H
 #define GQPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_IMPL_H
 
-#include "bmps.h"
 
 namespace gqpeps {
 using namespace gqten;
@@ -20,31 +19,36 @@ BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position, const size_t size,
     TenVec<LocalTenT>(size),
     position_(position),
     center_(0),
-    tens_cano_type_(size, MPSTenCanoType::LEFT) {
+    tens_cano_type_(size, MPSTenCanoType::RIGHT) {
   assert(local_hilbert_space.dim() == 1);
   LocalTenT mps_ten = LocalTenT({index0_in_, local_hilbert_space, index0_out_});
   mps_ten({0, 0, 0}) = 1.0;
   for (size_t i = 0; i < size; i++) {
     this->alloc(i);
-    (*this) = mps_ten;
+    (*this)[i] = mps_ten;
   }
 }
+
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> &BMPS<TenElemT, QNT>::operator[](const size_t idx) {
   return DuoVector<LocalTenT>::operator[](idx);
 }
+
 template<typename TenElemT, typename QNT>
 const GQTensor<TenElemT, QNT> &BMPS<TenElemT, QNT>::operator[](const size_t idx) const {
   return DuoVector<LocalTenT>::operator[](idx);
 }
+
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> *&BMPS<TenElemT, QNT>::operator()(const size_t idx) {
   return DuoVector<LocalTenT>::operator()(idx);
 }
+
 template<typename TenElemT, typename QNT>
 const GQTensor<TenElemT, QNT> *BMPS<TenElemT, QNT>::operator()(const size_t idx) const {
   return DuoVector<LocalTenT>::operator()(idx);
 }
+
 template<typename TenElemT, typename QNT>
 void BMPS<TenElemT, QNT>::Centralize(const int target_center) {
   assert(target_center >= 0);
@@ -66,6 +70,7 @@ void BMPS<TenElemT, QNT>::LeftCanonicalize(const size_t stop_idx) {
   }
   for (size_t i = start_idx; i <= stop_idx; ++i) { LeftCanonicalizeTen(i); }
 }
+
 template<typename TenElemT, typename QNT>
 void BMPS<TenElemT, QNT>::RightCanonicalize(const size_t stop_idx) {
   auto mps_tail_idx = this->size() - 1;
@@ -128,8 +133,8 @@ GQTensor<GQTEN_Double, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size
 
 template<typename TenElemT, typename QNT>
 double
-BMPS<TenElemT, QNT>::RightCanonicalizeTrunctate(const size_t site, const GQTEN_Double trunc_err, const size_t Dmin,
-                                                const size_t Dmax) {
+BMPS<TenElemT, QNT>::RightCanonicalizeTrunctate(const size_t site, const size_t Dmin,
+                                                const size_t Dmax, const GQTEN_Double trunc_err) {
 
   GQTensor<GQTEN_Double, QNT> s;
   auto pvt = new LocalTenT;
@@ -150,13 +155,15 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTrunctate(const size_t site, const GQTEN_D
   (*this)(site) = pvt;
 
   LocalTenT temp_ten;
-  Contract(*u, &s, {{1},
+  Contract(&u, &s, {{1},
                     {0}}, &temp_ten);
   auto pnext_ten = new LocalTenT;
   Contract((*this)(site - 1), &temp_ten, {{2},
                                           {0}}, pnext_ten);
   delete (*this)(site - 1);
   (*this)(site - 1) = pnext_ten;
+
+  return actual_trunc_err;
 }
 
 template<typename TenElemT, typename QNT>
@@ -225,86 +232,10 @@ template<typename TenElemT, typename QNT>
 void
 BMPS<TenElemT, QNT>::InplaceMultipleMPO(const BMPS::TransferMPO &mpo,
                                         const size_t Dmin, const size_t Dmax,
+                                        const double trunc_err,
                                         const CompressMPSScheme &scheme) {
-  assert(mpo.size() == this->size());
-  switch (scheme) {
-    case SVD_COMPRESS: {
-      const double trunc_err = 0.0;
-      IndexT idx1;
-      size_t ctrct_mpo_ten_start_idx;
-
-      switch (position_) {
-        case DOWN: {
-          idx1 = InverseIndex(mpo[0]->GetIndex(0));
-          ctrct_mpo_ten_start_idx = 0;
-        }
-        case UP: {
-          idx1 = InverseIndex(mpo.back()->GetIndex(2));
-          ctrct_mpo_ten_start_idx = 2;
-        }
-        case LEFT: {
-          idx1 = InverseIndex(mpo[0]->GetIndex(3));
-          ctrct_mpo_ten_start_idx = 3;
-          break;
-        }
-        case RIGHT: {
-          idx1 = InverseIndex(mpo.back()->GetIndex(1));
-          ctrct_mpo_ten_start_idx = 1;
-          break;
-        }
-        default: {
-          std::cout << "error: no defined boundary MPS position. " << std::endl;
-        }
-      }
-      IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
-      LocalTenT r = IndexCombine(idx1, idx2, IN);
-      r.Transpose({3, 0, 1});
-      for (size_t i = 0; i < this->size(); i++) {
-        LocalTenT tmp1, tmp2;
-        Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
-        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, ctrct_mpo_ten_start_idx, 2, tmp2);
-        if (i < this->size() - 1) {
-          tmp2.Transpose({1, 3, 2, 0});
-          QN mps_div = (*this)[i].Div();
-          (*this)[i].alloc();
-          r = LocalTenT();
-          QR(&tmp2, 2, mps_div, (*this)(i), &r);
-        } else {
-          LocalTenT tmp3({InverseIndex(tmp2.GetIndex(0))});
-          tmp3({0}) = 1.0;
-          (*this)[i].alloc();
-          Contract(&tmp3, 0, &tmp2, 0, (*this)(i));
-        }
-      }
-      for (size_t i = this->size() - 1; i > 0; --i) {
-        RightCanonicalizeTrunctate(i, trunc_err, Dmin, Dmax);
-      }
-      break;
-    }
-    case VARIATION: {
-      switch (position_) {
-        case DOWN: {
-          break;
-        }
-        case UP: {
-          break;
-        }
-        case LEFT: {
-          break;
-        }
-        case RIGHT: {
-
-        }
-        default: {
-
-        }
-      }
-      break;
-    }
-    default: {
-
-    }
-  }
+  auto res = this->MultipleMPO(mpo, Dmin, Dmax, trunc_err, scheme);
+  (*this) = res;
 }
 
 /**
@@ -324,62 +255,66 @@ template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPO(const BMPS::TransferMPO &mpo,
                                  const size_t Dmin, const size_t Dmax,
+                                 const double trunc_err,
                                  const CompressMPSScheme &scheme) const {
   assert(mpo.size() == this->size());
   BMPS<TenElemT, QNT> res(position_, this->size());
   switch (scheme) {
     case SVD_COMPRESS: {
-      const double trunc_err = 0.0;
+      size_t ctrct_mpo_ten_start_idx = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
       IndexT idx1;
-      size_t ctrct_mpo_ten_start_idx;
-
-      switch (position_) {
-        case DOWN: {
-          idx1 = InverseIndex(mpo[0]->GetIndex(0));
-          ctrct_mpo_ten_start_idx = 0;
-        }
-        case UP: {
-          idx1 = InverseIndex(mpo.back()->GetIndex(2));
-          ctrct_mpo_ten_start_idx = 2;
-        }
-        case LEFT: {
-          idx1 = InverseIndex(mpo[0]->GetIndex(3));
-          ctrct_mpo_ten_start_idx = 3;
-          break;
-        }
-        case RIGHT: {
-          idx1 = InverseIndex(mpo.back()->GetIndex(1));
-          ctrct_mpo_ten_start_idx = 1;
-          break;
-        }
-        default: {
-          std::cout << "error: no defined boundary MPS position. " << std::endl;
-        }
+      if (MPOIndex(position_) < 2) {
+        idx1 = InverseIndex(mpo[0]->GetIndex(ctrct_mpo_ten_start_idx));
+      } else {
+        idx1 = InverseIndex(mpo.back()->GetIndex(ctrct_mpo_ten_start_idx));
       }
       IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
-      LocalTenT r = IndexCombine(idx1, idx2, IN);
-      r.Transpose({3, 0, 1});
+      LocalTenT r = IndexCombine<TenElemT, QNT>(idx1, idx2, IN);
+      r.Transpose({2, 0, 1});
       for (size_t i = 0; i < this->size(); i++) {
         LocalTenT tmp1, tmp2;
         Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
-        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, ctrct_mpo_ten_start_idx, 2, tmp2);
+        size_t mpo_idx;
+        if (MPOIndex(position_) < 2) {
+          mpo_idx = i;
+        } else {
+          mpo_idx = this->size() - 1 - i;
+        }
+        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[mpo_idx], 3, ctrct_mpo_ten_start_idx, 2, tmp2);
+        res.alloc(i);
         if (i < this->size() - 1) {
           tmp2.Transpose({1, 3, 2, 0});
-          QN mps_div = (*this)[i].Div();
-          res[i].alloc();
+          QNT mps_div = (*this)[i].Div();
           r = LocalTenT();
           QR(&tmp2, 2, mps_div, res(i), &r);
         } else {
-          LocalTenT tmp3({InverseIndex(tmp2.GetIndex(0))});
+          auto trivial_idx = tmp2.GetIndex(0);
+          LocalTenT tmp3({InverseIndex(trivial_idx)});
           tmp3({0}) = 1.0;
-          res[i].alloc();
-          Contract(&tmp3, 0, &tmp2, 0, res(i));
+          Contract(&tmp3, {0}, &tmp2, {0}, res(i));
+          res(i)->Transpose({0, 2, 1});
         }
       }
-      for (size_t i = res.size() - 1; i > 0; --i) {
-        res.RightCanonicalizeTrunctate(i, trunc_err, Dmin, Dmax);
+#ifndef NDEBUG
+      size_t mpo_remain_idx = static_cast<size_t>(Opposite(position_));
+      for (size_t i = 0; i < this->size(); i++) {
+        size_t mpo_idx;
+        if (MPOIndex(position_) < 2) {
+          mpo_idx = i;
+        } else {
+          mpo_idx = this->size() - 1 - i;
+        }
+        assert(res[i].GetIndex(1) == mpo[mpo_idx]->GetIndex(mpo_remain_idx));
       }
-      break;
+      assert(res[0].GetIndex(0).dim() == 1);
+      assert(res[res.size() - 1].GetIndex(2).dim() == 1);
+#endif
+      for (size_t i = res.size() - 1; i > 0; --i) {
+        res.RightCanonicalizeTrunctate(i, Dmin, Dmax, trunc_err);
+      }
+      assert(res[0].GetIndex(0).dim() == 1);
+      assert(res[res.size() - 1].GetIndex(2).dim() == 1);
+      return res;
     }
     case VARIATION: {
       switch (position_) {
@@ -399,10 +334,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(const BMPS::TransferMPO &mpo,
 
         }
       }
-      break;
-    }
-    default: {
-
+      return res;
     }
   }
 }

@@ -133,32 +133,18 @@ class TenMatrix : public DuoMatrix<TenT> {
 
 
   /**
-   * Extracts a specified column from the TenMatrix as a plain std::vector<TenT*>.
+   * Extracts a specified column from the TenMatrix as a plain std::vector<Tensor*>.
    * @param col Column index to extract.
    * @return std::vector containing the pointers to the tensor elements from the specified column.
    */
-  std::vector<TenT *> get_col(size_t col) const {
-    std::vector<TenT *> result;
-    result.reserve(this->rows());
-    for (size_t row = 0; row < this->rows(); ++row) {
-      result.push_back((*this)(row, col));
-    }
-    return result;
-  }
+  using DuoMatrix<TenT>::get_col;
 
   /**
-   * Extracts a specified rows_ from the TenMatrix as a plain std::vector<TenT*>.
+   * Extracts a specified rows_ from the TenMatrix as a plain std::vector<Tensor*>.
    * @param row Row index to extract.
    * @return std::vector containing the pointers to the tensor elements from the specified rows_.
    */
-  std::vector<TenT *> get_row(size_t row) const {
-    std::vector<TenT *> result;
-    result.reserve(this->cols());
-    for (size_t col = 0; col < this->cols(); ++col) {
-      result.push_back((*this)(row, col));
-    }
-    return result;
-  }
+  using DuoMatrix<TenT>::get_row;
 };
 
 }

@@ -26,7 +26,7 @@ using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
 
 // Test spin systems
 struct TestSimpleUpdateSpinSystem : public testing::Test {
-  size_t Lx = 4; //cols
+  size_t Lx = 6; //cols
   size_t Ly = 4;
 
   U1QN qn0 = U1QN({QNCard("Sz", U1QNVal(0))});

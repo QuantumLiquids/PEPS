@@ -18,8 +18,10 @@
 #define GQPEPS_VMC_PEPS_TWO_DIM_TN_FRAMEWORK_DUOMATRIX_H
 
 #include <vector>     // vector
+#include <array>      // array
 #include <utility>    // move
 #include <cstddef>    // size_t
+#include "gqpeps/basic.h"      //BondOrientation
 
 namespace gqpeps {
 
@@ -215,6 +217,10 @@ class DuoMatrix {
     }
   }
 
+  void has_alloc(const size_t row, const size_t col) {
+    return raw_data_[row][col] != nullptr;
+  }
+
   /**
    * Deallocate all elements.
    */
@@ -236,6 +242,10 @@ class DuoMatrix {
    * Get the number of columns in the DuoMatrix.
    */
   size_t cols(void) const { return (raw_data_.empty() ? 0 : raw_data_[0].size()); }
+
+  size_t length(BondOrientation orientation) const {
+    return (orientation == HORIZONTAL) ? cols() : rows();
+  }
 
   /**
    * Get the number of elements in the DuoMatrix.
@@ -262,10 +272,9 @@ class DuoMatrix {
  * @return std::vector containing the pointers to the elements from the specified column.
  */
   std::vector<ElemT *> get_col(size_t col) const {
-    std::vector<ElemT *> result;
-    result.reserve(rows());
+    std::vector<ElemT *> result(rows(), nullptr);
     for (size_t row = 0; row < rows(); ++row) {
-      result.push_back(raw_data_[row][col]);
+      result[row] = raw_data_[row][col];
     }
     return result;
   }
@@ -275,13 +284,16 @@ class DuoMatrix {
  * @param row Row index to extract.
  * @return std::vector containing the pointers to the elements from the specified rows_.
  */
-  std::vector<ElemT *> get_row(size_t row) const {
-    std::vector<ElemT *> result;
-    result.reserve(cols());
-    for (size_t col = 0; col < cols(); ++col) {
-      result.push_back(raw_data_[row][col]);
+  const std::vector<ElemT *> &get_row(size_t row) const {
+    return raw_data_[row];
+  }
+
+  std::vector<ElemT *> get_slice(size_t num, BondOrientation orient) const {
+    if (orient == HORIZONTAL) {
+      return get_row(num);
+    } else {
+      return get_col(num);
     }
-    return result;
   }
 
  private:

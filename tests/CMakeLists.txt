@@ -118,13 +118,13 @@ macro(add_mpi_unittest
             "${LINK_LIBS}" "${LINK_LIB_FLAGS}"
             )
 
-    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
+#    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
         add_test(
                 NAME ${TEST_NAME}
                 COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} ${PROCESSOR_NUM}
                 $<TARGET_FILE:${TEST_NAME}>)
-    endif ()
+#    endif ()
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
 endmacro()
 
@@ -161,7 +161,7 @@ endmacro()
 #add_unittest(test_site_vec test_site_vec.cc "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "")
 #
 
-## Test 2D tensor networks.
+## Test basis for tensr networks
 # Test DuoVMatrix class
 add_unittest(test_duomatrix test_2d_tn/test_duomatrix.cpp "" "" "" "")
 # Test TenMatrix class
@@ -169,10 +169,17 @@ add_unittest(test_ten_mat
         "test_2d_tn/test_ten_matrix.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
         )
+
+## Test 2D tensor networks.
 add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
         )
+add_unittest(test_tn2d
+        "test_2d_tn/test_tensornetwork2d.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+
 ## Test algorithms
 # Test simple update
 add_unittest(test_simple_update
@@ -184,11 +191,10 @@ add_unittest(test_vmc_peps
         "test_algorithm/test_vmc_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
         )
-add_unittest(test_tn2d
-        "test_2d_tn/test_tensornetwork2d.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
-        )
-
+add_mpi_unittest(test_vmc_peps_mpi
+        "test_algorithm/test_vmc_peps.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "4"
+)
 
 
 #

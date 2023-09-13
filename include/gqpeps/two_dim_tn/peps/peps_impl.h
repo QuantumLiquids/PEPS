@@ -178,7 +178,7 @@ void PEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> &activates) {
 //TODO: check
 template<typename TenElemT, typename QNT>
 double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, const SiteIdx &site,
-                                                       const BondDirection &direction,
+                                                       const BondOrientation &direction,
                                                        const TruncatePara &trunc_para) {
   double norm;
   const size_t row = site[0], col = site[1];
@@ -321,7 +321,7 @@ double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, 
       Contract(lambda_horiz(row, col + 1), tmp_ten + 1, {{0},
                                                          {3}}, tmp_ten + 2);
 
-      TenT q0, r0, q1, r1;
+      Tensor q0, r0, q1, r1;
       QR(tmp_ten + 2, 3, tmp_ten[2].Div(), &q0, &r0);
 
       Contract(lambda_horiz(row + 1, col), {1}, Gamma(row + 1, col), {0}, tmp_ten + 3);
@@ -335,7 +335,7 @@ double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, 
       Contract(tmp_ten + 7, {1, 3}, &gate_ten, {0, 2}, tmp_ten + 8);
       tmp_ten[8].Transpose({0, 2, 1, 3});
 
-      TenT u, vt;
+      Tensor u, vt;
       DTensor s;
       double actual_trunc_err;
       size_t actual_D;
@@ -343,14 +343,14 @@ double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, 
           &actual_D);
       lambda_vert({row + 1, col}) = std::move(s);
       // hand over lambdas from q0, q1, contract u or vt, setting Gammas
-      TenT inv_lambda;
+      Tensor inv_lambda;
       inv_lambda = ElementWiseInv(lambda_vert(site), trunc_para.trunc_err);
       Contract(&inv_lambda, {1}, &q0, {1}, tmp_ten + 9);
       inv_lambda = ElementWiseInv(lambda_horiz(site), trunc_para.trunc_err);
       Contract(&inv_lambda, {1}, tmp_ten + 9, {2}, tmp_ten + 10);
       inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), trunc_para.trunc_err);
       Contract(&inv_lambda, {0}, tmp_ten + 10, {2}, tmp_ten + 11);
-      Gamma({row, col}) = TenT();
+      Gamma({row, col}) = Tensor();
       Contract(tmp_ten + 11, {3}, &u, {0}, Gamma(row, col));
       Gamma(row, col)->Transpose({1, 4, 0, 2, 3});
 
@@ -360,7 +360,7 @@ double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, 
       Contract(&inv_lambda, {0}, tmp_ten + 12, {1}, tmp_ten + 13);
       inv_lambda = ElementWiseInv(lambda_horiz({row + 1, col}), trunc_para.trunc_err);
       Contract(&inv_lambda, {1}, tmp_ten + 13, {2}, tmp_ten + 14);
-      Gamma({row + 1, col}) = TenT();
+      Gamma({row + 1, col}) = Tensor();
       Contract(tmp_ten + 14, {3}, &vt, {1}, Gamma(row + 1, col));
 
        */
@@ -427,7 +427,7 @@ double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, 
       assert(Gamma(row + 1, col)->GetIndex(3) == lambda_vert(row + 1, col)->GetIndex(0));
 
       for (size_t i = 0; i < 15; i++) {
-        assert(!isnan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
+        assert(!std::isnan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
       }
 
 #endif
