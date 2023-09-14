@@ -484,7 +484,7 @@ bool PEPS<TenElemT, QNT>::Dump(const std::string path, bool release_mem) {
   // Dump Gamma, lambda_vert, and lambda_horiz tensors one by one
   for (size_t row = 0; row < rows_; ++row) {
     for (size_t col = 0; col < cols_; ++col) {
-      std::string filename = path + "gamma_ten_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
+      std::string filename = path + "/gamma_ten_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
       if (!Gamma.DumpTen(row, col, filename, release_mem)) {
         std::cout << "Failed to dump tensor from file: " << filename << std::endl;
         return false; // Failed to dump Gamma tensor
@@ -494,7 +494,7 @@ bool PEPS<TenElemT, QNT>::Dump(const std::string path, bool release_mem) {
 
   for (size_t row = 0; row <= rows_; ++row) {
     for (size_t col = 0; col < cols_; ++col) {
-      std::string filename = path + "lam_v_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
+      std::string filename = path + "/lam_v_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
       if (!lambda_vert.DumpTen(row, col, filename, release_mem)) {
         std::cout << "Failed to dump tensor from file: " << filename << std::endl;
         return false; // Failed to dump lambda_vert tensor
@@ -504,7 +504,7 @@ bool PEPS<TenElemT, QNT>::Dump(const std::string path, bool release_mem) {
 
   for (size_t row = 0; row < rows_; ++row) {
     for (size_t col = 0; col <= cols_; ++col) {
-      std::string filename = path + "lam_h_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
+      std::string filename = path + "/lam_h_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
       if (!lambda_horiz.DumpTen(row, col, filename, release_mem)) {
         std::cout << "Failed to dump tensor from file: " << filename << std::endl;
         return false; // Failed to dump lambda_horiz tensor
@@ -520,7 +520,7 @@ bool PEPS<TenElemT, QNT>::Load(const std::string path) {
   // Load Gamma, lambda_vert, and lambda_horiz tensors one by one
   for (size_t row = 0; row < rows_; ++row) {
     for (size_t col = 0; col < cols_; ++col) {
-      std::string filename = path + "gamma_ten_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
+      std::string filename = path + "/gamma_ten_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
       if (!Gamma.LoadTen(row, col, filename)) {
         std::cout << "Failed to load tensor from file: " << filename << std::endl;
         return false; // Failed to dump Gamma tensor
@@ -530,7 +530,7 @@ bool PEPS<TenElemT, QNT>::Load(const std::string path) {
 
   for (size_t row = 0; row <= rows_; ++row) {
     for (size_t col = 0; col < cols_; ++col) {
-      std::string filename = path + "lam_v_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
+      std::string filename = path + "/lam_v_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
       if (!lambda_vert.LoadTen(row, col, filename)) {
         std::cout << "Failed to load tensor from file: " << filename << std::endl;
         return false; // Failed to dump lambda_vert tensor
@@ -540,7 +540,7 @@ bool PEPS<TenElemT, QNT>::Load(const std::string path) {
 
   for (size_t row = 0; row < rows_; ++row) {
     for (size_t col = 0; col <= cols_; ++col) {
-      std::string filename = path + "lam_h_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
+      std::string filename = path + "/lam_h_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
       if (!lambda_horiz.LoadTen(row, col, filename)) {
         std::cout << "Failed to load tensor from file: " << filename << std::endl;
         return false; // Failed to dump lambda_horiz tensor

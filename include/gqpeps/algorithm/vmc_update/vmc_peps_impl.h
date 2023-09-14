@@ -22,7 +22,8 @@ T Mean(const std::vector<T> data) {
     return T(0);
   }
   auto const count = static_cast<T>(data.size());
-  return std::reduce(data.begin(), data.end()) / count;
+//  return std::reduce(data.begin(), data.end()) / count;
+  return std::accumulate(data.begin(), data.end(), T(0)) / count;
 }
 
 template<typename TenElemT, typename QNT>
@@ -158,10 +159,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
+  Timer warm_up_timer("warm_up");
   for (size_t sweep = 0; sweep < optimize_para.mc_warm_up_sweeps; sweep++) {
     MCSweepSequentially_();
   }
-  std::cout << "Warm-up completes." << std::endl;
+  double elasp_time = warm_up_timer.Elapsed();
+  std::cout << "Proc " << world_.rank() << " warm-up completes T = " << elasp_time << "." << std::endl;
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -179,11 +182,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     if (world_.rank() == kMasterProc) {
       double gradient_update_time = grad_update_timer.Elapsed();
       std::cout << "Iter " << std::setw(4) << iter
-                << " Step length = " << std::setw(3) << std::scientific << step_len
-                << " E0 = " << std::setw(13) << std::setprecision(kEnergyOutputPrecision) << std::fixed
+                << "  Step length = " << std::setw(7) << std::scientific << std::setprecision(1) << step_len
+                << "  E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
                 << energy_trajectory_.back()
-                << " +- " << std::setw(3) << std::scientific << energy_error_traj_.back()
-                << " TotT = " << std::setw(8) << std::fixed << gradient_update_time
+                << " +- " << std::setw(10) << std::scientific << std::setprecision(4) << energy_error_traj_.back()
+                << " Grad Norm = " << std::setw(7) << std::scientific << std::setprecision(1) << grad_norm_.back()
+                << "  TotT = " << std::setw(10) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
                 << "\n";
       //should output the magnitude of grad?
     }
