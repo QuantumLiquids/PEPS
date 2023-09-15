@@ -446,6 +446,7 @@ double PEPS<TenElemT, QNT>::NearestNeighborSiteProject(const PEPS::GateT &gate, 
 template<typename TenElemT, typename QNT>
 bool PEPS<TenElemT, QNT>::Dump(const std::string path) const {
   // Dump Gamma, lambda_vert, and lambda_horiz tensors one by one
+  if (!gqmps2::IsPathExist(path)) { gqmps2::CreatPath(path); }
   for (size_t row = 0; row < rows_; ++row) {
     for (size_t col = 0; col < cols_; ++col) {
       std::string filename = path + "gamma_ten_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";
@@ -482,6 +483,7 @@ bool PEPS<TenElemT, QNT>::Dump(const std::string path) const {
 template<typename TenElemT, typename QNT>
 bool PEPS<TenElemT, QNT>::Dump(const std::string path, bool release_mem) {
   // Dump Gamma, lambda_vert, and lambda_horiz tensors one by one
+  if (!gqmps2::IsPathExist(path)) { gqmps2::CreatPath(path); }
   for (size_t row = 0; row < rows_; ++row) {
     for (size_t col = 0; col < cols_; ++col) {
       std::string filename = path + "/gamma_ten_" + std::to_string(row) + "-" + std::to_string(col) + ".gqten";

@@ -12,6 +12,7 @@
 #include "gqten/gqten.h"
 #include "gtest/gtest.h"
 #include "gqpeps/algorithm/simple_update/simple_update.h"
+#include "gqmps2/case_params_parser.h"
 
 using namespace gqten;
 using namespace gqpeps;
@@ -24,10 +25,23 @@ using QNSctVecT = QNSectorVec<U1QN>;
 using DGQTensor = GQTensor<GQTEN_Double, U1QN>;
 using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
 
+using gqmps2::CaseParamsParserBasic;
+
+struct SimpleUpdateParams : public CaseParamsParserBasic {
+  SimpleUpdateParams(const char *f) : CaseParamsParserBasic(f) {
+    Lx = ParseInt("Lx");
+    Ly = ParseInt("Ly");
+  }
+
+  size_t Ly;
+  size_t Lx;
+};
+
+
 // Test spin systems
 struct TestSimpleUpdateSpinSystem : public testing::Test {
-  size_t Lx = 6; //cols
-  size_t Ly = 4;
+  size_t Lx; //cols
+  size_t Ly;
 
   U1QN qn0 = U1QN({QNCard("Sz", U1QNVal(0))});
   IndexT pb_out = IndexT({
@@ -54,6 +68,10 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
   DGQTensor ham_hei_nn = DGQTensor({pb_in, pb_out, pb_in, pb_out});
 
   void SetUp(void) {
+    SimpleUpdateParams params = SimpleUpdateParams("../../tests/test_algorithm/test_params.json");
+    Lx = params.Lx;
+    Ly = params.Ly;
+
     did({0, 0}) = 1;
     did({1, 1}) = 1;
     dsz({0, 0}) = 0.5;
@@ -139,7 +157,10 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD8) {
   auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
   su_exe.Execute();
 
+  auto tps8 = su_exe.GetPEPS().ToTPS();
+
   su_exe.DumpResult("su_update_resultD8", true);
+  tps8.Dump("tps_heisenberg_D8");
 }
 
 TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
@@ -150,6 +171,8 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
 
   auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
   su_exe.Execute();
+  auto tps16 = su_exe.GetPEPS().ToTPS();
 
   su_exe.DumpResult("su_update_resultD16", true);
+  tps16.Dump("tps_heisenberg_D16");
 }

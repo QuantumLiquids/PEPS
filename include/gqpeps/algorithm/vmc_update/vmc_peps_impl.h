@@ -182,12 +182,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     if (world_.rank() == kMasterProc) {
       double gradient_update_time = grad_update_timer.Elapsed();
       std::cout << "Iter " << std::setw(4) << iter
-                << "  Step length = " << std::setw(7) << std::scientific << std::setprecision(1) << step_len
-                << "  E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
+                << "Step length = " << std::setw(9) << std::scientific << std::setprecision(1) << step_len
+                << "E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
                 << energy_trajectory_.back()
-                << " +- " << std::setw(10) << std::scientific << std::setprecision(4) << energy_error_traj_.back()
-                << " Grad Norm = " << std::setw(7) << std::scientific << std::setprecision(1) << grad_norm_.back()
-                << "  TotT = " << std::setw(10) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
+                << "+- " << std::setw(10) << std::scientific << std::setprecision(2) << energy_error_traj_.back()
+                << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
+                << "TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
                 << "\n";
       //should output the magnitude of grad?
     }

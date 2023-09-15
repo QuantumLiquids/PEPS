@@ -1,0 +1,15 @@
+{
+  "CaseParams": {
+    "Ly": 4,
+    "Lx": 6,
+    "D": 4,
+    "Dbmps_min": 4,
+    "Dbmps_max": 8,
+    "MC_samples": 100,
+    "WarmUp": 100,
+    "Continue_from_VMC": false,
+    "StepLengthFirst": 0.1,
+    "StepLengthDecrease": 0.01,
+    "UpdateNum": 5
+  }
+}
