@@ -38,10 +38,6 @@ class TPS : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   TPS(const size_t rows, const size_t cols) : TenMatrix<GQTensor<TenElemT, QNT>>(rows, cols) {}
 
-  operator SplitIndexTPS<TenElemT, QNT>() {
-    return SplitIndexTPS(*this);
-  }
-
   TensorNetwork2D<TenElemT, QNT> Project(const Configuration &config) const;
 
   void UpdateConfigurationTN(const std::vector<SiteIdx> &site_set,

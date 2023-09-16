@@ -24,14 +24,25 @@ struct TPSSample {
   TPSSample(const size_t rows, const size_t cols, const TruncatePara &trun_para) :
       config(rows, cols), tn(rows, cols, trun_para), amplitude(0) {}
 
+  TPSSample(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config, const TruncatePara &trun_para)
+      : config(config),
+        tn(config.rows(), config.cols(), trun_para) {
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config, tn.GetTruncatePara());
+    tn.GrowBMPSForRow(0);
+    tn.GrowFullBTen(RIGHT, 0, 2, true);
+    tn.InitBTen(LEFT, 0);
+    amplitude = tn.Trace({0, 0}, HORIZONTAL);
+  }
+
   /**
    * @note the function doesn't change the truncation error data in tn
    * @param sitps
    * @param occupancy_num
    */
   void RandomInit(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                  const std::vector<size_t> &occupancy_num) {
-    config.Random(occupancy_num);
+                  const std::vector<size_t> &occupancy_num,
+                  const size_t rand_seed) {
+    config.Random(occupancy_num, rand_seed);
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config, tn.GetTruncatePara());
     tn.GrowBMPSForRow(0);
     tn.GrowFullBTen(RIGHT, 0, 2, true);

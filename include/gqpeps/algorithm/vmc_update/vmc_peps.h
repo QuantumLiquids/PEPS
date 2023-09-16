@@ -64,6 +64,11 @@ class VMCPEPSExecutor : public Executor {
                   const SITPST &sitpst_init,
                   const boost::mpi::communicator &world);
 
+  VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
+                  const SITPST &sitpst_init,
+                  const Configuration &warmed_configure,
+                  const boost::mpi::communicator &world);
+
 
   void Execute(void) override;
 
@@ -105,21 +110,24 @@ class VMCPEPSExecutor : public Executor {
 
   std::uniform_real_distribution<double> u_double_;
 
+  SITPST grad_;
+
   std::vector<TenElemT> energy_samples_;
   ///<outside vector indices corresponding to the local hilbert space basis
-  DuoMatrix<std::vector<std::vector<Tensor *> >> gten_samples_;
-  DuoMatrix<std::vector<std::vector<Tensor *> >> g_times_energy_samples_;
+//  DuoMatrix<std::vector<std::vector<Tensor *> >> gten_samples_;
+//  DuoMatrix<std::vector<std::vector<Tensor *> >> g_times_energy_samples_;
 
-  SITPST grad_;
+  SITPST gten_sum_; // the holes
+  SITPST g_times_energy_sum_;
 
   std::vector<TenElemT> energy_trajectory_;
   std::vector<TenElemT> energy_error_traj_;
   std::vector<double> grad_norm_;
 
+  bool warm_up_;
+
   EnergySolver energy_solver_;
 };
-
-
 
 
 }//gqpeps;

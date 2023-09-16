@@ -64,7 +64,7 @@ macro(add_unittest
     target_compile_options(${TEST_NAME}
             PRIVATE ${CFLAGS}
             PRIVATE ${OMP_FLAGS}
-            )
+    )
 
     target_include_directories(${TEST_NAME}
             PRIVATE ${hptt_INCLUDE_DIR}
@@ -89,18 +89,19 @@ macro(add_unittest
     )
 
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
+    # Print the value of INPUT_ARGS
 endmacro()
 
 
 macro(add_mpi_unittest
-        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS PROCESSOR_NUM)
+        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS PROCESSOR_NUM INPUT_ARGS)
     add_executable(${TEST_NAME}
             ${TEST_SRC})
 
     target_compile_options(${TEST_NAME}
             PRIVATE ${CFLAGS}
             PRIVATE ${OMP_FLAGS}
-            )
+    )
     target_include_directories(${TEST_NAME}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${GQTENSOR_HEADER_PATH}
@@ -116,15 +117,17 @@ macro(add_mpi_unittest
             ${MPI_CXX_LINK_FLAGS}
             ${MPI_mpi_LIBRARY}
             "${LINK_LIBS}" "${LINK_LIB_FLAGS}"
-            )
+    )
 
-#    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
+    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
         add_test(
                 NAME ${TEST_NAME}
                 COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} ${PROCESSOR_NUM}
-                $<TARGET_FILE:${TEST_NAME}>)
-#    endif ()
+                $<TARGET_FILE:${TEST_NAME}>
+                ${INPUT_ARGS}
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    endif ()
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
 endmacro()
 
@@ -137,7 +140,7 @@ macro(compile_unittest
     target_compile_options(${TEST_NAME}
             PRIVATE ${CFLAGS}
             PRIVATE ${OMP_FLAGS}
-            )
+    )
     target_include_directories(${TEST_NAME}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${GQTENSOR_HEADER_PATH}
@@ -153,7 +156,7 @@ macro(compile_unittest
             ${MPI_CXX_LINK_FLAGS}
             ${MPI_mpi_LIBRARY}
             "${LINK_LIBS}" "${LINK_LIB_FLAGS}"
-            )
+    )
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
 endmacro()
 
@@ -168,13 +171,13 @@ add_unittest(test_duomatrix test_2d_tn/test_duomatrix.cpp "" "" "" "")
 add_unittest(test_ten_mat
         "test_2d_tn/test_ten_matrix.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
-        )
+)
 
 ## Test 2D tensor networks.
 add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
-        )
+)
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
@@ -184,16 +187,19 @@ add_unittest(test_tn2d
 # Test simple update
 add_unittest(test_simple_update
         "test_algorithm/test_simple_update.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
-        )
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
 # Test vmc-peps
 add_unittest(test_vmc_peps
         "test_algorithm/test_vmc_peps.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
-        )
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
 add_mpi_unittest(test_vmc_peps_mpi
         "test_algorithm/test_vmc_peps.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "4"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "2"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
 

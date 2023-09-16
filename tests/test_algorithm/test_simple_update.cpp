@@ -27,6 +27,8 @@ using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
 
 using gqmps2::CaseParamsParserBasic;
 
+char *params_file;
+
 struct SimpleUpdateParams : public CaseParamsParserBasic {
   SimpleUpdateParams(const char *f) : CaseParamsParserBasic(f) {
     Lx = ParseInt("Lx");
@@ -68,7 +70,7 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
   DGQTensor ham_hei_nn = DGQTensor({pb_in, pb_out, pb_in, pb_out});
 
   void SetUp(void) {
-    SimpleUpdateParams params = SimpleUpdateParams("../../tests/test_algorithm/test_params.json");
+    SimpleUpdateParams params = SimpleUpdateParams(params_file);
     Lx = params.Lx;
     Ly = params.Ly;
 
@@ -175,4 +177,12 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
 
   su_exe.DumpResult("su_update_resultD16", true);
   tps16.Dump("tps_heisenberg_D16");
+}
+
+
+int main(int argc, char *argv[]) {
+  testing::InitGoogleTest(&argc, argv);
+  std::cout << argc << std::endl;
+  params_file = argv[1];
+  return RUN_ALL_TESTS();
 }

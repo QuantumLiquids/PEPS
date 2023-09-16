@@ -8,7 +8,7 @@
 */
 
 
-#define PLAIN_TRANSPOSE 1
+//#define PLAIN_TRANSPOSE 1
 
 #include "gqten/gqten.h"
 #include "gtest/gtest.h"
@@ -30,6 +30,8 @@ using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
 boost::mpi::environment env;
 
 using gqmps2::CaseParamsParserBasic;
+
+char *params_file;
 
 struct VMCUpdateParams : public CaseParamsParserBasic {
   VMCUpdateParams(const char *f) : CaseParamsParserBasic(f) {
@@ -66,7 +68,7 @@ struct VMCUpdateParams : public CaseParamsParserBasic {
 
 // Test spin systems
 struct TestSpinSystemVMCPEPS : public testing::Test {
-  VMCUpdateParams params = VMCUpdateParams("../../tests/test_algorithm/test_params.json");;
+  VMCUpdateParams params = VMCUpdateParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
   size_t N = Lx * Ly;
@@ -135,11 +137,14 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4) {
 
   if (params.Continue_from_VMC) {
     SplitIndexTPS<GQTEN_Double, U1QN> sitps(Ly, Lx);
+    Configuration config(Ly, Lx);
+    config.Load("vmc_tps_heisenbergD" + std::to_string(params.D), world.rank());
     if (!sitps.Load("vmc_tps_heisenbergD" + std::to_string(params.D))) {
       std::cout << "Loading last TPS files is broken." << std::endl;
       exit(-1);
     }
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para, sitps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para,
+                                                              sitps, config,
                                                               world);
   } else {
     TPS<GQTEN_Double, U1QN> tps = TPS<GQTEN_Double, U1QN>(Ly, Lx);
@@ -154,4 +159,12 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4) {
   executor->Execute();
   executor->DumpTenData("vmc_tps_heisenbergD" + std::to_string(params.D));
   delete executor;
+}
+
+
+int main(int argc, char *argv[]) {
+  testing::InitGoogleTest(&argc, argv);
+  std::cout << argc << std::endl;
+  params_file = argv[1];
+  return RUN_ALL_TESTS();
 }

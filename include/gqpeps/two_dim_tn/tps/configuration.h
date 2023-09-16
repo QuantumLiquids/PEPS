@@ -17,13 +17,15 @@ class Configuration : public DuoMatrix<size_t> {
 
   using DuoMatrix<size_t>::DuoMatrix;
   using DuoMatrix<size_t>::operator();
+
   /**
    * Random generate a configuration
    *
    * @param occupancy_num  a vector with length dim, where dim is the dimension of loccal hilbert space
    *                  occupancy_num[i] indicates how many sites occupy the i-th state.
+   * @param seed seed for random number generator
    */
-  void Random(const std::vector<size_t> &occupancy_num) {
+  void Random(const std::vector<size_t> &occupancy_num, size_t seed) {
     size_t dim = occupancy_num.size();
     size_t rows = this->rows();
     size_t cols = this->cols();
@@ -37,7 +39,7 @@ class Configuration : public DuoMatrix<size_t> {
     }
     assert(off_set == data.size());
 
-    std::srand(std::time(nullptr));
+    std::srand(seed);
     std::random_device rd;
     std::mt19937 g(rd());
     std::shuffle(data.begin(), data.end(), g);
@@ -47,6 +49,33 @@ class Configuration : public DuoMatrix<size_t> {
         (*this)({row, col}) = data[row * cols + col];
       }
     }
+  }
+
+  void Dump(const std::string &path, const size_t label) {
+    if (!gqmps2::IsPathExist(path)) { gqmps2::CreatPath(path); }
+    std::string file = path + "/configuration" + std::to_string(label);
+    std::ofstream ofs(file, std::ofstream::binary);
+    for (size_t row = 0; row < this->rows(); row++) {
+      for (size_t col = 0; col < this->cols(); col++) {
+        ofs << (*this)({row, col}) << std::endl;
+      }
+    }
+    ofs << std::endl;
+    ofs.close();
+  }
+
+  bool Load(const std::string &path, const size_t label) {
+    std::string file = path + "/configuration" + std::to_string(label);
+    std::ifstream ifs(file, std::ifstream::binary);
+    if (!ifs) {
+      return false; // Failed to open the file
+    }
+    for (size_t row = 0; row < this->rows(); row++) {
+      for (size_t col = 0; col < this->cols(); col++) {
+        ifs >> (*this)({row, col});
+      }
+    }
+    ifs.close();
   }
 
  private:

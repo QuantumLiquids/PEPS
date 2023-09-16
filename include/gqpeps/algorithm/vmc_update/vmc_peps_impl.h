@@ -96,22 +96,100 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     split_index_tps_(sitpst_init),
     tps_sample_(ly_, lx_, TruncatePara(optimize_para)),
     u_double_(0, 1),
+    grad_(ly_, lx_),
+//    gten_samples_(ly_, lx_),
+//    g_times_energy_samples_(ly_, lx_),
+    gten_sum_(ly_, lx_),
+    g_times_energy_sum_(ly_, lx_),
     energy_solver_(&split_index_tps_, &tps_sample_),
-    gten_samples_(ly_, lx_),
-    g_times_energy_samples_(ly_, lx_),
-    grad_(ly_, lx_) {
-  tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num);
+    warm_up_(false) {
+  random_engine.seed((size_t) std::time(nullptr) + world.rank());
+  tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, world.rank() + std::time(nullptr));
 
   energy_samples_.reserve(optimize_para.mc_samples);
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
       size_t dim = split_index_tps_({row, col}).size();
-      gten_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
-      g_times_energy_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
-      for (size_t i = 0; i < dim; i++) {
-        gten_samples_({row, col})[i].reserve(optimize_para.mc_samples);
-        g_times_energy_samples_({row, col})[i].reserve(optimize_para.mc_samples);
-      }
+
+//      gten_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
+//      g_times_energy_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
+//      for (size_t i = 0; i < dim; i++) {
+//        gten_samples_({row, col})[i].reserve(optimize_para.mc_samples);
+//        g_times_energy_samples_({row, col})[i].reserve(optimize_para.mc_samples);
+//      }
+
+      gten_sum_({row, col}) = std::vector<Tensor>(dim, Tensor(split_index_tps_({row, col})[0].GetIndexes()));
+      g_times_energy_sum_({row, col}) = gten_sum_({row, col});
+    }
+  }
+  for (size_t row = 0; row < ly_; row++)
+    for (size_t col = 0; col < lx_; col++) {
+      size_t dim = split_index_tps_({row, col}).size();
+      grad_({row, col}) = std::vector<Tensor>(dim);
+    }
+
+  energy_trajectory_.reserve(optimize_para.step_lens.size());
+  energy_error_traj_.reserve(optimize_para.step_lens.size());
+  if (world.rank() == kMasterProc)
+    grad_norm_.reserve(optimize_para.step_lens.size());
+
+  std::cout << std::left;  // Set left alignment for the output
+
+  if (world_.rank() == kMasterProc) {
+    std::cout << "\n";
+    std::cout << "=====> VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS <=====" << "\n";
+    std::cout << std::setw(30) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
+    std::cout << std::setw(30) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
+    std::cout << std::setw(30) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
+              << optimize_para.bmps_trunc_para.D_max << "\n";
+    std::cout << std::setw(30) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
+    std::cout << std::setw(30) << "Gradient update times:" << optimize_para.step_lens.size() << "\n";
+
+    std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
+    std::cout << std::setw(40) << "The number of processors (including master):" << world_.size() << "\n";
+    std::cout << std::setw(40) << "The number of threads per processor:" << hp_numeric::GetTensorManipulationThreads()
+              << "\n";
+  }
+
+  this->SetStatus(ExecutorStatus::INITED);
+
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
+                                                              const SITPST &sitpst_init,
+                                                              const Configuration &warmed_config,
+                                                              const boost::mpi::communicator &world) :
+    world_(world),
+    optimize_para(optimize_para),
+    lx_(sitpst_init.cols()),
+    ly_(sitpst_init.rows()),
+    split_index_tps_(sitpst_init),
+    tps_sample_(split_index_tps_, warmed_config, TruncatePara(optimize_para)),
+    u_double_(0, 1),
+    grad_(ly_, lx_),
+//    gten_samples_(ly_, lx_),
+//    g_times_energy_samples_(ly_, lx_),
+    gten_sum_(ly_, lx_),
+    g_times_energy_sum_(ly_, lx_),
+    energy_solver_(&split_index_tps_, &tps_sample_),
+    warm_up_(true) {
+  random_engine.seed((size_t) std::time(nullptr) + world.rank());
+
+  energy_samples_.reserve(optimize_para.mc_samples);
+  for (size_t row = 0; row < ly_; row++) {
+    for (size_t col = 0; col < lx_; col++) {
+      size_t dim = split_index_tps_({row, col}).size();
+
+//      gten_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
+//      g_times_energy_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
+//      for (size_t i = 0; i < dim; i++) {
+//        gten_samples_({row, col})[i].reserve(optimize_para.mc_samples);
+//        g_times_energy_samples_({row, col})[i].reserve(optimize_para.mc_samples);
+//      }
+
+      gten_sum_({row, col}) = std::vector<Tensor>(dim, Tensor(split_index_tps_({row, col})[0].GetIndexes()));
+      g_times_energy_sum_({row, col}) = gten_sum_({row, col});
     }
   }
   for (size_t row = 0; row < ly_; row++)
@@ -159,12 +237,16 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
-  Timer warm_up_timer("warm_up");
-  for (size_t sweep = 0; sweep < optimize_para.mc_warm_up_sweeps; sweep++) {
-    MCSweepSequentially_();
+  if (!warm_up_) {
+    Timer warm_up_timer("warm_up");
+    for (size_t sweep = 0; sweep < optimize_para.mc_warm_up_sweeps; sweep++) {
+      MCSweepSequentially_();
+    }
+    double elasp_time = warm_up_timer.Elapsed();
+    std::cout << "Proc " << std::setw(4) << world_.rank() << " warm-up completes T = " << elasp_time << "s."
+              << std::endl;
+    warm_up_ = true;
   }
-  double elasp_time = warm_up_timer.Elapsed();
-  std::cout << "Proc " << world_.rank() << " warm-up completes T = " << elasp_time << "." << std::endl;
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -189,7 +271,6 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
                 << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
                 << "TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
                 << "\n";
-      //should output the magnitude of grad?
     }
   }
 }
@@ -197,18 +278,27 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ClearEnergyAndHoleSamples_(void) {
   energy_samples_.clear();
+//  for (size_t row = 0; row < ly_; row++) {
+//    for (size_t col = 0; col < lx_; col++) {
+//      const size_t phy_dim = split_index_tps_({row, col}).size();
+//      for (size_t basis = 0; basis < phy_dim; basis++) {
+//        auto &g_sample = gten_samples_({row, col})[basis];
+//        auto &ge_sample = g_times_energy_samples_({row, col})[basis];
+//        for (size_t i = 0; i < g_sample.size(); i++) {
+//          delete g_sample[i];
+//          delete ge_sample[i];
+//        }
+//        g_sample.clear();
+//        ge_sample.clear();
+//      }
+//    }
+//  }
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
-      for (size_t basis = 0; basis < gten_samples_({row, col}).size(); basis++) {
-        auto &g_sample = gten_samples_({row, col})[basis];
-        auto &ge_sample = g_times_energy_samples_({row, col})[basis];
-        for (size_t i = 0; i < g_sample.size(); i++) {
-          delete g_sample[i];
-          delete ge_sample[i];
-        }
-        g_sample.clear();
-        ge_sample.clear();
-      }
+      size_t dim = split_index_tps_({row, col}).size();
+
+      gten_sum_({row, col}) = std::vector<Tensor>(dim, Tensor(split_index_tps_({row, col})[0].GetIndexes()));
+      g_times_energy_sum_({row, col}) = gten_sum_({row, col});
     }
   }
 }
@@ -222,11 +312,15 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergyAndHols_(void) {
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
       size_t basis = tps_sample_.config({row, col});
-      Tensor *g_ten = new Tensor(), *gten_times_energy = new Tensor();
-      *g_ten = inv_psi * holes({row, col});
-      *gten_times_energy = energy_loc * (*g_ten);
-      gten_samples_({row, col})[basis].push_back(g_ten);
-      g_times_energy_samples_({row, col})[basis].push_back(gten_times_energy);
+//      Tensor *g_ten = new Tensor(), *gten_times_energy = new Tensor();
+//      *g_ten = inv_psi * holes({row, col});
+//      *gten_times_energy = energy_loc * (*g_ten);
+//      gten_samples_({row, col})[basis].push_back(g_ten);
+//      g_times_energy_samples_({row, col})[basis].push_back(gten_times_energy);
+      Tensor gten = inv_psi * holes({row, col});
+      gten_sum_({row, col})[basis] += gten;
+      g_times_energy_sum_({row, col})[basis] += energy_loc * gten;
+      //? when samples become large, does the summation reliable as the small number are added to large number.
     }
   }
 }
@@ -253,14 +347,15 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
     for (size_t col = 0; col < lx_; col++) {
       const size_t phy_dim = grad_({row, col}).size();
       for (size_t compt = 0; compt < phy_dim; compt++) {
-        if (g_times_energy_samples_({row, col})[compt].size() == 0) {
-          grad_({row, col})[compt] = Tensor(split_index_tps_({row, col})[compt].GetIndexes());
-        } else {
-          grad_({row, col})[compt] =
-              Mean(g_times_energy_samples_({row, col})[compt], sample_num) +
-              (-energy) * Mean(gten_samples_({row, col})[compt], sample_num);
-        }
-
+//        if (g_times_energy_samples_({row, col})[compt].size() == 0) {
+//          grad_({row, col})[compt] = Tensor(split_index_tps_({row, col})[compt].GetIndexes());
+//        } else {
+//          grad_({row, col})[compt] =
+//              Mean(g_times_energy_samples_({row, col})[compt], sample_num) +
+//              (-energy) * Mean(gten_samples_({row, col})[compt], sample_num);
+//        }
+        grad_({row, col})[compt] = g_times_energy_sum_({row, col})[compt] * (1.0 / sample_num)
+                                   + (-energy) * gten_sum_({row, col})[compt] * (1.0 / sample_num);
       }
     }
   }
@@ -353,8 +448,10 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpTenData(const std::string &tps_path, const bool release_mem) {
-  if (world_.rank() == kMasterProc)
+  if (world_.rank() == kMasterProc) {
     split_index_tps_.Dump(tps_path, release_mem);
+  }
+  tps_sample_.config.Dump(tps_path, world_.rank());
 }
 
 }//gqpeps
