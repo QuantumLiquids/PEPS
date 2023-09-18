@@ -86,7 +86,7 @@ class VMCPEPSExecutor : public Executor {
 
   void Measure_(void);
 
-  void MCSweepSequentially_(void);
+  size_t MCSweepSequentially_(void);
 
   void MCUpdateNNSite_(const SiteIdx &site_a, BondOrientation dir);
 
@@ -97,7 +97,7 @@ class VMCPEPSExecutor : public Executor {
   //return the grad;
   SITPST GatherStatisticEnergyAndGrad_(void);
 
-  void GradUpdateTPS_(const SITPST &grad, const double step_len);
+  void StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
 
   boost::mpi::communicator world_;
 

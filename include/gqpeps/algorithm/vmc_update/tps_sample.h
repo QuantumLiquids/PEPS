@@ -55,14 +55,15 @@ struct TPSSample {
   }
 
 
-  void MCSequentiallySweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                           std::uniform_real_distribution<double> &u_double) {
+  size_t MCSequentiallySweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
+                             std::uniform_real_distribution<double> &u_double) {
+    size_t accept_num = 0;
     tn.GenerateBMPSApproach(UP);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 2, true);
       for (size_t col = 0; col < tn.cols() - 1; col++) {
-        ExchangeUpdate({row, col}, {row, col + 1}, HORIZONTAL, sitps, u_double);
+        accept_num += ExchangeUpdate({row, col}, {row, col + 1}, HORIZONTAL, sitps, u_double);
         if (col < tn.cols() - 2) {
           tn.BTenMoveStep(RIGHT);
         }
@@ -80,7 +81,7 @@ struct TPSSample {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 2, true);
       for (size_t row = 0; row < tn.rows() - 1; row++) {
-        ExchangeUpdate({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
+        accept_num += ExchangeUpdate({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
         if (row < tn.rows() - 2) {
           tn.BTenMoveStep(DOWN);
         }
@@ -91,6 +92,7 @@ struct TPSSample {
     }
 
     tn.DeleteInnerBMPS(UP);
+    return accept_num;
   }
 
   bool ExchangeUpdate(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,

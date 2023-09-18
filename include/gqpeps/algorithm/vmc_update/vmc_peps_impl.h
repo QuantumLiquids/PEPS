@@ -251,15 +251,18 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
+  size_t bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
   for (size_t iter = 0; iter < optimize_para.step_lens.size(); iter++) {
     Timer grad_update_timer("gradient_update");
     double step_len = optimize_para.step_lens[iter];
+    size_t accept_num = 0;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-      MCSweepSequentially_();
+      accept_num += MCSweepSequentially_();
       SampleEnergyAndHols_();
     }
+    double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
-    GradUpdateTPS_(grad_, step_len);
+    StochGradUpdateTPS_(grad_, step_len);
     ClearEnergyAndHoleSamples_();
     if (world_.rank() == kMasterProc) {
       double gradient_update_time = grad_update_timer.Elapsed();
@@ -269,6 +272,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
                 << energy_trajectory_.back()
                 << "+- " << std::setw(10) << std::scientific << std::setprecision(2) << energy_error_traj_.back()
                 << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
+                << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << accept_rate
                 << "TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
                 << "\n";
     }
@@ -385,10 +389,20 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
   return grad_;
 }
 
+/**
+ * Stochastic gradient descent update peps
+ *
+ * @tparam TenElemT
+ * @tparam QNT
+ * @tparam EnergySolver
+ * @param grad
+ * @param step_len
+ */
 template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
-                                                                  const double step_len) {
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
+                                                                       double step_len) {
   if (world_.rank() == kMasterProc) {
+    step_len *= u_double_(random_engine);
     for (size_t row = 0; row < ly_; row++)
       for (size_t col = 0; col < lx_; col++) {
         const size_t phy_dim = grad_({row, col}).size();
@@ -408,6 +422,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GradUpdateTPS_(const VMCPEPSE
       for (size_t col = 0; col < lx_; col++) {
         const size_t phy_dim = grad_({row, col}).size();
         for (size_t compt = 0; compt < phy_dim; compt++) {
+          split_index_tps_({row, col})[compt] = Tensor();
           RecvBroadCastGQTensor(world_, split_index_tps_({row, col})[compt], kMasterProc);
         }
       }
@@ -415,8 +430,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GradUpdateTPS_(const VMCPEPSE
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweepSequentially_(void) {
-  tps_sample_.MCSequentiallySweep(split_index_tps_, u_double_);
+size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweepSequentially_(void) {
+  return tps_sample_.MCSequentiallySweep(split_index_tps_, u_double_);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -451,6 +466,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpTenData(const std::string
   if (world_.rank() == kMasterProc) {
     split_index_tps_.Dump(tps_path, release_mem);
   }
+  world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
   tps_sample_.config.Dump(tps_path, world_.rank());
 }
 

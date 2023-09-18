@@ -74,15 +74,18 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   size_t N = Lx * Ly;
 
   U1QN qn0 = U1QN({QNCard("Sz", U1QNVal(0))});
+#ifdef U1SYM
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
                          GQTenIndexDirType::OUT
   );
-//  IndexT pb_out = IndexT({
-//                             QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
-//                         GQTenIndexDirType::OUT
-//  );
+#else
+  IndexT pb_out = IndexT({
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         GQTenIndexDirType::OUT
+  );
+#endif
   IndexT pb_in = InverseIndex(pb_out);
 
   VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
