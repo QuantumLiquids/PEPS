@@ -51,6 +51,11 @@ class Configuration : public DuoMatrix<size_t> {
     }
   }
 
+  /**
+   *
+   * @param path
+   * @param label e.g. the MPI rank
+   */
   void Dump(const std::string &path, const size_t label) {
     if (!gqmps2::IsPathExist(path)) { gqmps2::CreatPath(path); }
     std::string file = path + "/configuration" + std::to_string(label);

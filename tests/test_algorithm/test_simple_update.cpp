@@ -101,6 +101,9 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
 };
 
 TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
+  gqten::hp_numeric::SetTensorManipulationThreads(1);
+  gqten::hp_numeric::SetTensorTransposeNumThreads(1);
+
   PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
 
@@ -121,9 +124,6 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
 }
 
 TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
-  gqten::hp_numeric::SetTensorManipulationThreads(1);
-  gqten::hp_numeric::SetTensorTransposeNumThreads(1);
-
   PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   size_t sz_int = 0;

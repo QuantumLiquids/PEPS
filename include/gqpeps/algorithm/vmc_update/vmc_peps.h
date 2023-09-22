@@ -26,7 +26,37 @@ const size_t kMasterProc = 0;
 
 std::default_random_engine random_engine;
 
+enum WAVEFUNCTION_UPDATE_SCHEME {
+  StochasticGradient,
+  StochasticReconfiguration
+};
+
 struct VMCOptimizePara {
+  VMCOptimizePara(TruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
+                  const std::vector<size_t> &occupancy,
+                  const std::vector<double> &step_lens,
+                  const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
+                  const std::string wavefunction_path = kTpsPath) :
+      bmps_trunc_para(trunc_para), mc_samples(samples),
+      mc_warm_up_sweeps(warm_up_sweeps),
+      occupancy_num(occupancy),
+      step_lens(step_lens),
+      update_scheme(update_scheme),
+      wavefunction_path(wavefunction_path) {}
+
+  VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax,
+                  size_t samples, size_t warm_up_sweeps,
+                  const std::vector<size_t> &occupancy,
+                  const std::vector<double> &step_lens,
+                  const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
+                  const std::string wavefunction_path = kTpsPath)
+      : VMCOptimizePara(TruncatePara(Dmin, Dmax, truncErr), samples,
+                        warm_up_sweeps, occupancy,
+                        step_lens, update_scheme, wavefunction_path) {}
+
+  operator TruncatePara() const {
+    return bmps_trunc_para;
+  }
 
   TruncatePara bmps_trunc_para; // Truncation Error and bond dimensionts for compressing boundary MPS
 
@@ -37,15 +67,8 @@ struct VMCOptimizePara {
   std::vector<size_t> occupancy_num;
 
   std::vector<double> step_lens;
-
-  VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax, size_t samples, size_t warm_up_sweeps,
-                  const std::vector<size_t> &occupancy, const std::vector<double> &step_len)
-      : bmps_trunc_para(Dmin, Dmax, truncErr), mc_samples(samples),
-        mc_warm_up_sweeps(warm_up_sweeps), occupancy_num(occupancy), step_lens(step_len) {}
-
-  operator TruncatePara() const {
-    return bmps_trunc_para;
-  }
+  WAVEFUNCTION_UPDATE_SCHEME update_scheme;
+  std::string wavefunction_path;
 };
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -58,27 +81,37 @@ class VMCPEPSExecutor : public Executor {
 
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                   const TPST &tps_init,
-                  const boost::mpi::communicator &world);
+                  const boost::mpi::communicator &world,
+                  const EnergySolver &solver = EnergySolver());
 
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                   const SITPST &sitpst_init,
-                  const boost::mpi::communicator &world);
+                  const boost::mpi::communicator &world,
+                  const EnergySolver &solver = EnergySolver());
 
+  //Load Data from path
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
-                  const SITPST &sitpst_init,
-                  const Configuration &warmed_configure,
-                  const boost::mpi::communicator &world);
+                  const size_t ly, const size_t lx,
+                  const boost::mpi::communicator &world,
+                  const EnergySolver &solver = EnergySolver());
 
 
   void Execute(void) override;
 
-  void LoadTenData(const std::string &tps_path = kTpsPath);
+  void LoadTenData(void);
 
-  void DumpTenData(const std::string &tps_path = kTpsPath, const bool release_mem = false);
+  void LoadTenData(const std::string &tps_path);
+
+  void DumpTenData(const bool release_mem = false);
+
+  void DumpTenData(const std::string &tps_path, const bool release_mem = false);
 
   VMCOptimizePara optimize_para;
 
- private:
+ protected:
+  void PrintExecutorInfo_(void);
+
+  void ReserveSamplesDataSpace_(void);
 
   void WarmUp_(void);
 

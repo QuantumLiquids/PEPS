@@ -108,15 +108,22 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
    */
   void InitBTen(const BTenPOSITION position, const size_t slice_num);
 
+  void InitBTen2(const BTenPOSITION position, const size_t slice_num1);
+
   //< if init = false, the existed environment tensor data is correct.
   void
   GrowFullBTen(const BTenPOSITION position, const size_t slice_num, const size_t remain_sites = 2, bool init = true);
+
+  void
+  GrowFullBTen2(const BTenPOSITION post, const size_t slice_num1, const size_t remain_sites = 2, bool init = true);
 
   /**
    * we assume the boundary mps and boundary tensors has form a square
    * @param position the direction they move
    */
   void BTenMoveStep(const BTenPOSITION position);
+
+  void BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1);
 
 
   void UpdateSiteConfig(const SiteIdx &site, const size_t update_config, const SITPS &tps,
@@ -138,6 +145,11 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
                               const BondOrientation bond_dir,
                               const Tensor &ten_a, const Tensor &ten_b) const;
 
+  TenElemT ReplaceNNNSiteTrace(const SiteIdx &left_up_site,
+                               const DIAGONAL_DIR nnn_dir,
+                               const BondOrientation mps_orient,
+                               const Tensor &ten_left, const Tensor &ten_right) const;
+
   Tensor PunchHole(const SiteIdx &site, const BondOrientation mps_orient) const;
 
  private:
@@ -153,9 +165,19 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   /**
    *
-   * @param post the post of the boundary tensor which will be grown.
+   * @param post the postion of the boundary tensor which will be grown.
+   * @note the data of bmps should just clip one layer of mpo.
    */
   void GrowBTenStep_(const BTenPOSITION post);
+
+  /**
+   *
+   * @param post
+   * @param slice_num1 for post = left/right, slice_num is the row number.
+   *                   for post = up/down, slice_num is the col number.
+   *                   slice_num1 is the smaller one.
+   */
+  void GrowBTen2Step_(const BTenPOSITION post, const size_t slice_num1);
 
   std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> bmps_set_;
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps

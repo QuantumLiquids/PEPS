@@ -26,14 +26,21 @@ using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
 
 struct TestSpin2DTensorNetwork : public testing::Test {
 
-  const size_t Lx = 6;  // cols
+  const size_t Lx = 4;  // cols
   const size_t Ly = 4;  // rows
 
+#ifdef U1SYM
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
                          GQTenIndexDirType::OUT
   );
+#else
+  IndexT pb_out = IndexT({
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         GQTenIndexDirType::OUT
+  );
+#endif
 
   IndexT pb_in = InverseIndex(pb_out);
 
@@ -58,7 +65,7 @@ struct TestSpin2DTensorNetwork : public testing::Test {
   }
 };
 
-TEST_F(TestSpin2DTensorNetwork, HeisenbergD4) {
+TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTrace) {
   tn2d.GrowBMPSForRow(2);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -77,4 +84,10 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4) {
   tn2d.BTenMoveStep(BTenPOSITION::UP);
   double psi_d = tn2d.Trace({Ly-3, 1}, VERTICAL);
   EXPECT_NEAR(psi_c, psi_d, 1e-14);
+}
+
+TEST_F(TestSpin2DTensorNetwork, HeisenbergD4BTen2) {
+  tn2d.GrowBMPSForRow(2);
+  tn2d.InitBTen2(BTenPOSITION::LEFT, 2);
+  tn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 2, 2, true);
 }

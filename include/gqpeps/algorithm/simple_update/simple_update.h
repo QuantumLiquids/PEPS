@@ -28,6 +28,7 @@ struct SimpleUpdatePara {
   SimpleUpdatePara(size_t steps, double tau, size_t Dmin, size_t Dmax, double Trunc_err)
       : steps(steps), tau(tau), Dmin(Dmin), Dmax(Dmax), Trunc_err(Trunc_err) {}
 };
+
 /** SimpleUpdateExecutor
  * execution for simple update in the optimization of PEPS
  *
@@ -41,14 +42,17 @@ class SimpleUpdateExecutor : public Executor {
   using LocalTenT = GQTensor<TenElemT, QNT>;
   using PEPST = PEPS<TenElemT, QNT>;
   using GateT = Gate<TenElemT, QNT>;
+
   SimpleUpdateExecutor(const SimpleUpdatePara &update_para,
                        const LocalTenT &ham_nn,
                        const PEPST &peps_initial);
 
   void Execute(void) override;
+
   const PEPST &GetPEPS(void) const {
     return peps_;
   }
+
   bool DumpResult(std::string path, bool release_mem) {
     return peps_.Dump(path, release_mem);
   }
@@ -104,6 +108,15 @@ SimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateExecutor(const SimpleUpdatePara
     : Executor(), update_para(update_para), ham_nn_(ham_nn), peps_(peps_initial), lx_(peps_initial.Cols()),
       ly_(peps_initial.Rows()) {
   TaylorExpMatrix_(update_para.tau, ham_nn);
+  std::cout << "\n";
+  std::cout << "=====> SIMPLE UPDATE PROGRAM FOR PEPS <=====" << "\n";
+  std::cout << std::setw(40) << "System size (lx, ly) : " << "(" << lx_ << ", " << ly_ << ")\n";
+  std::cout << std::setw(40) << "PEPS bond dimension : " << update_para.Dmin << "/" << update_para.Dmax << "\n";
+  std::cout << std::setw(40) << "Trotter step : " << update_para.tau << "\n";
+
+  std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
+  std::cout << std::setw(40) << "The number of threads per processor : " << hp_numeric::GetTensorManipulationThreads()
+            << "\n";
   SetStatus(gqten::INITED);
 }
 

@@ -22,16 +22,20 @@ class SpinOneHalfHeisenbergSquare : public ModelEnergySolver<TenElemT, QNT> {
   using ModelEnergySolver<TenElemT, QNT>::ModelEnergySolver;
 
   TenElemT CalEnergyAndHoles(
+      const SITPS *sitps,
+      TPSSample<TenElemT, QNT> *tps_sample,
       TensorNetwork2D<TenElemT, QNT> &hole_res
   ) override;
 };
 
 template<typename TenElemT, typename QNT>
-TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(TensorNetwork2D<TenElemT, QNT> &hole_res) {
+TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_index_tps,
+                                                                       TPSSample<TenElemT, QNT> *tps_sample,
+                                                                       TensorNetwork2D<TenElemT, QNT> &hole_res) {
   TenElemT energy(0);
-  TensorNetwork2D<TenElemT, QNT> &tn = this->tps_sample_->tn;
-  const Configuration &config = this->tps_sample_->config;
-  TenElemT inv_psi = 1.0 / (this->tps_sample_->amplitude);
+  TensorNetwork2D < TenElemT, QNT > &tn = tps_sample->tn;
+  const Configuration &config = tps_sample->config;
+  TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP);
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
@@ -47,8 +51,8 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(TensorNet
           energy += 0.25;
         } else {
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
-                                                  (*this->split_index_tps_)(site1)[config(site2)],
-                                                  (*this->split_index_tps_)(site2)[config(site1)]);
+                                                  (*split_index_tps)(site1)[config(site2)],
+                                                  (*split_index_tps)(site2)[config(site1)]);
           energy += (-0.25 + psi_ex * inv_psi * 0.5);
         }
         tn.BTenMoveStep(RIGHT);
@@ -71,8 +75,8 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(TensorNet
         energy += 0.25;
       } else {
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
-                                                (*this->split_index_tps_)(site1)[config(site2)],
-                                                (*this->split_index_tps_)(site2)[config(site1)]);
+                                                (*split_index_tps)(site1)[config(site2)],
+                                                (*split_index_tps)(site2)[config(site1)]);
         energy += (-0.25 + psi_ex * inv_psi * 0.5);
       }
       if (row < tn.rows() - 2) {
@@ -82,6 +86,9 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(TensorNet
     if (col < tn.cols() - 1) {
       tn.BMPSMoveStep(RIGHT);
     }
+  }
+  if (energy < -1.0e8) {
+    std::cout << "Warning: sample's energy = " << energy << std::endl;
   }
   return energy;
 }

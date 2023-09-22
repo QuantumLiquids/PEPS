@@ -244,6 +244,56 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen(const gqpeps::BTenPOSITION positio
   bten_set_[position].emplace_back(ten);
 }
 
+///< slice_num1 is the small row/col value.
+template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::InitBTen2(const BTenPOSITION position, const size_t slice_num1) {
+  bten_set2_[position].clear();
+  IndexT index0, index1, index2, index3;
+
+  switch (position) {
+    case DOWN: {
+      const size_t col1 = slice_num1;
+      const size_t col2 = col1 + 1;
+      index0 = InverseIndex(bmps_set_[LEFT][col1](this->rows() - 1)->GetIndex(2));
+      index1 = InverseIndex((*this)(this->rows() - 1, col1)->GetIndex(position));
+      index2 = InverseIndex((*this)(this->rows() - 1, col2)->GetIndex(position));
+      index3 = InverseIndex(bmps_set_[RIGHT][this->cols() - col2 - 1](0)->GetIndex(0));
+      break;
+    }
+    case UP: {
+      const size_t col1 = slice_num1;
+      const size_t col2 = col1 + 1;
+      index0 = InverseIndex(bmps_set_[RIGHT][this->cols() - col2 - 1](this->rows() - 1)->GetIndex(2));
+      index1 = InverseIndex((*this)(0, col2)->GetIndex(position));
+      index2 = InverseIndex((*this)(0, col1)->GetIndex(position));
+      index3 = InverseIndex(bmps_set_[LEFT][col1](0)->GetIndex(0));
+      break;
+    }
+    case LEFT: {
+      const size_t row1 = slice_num1;
+      const size_t row2 = row1 + 1;
+      index0 = InverseIndex(bmps_set_[UP][row1](this->cols() - 1)->GetIndex(2));
+      index1 = InverseIndex((*this)(row1, 0)->GetIndex(position));
+      index2 = InverseIndex((*this)(row2, 0)->GetIndex(position));
+      index3 = InverseIndex(bmps_set_[DOWN][this->rows() - row2 - 1](0)->GetIndex(0));
+      break;
+    }
+    case RIGHT: {
+      const size_t row1 = slice_num1;
+      const size_t row2 = row1 + 1;
+      index0 = InverseIndex(bmps_set_[DOWN][this->rows() - row2 - 1](this->cols() - 1)->GetIndex(2));
+      index1 = InverseIndex((*this)(row2, this->cols() - 1)->GetIndex(position));
+      index2 = InverseIndex((*this)(row1, this->cols() - 1)->GetIndex(position));
+      index3 = InverseIndex(bmps_set_[UP][row1](0)->GetIndex(0));
+      break;
+    }
+  }
+  Tensor ten({index0, index1, index2, index3});
+  ten({0, 0, 0, 0}) = TenElemT(1.0);
+  bten_set2_[position].emplace_back(ten);
+}
+
+
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION position,
                                                   const size_t slice_num,
@@ -339,6 +389,84 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION pos
 }
 
 template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, const size_t slice_num1,
+                                                   const size_t remain_sites, bool init) {
+  if (init) {
+    InitBTen2(post, slice_num1);
+  }
+  size_t ctrct_mpo_start_idx = (size_t(post) + 3) % 4;
+  BMPSPOSITION pre_post = BMPSPOSITION(ctrct_mpo_start_idx);
+  BMPSPOSITION next_post = BMPSPOSITION((size_t(post) + 1) % 4);
+  size_t start_idx = bten_set2_[post].size() - 1;
+  std::vector<Tensor> &btens = bten_set2_[post];
+  switch (post) {
+    case DOWN: {
+      std::cout << "TODO code." << std::endl;
+      exit(1);
+      break;
+    }
+    case UP: {
+      std::cout << "TODO code." << std::endl;
+      exit(1);
+      break;
+    }
+    case LEFT: {
+      const size_t row1 = slice_num1;
+      const size_t row2 = row1 + 1;
+      const TransferMPO &mpo1 = this->get_row(row1);
+      const TransferMPO &mpo2 = this->get_row(row2);
+      const size_t N = mpo1.size(); // this->cols()
+      const size_t end_idx = N - remain_sites;
+
+      const size_t mps1_num = row1;
+      const size_t mps2_num = this->rows() - 1 - row2;
+      auto &up_bmps = bmps_set_[pre_post][mps1_num];
+      auto &down_bmps = bmps_set_[next_post][mps2_num];
+      for (size_t i = start_idx; i < end_idx; i++) {
+        auto &mps_ten1 = up_bmps[N - i - 1];
+        auto &mps_ten2 = down_bmps[i];
+        Tensor mpo_ten1 = *mpo1[i];
+        mpo_ten1.Transpose({3, 0, 2, 1});
+        auto &mpo_ten2 = *mpo2[i];
+        Tensor tmp1, tmp2, tmp3, next_bten;
+        Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
+        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
+        Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
+        Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
+        btens.emplace_back(next_bten);
+      }
+      break;
+    }
+    case RIGHT: {
+      const size_t row1 = slice_num1;
+      const size_t row2 = row1 + 1;
+      const TransferMPO &mpo1 = this->get_row(row2);
+      const TransferMPO &mpo2 = this->get_row(row1);
+      const size_t N = mpo1.size(); // this->cols()
+      const size_t end_idx = N - remain_sites;
+      const size_t mps1_num = this->rows() - 1 - row2;
+      const size_t mps2_num = row1;
+      auto &down_bmps = bmps_set_[pre_post][mps1_num];
+      auto &up_bmps = bmps_set_[next_post][mps2_num];
+      for (size_t i = start_idx; i < end_idx; i++) {
+        auto &mps_ten1 = down_bmps[N - i - 1];
+        auto &mps_ten2 = up_bmps[i];
+        Tensor mpo_ten1 = *mpo1[N - i - 1];
+        mpo_ten1.Transpose({1, 2, 0, 3});
+        auto &mpo_ten2 = *mpo2[N - i - 1];
+        Tensor tmp1, tmp2, tmp3, next_bten;
+        Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
+        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
+        Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
+        Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
+        btens.emplace_back(next_bten);
+      }
+      break;
+    }
+  }
+}
+
+template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::BMPSMoveStep(const BMPSPOSITION position) {
   bmps_set_[position].pop_back();
   auto oppo_post = Opposite(position);
@@ -347,83 +475,149 @@ void TensorNetwork2D<TenElemT, QNT>::BMPSMoveStep(const BMPSPOSITION position) {
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::BTenMoveStep(const BTenPOSITION position) {
-  Tensor tmp1, tmp2, tmp3;
   bten_set_[position].pop_back();
   GrowBTenStep_(Opposite(position));
 }
 
 
 template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1) {
+  bten_set2_[position].pop_back();
+  GrowBTen2Step_(Opposite(position), slice_num1);
+}
+
+template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep_(const BTenPOSITION post) {
-  Tensor tmp1, tmp2, next_bten;
   size_t ctrct_mpo_start_idx = (size_t(post) + 3) % 4;
-#ifndef NDEBUG
   BMPSPOSITION pre_post = BMPSPOSITION(ctrct_mpo_start_idx);
   BMPSPOSITION next_post = BMPSPOSITION((size_t(post) + 1) % 4);
+#ifndef NDEBUG
   assert(bmps_set_.at(pre_post).size() + bmps_set_.at(next_post).size() == this->length(Orientation(pre_post)) + 1);
   assert(bten_set_.at(post).size() > 0 &&
          bten_set_.at(post).size() <= bmps_set_.at(pre_post).back().size()); // has been initialled
 #endif
+  Tensor tmp1, tmp2, next_bten;
+  Tensor *mps_ten1, *mps_ten2;
+  SiteIdx grown_site;
+  size_t N; //mps length
+  const size_t bten_size = bten_set_.at(post).size();
   switch (post) {
-    case DOWN: {// up_ten +1, down_ten -1;
+    case DOWN: {
       const size_t col = bmps_set_[LEFT].size() - 1;
-      const TransferMPO &mpo = this->get_col(col);
-      const size_t N = mpo.size();
-      const size_t mpo_idx = N - bten_set_.at(post).size();
-      auto &left_mps_ten = bmps_set_[LEFT].back()[mpo_idx];
-      auto &right_mps_ten = bmps_set_[RIGHT].back()[N - mpo_idx - 1];
-      auto &mpo_ten = *mpo[mpo_idx];
-      Contract<TenElemT, QNT, true, true>(left_mps_ten, bten_set_.at(post).back(), 2, 0, 1, tmp1);
-      Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, ctrct_mpo_start_idx, 2, tmp2);
-      Contract(&tmp2, {0, 2}, &right_mps_ten, {0, 1}, &next_bten);
+      N = this->rows();
+      grown_site[0] = N - bten_size;
+      grown_site[1] = col;
       break;
     }
     case UP: {
       const size_t col = bmps_set_[LEFT].size() - 1;
-      const TransferMPO &mpo = this->get_col(col);
-      const size_t N = mpo.size();
-      const size_t mpo_idx = bten_set_.at(post).size() - 1;
-
-      auto &left_mps_ten = bmps_set_[LEFT].back()[mpo_idx];
-      auto &right_mps_ten = bmps_set_[RIGHT].back()[N - mpo_idx - 1];
-      auto &mpo_ten = *mpo[mpo_idx];
-      Contract<TenElemT, QNT, true, true>(right_mps_ten, bten_set_.at(post).back(), 2, 0, 1, tmp1);
-      Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, ctrct_mpo_start_idx, 2, tmp2);
-      Contract(&tmp2, {0, 2}, &left_mps_ten, {0, 1}, &next_bten);
+      N = this->rows();
+      grown_site[0] = bten_size - 1;
+      grown_site[1] = col;
       break;
     }
     case LEFT: {
       const size_t row = bmps_set_[UP].size() - 1;
-      const TransferMPO &mpo = this->get_row(row);
-      const size_t N = mpo.size();
-      const size_t mpo_idx = bten_set_.at(post).size() - 1;
-
-      auto &up_mps_ten = bmps_set_[UP].back()[N - mpo_idx - 1];
-      auto &down_mps_ten = bmps_set_[DOWN].back()[mpo_idx];
-      auto &mpo_ten = *mpo[mpo_idx];
-
-      Contract<TenElemT, QNT, true, true>(up_mps_ten, bten_set_.at(post).back(), 2, 0, 1, tmp1);
-      Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, ctrct_mpo_start_idx, 2, tmp2);
-      Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &next_bten);
+      N = this->cols();
+      grown_site[0] = row;
+      grown_site[1] = bten_size - 1;
       break;
     }
     case RIGHT: {
       const size_t row = bmps_set_[UP].size() - 1;
-      const TransferMPO &mpo = this->get_row(row);
-      const size_t N = mpo.size();
-      const size_t mpo_idx = N - bten_set_.at(post).size();
-
-      auto &up_mps_ten = bmps_set_[UP].back()[N - mpo_idx - 1];
-      auto &down_mps_ten = bmps_set_[DOWN].back()[mpo_idx];
-      auto &mpo_ten = *mpo[mpo_idx];
-
-      Contract<TenElemT, QNT, true, true>(down_mps_ten, bten_set_.at(post).back(), 2, 0, 1, tmp1);
-      Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, ctrct_mpo_start_idx, 2, tmp2);
-      Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &next_bten);
+      N = this->cols();
+      grown_site[0] = row;
+      grown_site[1] = N - bten_size;
       break;
     }
   }
+  mps_ten1 = &bmps_set_[pre_post].back()[N - bten_size];
+  mps_ten2 = &bmps_set_[next_post].back()[bten_size - 1];
+  Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set_.at(post).back(), 2, 0, 1, tmp1);
+  Contract<TenElemT, QNT, false, false>(tmp1, (*this)(grown_site), 1, ctrct_mpo_start_idx, 2, tmp2);
+  Contract(&tmp2, {0, 2}, mps_ten2, {0, 1}, &next_bten);
   bten_set_[post].emplace_back(next_bten);
+}
+
+
+template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::GrowBTen2Step_(const BTenPOSITION post, const size_t slice_num1) {
+  size_t ctrct_mpo_start_idx = (size_t(post) + 3) % 4;
+  BMPSPOSITION pre_post = BMPSPOSITION(ctrct_mpo_start_idx);
+  BMPSPOSITION next_post = BMPSPOSITION((size_t(post) + 1) % 4);
+#ifndef NDEBUG
+  assert(bmps_set_.at(pre_post).size() + bmps_set_.at(next_post).size() >= this->length(Orientation(pre_post)));
+  assert(bten_set2_.at(post).size() > 0 &&
+         bten_set2_.at(post).size() <= bmps_set_.at(pre_post).back().size()); // has been initialled
+#endif
+  Tensor tmp1, tmp2, tmp3, next_bten;
+  Tensor *mps_ten1, *mpo_ten2, *mps_ten2;
+  Tensor mpo_ten1;
+  SiteIdx grown_site1, grown_site2;
+  size_t N; //mps length
+  const size_t bten_size = bten_set2_.at(post).size();
+  size_t mps1_num, mps2_num;
+  switch (post) {
+    case DOWN: {
+      const size_t col = slice_num1;
+      N = this->rows();
+      grown_site1[0] = N - bten_size;
+      grown_site1[1] = col;
+      grown_site2[0] = N - bten_size;
+      grown_site2[1] = col + 1;
+      mps1_num = col;
+      mps2_num = this->cols() - 1 - (col + 1);
+      mpo_ten1 = (*this)(grown_site1);
+      mpo_ten1.Transpose({0, 1, 3, 2});
+      break;
+    }
+    case UP: {
+      const size_t col = slice_num1;
+      N = this->rows();
+      grown_site1[0] = bten_size - 1;
+      grown_site1[1] = col;
+      grown_site2[0] = bten_size - 1;
+      grown_site2[1] = col + 1;
+      mps1_num = this->cols() - 1 - (col + 1);
+      mps2_num = col;
+      mpo_ten1 = (*this)(grown_site1);
+      mpo_ten1.Transpose({2, 3, 1, 0});
+      break;
+    }
+    case LEFT: {
+      const size_t row = slice_num1;
+      N = this->cols();
+      grown_site1[0] = row;
+      grown_site1[1] = bten_size - 1;
+      grown_site2[0] = row + 1;
+      grown_site2[1] = bten_size - 1;
+      mps1_num = row;
+      mps2_num = this->rows() - 1 - (row + 1);
+      mpo_ten1 = (*this)(grown_site1);
+      mpo_ten1.Transpose({3, 0, 2, 1});
+      break;
+    }
+    case RIGHT: {
+      const size_t row = slice_num1;
+      N = this->cols();
+      grown_site1[0] = row;
+      grown_site1[1] = N - bten_size;
+      grown_site2[0] = row + 1;
+      grown_site2[1] = N - bten_size;
+      mps1_num = this->rows() - 1 - (row + 1);
+      mps2_num = row;
+      mpo_ten1 = (*this)(grown_site1);
+      mpo_ten1.Transpose({1, 2, 0, 3});
+      break;
+    }
+  }
+  mps_ten1 = &bmps_set_[pre_post][mps1_num][N - bten_size];
+  mps_ten2 = &bmps_set_[next_post][mps2_num][bten_size - 1];
+  Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
+  Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
+  Contract<TenElemT, QNT, false, false>(tmp2, (*this)(grown_site2), 4, ctrct_mpo_start_idx, 2, tmp3);
+  Contract(&tmp3, {0, 3}, mps_ten2, {0, 1}, &next_bten);
+  bten_set2_[post].emplace_back(next_bten);
 }
 
 template<typename TenElemT, typename QNT>
@@ -510,6 +704,60 @@ TensorNetwork2D<TenElemT, QNT>::ReplaceNNSiteTrace(const SiteIdx &site_a, const 
   Contract(&tmp[2], {0, 1, 2}, &tmp[5], {2, 1, 0}, &tmp[6]);
   return tmp[6]();
 }
+
+
+template<typename TenElemT, typename QNT>
+TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left_up_site,
+                                                             const DIAGONAL_DIR nnn_dir,
+                                                             const BondOrientation mps_orient,
+                                                             const TensorNetwork2D::Tensor &ten_left,
+                                                             const TensorNetwork2D::Tensor &ten_right) const {
+  if (mps_orient == HORIZONTAL) {
+    const size_t row1 = left_up_site[0];
+    const size_t row2 = row1 + 1;
+    const size_t col1 = left_up_site[1];
+    const size_t col2 = col1 + 1;
+    const Tensor &mps_ten1 = bmps_set_.at(UP)[row1][this->cols() - col1 - 1];
+    const Tensor &mps_ten2 = bmps_set_.at(DOWN)[this->rows() - 1 - row2][col1];
+    const Tensor &mps_ten3 = bmps_set_.at(DOWN)[this->rows() - 1 - row2][col2];
+    const Tensor &mps_ten4 = bmps_set_.at(UP)[row1][this->cols() - col2 - 1];
+    Tensor mpo_ten1, mpo_ten3;
+    const Tensor *mpo_ten2, *mpo_ten4;
+    const Tensor &left_bten = bten_set2_.at(LEFT)[col1];
+    const Tensor &right_bten = bten_set2_.at(RIGHT)[this->cols() - col2 - 1];
+    if (nnn_dir == LEFTUP_TO_RIGHTDOWN) {
+      mpo_ten1 = ten_left;
+      mpo_ten2 = (*this)(row2, col1);
+      mpo_ten3 = ten_right;
+      mpo_ten4 = (*this)(row1, col2);
+    } else { //LEFTDOWN_TO_RIGHTUP
+      mpo_ten1 = (*this)({row1, col1});
+      mpo_ten2 = &ten_left;
+      mpo_ten3 = (*this)({row2, col2});
+      mpo_ten4 = &ten_right;
+    }
+    mpo_ten1.Transpose({3, 0, 2, 1});
+    mpo_ten3.Transpose({1, 2, 0, 3});
+    Tensor tmp[9];
+
+    Contract<TenElemT, QNT, true, true>(mps_ten1, left_bten, 2, 0, 1, tmp[0]);
+    Contract<TenElemT, QNT, false, false>(tmp[0], mpo_ten1, 1, 0, 2, tmp[1]);
+    Contract<TenElemT, QNT, false, false>(tmp[1], *mpo_ten2, 4, 3, 2, tmp[2]);
+    Contract(&tmp[2], {0, 3}, &mps_ten2, {0, 1}, &tmp[3]);
+
+    Contract<TenElemT, QNT, true, true>(mps_ten3, right_bten, 2, 0, 1, tmp[4]);
+    Contract<TenElemT, QNT, false, false>(tmp[4], mpo_ten3, 1, 0, 2, tmp[5]);
+    Contract<TenElemT, QNT, false, false>(tmp[5], *mpo_ten4, 4, 1, 2, tmp[6]);
+    Contract(&tmp[6], {0, 3}, &mps_ten4, {0, 1}, &tmp[7]);
+    Contract(&tmp[3], {0, 1, 2, 3}, &tmp[7], {3, 2, 1, 0}, &tmp[8]);
+    return tmp[8]();
+  } else {
+    std::cout << "TODO code" << std::endl;
+    exit(1);
+    return 0;
+  }
+}
+
 
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> TensorNetwork2D<TenElemT, QNT>::PunchHole(const gqpeps::SiteIdx &site,

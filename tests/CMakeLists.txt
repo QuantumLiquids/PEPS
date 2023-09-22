@@ -56,6 +56,10 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(OMP_FLAGS -fopenmp)
 endif ()
 
+if (U1SYM)
+    add_definitions(-DU1SYM)
+endif ()
+
 macro(add_unittest
         TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
     add_executable(${TEST_NAME}

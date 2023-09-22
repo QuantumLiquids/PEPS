@@ -82,13 +82,15 @@ T Variance(const std::vector<T> data) {
 template<typename TenElemT, typename QNT, typename EnergySolver>
 VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                                                               const TPST &tps_init,
-                                                              const boost::mpi::communicator &world) :
-    VMCPEPSExecutor<TenElemT, QNT, EnergySolver>(optimize_para, SITPST(tps_init), world) {}
+                                                              const boost::mpi::communicator &world,
+                                                              const EnergySolver &solver) :
+    VMCPEPSExecutor<TenElemT, QNT, EnergySolver>(optimize_para, SITPST(tps_init), world, solver) {}
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                                                               const SITPST &sitpst_init,
-                                                              const boost::mpi::communicator &world) :
+                                                              const boost::mpi::communicator &world,
+                                                              const EnergySolver &solver) :
     world_(world),
     optimize_para(optimize_para),
     lx_(sitpst_init.cols()),
@@ -101,81 +103,40 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_),
     g_times_energy_sum_(ly_, lx_),
-    energy_solver_(&split_index_tps_, &tps_sample_),
+    energy_solver_(solver),
     warm_up_(false) {
-  random_engine.seed((size_t) std::time(nullptr) + world.rank());
-  tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, world.rank() + std::time(nullptr));
+  random_engine.seed((size_t)
+  std::time(nullptr) + 10086 * world.rank());
+  tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10087 * world.rank() + std::time(nullptr));
 
-  energy_samples_.reserve(optimize_para.mc_samples);
-  for (size_t row = 0; row < ly_; row++) {
-    for (size_t col = 0; col < lx_; col++) {
-      size_t dim = split_index_tps_({row, col}).size();
-
-//      gten_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
-//      g_times_energy_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
-//      for (size_t i = 0; i < dim; i++) {
-//        gten_samples_({row, col})[i].reserve(optimize_para.mc_samples);
-//        g_times_energy_samples_({row, col})[i].reserve(optimize_para.mc_samples);
-//      }
-
-      gten_sum_({row, col}) = std::vector<Tensor>(dim, Tensor(split_index_tps_({row, col})[0].GetIndexes()));
-      g_times_energy_sum_({row, col}) = gten_sum_({row, col});
-    }
-  }
-  for (size_t row = 0; row < ly_; row++)
-    for (size_t col = 0; col < lx_; col++) {
-      size_t dim = split_index_tps_({row, col}).size();
-      grad_({row, col}) = std::vector<Tensor>(dim);
-    }
-
-  energy_trajectory_.reserve(optimize_para.step_lens.size());
-  energy_error_traj_.reserve(optimize_para.step_lens.size());
-  if (world.rank() == kMasterProc)
-    grad_norm_.reserve(optimize_para.step_lens.size());
-
-  std::cout << std::left;  // Set left alignment for the output
-
-  if (world_.rank() == kMasterProc) {
-    std::cout << "\n";
-    std::cout << "=====> VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS <=====" << "\n";
-    std::cout << std::setw(30) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
-    std::cout << std::setw(30) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(30) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
-              << optimize_para.bmps_trunc_para.D_max << "\n";
-    std::cout << std::setw(30) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
-    std::cout << std::setw(30) << "Gradient update times:" << optimize_para.step_lens.size() << "\n";
-
-    std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
-    std::cout << std::setw(40) << "The number of processors (including master):" << world_.size() << "\n";
-    std::cout << std::setw(40) << "The number of threads per processor:" << hp_numeric::GetTensorManipulationThreads()
-              << "\n";
-  }
-
+  ReserveSamplesDataSpace_();
+  PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
-
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
-                                                              const SITPST &sitpst_init,
-                                                              const Configuration &warmed_config,
-                                                              const boost::mpi::communicator &world) :
-    world_(world),
-    optimize_para(optimize_para),
-    lx_(sitpst_init.cols()),
-    ly_(sitpst_init.rows()),
-    split_index_tps_(sitpst_init),
-    tps_sample_(split_index_tps_, warmed_config, TruncatePara(optimize_para)),
-    u_double_(0, 1),
-    grad_(ly_, lx_),
+                                                              const size_t ly, const size_t lx,
+                                                              const boost::mpi::communicator &world,
+                                                              const EnergySolver &solver):
+    world_(world), optimize_para(optimize_para), lx_(lx), ly_(ly),
+    split_index_tps_(ly, lx), tps_sample_(ly, lx, TruncatePara(optimize_para)),
+    u_double_(0, 1), grad_(ly_, lx_),
 //    gten_samples_(ly_, lx_),
 //    g_times_energy_samples_(ly_, lx_),
-    gten_sum_(ly_, lx_),
-    g_times_energy_sum_(ly_, lx_),
-    energy_solver_(&split_index_tps_, &tps_sample_),
-    warm_up_(true) {
-  random_engine.seed((size_t) std::time(nullptr) + world.rank());
+    gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
+    energy_solver_(solver), warm_up_(false) {
+  random_engine.seed((size_t)
+  std::time(nullptr) + 10086 * world.rank());
+  LoadTenData();
+  ReserveSamplesDataSpace_();
+  PrintExecutorInfo_();
+  this->SetStatus(ExecutorStatus::INITED);
+}
 
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void) {
   energy_samples_.reserve(optimize_para.mc_samples);
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
@@ -200,12 +161,15 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
 
   energy_trajectory_.reserve(optimize_para.step_lens.size());
   energy_error_traj_.reserve(optimize_para.step_lens.size());
-  if (world.rank() == kMasterProc)
+  if (world_.rank() == kMasterProc)
     grad_norm_.reserve(optimize_para.step_lens.size());
+}
 
-  std::cout << std::left;  // Set left alignment for the output
 
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
   if (world_.rank() == kMasterProc) {
+    std::cout << std::left;  // Set left alignment for the output
     std::cout << "\n";
     std::cout << "=====> VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS <=====" << "\n";
     std::cout << std::setw(30) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
@@ -220,9 +184,6 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     std::cout << std::setw(40) << "The number of threads per processor:" << hp_numeric::GetTensorManipulationThreads()
               << "\n";
   }
-
-  this->SetStatus(ExecutorStatus::INITED);
-
 }
 
 
@@ -232,6 +193,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
   WarmUp_();
   OptimizeTPS_();
   Measure_();
+  DumpTenData();
   SetStatus(ExecutorStatus::FINISH);
 }
 
@@ -262,7 +224,16 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     }
     double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
-    StochGradUpdateTPS_(grad_, step_len);
+    if (optimize_para.update_scheme == StochasticGradient) {
+      StochGradUpdateTPS_(grad_, step_len);
+    } else if (optimize_para.update_scheme == StochasticReconfiguration) {
+      std::cout << "TODO code." << std::endl;
+      exit(1);
+    } else {
+      std::cout << "update method does not support!" << std::endl;
+      exit(2);
+    }
+
     ClearEnergyAndHoleSamples_();
     if (world_.rank() == kMasterProc) {
       double gradient_update_time = grad_update_timer.Elapsed();
@@ -310,7 +281,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ClearEnergyAndHoleSamples_(vo
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergyAndHols_(void) {
   TensorNetwork2D<TenElemT, QNT> holes(ly_, lx_);
-  TenElemT energy_loc = energy_solver_.CalEnergyAndHoles(holes);
+  TenElemT energy_loc = energy_solver_.CalEnergyAndHoles(&split_index_tps_, &tps_sample_, holes);
   TenElemT inv_psi = 1.0 / tps_sample_.amplitude;
   energy_samples_.push_back(energy_loc);
   for (size_t row = 0; row < ly_; row++) {
@@ -456,9 +427,36 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Measure_(void) {
 
 }
 
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(void) {
+  LoadTenData(optimize_para.wavefunction_path);
+}
+
+
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string &tps_path) {
+  if (!split_index_tps_.Load(tps_path)) {
+    std::cout << "Loading TPS files fails." << std::endl;
+    exit(-1);
+  }
+  Configuration config(ly_, lx_);
+  bool load_config = config.Load(tps_path, world_.rank());
+  if (load_config) {
+    tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, config, TruncatePara(optimize_para));
+  } else {
+    std::cout << "Loading configuration in rank " << world_.rank()
+              << " fails. Random generate it and warm up."
+              << std::endl;
+    tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10089 * world_.rank() + std::time(nullptr));
+    WarmUp_();
+  }
+  warm_up_ = true;
+}
 
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpTenData(const bool release_mem) {
+  DumpTenData(optimize_para.wavefunction_path, release_mem);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>

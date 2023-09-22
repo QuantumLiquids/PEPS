@@ -78,6 +78,11 @@ BMPSPOSITION Opposite(const BMPSPOSITION post) {
 }
 
 
+enum DIAGONAL_DIR {
+  LEFTUP_TO_RIGHTDOWN,
+  LEFTDOWN_TO_RIGHTUP
+};
+
 struct TruncatePara {
   size_t D_min;
   size_t D_max;

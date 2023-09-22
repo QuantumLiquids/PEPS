@@ -18,17 +18,18 @@ template<typename TenElemT, typename QNT>
 class ModelEnergySolver {
   using SITPS = SplitIndexTPS<TenElemT, QNT>;
  public:
-  ModelEnergySolver(const SITPS *sitps,
-                    TPSSample<TenElemT, QNT> *tps_sample)
-      : split_index_tps_(sitps), tps_sample_(tps_sample) {}
+  ModelEnergySolver(void) = default;
 
   virtual TenElemT CalEnergyAndHoles(
+      const SITPS *sitps,
+      TPSSample<TenElemT, QNT> *tps_sample,
       TensorNetwork2D<TenElemT, QNT> &hole_res  // the return value
-  ) {}
+  ) {
+    TenElemT energy(0);
+    return energy;
+  }
 
  protected:
-  const SITPS *split_index_tps_;
-  TPSSample<TenElemT, QNT> *tps_sample_;
 };
 
 }//gqpeps
