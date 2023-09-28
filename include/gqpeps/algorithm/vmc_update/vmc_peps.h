@@ -28,6 +28,7 @@ std::default_random_engine random_engine;
 
 enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticGradient,
+  RandomStepStochasticGradient,
   StochasticReconfiguration
 };
 

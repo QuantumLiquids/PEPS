@@ -105,8 +105,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver),
     warm_up_(false) {
-  random_engine.seed((size_t)
-  std::time(nullptr) + 10086 * world.rank());
+  random_engine.seed((size_t) std::time(nullptr) + 10086 * world.rank());
   tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10087 * world.rank() + std::time(nullptr));
 
   ReserveSamplesDataSpace_();
@@ -126,8 +125,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver), warm_up_(false) {
-  random_engine.seed((size_t)
-  std::time(nullptr) + 10086 * world.rank());
+  random_engine.seed((size_t) std::time(nullptr) + 10086 * world.rank());
   LoadTenData();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
@@ -225,6 +223,9 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
     if (optimize_para.update_scheme == StochasticGradient) {
+      StochGradUpdateTPS_(grad_, step_len);
+    } else if (optimize_para.update_scheme == RandomStepStochasticGradient) {
+      step_len *= u_double_(random_engine);
       StochGradUpdateTPS_(grad_, step_len);
     } else if (optimize_para.update_scheme == StochasticReconfiguration) {
       std::cout << "TODO code." << std::endl;
@@ -373,7 +374,6 @@ template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
                                                                        double step_len) {
   if (world_.rank() == kMasterProc) {
-    step_len *= u_double_(random_engine);
     for (size_t row = 0; row < ly_; row++)
       for (size_t col = 0; col < lx_; col++) {
         const size_t phy_dim = grad_({row, col}).size();

@@ -35,6 +35,7 @@
 # Dir
 build/
 release/
+debug/
 test/
 build_doc/
 external/gqten/

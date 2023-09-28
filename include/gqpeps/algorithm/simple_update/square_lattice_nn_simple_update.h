@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+
+/*
+* Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
+* Creation Date: 2023-09-28
+*
+* Description: GraceQ/VMC-SquareLatticePEPS project.
+*              Simple Update for nearest-neighbor interaction models in square lattice
+*/
+
+#ifndef GRACEQ_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#define GRACEQ_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+
+#include "gqpeps/algorithm/simple_update/simple_update.h"
+
+namespace gqpeps {
+
+using namespace gqten;
+
+template<typename TenElemT, typename QNT>
+class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
+  using Tensor = GQTensor<TenElemT, QNT>;
+  using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+ public:
+  SquareLatticeNNSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
+                                      const PEPST &peps_initial,
+                                      const Tensor &ham_nn) :
+      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_nn_(ham_nn) {}
+
+ private:
+  void SetEvolveGate_(void) override {
+    evolve_gate_nn_ = TaylorExpMatrix(this->update_para.tau, ham_nn_);
+  }
+
+  double SimpleUpdateSweep_(void) override;
+
+  Tensor ham_nn_;
+  Tensor evolve_gate_nn_;
+};
+
+
+template<typename TenElemT, typename QNT>
+double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+  Timer simple_update_sweep_timer("simple_update_sweep");
+  TruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
+  double norm = 1.0;
+  double e0 = 0.0;
+#ifdef GQPEPS_TIMING_MODE
+  Timer vertical_nn_projection_timer("vertical_nn_projection");
+#endif
+  for (size_t col = 0; col < this->lx_; col++) {
+    for (size_t row = 0; row < this->ly_ - 1; row++) {
+      norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, VERTICAL, para);
+      e0 += -std::log(norm) / this->update_para.tau;
+    }
+  }
+#ifdef GQPEPS_TIMING_MODE
+  vertical_nn_projection_timer.PrintElapsed();
+  Timer horizontal_nn_projection_timer("horizontal_nn_projection");
+#endif
+  for (size_t col = 0; col < this->lx_ - 1; col++) {
+    for (size_t row = 0; row < this->ly_; row++) {
+      norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, HORIZONTAL, para);
+      e0 += -std::log(norm) / this->update_para.tau;
+    }
+  }
+#ifdef GQPEPS_TIMING_MODE
+  horizontal_nn_projection_timer.PrintElapsed();
+#endif
+  double sweep_time = simple_update_sweep_timer.Elapsed();
+  auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
+  std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
+            << std::right << e0
+            << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
+            << " SweepTime = " << std::setw(8) << sweep_time
+            << std::endl;
+
+  return norm;
+}
+}
+
+
+#endif //GRACEQ_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H

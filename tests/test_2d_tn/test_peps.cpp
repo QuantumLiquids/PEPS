@@ -9,7 +9,7 @@
 
 #include "gqten/gqten.h"
 #include "gtest/gtest.h"
-#include "gqpeps/two_dim_tn/peps/peps.h"
+#include "gqpeps/two_dim_tn/peps/square_lattice_peps.h"
 
 using namespace gqten;
 using namespace gqpeps;
@@ -64,7 +64,7 @@ struct TestSpinSystem : public testing::Test {
 };
 
 TEST_F(TestSpinSystem, InitialCopyAndIO) {
-  PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
 
   for (size_t y = 0; y < Ly; y++) {
@@ -91,7 +91,7 @@ TEST_F(TestSpinSystem, InitialCopyAndIO) {
   EXPECT_EQ(peps1, peps0);
 
   peps0.Dump("peps_for_test_io", true);
-  PEPS<GQTEN_Double, U1QN> peps2(pb_out, Ly, Lx);
+  SquareLatticePEPS<GQTEN_Double, U1QN> peps2(pb_out, Ly, Lx);
   peps2.Load("peps_for_test_io");
   EXPECT_EQ(peps1, peps2);
 }

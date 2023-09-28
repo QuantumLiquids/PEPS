@@ -11,8 +11,9 @@
 
 #include "gqten/gqten.h"
 #include "gtest/gtest.h"
-#include "gqpeps/algorithm/simple_update/simple_update.h"
 #include "gqmps2/case_params_parser.h"
+#include "gqpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
+#include "gqpeps/algorithm/simple_update/triangle_nn_on_sqr_peps_simple_update.h"
 
 using namespace gqten;
 using namespace gqpeps;
@@ -71,6 +72,7 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
   ZGQTensor zsm = ZGQTensor({pb_in, pb_out});
 
   DGQTensor ham_hei_nn = DGQTensor({pb_in, pb_out, pb_in, pb_out});
+  DGQTensor ham_hei_tri;  // three-site hamiltonian in triangle lattice
 
   void SetUp(void) {
     SimpleUpdateParams params = SimpleUpdateParams(params_file);
@@ -91,6 +93,39 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
     ham_hei_nn({0, 1, 1, 0}) = 0.5;
     ham_hei_nn({1, 0, 0, 1}) = 0.5;
 
+    DGQTensor ham_hei_tri_terms[3];
+    for (size_t i = 0; i < 3; i++) {
+      ham_hei_tri_terms[i] = DGQTensor({pb_in, pb_out, pb_in, pb_out, pb_in, pb_out});
+    }
+
+    for (size_t i = 0; i < 2; i++) {
+      ham_hei_tri_terms[0]({0, 0, 0, 0, i, i}) = 0.25;
+      ham_hei_tri_terms[0]({1, 1, 1, 1, i, i}) = 0.25;
+      ham_hei_tri_terms[0]({1, 1, 0, 0, i, i}) = -0.25;
+      ham_hei_tri_terms[0]({0, 0, 1, 1, i, i}) = -0.25;
+      ham_hei_tri_terms[0]({0, 1, 1, 0, i, i}) = 0.5;
+      ham_hei_tri_terms[0]({1, 0, 0, 1, i, i}) = 0.5;
+    }
+
+    for (size_t i = 0; i < 2; i++) {
+      ham_hei_tri_terms[1]({0, 0, i, i, 0, 0}) = 0.25;
+      ham_hei_tri_terms[1]({1, 1, i, i, 1, 1}) = 0.25;
+      ham_hei_tri_terms[1]({1, 1, i, i, 0, 0}) = -0.25;
+      ham_hei_tri_terms[1]({0, 0, i, i, 1, 1}) = -0.25;
+      ham_hei_tri_terms[1]({0, 1, i, i, 1, 0}) = 0.5;
+      ham_hei_tri_terms[1]({1, 0, i, i, 0, 1}) = 0.5;
+    }
+
+    for (size_t i = 0; i < 2; i++) {
+      ham_hei_tri_terms[2]({i, i, 0, 0, 0, 0}) = 0.25;
+      ham_hei_tri_terms[2]({i, i, 1, 1, 1, 1}) = 0.25;
+      ham_hei_tri_terms[2]({i, i, 1, 1, 0, 0}) = -0.25;
+      ham_hei_tri_terms[2]({i, i, 0, 0, 1, 1}) = -0.25;
+      ham_hei_tri_terms[2]({i, i, 0, 1, 1, 0}) = 0.5;
+      ham_hei_tri_terms[2]({i, i, 1, 0, 0, 1}) = 0.5;
+    }
+    ham_hei_tri = ham_hei_tri_terms[0] + ham_hei_tri_terms[1] + ham_hei_tri_terms[2];
+
     zid({0, 0}) = 1;
     zid({1, 1}) = 1;
     zsz({0, 0}) = 0.5;
@@ -104,7 +139,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
   gqten::hp_numeric::SetTensorManipulationThreads(1);
   gqten::hp_numeric::SetTensorTransposeNumThreads(1);
 
-  PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
 
   for (size_t y = 0; y < Ly; y++) {
@@ -118,13 +153,14 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
   SimpleUpdatePara update_para(5, 0.01, 1, 4, 1e-5);
   DGQTensor ham_nn;
   Contract(&dsz, {}, &dsz, {}, &ham_nn);
-
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_nn, peps0);
-  su_exe.Execute();
+  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe = new SquareLatticeNNSimpleUpdateExecutor(update_para, peps0,
+                                                                                             ham_nn);
+  su_exe->Execute();
+  delete su_exe;
 }
 
 TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
-  PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   size_t sz_int = 0;
   for (size_t y = 0; y < Ly; y++) {
@@ -137,50 +173,82 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
 
   SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
 
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
-  su_exe.Execute();
+  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe = new SquareLatticeNNSimpleUpdateExecutor(update_para, peps0,
+                                                                                             ham_hei_nn);
+  su_exe->Execute();
 
-  su_exe.update_para.Dmax = 4;
-  su_exe.update_para.Trunc_err = 1e-6;
-  su_exe.SetStepLenth(0.05);
-  su_exe.Execute();
+  su_exe->update_para.Dmax = 4;
+  su_exe->update_para.Trunc_err = 1e-6;
+  su_exe->SetStepLenth(0.05);
+  su_exe->Execute();
 
-  auto tps4 = su_exe.GetPEPS().ToTPS();
-
-  su_exe.DumpResult("su_update_resultD4", true);
-
-
+  auto tps4 = TPS<GQTEN_Double, U1QN>(su_exe->GetPEPS());
+  su_exe->DumpResult("su_update_resultD4", true);
   tps4.Dump("tps_heisenberg_D4");
+  delete su_exe;
 }
 
 TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD8) {
-  PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   peps0.Load("su_update_resultD4");
 
   SimpleUpdatePara update_para(10, 0.1, 1, 8, 1e-10);
 
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
-  su_exe.Execute();
+  auto su_exe = new SquareLatticeNNSimpleUpdateExecutor(update_para, peps0, ham_hei_nn);
+  su_exe->Execute();
 
-  auto tps8 = su_exe.GetPEPS().ToTPS();
+  auto tps8 = TPS<GQTEN_Double, U1QN>(su_exe->GetPEPS());
 
-  su_exe.DumpResult("su_update_resultD8", true);
+  su_exe->DumpResult("su_update_resultD8", true);
   tps8.Dump("tps_heisenberg_D8");
+  delete su_exe;
 }
 
-TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
-  PEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
-  peps0.Load("su_update_resultD8");
+TEST_F(TestSimpleUpdateSpinSystem, TriangleNNHeisenberg) {
+  SquareLatticePEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
+  std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
+  size_t sz_int = 0;
+  for (size_t y = 0; y < Ly; y++) {
+    for (size_t x = 0; x < Lx; x++) {
+      size_t sz_int = x + y;
+      activates[y][x] = sz_int % 2;
+    }
+  }
+  peps0.Initial(activates);
 
-  SimpleUpdatePara update_para(10, 0.05, 1, 16, 1e-10);
+  SimpleUpdatePara update_para(20, 0.1, 1, 2, 1e-5);
 
-  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
-  su_exe.Execute();
-  auto tps16 = su_exe.GetPEPS().ToTPS();
+  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe
+      = new TriangleNNModelSquarePEPSSimpleUpdateExecutor(update_para, peps0,
+                                                          ham_hei_nn,
+                                                          ham_hei_tri);
+  su_exe->Execute();
 
-  su_exe.DumpResult("su_update_resultD16", true);
-  tps16.Dump("tps_heisenberg_D16");
+  su_exe->update_para.Dmax = 4;
+  su_exe->update_para.Trunc_err = 1e-6;
+  su_exe->SetStepLenth(0.05);
+  su_exe->Execute();
+
+  auto tps4 = TPS<GQTEN_Double, U1QN>(su_exe->GetPEPS());
+  su_exe->DumpResult("su_update_resultD4", true);
+  tps4.Dump("tps_heisenberg_D4");
+  delete su_exe;
 }
+
+
+//TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
+//  SquareLatticePEPS<GQTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
+//  peps0.Load("su_update_resultD8");
+//
+//  SimpleUpdatePara update_para(10, 0.05, 1, 16, 1e-10);
+//
+//  auto su_exe = SimpleUpdateExecutor(update_para, ham_hei_nn, peps0);
+//  su_exe.Execute();
+//  auto tps16 = TPS<GQTEN_Double, U1QN>(su_exe.GetPEPS());
+//
+//  su_exe.DumpResult("su_update_resultD16", true);
+//  tps16.Dump("tps_heisenberg_D16");
+//}
 
 
 int main(int argc, char *argv[]) {

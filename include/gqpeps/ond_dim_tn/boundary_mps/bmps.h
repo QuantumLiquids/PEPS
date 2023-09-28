@@ -22,7 +22,8 @@ using namespace gqmps2;
 
 enum CompressMPSScheme {
   SVD_COMPRESS,
-  VARIATION
+  VARIATION2Site,
+  VARIATION1Site
 };
 
 /**
@@ -34,12 +35,12 @@ enum CompressMPSScheme {
  */
 template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
-  using LocalTenT = GQTensor<TenElemT, QNT>;
+  using Tensor = GQTensor<TenElemT, QNT>;
   using IndexT = Index<QNT>;
-  using TransferMPO = std::vector<LocalTenT *>;
+  using TransferMPO = std::vector<Tensor *>;
  public:
 
-  BMPS(const BMPSPOSITION position, const size_t size) : TenVec<LocalTenT>(size), position_(position),
+  BMPS(const BMPSPOSITION position, const size_t size) : TenVec<Tensor>(size), position_(position),
                                                          center_(kUncentralizedCenterIdx),
                                                          tens_cano_type_(size, NONE) {}
 
@@ -66,16 +67,16 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
   }
 
   // MPS local tensor access, set function
-  LocalTenT &operator[](const size_t idx);
+  Tensor &operator[](const size_t idx);
 
   // get function
-  const LocalTenT &operator[](const size_t idx) const;
+  const Tensor &operator[](const size_t idx) const;
 
   // set function
-  LocalTenT *&operator()(const size_t idx);
+  Tensor *&operator()(const size_t idx);
 
   // get function
-  const LocalTenT *operator()(const size_t idx) const;
+  const Tensor *operator()(const size_t idx) const;
 
   // MPS global operations
   void Centralize(const int);
@@ -108,12 +109,16 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
   void Reverse();
 
   void InplaceMultipleMPO(const TransferMPO &, const size_t, const size_t, const double,
-                          const CompressMPSScheme &scheme = SVD_COMPRESS);
+                          const size_t max_iter = 5, //only valid for variational methods
+                          const CompressMPSScheme &scheme = VARIATION2Site);
 
   BMPS MultipleMPO(const TransferMPO &, const size_t, const size_t, const double,
-                   const CompressMPSScheme &scheme = SVD_COMPRESS) const;
+                   const size_t max_iter = 5, //only valid for variational methods
+                   const CompressMPSScheme &scheme = VARIATION2Site) const;
 
  private:
+  BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const double) const;
+
   const BMPSPOSITION position_; //posible to remove this member and replace it with function parameter if the function needs
   int center_;
   std::vector<MPSTenCanoType> tens_cano_type_;
