@@ -81,6 +81,7 @@ class Configuration : public DuoMatrix<size_t> {
       }
     }
     ifs.close();
+    return true;
   }
 
  private:

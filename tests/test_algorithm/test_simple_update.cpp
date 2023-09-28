@@ -230,8 +230,8 @@ TEST_F(TestSimpleUpdateSpinSystem, TriangleNNHeisenberg) {
   su_exe->Execute();
 
   auto tps4 = TPS<GQTEN_Double, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("su_update_resultD4", true);
-  tps4.Dump("tps_heisenberg_D4");
+  su_exe->DumpResult("su_update_tri_heisenberg_D4", true);
+  tps4.Dump("tps_tri_heisenberg_D4");
   delete su_exe;
 }
 
