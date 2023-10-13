@@ -140,6 +140,8 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   TenElemT Trace(const SiteIdx &site_a, const SiteIdx &site_b, const BondOrientation bond_dir) const;
 
+  TenElemT ReplaceOneSiteTrace(const SiteIdx &site, const Tensor &replace_ten) const;
+
   // There are some redundancy information but it will help users to check the calling.
   TenElemT ReplaceNNSiteTrace(const SiteIdx &site_a, const SiteIdx &site_b,
                               const BondOrientation bond_dir,

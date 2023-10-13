@@ -32,6 +32,11 @@ enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticReconfiguration
 };
 
+enum MC_SWEEP_SCHEME {
+  SequentiallyNNSiteFlip,
+  CompressedLatticeKagomeLocalUpdate
+};
+
 struct VMCOptimizePara {
   VMCOptimizePara(TruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
                   const std::vector<size_t> &occupancy,
@@ -70,6 +75,8 @@ struct VMCOptimizePara {
   std::vector<double> step_lens;
   WAVEFUNCTION_UPDATE_SCHEME update_scheme;
   std::string wavefunction_path;
+
+  MC_SWEEP_SCHEME mc_sweep_sheme = SequentiallyNNSiteFlip;
 };
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -120,7 +127,7 @@ class VMCPEPSExecutor : public Executor {
 
   void Measure_(void);
 
-  size_t MCSweepSequentially_(void);
+  size_t MCSweep_(void);
 
   void MCUpdateNNSite_(const SiteIdx &site_a, BondOrientation dir);
 

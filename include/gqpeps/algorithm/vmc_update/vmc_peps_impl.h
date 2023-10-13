@@ -200,7 +200,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
   if (!warm_up_) {
     Timer warm_up_timer("warm_up");
     for (size_t sweep = 0; sweep < optimize_para.mc_warm_up_sweeps; sweep++) {
-      MCSweepSequentially_();
+      MCSweep_();
     }
     double elasp_time = warm_up_timer.Elapsed();
     std::cout << "Proc " << std::setw(4) << world_.rank() << " warm-up completes T = " << elasp_time << "s."
@@ -217,7 +217,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     double step_len = optimize_para.step_lens[iter];
     size_t accept_num = 0;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-      accept_num += MCSweepSequentially_();
+      accept_num += MCSweep_();
       SampleEnergyAndHols_();
     }
     double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
@@ -401,8 +401,11 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMC
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweepSequentially_(void) {
-  return tps_sample_.MCSequentiallySweep(split_index_tps_, u_double_);
+size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void) {
+  if (optimize_para.mc_sweep_sheme == SequentiallyNNSiteFlip)
+    return tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, u_double_);
+  else if (optimize_para.mc_sweep_sheme == CompressedLatticeKagomeLocalUpdate)
+    return tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>

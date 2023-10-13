@@ -639,6 +639,22 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::Trace(const SiteIdx &site_a, const Site
   return ReplaceNNSiteTrace(site_a, site_b, bond_dir, ten_a, ten_b);
 }
 
+template<typename TenElemT, typename QNT>
+TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceOneSiteTrace(const SiteIdx &site,
+                                                             const TensorNetwork2D::Tensor &replace_ten) const {
+  //here suppose mps along the horizontal direction.
+  Tensor tmp[4];
+  const size_t row = site[0];
+  const size_t col = site[1];
+  const Tensor &up_mps_ten = bmps_set_.at(UP)[row][this->cols() - col - 1];
+  const Tensor &down_mps_ten = bmps_set_.at(DOWN)[this->rows() - row - 1][col];
+  Contract<TenElemT, QNT, true, true>(up_mps_ten, bten_set_.at(LEFT)[col], 2, 0, 1, tmp[0]);
+  Contract<TenElemT, QNT, false, false>(tmp[0], replace_ten, 1, 3, 2, tmp[1]);
+  Contract(&tmp[1], {0, 2}, &down_mps_ten, {0, 1}, &tmp[2]);
+  Contract(&tmp[2], {0, 1, 2}, &bten_set_.at(RIGHT)[this->cols() - col - 1], {2, 1, 0}, &tmp[3]);
+  return tmp[3]();
+}
+
 
 template<typename TenElemT, typename QNT>
 TenElemT

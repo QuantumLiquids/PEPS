@@ -133,6 +133,12 @@ class SquareLatticePEPS {
       const TruncatePara &trunc_para
   );
 
+  double UpperLeftTriangleProject(
+      const TenT &gate_ten,
+      const SiteIdx &upper_left_site,
+      const TruncatePara &trunc_para
+  );
+
   double LowerRightTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_site,
@@ -158,7 +164,7 @@ class SquareLatticePEPS {
   TenT Eat3SurroundLambdas_(const SiteIdx &site, const BTenPOSITION leaving_post) const;
 
   TenT QTenSplitOutLambdas_(const TenT &q, const SiteIdx &site,
-                           const BTenPOSITION leaving_post, double inv_tolerance) const;
+                            const BTenPOSITION leaving_post, double inv_tolerance) const;
 
   static const QNT qn0_;
 

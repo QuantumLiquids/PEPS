@@ -27,9 +27,9 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
    * @param ham_tri    three-site triangle interaction term
    */
   TriangleNNModelSquarePEPSSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
-                                      const PEPST &peps_initial,
-                                      const Tensor &ham_nn,
-                                      const Tensor &ham_tri) :
+                                                const PEPST &peps_initial,
+                                                const Tensor &ham_nn,
+                                                const Tensor &ham_tri) :
       SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), \
           ham_nn_(ham_nn), ham_tri_(ham_tri) {}
 
@@ -53,7 +53,7 @@ double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdat
   Timer simple_update_sweep_timer("simple_update_sweep");
   TruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   double norm = 1.0;
-  double e0 = 0.0;
+  double e0 = 0.0, e1 = 0.0;
 
   for (size_t row = 0; row < this->ly_ - 1; row++) {
     norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, 0}, VERTICAL, para);
@@ -67,10 +67,26 @@ double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdat
       e0 += -std::log(norm) / this->update_para.tau;
     }
   }
+
+  for (size_t col = 0; col < this->lx_ - 1; col++) {
+    for (size_t row = 0; row < this->ly_ - 1; row++) {
+      norm = this->peps_.UpperLeftTriangleProject(evolve_gate_tri_, {row, col}, para);
+      e1 += -std::log(norm) / this->update_para.tau;
+    }
+    norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {this->ly_ - 1, col}, HORIZONTAL, para);
+    e1 += -std::log(norm) / this->update_para.tau;
+  }
+  for (size_t row = 0; row < this->ly_ - 1; row++) {
+    norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, this->lx_ - 1}, VERTICAL, para);
+    e1 += -std::log(norm) / this->update_para.tau;
+  }
+
   double sweep_time = simple_update_sweep_timer.Elapsed();
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
-            << std::right << e0
+            << std::right << (e0 + e1) / 2
+            << " Delta E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
+            << std::right << std::fabs(e0 - e1) / 2
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
