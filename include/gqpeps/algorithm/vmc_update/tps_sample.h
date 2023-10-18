@@ -1,6 +1,9 @@
-//
-// Created by haoxinwang on 07/09/23.
-//
+/*
+* Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
+* Creation Date: 2023-07-9
+*
+* Description: GraceQ/VMC-PEPS project. The generic PEPS class, implementation.
+*/
 
 #ifndef GRACEQ_VMC_PEPS_TPS_SAMPLE_H
 #define GRACEQ_VMC_PEPS_TPS_SAMPLE_H
@@ -53,6 +56,15 @@ struct TPSSample {
   void SetTruncatePara(const TruncatePara &trun_para) {
     tn.SetTruncatePara(trun_para);
   }
+
+//  SplitIndexTPS<TenElemT, QNT> operator*(const SplitIndexTPS<TenElemT, QNT> &sitps) const {
+//
+//
+//  }
+//
+//  operator SplitIndexTPS<TenElemT, QNT>() const {
+//
+//  }
 
   size_t MCCompressedKagomeLatticeLocalUpdateSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
                                                    std::uniform_real_distribution<double> &u_double) {

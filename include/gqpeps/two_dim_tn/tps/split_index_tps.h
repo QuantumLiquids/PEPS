@@ -33,7 +33,17 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
  public:
 
   //constructor
+  SplitIndexTPS(void) = default;    // default constructor for MPI
+
   SplitIndexTPS(const size_t rows, const size_t cols) : TenMatrix<std::vector<Tensor>>(rows, cols) {}
+
+  SplitIndexTPS(const size_t rows, const size_t cols, const size_t phy_dim) : SplitIndexTPS(rows, cols) {
+    for (size_t row = 0; row < rows; row++) {
+      for (size_t col = 0; col < cols; col++) {
+        (*this)({row, col}) = std::vector<Tensor>(phy_dim);
+      }
+    }
+  }
 
   SplitIndexTPS(const SplitIndexTPS &brotps) : TenMatrix<std::vector<GQTensor<TenElemT, QNT>>>(brotps) {}
 
@@ -62,6 +72,10 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
 
   }
 
+  size_t PhysicalDim(void) const {
+    return (*this)({0, 0}).size();
+  }
+
   TN2D Project(const Configuration &config) const {
     assert(config.rows() == this->rows());
     assert(config.cols() == this->cols());
@@ -79,6 +93,124 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     }
     return dmax;
   };
+
+  bool IsBondDimensionEven(void) const;
+
+  SplitIndexTPS operator*(TenElemT scalar) const {
+    SplitIndexTPS res(this->rows(), this->cols());
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        res({row, col}) = std::vector<Tensor>(phy_dim);
+        for (size_t i = 0; i < phy_dim; i++) {
+          if (!(*this)({row, col})[i].IsDefault())
+            res({row, col})[i] = (*this)({row, col})[i] * scalar;
+        }
+      }
+    }
+    return res;
+  }
+
+  SplitIndexTPS operator*=(TenElemT scalar) {
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        for (size_t i = 0; i < phy_dim; i++) {
+          if (!(*this)({row, col})[i].IsDefault())
+            (*this)({row, col})[i] *= scalar;
+        }
+      }
+    }
+    return *this;
+  }
+
+  SplitIndexTPS operator+(SplitIndexTPS right) const {
+    SplitIndexTPS res(this->rows(), this->cols());
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        res({row, col}) = std::vector<Tensor>(phy_dim);
+        for (size_t i = 0; i < phy_dim; i++) {
+          if (!(*this)({row, col})[i].IsDefault() && !right({row, col})[i].IsDefault())
+            res({row, col})[i] = (*this)({row, col})[i] + right({row, col})[i];
+          else if (!(*this)({row, col})[i].IsDefault())
+            res({row, col})[i] = (*this)({row, col})[i];
+          else if (!right({row, col})[i].IsDefault())
+            res({row, col})[i] = right({row, col})[i];
+        }
+      }
+    }
+    return res;
+  }
+
+  SplitIndexTPS &operator+=(SplitIndexTPS right) {
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        for (size_t i = 0; i < phy_dim; i++) {
+          if ((*this)({row, col})[i].IsDefault())
+            (*this)({row, col})[i] = right({row, col})[i];
+          else if (!right({row, col})[i].IsDefault())
+            (*this)({row, col})[i] += right({row, col})[i];
+        }
+      }
+    }
+    return *this;
+  }
+
+  ///< Inner norm
+  TenElemT operator*(SplitIndexTPS right) const {
+    TenElemT res;
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        for (size_t i = 0; i < phy_dim; i++) {
+          if ((*this)({row, col})[i].IsDefault()) {
+            continue;
+          }
+          Tensor ten_dag = Dag((*this)({row, col})[i]);
+          Tensor scalar;
+          Contract(&ten_dag, {0, 1, 2, 3}, &right({row, col})[i], {0, 1, 2, 3}, &scalar);
+          res += scalar();
+        }
+      }
+    }
+    return res;
+  }
+
+  SplitIndexTPS operator-() const {
+    SplitIndexTPS res(this->rows(), this->cols());
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        res({row, col}) = std::vector<Tensor>(phy_dim);
+        for (size_t i = 0; i < phy_dim; i++) {
+          if (!(*this)({row, col})[i].IsDefault())
+            res({row, col})[i] = -(*this)({row, col})[i];
+        }
+      }
+    }
+    return res;
+  }
+
+  SplitIndexTPS operator-(SplitIndexTPS right) const {
+    return (*this) + (-right);
+  }
+
+  ///< NB! not the wave function norm, it's the summation of tensor norm
+  double Norm() const {
+    double norm = 0;
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        for (size_t i = 0; i < phy_dim; i++) {
+          if (!(*this)({row, col})[i].IsDefault())
+            norm += (*this)({row, col})[i].Get2Norm();
+        }
+      }
+    }
+    return norm;
+  }
 
   bool DumpTen(const size_t row, const size_t col, const size_t compt, const std::string &file) const {
     std::ofstream ofs(file, std::ofstream::binary);
@@ -113,6 +245,23 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
 
   bool Load(const std::string &tps_path = kTpsPath);
 };
+
+template<typename TenElemT, typename QNT>
+bool SplitIndexTPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
+  size_t d = (*this)({0, 0})[0].GetShape()[1];
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      const Tensor &tensor = (*this)({row, col})[0];
+      if (row < this->rows() - 1 && d != tensor.GetShape()[1]) {
+        return false;
+      }
+      if (col < this->cols() - 1 && d != tensor.GetShape()[2]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
 
 template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool release_mem) {
@@ -164,7 +313,105 @@ bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
   }
   return true;
 }
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT> operator*(TenElemT scalar, const SplitIndexTPS<TenElemT, QNT> &split_idx_tps) {
+  return split_idx_tps * scalar;
 }
+
+template<typename QNT>
+SplitIndexTPS<GQTEN_Complex, QNT>
+operator*(GQTEN_Double scalar, const SplitIndexTPS<GQTEN_Complex, QNT> &split_idx_tps) {
+  return split_idx_tps * GQTEN_Complex(scalar, 0.0);
+}
+
+
+template<typename TenElemT, typename QNT>
+void CGSolverBroadCastVector(
+    SplitIndexTPS<TenElemT, QNT> &v,
+    boost::mpi::communicator &world
+) {
+  using Tensor = GQTensor<TenElemT, QNT>;
+  size_t rows = v.rows(), cols = v.cols(), phy_dim = 0;
+  broadcast(world, rows, kMasterProc);
+  broadcast(world, cols, kMasterProc);
+  if (world.rank() != kMasterProc) {
+    v = SplitIndexTPS<TenElemT, QNT>(rows, cols);
+  } else {
+    phy_dim = v({0, 0}).size();
+  }
+  broadcast(world, phy_dim, kMasterProc);
+  if (world.rank() == kMasterProc) {
+    for (size_t row = 0; row < rows; ++row) {
+      for (size_t col = 0; col < cols; ++col) {
+        for (size_t compt = 0; compt < phy_dim; compt++) {
+          SendBroadCastGQTensor(world, v({row, col})[compt], kMasterProc);
+        }
+      }
+    }
+  } else {
+    for (size_t row = 0; row < rows; ++row) {
+      for (size_t col = 0; col < cols; ++col) {
+        v({row, col}) = std::vector<Tensor>(phy_dim);
+        for (size_t compt = 0; compt < phy_dim; compt++) {
+          RecvBroadCastGQTensor(world, v({row, col})[compt], kMasterProc);
+        }
+      }
+    }
+  }
+}
+
+template<typename TenElemT, typename QNT>
+void CGSolverSendVector(
+    boost::mpi::communicator &world,
+    const SplitIndexTPS<TenElemT, QNT> &v,
+    const size_t dest,
+    const int tag
+) {
+  using Tensor = GQTensor<TenElemT, QNT>;
+  size_t rows = v.rows(), cols = v.cols(), phy_dim = v({0, 0}).size();
+  world.send(dest, tag, rows);
+  world.send(dest, tag, cols);
+  world.send(dest, tag, phy_dim);
+  for (size_t row = 0; row < rows; ++row) {
+    for (size_t col = 0; col < cols; ++col) {
+      for (size_t compt = 0; compt < phy_dim; compt++) {
+        const Tensor &ten = v({row, col})[compt];
+        send_gqten(world, dest, tag, ten);
+      }
+    }
+  }
+}
+
+
+template<typename TenElemT, typename QNT>
+size_t CGSolverRecvVector(
+    boost::mpi::communicator &world,
+    SplitIndexTPS<TenElemT, QNT> &v,
+    const size_t src,
+    const int tag
+) {
+  using Tensor = GQTensor<TenElemT, QNT>;
+  size_t rows, cols, phy_dim;
+  boost::mpi::status status = world.recv(src, tag, rows);
+  size_t actual_src = status.source();
+  size_t actual_tag = status.tag();
+  world.recv(actual_src, actual_tag, cols);
+  world.recv(actual_src, actual_tag, phy_dim);
+  v = SplitIndexTPS<TenElemT, QNT>(rows, cols);
+  for (size_t row = 0; row < rows; ++row) {
+    for (size_t col = 0; col < cols; ++col) {
+      v({row, col}) = std::vector<Tensor>(phy_dim);
+      for (size_t compt = 0; compt < phy_dim; compt++) {
+        Tensor &ten = v({row, col})[compt];
+        recv_gqten(world, actual_src, actual_tag, ten);
+      }
+    }
+  }
+  return actual_src;
+}
+
+}//gqpeps
 
 
 #endif //GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_H

@@ -160,6 +160,30 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4) {
   delete executor;
 }
 
+
+TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4StochasticReconfigration) {
+  using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
+  VMCPEPSExecutor<GQTEN_Double, U1QN, Model> *executor(nullptr);
+
+  optimize_para.update_scheme = StochasticReconfiguration;
+  if (params.Continue_from_VMC) {
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para,
+                                                              Ly, Lx,
+                                                              world);
+  } else {
+    TPS<GQTEN_Double, U1QN> tps = TPS<GQTEN_Double, U1QN>(Ly, Lx);
+    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+      std::cout << "Loading simple updated TPS files is broken." << std::endl;
+      exit(-2);
+    };
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para, tps,
+                                                              world);
+  }
+
+  executor->Execute();
+  delete executor;
+}
+
 TEST_F(TestSpinSystemVMCPEPS, J1J2D4) {
   using Model = SpinOneHalfJ1J2HeisenbergSquare<GQTEN_Double, U1QN>;
   VMCPEPSExecutor<GQTEN_Double, U1QN, Model> *executor(nullptr);

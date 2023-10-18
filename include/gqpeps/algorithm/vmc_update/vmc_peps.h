@@ -22,7 +22,6 @@
 namespace gqpeps {
 using namespace gqten;
 
-const size_t kMasterProc = 0;
 
 std::default_random_engine random_engine;
 
@@ -140,6 +139,8 @@ class VMCPEPSExecutor : public Executor {
 
   void StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
 
+  size_t StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+
   boost::mpi::communicator world_;
 
   size_t lx_; //cols
@@ -158,7 +159,11 @@ class VMCPEPSExecutor : public Executor {
 //  DuoMatrix<std::vector<std::vector<Tensor *> >> gten_samples_;
 //  DuoMatrix<std::vector<std::vector<Tensor *> >> g_times_energy_samples_;
 
-  SITPST gten_sum_; // the holes
+  ///< vector index corresponding to the samples.
+  std::vector<SITPST> gten_samples_; //useful for stochastic reconfiguration
+
+  SITPST gten_sum_; // the holes * psi^(-1)
+  SITPST gten_ave_; // average of gten_sum_;
   SITPST g_times_energy_sum_;
 
   std::vector<TenElemT> energy_trajectory_;

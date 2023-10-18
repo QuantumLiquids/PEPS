@@ -32,6 +32,8 @@ const std::string kBoundaryMpsTenBaseName = "bmps_ten";
 const size_t kMaxTaylorExpansionOrder = 1000;
 const int kEnergyOutputPrecision = 8;
 
+const size_t kMasterProc = 0;
+
 } /* gqpeps */
 
 

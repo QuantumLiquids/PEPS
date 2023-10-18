@@ -206,6 +206,18 @@ add_mpi_unittest(test_vmc_peps_mpi
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
+## Test utility
+add_unittest(test_conjugate_gradient_solver
+        "test_utility/test_conjugate_gradient_solver.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
+add_mpi_unittest(test_conjugate_gradient_mpi_solver
+        "test_utility/test_conjugate_gradient_mpi_solver.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "3"
+        ""
+)
 
 #
 ## Test mpi two site update

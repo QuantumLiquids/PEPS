@@ -321,6 +321,10 @@ BMPS<TenElemT, QNT>::MultipleMPO(const BMPS::TransferMPO &mpo,
     case VARIATION2Site: {
       const double converge_tol = 1e-15;
       size_t N = this->size();
+      if (N == 2) {
+        return MultipleMPO(mpo, Dmin, Dmax,
+                           trunc_err, iter_max, SVD_COMPRESS);
+      }
       BMPS::TransferMPO ordered_mpo = mpo;
       if (position_ == RIGHT || position_ == UP) {
         std::reverse(ordered_mpo.begin(), ordered_mpo.end());
