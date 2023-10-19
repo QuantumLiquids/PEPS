@@ -363,7 +363,6 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
       }
     }
   }
-  double grad_norm(0.0);
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
       const size_t phy_dim = grad_({row, col}).size();
@@ -378,15 +377,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
     }
   }
   if (world_.rank() == kMasterProc) {
-    for (size_t row = 0; row < ly_; row++) {
-      for (size_t col = 0; col < lx_; col++) {
-        const size_t phy_dim = grad_({row, col}).size();
-        for (size_t compt = 0; compt < phy_dim; compt++) {
-          grad_norm += grad_({row, col})[compt].Get2Norm();
-        }
-      }
-    }
-    grad_norm_.push_back(grad_norm);
+    grad_norm_.push_back(grad_.Norm());
   }
   //do not broad cast because only broad cast the updated TPS
   return grad_;

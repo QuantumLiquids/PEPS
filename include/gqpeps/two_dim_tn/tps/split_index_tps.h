@@ -197,15 +197,18 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return (*this) + (-right);
   }
 
-  ///< NB! not the wave function norm, it's the summation of tensor norm
+  ///< NB! not the wave function norm, it's the summation of tensor norm.
+  ///< NB! the norm is defined as summation of element square, no square root.
   double Norm() const {
     double norm = 0;
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
         for (size_t i = 0; i < phy_dim; i++) {
-          if (!(*this)({row, col})[i].IsDefault())
-            norm += (*this)({row, col})[i].Get2Norm();
+          if (!(*this)({row, col})[i].IsDefault()) {
+            double norm_local = (*this)({row, col})[i].Get2Norm();
+            norm += norm_local * norm_local;
+          }
         }
       }
     }

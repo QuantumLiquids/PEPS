@@ -192,9 +192,12 @@ VectorType ConjugateGradientSolverMaster(
 ) {
   MasterBroadcastInstruction(start, world);
 
+  double tol = b.Norm() * tolerance;
+
   VectorType ax0 = MatrixMultiplyVectorMaster(matrix_a, x0, world);
   VectorType r = b - ax0;
-  if (r.Norm() < tolerance) {
+  double rk_2norm = r.Norm();
+  if (rk_2norm < tol) {
     iter = 0;
     MasterBroadcastInstruction(finish, world);
     return x0;
@@ -203,23 +206,31 @@ VectorType ConjugateGradientSolverMaster(
   VectorType x = x0;
   double rkp1_2norm;
   for (size_t k = 0; k < max_iter; k++) {
-    double rk_2norm = r.Norm(); //auto is double or complex
     MasterBroadcastInstruction(multiplication, world);
     VectorType ap = MatrixMultiplyVectorMaster(matrix_a, p, world);
-    auto alpha = rk_2norm / (p * ap);
+    auto pap = (p * ap);
+    assert(pap > 0);
+    auto alpha = rk_2norm / pap; //auto is double or complex
     x = x + alpha * p;
+
+//    MasterBroadcastInstruction(multiplication, world);
+//    VectorType ax = MatrixMultiplyVectorMaster(matrix_a, x, world);
+//    r = b - ax;
+
     r = r - alpha * ap;
     rkp1_2norm = r.Norm();   // return value of norm has definitely double type.
-#if VERBOSE_MODE == 1
-    std::cout << "rkp1_2norm = " << rkp1_2norm << std::endl;
-#endif
-    if (rkp1_2norm < tolerance) {
+
+    if (rkp1_2norm < tol) {
       iter = k + 1;
       MasterBroadcastInstruction(finish, world);
       return x;
     }
     double beta = rkp1_2norm / rk_2norm;
+#if VERBOSE_MODE == 1
+    std::cout << "k = " << k << "rkp1_2norm = " << rkp1_2norm << " beta = " << beta << std::endl;
+#endif
     p = r + beta * p;
+    rk_2norm = rkp1_2norm;
   }
   iter = max_iter;
   std::cout << "warning: convergence may fail on gradient solving linear equation. rkp1_2norm = " << rkp1_2norm
