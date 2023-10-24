@@ -28,15 +28,11 @@ struct TPSSample {
 
   TPSSample(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
       : config(config), tn(config.rows(), config.cols()) {
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
     tn.GrowBMPSForRow(0, trun_para);
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     amplitude = tn.Trace({0, 0}, HORIZONTAL);
-  }
-
-  TPSSample(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config, const TruncatePara &trun_para)
-      : TPSSample(sitps, config) {
-    TPSSample::trun_para = trun_para;
   }
 
   /**

@@ -487,7 +487,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string
   Configuration config(ly_, lx_);
   bool load_config = config.Load(tps_path, world_.rank());
   if (load_config) {
-    tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, config, TruncatePara(optimize_para));
+    tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, config);
   } else {
     std::cout << "Loading configuration in rank " << world_.rank()
               << " fails. Random generate it and warm up."
