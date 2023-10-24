@@ -78,6 +78,17 @@ struct VMCOptimizePara {
   MC_SWEEP_SCHEME mc_sweep_sheme = SequentiallyNNSiteFlip;
 };
 
+///< For stochastic reconfiguration
+struct ConjugateGradientParams {
+  size_t max_iter;
+  double tolerance;
+  int residue_restart_step;
+
+  ConjugateGradientParams(size_t max_iter, double tolerance, int residue_restart_step)
+      : max_iter(max_iter), tolerance(tolerance), residue_restart_step(residue_restart_step) {}
+};
+
+
 template<typename TenElemT, typename QNT, typename EnergySolver>
 class VMCPEPSExecutor : public Executor {
  public:
@@ -115,6 +126,7 @@ class VMCPEPSExecutor : public Executor {
 
   VMCOptimizePara optimize_para;
 
+  ConjugateGradientParams cg_params = ConjugateGradientParams(100, 1e-8, 20);
  protected:
   void PrintExecutorInfo_(void);
 

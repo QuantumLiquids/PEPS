@@ -60,7 +60,7 @@ void RunTestPlainCGSolverParallelCase(
     communicator &world
 ) {
   size_t iter;
-  auto x = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, iter, world);
+  auto x = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 20, iter, world);
   if (world.rank() == kMasterProc) {
     x.Print();
     auto diff_vec = x - x_res;

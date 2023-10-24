@@ -47,30 +47,19 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
   //without initialization of the data of boundary mps
   TensorNetwork2D(const size_t rows, const size_t cols);
 
-  //without initialization of the data of boundary mps
-  TensorNetwork2D(const size_t rows, const size_t cols, const TruncatePara &trunc_para);
 
   //with initialization of the data of boundary mps
   TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config);
 
-  //with initialization of the data of boundary mps
-  TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config, const TruncatePara &trunc_para);
-
   TensorNetwork2D<TenElemT, QNT> &operator=(const TensorNetwork2D<TenElemT, QNT> &tn);
 
-  void SetTruncatePara(const TruncatePara &trunc_para) {
-    trunc_para_ = trunc_para;
-  }
-
-  const TruncatePara &GetTruncatePara(void) const {
-    return trunc_para_;
-  }
 
   const std::vector<BMPS<TenElemT, QNT>> &GetBMPS(const BMPSPOSITION position) const {
     return bmps_set_[position];
   }
 
-  const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &GenerateBMPSApproach(BMPSPOSITION post);
+  const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
+  GenerateBMPSApproach(BMPSPOSITION post, const TruncatePara &trunc_para);
 
   /**
    * Generate the boundary MPS for the row-th MPO.
@@ -78,22 +67,24 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
    * @param row
    * @return
    */
-  const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &GrowBMPSForRow(const size_t row);
+  const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
+  GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para);
 
   /**
    * Same functionality with GrowBMPSForRow but only return the corresponding boundary MPS
    * @param row
    * @return
    */
-  const std::pair<BMPST, BMPST> GetBMPSForRow(const size_t row);
+  const std::pair<BMPST, BMPST> GetBMPSForRow(const size_t row, const TruncatePara &trunc_para);
 
-  const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &GrowBMPSForCol(const size_t col);
+  const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
+  GrowBMPSForCol(const size_t col, const TruncatePara &trunc_para);
 
-  const std::pair<BMPST, BMPST> GetBMPSForCol(const size_t col);
+  const std::pair<BMPST, BMPST> GetBMPSForCol(const size_t col, const TruncatePara &trunc_para);
 
-  void BMPSMoveStep(const BMPSPOSITION position);
+  void BMPSMoveStep(const BMPSPOSITION position, const TruncatePara &trunc_para);
 
-  void GrowFullBMPS(const BMPSPOSITION position);
+  void GrowFullBMPS(const BMPSPOSITION position, const TruncatePara &trunc_para);
 
   void DeleteInnerBMPS(const BMPSPOSITION position) {
     bmps_set_[position].erase(bmps_set_[position].begin() + 1, bmps_set_[position].end());
@@ -161,9 +152,9 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
  * @param position
  * @return
  */
-  size_t GrowBMPSStep_(const BMPSPOSITION position);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, const TransferMPO &, const TruncatePara &);
 
-  size_t GrowBMPSStep_(const BMPSPOSITION position, const TransferMPO &);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &);
 
   /**
    *
@@ -184,7 +175,6 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
   std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> bmps_set_;
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layer between two bmps, todo
-  TruncatePara trunc_para_;
 };
 
 

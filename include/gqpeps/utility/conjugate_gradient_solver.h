@@ -95,8 +95,9 @@ VectorType ConjugateGradientSolverMaster(
     const MatrixType &matrix_a,
     const VectorType &b,
     const VectorType &x0, //initial guess
-    const size_t max_iter,
-    const double tolerance,
+    size_t max_iter,
+    double tolerance,
+    int,
     size_t &iter,
     boost::mpi::communicator &world
 );
@@ -145,12 +146,13 @@ VectorType ConjugateGradientSolver(
     const VectorType &x0, //initial guess
     const size_t max_iter,
     const double tolerance,
+    const int residue_restart_step,
     size_t &iter,    //return value
     boost::mpi::communicator &world
 ) {
   if (world.rank() == kMasterProc) {
     return ConjugateGradientSolverMaster(
-        matrix_a, b, x0, max_iter, tolerance, iter, world
+        matrix_a, b, x0, max_iter, tolerance, residue_restart_step, iter, world
     );
   } else {
     ConjugateGradientSolverSlave<MatrixType, VectorType>(
@@ -185,8 +187,9 @@ VectorType ConjugateGradientSolverMaster(
     const MatrixType &matrix_a,
     const VectorType &b,
     const VectorType &x0, //initial guess
-    const size_t max_iter,
-    const double tolerance,
+    size_t max_iter,
+    double tolerance,
+    int residue_restart_step,
     size_t &iter,
     boost::mpi::communicator &world
 ) {
@@ -211,13 +214,15 @@ VectorType ConjugateGradientSolverMaster(
     auto pap = (p * ap);
     assert(pap > 0);
     auto alpha = rk_2norm / pap; //auto is double or complex
-    x = x + alpha * p;
+    x += alpha * p;
 
-//    MasterBroadcastInstruction(multiplication, world);
-//    VectorType ax = MatrixMultiplyVectorMaster(matrix_a, x, world);
-//    r = b - ax;
-
-    r = r - alpha * ap;
+    if (residue_restart_step > 0 && (k % residue_restart_step) == (residue_restart_step - 1)) {
+      MasterBroadcastInstruction(multiplication, world);
+      VectorType ax = MatrixMultiplyVectorMaster(matrix_a, x, world);
+      r = b - ax;
+    } else {
+      r += (-alpha) * ap;
+    }
     rkp1_2norm = r.Norm();   // return value of norm has definitely double type.
 
     if (rkp1_2norm < tol) {

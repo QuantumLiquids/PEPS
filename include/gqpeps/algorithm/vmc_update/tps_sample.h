@@ -22,23 +22,24 @@ struct TPSSample {
   TensorNetwork2D<TenElemT, QNT> tn;
   TenElemT amplitude;
 
+  static TruncatePara trun_para;
+
   TPSSample(const size_t rows, const size_t cols) : config(rows, cols), tn(rows, cols), amplitude(0) {}
 
-  TPSSample(const size_t rows, const size_t cols, const TruncatePara &trun_para) :
-      config(rows, cols), tn(rows, cols, trun_para), amplitude(0) {}
-
-  TPSSample(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config, const TruncatePara &trun_para)
-      : config(config),
-        tn(config.rows(), config.cols(), trun_para) {
-    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config, tn.GetTruncatePara());
-    tn.GrowBMPSForRow(0);
+  TPSSample(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
+      : config(config), tn(config.rows(), config.cols()) {
+    tn.GrowBMPSForRow(0, trun_para);
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     amplitude = tn.Trace({0, 0}, HORIZONTAL);
   }
 
+  TPSSample(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config, const TruncatePara &trun_para)
+      : TPSSample(sitps, config) {
+    TPSSample::trun_para = trun_para;
+  }
+
   /**
-   * @note the function doesn't change the truncation error data in tn
    * @param sitps
    * @param occupancy_num
    */
@@ -46,16 +47,13 @@ struct TPSSample {
                   const std::vector<size_t> &occupancy_num,
                   const size_t rand_seed) {
     config.Random(occupancy_num, rand_seed);
-    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config, tn.GetTruncatePara());
-    tn.GrowBMPSForRow(0);
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
+    tn.GrowBMPSForRow(0, trun_para);
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     amplitude = tn.Trace({0, 0}, HORIZONTAL);
   }
 
-  void SetTruncatePara(const TruncatePara &trun_para) {
-    tn.SetTruncatePara(trun_para);
-  }
 
 //  SplitIndexTPS<TenElemT, QNT> operator*(const SplitIndexTPS<TenElemT, QNT> &sitps) const {
 //
@@ -69,7 +67,7 @@ struct TPSSample {
   size_t MCCompressedKagomeLatticeLocalUpdateSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
                                                    std::uniform_real_distribution<double> &u_double) {
     size_t accept_num = 0;
-    tn.GenerateBMPSApproach(UP);
+    tn.GenerateBMPSApproach(UP, trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 1, true);
@@ -81,14 +79,14 @@ struct TPSSample {
         }
       }
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN);
+        tn.BMPSMoveStep(DOWN, trun_para);
       }
     }
 
     tn.DeleteInnerBMPS(LEFT);
     tn.DeleteInnerBMPS(RIGHT);
 
-    tn.GenerateBMPSApproach(LEFT);
+    tn.GenerateBMPSApproach(LEFT, trun_para);
     for (size_t col = 0; col < tn.cols(); col++) {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 2, true);
@@ -99,7 +97,7 @@ struct TPSSample {
         }
       }
       if (col < tn.cols() - 1) {
-        tn.BMPSMoveStep(RIGHT);
+        tn.BMPSMoveStep(RIGHT, trun_para);
       }
     }
 
@@ -111,7 +109,7 @@ struct TPSSample {
   size_t MCSequentiallyNNFlipSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
                                    std::uniform_real_distribution<double> &u_double) {
     size_t accept_num = 0;
-    tn.GenerateBMPSApproach(UP);
+    tn.GenerateBMPSApproach(UP, trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 2, true);
@@ -122,14 +120,14 @@ struct TPSSample {
         }
       }
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN);
+        tn.BMPSMoveStep(DOWN, trun_para);
       }
     }
 
     tn.DeleteInnerBMPS(LEFT);
     tn.DeleteInnerBMPS(RIGHT);
 
-    tn.GenerateBMPSApproach(LEFT);
+    tn.GenerateBMPSApproach(LEFT, trun_para);
     for (size_t col = 0; col < tn.cols(); col++) {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 2, true);
@@ -140,7 +138,7 @@ struct TPSSample {
         }
       }
       if (col < tn.cols() - 1) {
-        tn.BMPSMoveStep(RIGHT);
+        tn.BMPSMoveStep(RIGHT, trun_para);
       }
     }
 
@@ -336,6 +334,9 @@ struct TPSSample {
   } //CompressedKagomeLatticeSingleSiteUpdate_
 
 }; //TPSSample
+
+template<typename TenElemT, typename QNT>
+TruncatePara TPSSample<TenElemT, QNT>::trun_para = TruncatePara(0, 0, 0.0);
 }//gqpeps
 
 #endif //GRACEQ_VMC_PEPS_TPS_SAMPLE_H

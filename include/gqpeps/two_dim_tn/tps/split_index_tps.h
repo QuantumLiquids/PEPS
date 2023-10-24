@@ -64,8 +64,12 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     }
   }
 
-  using TenMatrix<std::vector<Tensor>>::operator=;
-
+//  using TenMatrix<std::vector<Tensor>>::operator=;
+  ///< using below explicitly definition to be compatible with lower version of g++
+  SplitIndexTPS&operator=(const SplitIndexTPS &rhs) {
+    TenMatrix<std::vector<Tensor>>::operator=(rhs);
+    return *this;
+  }
   // TODO
   operator TPST() {
     TPST tps(this->rows(), this->cols());

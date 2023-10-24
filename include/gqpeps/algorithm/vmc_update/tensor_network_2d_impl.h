@@ -17,12 +17,7 @@ using namespace gqten;
 
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t cols)
-    :TensorNetwork2D(rows, cols, TruncatePara(1, 1, 0)) {}
-
-
-template<typename TenElemT, typename QNT>
-TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t cols, const TruncatePara &trunc_para)
-    : TenMatrix<GQTensor<TenElemT, QNT>>(rows, cols), trunc_para_(trunc_para) {
+    : TenMatrix<GQTensor<TenElemT, QNT>>(rows, cols) {
   for (size_t post_int = 0; post_int < 4; post_int++) {
     const BMPSPOSITION post = static_cast<BMPSPOSITION>(post_int);
     bmps_set_.insert(std::make_pair(post, std::vector<BMPS<TenElemT, QNT>>()));
@@ -35,12 +30,7 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t 
 
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config)
-    : TensorNetwork2D(tps, config, TruncatePara(1, 1, 0.0)) {}
-
-template<typename TenElemT, typename QNT>
-TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config,
-                                                const TruncatePara &trunc_para)
-    :TensorNetwork2D(tps.rows(), tps.cols(), trunc_para) {
+    :TensorNetwork2D(tps.rows(), tps.cols()) {
   for (size_t row = 0; row < tps.rows(); row++) {
     for (size_t col = 0; col < tps.cols(); col++) {
       (*this)({row, col}) = tps({row, col})[config({row, col})];
@@ -69,30 +59,30 @@ TensorNetwork2D<TenElemT, QNT> &TensorNetwork2D<TenElemT, QNT>::operator=(const 
   TenMatrix<Tensor>::operator=(tn);
   bmps_set_ = tn.bmps_set_;
   bten_set_ = tn.bten_set_;
-  trunc_para_ = tn.trunc_para_;
   return *this;
 }
 
 template<typename TenElemT, typename QNT>
 const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-TensorNetwork2D<TenElemT, QNT>::GenerateBMPSApproach(BMPSPOSITION post) {
+TensorNetwork2D<TenElemT, QNT>::GenerateBMPSApproach(BMPSPOSITION post, const TruncatePara &trunc_para) {
   DeleteInnerBMPS(post);
-  GrowFullBMPS(Opposite(post));
+  GrowFullBMPS(Opposite(post), trunc_para);
   return bmps_set_;
 }
 
 
 template<typename TenElemT, typename QNT>
 size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position,
-                                                     const TransferMPO &mpo) {
+                                                     const TransferMPO &mpo,
+                                                     const TruncatePara &trunc_para) {
   std::vector<BMPS<TenElemT, QNT>> &bmps_set = bmps_set_[position];
-  bmps_set.push_back(bmps_set.back().MultipleMPO(mpo, trunc_para_.D_min, trunc_para_.D_max, trunc_para_.trunc_err));
+  bmps_set.push_back(bmps_set.back().MultipleMPO(mpo, trunc_para.D_min, trunc_para.D_max, trunc_para.trunc_err));
   return bmps_set.size();
 }
 
 
 template<typename TenElemT, typename QNT>
-size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position) {
+size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &trunc_para) {
   std::vector<BMPS<TenElemT, QNT>> &bmps_set = bmps_set_[position];
   size_t existed_bmps_num = bmps_set.size();
   assert(existed_bmps_num > 0);
@@ -105,12 +95,12 @@ size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position
     mpo_num = this->cols() - existed_bmps_num;
   }
   const TransferMPO &mpo = this->get_slice(mpo_num, Rotate(Orientation(position)));
-  return GrowBMPSStep_(position, mpo);
+  return GrowBMPSStep_(position, mpo, trunc_para);
 }
 
 
 template<typename TenElemT, typename QNT>
-void TensorNetwork2D<TenElemT, QNT>::GrowFullBMPS(const BMPSPOSITION position) {
+void TensorNetwork2D<TenElemT, QNT>::GrowFullBMPS(const BMPSPOSITION position, const TruncatePara &trunc_para) {
   std::vector<BMPS<TenElemT, QNT>> &bmps_set = bmps_set_[position];
   size_t existed_bmps_size = bmps_set.size();
   assert(existed_bmps_size > 0);
@@ -120,27 +110,27 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBMPS(const BMPSPOSITION position) {
     case DOWN: {
       for (size_t row = rows - existed_bmps_size; row > 0; row--) {
         const TransferMPO &mpo = this->get_row(row);
-        GrowBMPSStep_(position, mpo);
+        GrowBMPSStep_(position, mpo, trunc_para);
       }
       break;
     }
     case UP: {
       for (size_t row = existed_bmps_size - 1; row < rows - 1; row++) {
         const TransferMPO &mpo = this->get_row(row);
-        GrowBMPSStep_(position, mpo);
+        GrowBMPSStep_(position, mpo, trunc_para);
       }
       break;
     }
     case LEFT: {
       for (size_t col = existed_bmps_size - 1; col < cols - 1; col++) {
         const TransferMPO &mpo = this->get_col(col);
-        GrowBMPSStep_(position, mpo);
+        GrowBMPSStep_(position, mpo, trunc_para);
       }
     }
     case RIGHT: {
       for (size_t col = cols - existed_bmps_size; col > 0; col--) {
         const TransferMPO &mpo = this->get_col(col);
-        GrowBMPSStep_(position, mpo);
+        GrowBMPSStep_(position, mpo, trunc_para);
       }
       break;
     }
@@ -149,43 +139,43 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBMPS(const BMPSPOSITION position) {
 
 template<typename TenElemT, typename QNT>
 const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-TensorNetwork2D<TenElemT, QNT>::GrowBMPSForRow(const size_t row) {
+TensorNetwork2D<TenElemT, QNT>::GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para) {
   const size_t rows = this->rows();
   std::vector<BMPS<TenElemT, QNT>> &bmps_set_down = bmps_set_[DOWN];
   for (size_t row_bmps = rows - bmps_set_down.size(); row_bmps > row; row_bmps--) {
     const TransferMPO &mpo = this->get_row(row_bmps);
-    GrowBMPSStep_(DOWN, mpo);
+    GrowBMPSStep_(DOWN, mpo, trunc_para);
   }
 
   std::vector<BMPS<TenElemT, QNT>> &bmps_set_up = bmps_set_[UP];
   for (size_t row_bmps = bmps_set_up.size() - 1; row_bmps < row; row_bmps++) {
     const TransferMPO &mpo = this->get_row(row_bmps);
-    GrowBMPSStep_(UP, mpo);
+    GrowBMPSStep_(UP, mpo, trunc_para);
   }
   return bmps_set_;
 }
 
 template<typename TenElemT, typename QNT>
 const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-TensorNetwork2D<TenElemT, QNT>::GrowBMPSForCol(const size_t col) {
+TensorNetwork2D<TenElemT, QNT>::GrowBMPSForCol(const size_t col, const TruncatePara &trunc_para) {
   const size_t cols = this->cols();
   std::vector<BMPS<TenElemT, QNT>> &bmps_set_right = bmps_set_[RIGHT];
   for (size_t col_bmps = cols - bmps_set_right.size(); col_bmps > col; col_bmps--) {
     const TransferMPO &mpo = this->get_col(col_bmps);
-    GrowBMPSStep_(RIGHT, mpo);
+    GrowBMPSStep_(RIGHT, mpo, trunc_para);
   }
 
   std::vector<BMPS<TenElemT, QNT>> &bmps_set_left = bmps_set_[LEFT];
   for (size_t col_bmps = bmps_set_left.size() - 1; col_bmps < col; col_bmps++) {
     const TransferMPO &mpo = this->get_col(col_bmps);
-    GrowBMPSStep_(LEFT, mpo);
+    GrowBMPSStep_(LEFT, mpo, trunc_para);
   }
   return bmps_set_;
 }
 
 template<typename TenElemT, typename QNT>
 const std::pair<BMPS<TenElemT, QNT>, BMPS<TenElemT, QNT> >
-TensorNetwork2D<TenElemT, QNT>::GetBMPSForRow(const size_t row) {
+TensorNetwork2D<TenElemT, QNT>::GetBMPSForRow(const size_t row, const TruncatePara &trunc_para) {
   const size_t rows = this->rows();
   GrowBMPSForRow(row);
   BMPST &up_bmps = bmps_set_[UP][row];
@@ -196,7 +186,7 @@ TensorNetwork2D<TenElemT, QNT>::GetBMPSForRow(const size_t row) {
 
 template<typename TenElemT, typename QNT>
 const std::pair<BMPS<TenElemT, QNT>, BMPS<TenElemT, QNT> >
-TensorNetwork2D<TenElemT, QNT>::GetBMPSForCol(const size_t col) {
+TensorNetwork2D<TenElemT, QNT>::GetBMPSForCol(const size_t col, const TruncatePara &trunc_para) {
   const size_t cols = this->cols();
   GrowBMPSForCol(col);
   BMPST &left_bmps = bmps_set_[LEFT][col];
@@ -310,9 +300,9 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION pos
       const TransferMPO &mpo = this->get_col(col);
       const size_t N = mpo.size(); // this->cols()
       const size_t end_idx = N - remain_sites;
-      GrowBMPSForCol(col);
-      auto &left_bmps = bmps_set_[LEFT].back();
-      auto &right_bmps = bmps_set_[RIGHT].back();
+//      GrowBMPSForCol(col);
+      auto &left_bmps = bmps_set_[LEFT][col];
+      auto &right_bmps = bmps_set_[RIGHT][this->cols() - col - 1];
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &left_mps_ten = left_bmps[N - i - 1];
         auto &right_mps_ten = right_bmps[i];
@@ -330,9 +320,9 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION pos
       const TransferMPO &mpo = this->get_col(col);
       const size_t N = mpo.size(); // this->cols()
       const size_t end_idx = N - remain_sites;
-      GrowBMPSForCol(col);
-      auto &left_bmps = bmps_set_[LEFT].back();
-      auto &right_bmps = bmps_set_[RIGHT].back();
+//      GrowBMPSForCol(col);
+      auto &left_bmps = bmps_set_[LEFT][col];
+      auto &right_bmps = bmps_set_[RIGHT][this->cols() - col - 1];
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &left_mps_ten = left_bmps[i];
         auto &right_mps_ten = right_bmps[N - i - 1];
@@ -350,9 +340,9 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION pos
       const TransferMPO &mpo = this->get_row(row);
       const size_t N = mpo.size(); // this->cols()
       const size_t end_idx = N - remain_sites;
-      GrowBMPSForRow(row);
-      auto &up_bmps = bmps_set_[UP].back();
-      auto &down_bmps = bmps_set_[DOWN].back();
+//      GrowBMPSForRow(row);
+      auto &up_bmps = bmps_set_[UP][row];
+      auto &down_bmps = bmps_set_[DOWN][this->rows() - row - 1];
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &up_mps_ten = up_bmps[N - i - 1];
         auto &down_mps_ten = down_bmps[i];
@@ -370,9 +360,9 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION pos
       const TransferMPO &mpo = this->get_row(row);
       const size_t N = mpo.size(); // this->cols()
       const size_t end_idx = N - remain_sites;
-      GrowBMPSForRow(row);
-      auto &up_bmps = bmps_set_[UP].back();
-      auto &down_bmps = bmps_set_[DOWN].back();
+//      GrowBMPSForRow(row);
+      auto &up_bmps = bmps_set_[UP][row];
+      auto &down_bmps = bmps_set_[DOWN][this->rows() - row - 1];
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &up_mps_ten = up_bmps[i];
         auto &down_mps_ten = down_bmps[N - i - 1];
@@ -467,10 +457,10 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, cons
 }
 
 template<typename TenElemT, typename QNT>
-void TensorNetwork2D<TenElemT, QNT>::BMPSMoveStep(const BMPSPOSITION position) {
+void TensorNetwork2D<TenElemT, QNT>::BMPSMoveStep(const BMPSPOSITION position, const TruncatePara &trunc_para) {
   bmps_set_[position].pop_back();
   auto oppo_post = Opposite(position);
-  GrowBMPSStep_(oppo_post);
+  GrowBMPSStep_(oppo_post, trunc_para);
 }
 
 template<typename TenElemT, typename QNT>

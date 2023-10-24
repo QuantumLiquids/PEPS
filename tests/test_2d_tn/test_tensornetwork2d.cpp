@@ -48,6 +48,8 @@ struct TestSpin2DTensorNetwork : public testing::Test {
 
   TensorNetwork2D<GQTEN_Double, U1QN> tn2d = TensorNetwork2D<GQTEN_Double, U1QN>(Ly, Lx);
 
+  TruncatePara trunc_para = TruncatePara(4, 8, 1e-12);
+
   void SetUp(void) {
     TPS<GQTEN_Double, U1QN> tps(Ly, Lx);
     gqten::hp_numeric::SetTensorManipulationThreads(1);
@@ -61,12 +63,11 @@ struct TestSpin2DTensorNetwork : public testing::Test {
       }
     }
     tn2d = TensorNetwork2D<GQTEN_Double, U1QN>(split_index_tps, config);
-    tn2d.SetTruncatePara({4, 8, 1e-12});
   }
 };
 
 TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTrace) {
-  tn2d.GrowBMPSForRow(2);
+  tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
   double psi_a = tn2d.Trace({2, 0}, HORIZONTAL);
@@ -76,18 +77,18 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTrace) {
   double psi_b = tn2d.Trace({2, 1}, HORIZONTAL);
   EXPECT_NEAR(psi_a, psi_b, 1e-14);
 
-  tn2d.GrowBMPSForCol(1);
+  tn2d.GrowBMPSForCol(1, trunc_para);
   tn2d.InitBTen(BTenPOSITION::DOWN, 1);
   tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
   double psi_c = tn2d.Trace({Ly - 2, 1}, VERTICAL);
   std::cout << "Amplitude by vertical BMPS = " << psi_c << std::endl;
   tn2d.BTenMoveStep(BTenPOSITION::UP);
-  double psi_d = tn2d.Trace({Ly-3, 1}, VERTICAL);
+  double psi_d = tn2d.Trace({Ly - 3, 1}, VERTICAL);
   EXPECT_NEAR(psi_c, psi_d, 1e-14);
 }
 
 TEST_F(TestSpin2DTensorNetwork, HeisenbergD4BTen2) {
-  tn2d.GrowBMPSForRow(2);
+  tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen2(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 2, 2, true);
 }

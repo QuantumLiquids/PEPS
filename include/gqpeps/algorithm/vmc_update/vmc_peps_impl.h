@@ -98,7 +98,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     lx_(sitpst_init.cols()),
     ly_(sitpst_init.rows()),
     split_index_tps_(sitpst_init),
-    tps_sample_(ly_, lx_, TruncatePara(optimize_para)),
+    tps_sample_(ly_, lx_),
     u_double_(0, 1),
     grad_(ly_, lx_),
 //    gten_samples_(ly_, lx_),
@@ -109,6 +109,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     warm_up_(false) {
   random_engine.seed((size_t)
                          std::time(nullptr) + 10086 * world.rank());
+  TPSSample<TenElemT, QNT>::trun_para = TruncatePara(optimize_para);
   tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10087 * world.rank() + std::time(nullptr));
 
   ReserveSamplesDataSpace_();
@@ -122,12 +123,13 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
                                                               const boost::mpi::communicator &world,
                                                               const EnergySolver &solver):
     world_(world), optimize_para(optimize_para), lx_(lx), ly_(ly),
-    split_index_tps_(ly, lx), tps_sample_(ly, lx, TruncatePara(optimize_para)),
+    split_index_tps_(ly, lx), tps_sample_(ly, lx),
     u_double_(0, 1), grad_(ly_, lx_),
 //    gten_samples_(ly_, lx_),
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver), warm_up_(false) {
+  TPSSample<TenElemT, QNT>::trun_para = TruncatePara(optimize_para);
   random_engine.seed((size_t)
                          std::time(nullptr) + 10086 * world.rank());
   LoadTenData();
@@ -432,7 +434,9 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
   s_matrix.diag_shift = 0.01;
   size_t iter;
-  auto natural_grad = ConjugateGradientSolver(s_matrix, grad, grad, 100, 1e-8, iter, world_);
+  auto natural_grad = ConjugateGradientSolver(s_matrix, grad, grad,
+                                              cg_params.max_iter, cg_params.tolerance,
+                                              cg_params.residue_restart_step, iter, world_);
   StochGradUpdateTPS_(natural_grad, step_len);
   return iter;
 }
