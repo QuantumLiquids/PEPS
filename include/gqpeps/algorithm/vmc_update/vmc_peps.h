@@ -86,7 +86,7 @@ struct ConjugateGradientParams {
   double diag_shift;
 
   ConjugateGradientParams(size_t max_iter, double tolerance, int residue_restart_step, double diag_shift)
-      : max_iter(max_iter), tolerance(tolerance), residue_restart_step(residue_restart_step, diag_shift(diag_shift) {}
+      : max_iter(max_iter), tolerance(tolerance), residue_restart_step(residue_restart_step), diag_shift(diag_shift) {}
 };
 
 

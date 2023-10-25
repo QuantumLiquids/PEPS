@@ -225,6 +225,7 @@ VectorType ConjugateGradientSolverMaster(
       std::cout << "k : " << k << "pap : " << std::scientific << pap
                 << "rk_2norm : " << std::scientific << rk_2norm
                 << "alpha : " << std::scientific << alpha << std::endl;
+      exit(1);
     }
 #endif
     x += alpha * p;
