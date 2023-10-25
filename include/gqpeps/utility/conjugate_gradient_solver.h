@@ -14,6 +14,12 @@
 #include <boost/mpi.hpp>
 #include "gqpeps/consts.h"    //kMasterProc
 
+#ifndef  NDEBUG
+
+#include <cmath>
+
+#endif
+
 namespace gqpeps {
 
 
@@ -212,8 +218,15 @@ VectorType ConjugateGradientSolverMaster(
     MasterBroadcastInstruction(multiplication, world);
     VectorType ap = MatrixMultiplyVectorMaster(matrix_a, p, world);
     auto pap = (p * ap);
-    assert(pap > 0);
     auto alpha = rk_2norm / pap; //auto is double or complex
+#ifndef NDEBUG
+    assert(pap > 0);
+    if (!std::isnormal(alpha)) {
+      std::cout << "k : " << k << "pap : " << std::scientific << pap
+                << "rk_2norm : " << std::scientific << rk_2norm
+                << "alpha : " << std::scientific << alpha << std::endl;
+    }
+#endif
     x += alpha * p;
 
     if (residue_restart_step > 0 && (k % residue_restart_step) == (residue_restart_step - 1)) {
@@ -234,6 +247,9 @@ VectorType ConjugateGradientSolverMaster(
 #if VERBOSE_MODE == 1
     std::cout << "k = " << k << "rkp1_2norm = " << rkp1_2norm << " beta = " << beta << std::endl;
 #endif
+    if (beta > 1.0) {
+      std::cout << "k = " << k << "rkp1_2norm = " << rkp1_2norm << " beta = " << beta << std::endl;
+    }
     p = r + beta * p;
     rk_2norm = rkp1_2norm;
   }

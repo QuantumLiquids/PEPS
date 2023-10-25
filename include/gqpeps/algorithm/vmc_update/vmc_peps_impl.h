@@ -432,7 +432,7 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
     pgten_ave_ = nullptr;
   }
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
-  s_matrix.diag_shift = 0.01;
+  s_matrix.diag_shift = cg_params.diag_shift;
   size_t iter;
   auto natural_grad = ConjugateGradientSolver(s_matrix, grad, grad,
                                               cg_params.max_iter, cg_params.tolerance,
