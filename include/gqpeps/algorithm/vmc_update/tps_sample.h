@@ -62,15 +62,16 @@ struct TPSSample {
 
   size_t MCCompressedKagomeLatticeLocalUpdateSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
                                                    std::uniform_real_distribution<double> &u_double) {
-    size_t accept_num = 0;
+    size_t accept_num_site = 0, accept_num_bond = 0;
     tn.GenerateBMPSApproach(UP, trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 1, true);
       for (size_t col = 0; col < tn.cols(); col++) {
-        CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
+        accept_num_site += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
         if (col < tn.cols() - 1) {
-          accept_num += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps, u_double);
+          accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps,
+                                                                    u_double);
           tn.BTenMoveStep(RIGHT);
         }
       }
@@ -87,9 +88,10 @@ struct TPSSample {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 1, true);
       for (size_t row = 0; row < tn.rows(); row++) {
-        CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, VERTICAL);
+        accept_num_site += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, VERTICAL);
         if (row < tn.rows() - 1) {
-          accept_num += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
+          accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps,
+                                                                    u_double);
           tn.BTenMoveStep(DOWN);
         }
       }
@@ -99,7 +101,8 @@ struct TPSSample {
     }
 
     tn.DeleteInnerBMPS(UP);
-    return accept_num;
+    return accept_num_bond;
+//    return (accept_num_bond + accept_num_site) / 2; // a roughly estimation
   }
 
 
@@ -200,9 +203,16 @@ struct TPSSample {
     }
 
     if (eff_config1 == eff_config2) {
-      return true;
+      return false;
     }
-    if (sitps(site1)[ex_config1].GetQNBlkNum() == 0 || sitps(site2)[ex_config2].GetQNBlkNum() == 0) {
+    if (sitps(site1)[ex_config1].GetQNBlkNum() == 0) {
+      std::cout << "warning: site (" << site1[0] << ", " << site1[1] << ") on config " << ex_config1
+                << " lost tensor block." << std::endl;
+      return false;
+    }
+    if (sitps(site2)[ex_config2].GetQNBlkNum() == 0) {
+      std::cout << "warning: site (" << site1[0] << ", " << site1[1] << ") on config " << ex_config1
+                << " lost tensor block." << std::endl;
       return false;
     }
     TenElemT psi_b = tn.ReplaceNNSiteTrace(site1, site2, bond_dir, sitps(site1)[ex_config1],
@@ -236,7 +246,7 @@ struct TPSSample {
                                                 const BondOrientation mps_orient) {
     size_t config_site = config(site);
     if (config_site == 0 || config_site == 7) {
-      return true;//or false
+      return false;//or true
     }
     size_t rotate_config1 = config_site / 4 + 2 * (config_site % 4);
     size_t rotate_config2 = rotate_config1 / 4 + 2 * (rotate_config1 % 4);

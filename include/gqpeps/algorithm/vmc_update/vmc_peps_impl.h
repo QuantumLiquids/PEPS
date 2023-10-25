@@ -18,6 +18,19 @@ namespace gqpeps {
 using namespace gqten;
 
 // helpers
+template<typename DataType>
+void DumpVecData(
+    const std::string &filename,
+    const std::vector<DataType> &data
+) {
+  std::ofstream ofs(filename, std::ofstream::binary);
+  for (auto datum: data) {
+    ofs << datum << '\n';
+  }
+  ofs << std::endl;
+  ofs.close();
+}
+
 template<typename T>
 T Mean(const std::vector<T> data) {
   if (data.empty()) {
@@ -171,6 +184,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
   if (optimize_para.update_scheme == StochasticReconfiguration) {
     gten_samples_.reserve(optimize_para.mc_samples);
   }
+  center_site_configs_.reserve(optimize_para.mc_samples * optimize_para.update_scheme);
 }
 
 
@@ -201,7 +215,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
   WarmUp_();
   OptimizeTPS_();
   Measure_();
-  DumpTenData();
+  DumpData();
   SetStatus(ExecutorStatus::FINISH);
 }
 
@@ -229,6 +243,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
       accept_num += MCSweep_();
       SampleEnergyAndHols_();
+      center_site_configs_.push_back(tps_sample_.config({ly_ / 2, lx_ / 2}));
     }
     double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
@@ -499,17 +514,18 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpTenData(const bool release_mem) {
-  DumpTenData(optimize_para.wavefunction_path, release_mem);
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const bool release_mem) {
+  DumpData(optimize_para.wavefunction_path, release_mem);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpTenData(const std::string &tps_path, const bool release_mem) {
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const std::string &tps_path, const bool release_mem) {
   if (world_.rank() == kMasterProc) {
     split_index_tps_.Dump(tps_path, release_mem);
   }
   world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
   tps_sample_.config.Dump(tps_path, world_.rank());
+  DumpVecData(tps_path + "/center_configs", center_site_configs_);
 }
 
 }//gqpeps

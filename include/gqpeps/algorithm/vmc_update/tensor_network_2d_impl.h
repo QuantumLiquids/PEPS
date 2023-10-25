@@ -420,7 +420,7 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, cons
         auto &mpo_ten2 = *mpo2[i];
         Tensor tmp1, tmp2, tmp3, next_bten;
         Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
+        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten1, 1, 0, 2, tmp2); // O(D^7) complexity
         Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
         Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
         btens.emplace_back(next_bten);

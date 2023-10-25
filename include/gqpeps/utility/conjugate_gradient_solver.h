@@ -222,9 +222,9 @@ VectorType ConjugateGradientSolverMaster(
 #ifndef NDEBUG
     assert(pap > 0);
     if (!std::isnormal(alpha)) {
-      std::cout << "k : " << k << "pap : " << std::scientific << pap
-                << "rk_2norm : " << std::scientific << rk_2norm
-                << "alpha : " << std::scientific << alpha << std::endl;
+      std::cout << "k : " << k << "\t pap : " << std::scientific << pap
+                << "\t rk_2norm : " << std::scientific << rk_2norm
+                << "\t alpha : " << std::scientific << alpha << std::endl;
       exit(1);
     }
 #endif
@@ -249,9 +249,13 @@ VectorType ConjugateGradientSolverMaster(
     std::cout << "k = " << k << "rkp1_2norm = " << rkp1_2norm << " beta = " << beta << std::endl;
 #endif
     if (beta > 1.0) {
-      std::cout << "k = " << k << "rkp1_2norm = " << rkp1_2norm << " beta = " << beta << std::endl;
+      std::cout << "k = " << k << "\t residue norm = " << std::scientific << rkp1_2norm
+                << "\t beta = " << std::fixed << beta << ". Set beta = 0 to restart."
+                << std::endl;
+      p = r;
+    } else {
+      p = r + beta * p;
     }
-    p = r + beta * p;
     rk_2norm = rkp1_2norm;
   }
   iter = max_iter;

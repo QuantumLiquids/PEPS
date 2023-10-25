@@ -121,9 +121,9 @@ class VMCPEPSExecutor : public Executor {
 
   void LoadTenData(const std::string &tps_path);
 
-  void DumpTenData(const bool release_mem = false);
+  void DumpData(const bool release_mem = false);
 
-  void DumpTenData(const std::string &tps_path, const bool release_mem = false);
+  void DumpData(const std::string &tps_path, const bool release_mem = false);
 
   VMCOptimizePara optimize_para;
 
@@ -186,6 +186,8 @@ class VMCPEPSExecutor : public Executor {
   bool warm_up_;
 
   EnergySolver energy_solver_;
+
+  std::vector<size_t> center_site_configs_; //used to analyze the auto correlation.
 };
 
 
