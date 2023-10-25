@@ -68,7 +68,7 @@ struct TPSSample {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 1, true);
       for (size_t col = 0; col < tn.cols(); col++) {
-        CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double);
+        CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
         if (col < tn.cols() - 1) {
           accept_num += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps, u_double);
           tn.BTenMoveStep(RIGHT);
@@ -85,10 +85,11 @@ struct TPSSample {
     tn.GenerateBMPSApproach(LEFT, trun_para);
     for (size_t col = 0; col < tn.cols(); col++) {
       tn.InitBTen(UP, col);
-      tn.GrowFullBTen(DOWN, col, 2, true);
-      for (size_t row = 0; row < tn.rows() - 1; row++) {
-        accept_num += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
-        if (row < tn.rows() - 2) {
+      tn.GrowFullBTen(DOWN, col, 1, true);
+      for (size_t row = 0; row < tn.rows(); row++) {
+        CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, VERTICAL);
+        if (row < tn.rows() - 1) {
+          accept_num += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
           tn.BTenMoveStep(DOWN);
         }
       }
@@ -231,15 +232,16 @@ struct TPSSample {
 
   bool CompressedKagomeLatticeSingleSiteUpdate_(const SiteIdx &site,
                                                 const SplitIndexTPS<TenElemT, QNT> &sitps,
-                                                std::uniform_real_distribution<double> &u_double) {
+                                                std::uniform_real_distribution<double> &u_double,
+                                                const BondOrientation mps_orient) {
     size_t config_site = config(site);
     if (config_site == 0 || config_site == 7) {
       return true;//or false
     }
     size_t rotate_config1 = config_site / 4 + 2 * (config_site % 4);
     size_t rotate_config2 = rotate_config1 / 4 + 2 * (rotate_config1 % 4);
-    TenElemT psi_rotate1 = tn.ReplaceOneSiteTrace(site, sitps(site)[rotate_config1]);
-    TenElemT psi_rotate2 = tn.ReplaceOneSiteTrace(site, sitps(site)[rotate_config2]);
+    TenElemT psi_rotate1 = tn.ReplaceOneSiteTrace(site, sitps(site)[rotate_config1], mps_orient);
+    TenElemT psi_rotate2 = tn.ReplaceOneSiteTrace(site, sitps(site)[rotate_config2], mps_orient);
 
     //make sure rotate1 is smaller than rotate2
     if (std::fabs(psi_rotate1) > std::fabs(psi_rotate2)) {
