@@ -66,10 +66,11 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
 
 //  using TenMatrix<std::vector<Tensor>>::operator=;
   ///< using below explicitly definition to be compatible with lower version of g++
-  SplitIndexTPS&operator=(const SplitIndexTPS &rhs) {
+  SplitIndexTPS &operator=(const SplitIndexTPS &rhs) {
     TenMatrix<std::vector<Tensor>>::operator=(rhs);
     return *this;
   }
+
   // TODO
   operator TPST() {
     TPST tps(this->rows(), this->cols());
@@ -100,7 +101,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
 
   bool IsBondDimensionEven(void) const;
 
-  SplitIndexTPS operator*(TenElemT scalar) const {
+  SplitIndexTPS operator*(const TenElemT scalar) const {
     SplitIndexTPS res(this->rows(), this->cols());
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
@@ -115,7 +116,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return res;
   }
 
-  SplitIndexTPS operator*=(TenElemT scalar) {
+  SplitIndexTPS operator*=(const TenElemT scalar) {
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
@@ -128,7 +129,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return *this;
   }
 
-  SplitIndexTPS operator+(SplitIndexTPS right) const {
+  SplitIndexTPS operator+(const SplitIndexTPS &right) const {
     SplitIndexTPS res(this->rows(), this->cols());
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
@@ -147,7 +148,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return res;
   }
 
-  SplitIndexTPS &operator+=(SplitIndexTPS right) {
+  SplitIndexTPS &operator+=(const SplitIndexTPS &right) {
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
@@ -162,9 +163,9 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return *this;
   }
 
-  ///< Inner norm
-  TenElemT operator*(SplitIndexTPS right) const {
-    TenElemT res;
+  ///< Inner product
+  TenElemT operator*(const SplitIndexTPS &right) const {
+    TenElemT res(0);
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
@@ -197,7 +198,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return res;
   }
 
-  SplitIndexTPS operator-(SplitIndexTPS right) const {
+  SplitIndexTPS operator-(const SplitIndexTPS &right) const {
     return (*this) + (-right);
   }
 
@@ -322,13 +323,13 @@ bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
 }
 
 template<typename TenElemT, typename QNT>
-SplitIndexTPS<TenElemT, QNT> operator*(TenElemT scalar, const SplitIndexTPS<TenElemT, QNT> &split_idx_tps) {
+SplitIndexTPS<TenElemT, QNT> operator*(const TenElemT scalar, const SplitIndexTPS<TenElemT, QNT> &split_idx_tps) {
   return split_idx_tps * scalar;
 }
 
 template<typename QNT>
 SplitIndexTPS<GQTEN_Complex, QNT>
-operator*(GQTEN_Double scalar, const SplitIndexTPS<GQTEN_Complex, QNT> &split_idx_tps) {
+operator*(const GQTEN_Double scalar, const SplitIndexTPS<GQTEN_Complex, QNT> &split_idx_tps) {
   return split_idx_tps * GQTEN_Complex(scalar, 0.0);
 }
 

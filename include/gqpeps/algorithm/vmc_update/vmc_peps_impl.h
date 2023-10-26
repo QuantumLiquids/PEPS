@@ -525,7 +525,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const std::string &t
   }
   world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
   tps_sample_.config.Dump(tps_path, world_.rank());
-  DumpVecData(tps_path + "/center_configs", center_site_configs_);
+  DumpVecData(tps_path + "/center_configs" + std::to_string(world_.rank()), center_site_configs_);
 }
 
 }//gqpeps

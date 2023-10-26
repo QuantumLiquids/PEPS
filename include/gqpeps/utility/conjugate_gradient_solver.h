@@ -14,6 +14,14 @@
 #include <boost/mpi.hpp>
 #include "gqpeps/consts.h"    //kMasterProc
 
+#ifdef GQPEPS_TIMING_MODE
+
+#include "gqten/utility/timer.h"
+
+using gqten::Timer;
+#endif
+
+
 #ifndef  NDEBUG
 
 #include <cmath>
@@ -246,16 +254,16 @@ VectorType ConjugateGradientSolverMaster(
     }
     double beta = rkp1_2norm / rk_2norm;
 #if VERBOSE_MODE == 1
-    std::cout << "k = " << k << "rkp1_2norm = " << rkp1_2norm << " beta = " << beta << std::endl;
+    std::cout << "k = " << k << "\t residue norm = " << std::scientific << rkp1_2norm
+                << "\t beta = " << std::fixed << beta << "."
+                << std::endl;
 #endif
     if (beta > 1.0) {
       std::cout << "k = " << k << "\t residue norm = " << std::scientific << rkp1_2norm
-                << "\t beta = " << std::fixed << beta << ". Set beta = 0 to restart."
+                << "\t beta = " << std::fixed << beta << "."
                 << std::endl;
-      p = r;
-    } else {
-      p = r + beta * p;
     }
+    p = r + beta * p;
     rk_2norm = rkp1_2norm;
   }
   iter = max_iter;
@@ -287,16 +295,33 @@ VectorType MatrixMultiplyVectorMaster(
     const VectorType &v,
     boost::mpi::communicator &world
 ) {
+#ifdef GQPEPS_TIMING_MODE
+  Timer cg_mat_vec_mult_timer("conjugate gradient matrix vector multiplication");
+  Timer cg_broadcast_vec_timer("conjugate gradient broadcast vector");
+#endif
   CGSolverBroadCastVector(const_cast<VectorType &>(v), world); //defined by user
+#ifdef GQPEPS_TIMING_MODE
+  cg_broadcast_vec_timer.PrintElapsed();
+#endif
   std::vector<VectorType> res_list(world.size());
-  res_list[0] = mat * v;
+  VectorType res = mat * v;
+#ifdef GQPEPS_TIMING_MODE
+  Timer cg_gather_vec_timer("conjugate gradient gather vector");
+#endif
   for (size_t i = 1; i < world.size(); i++) {
     CGSolverRecvVector(world, res_list[i], boost::mpi::any_source, boost::mpi::any_tag);
   }
-  VectorType res = res_list[0];
+#ifdef GQPEPS_TIMING_MODE
+  cg_gather_vec_timer.PrintElapsed();
+  Timer cg_gather_reduce_vec_timer("conjugate gradient gather reduce (summation) vector");
+#endif
   for (size_t i = 1; i < world.size(); i++) {
     res += res_list[i];
   }
+#ifdef GQPEPS_TIMING_MODE
+  cg_gather_reduce_vec_timer.PrintElapsed();
+  cg_mat_vec_mult_timer.PrintElapsed();
+#endif
   return res;
 }
 
