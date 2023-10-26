@@ -51,6 +51,18 @@ class Configuration : public DuoMatrix<size_t> {
     }
   }
 
+  size_t Sum(void) const {
+    size_t summation = 0;
+    size_t rows = this->rows();
+    size_t cols = this->cols();
+    for (size_t row = 0; row < rows; row++) {
+      for (size_t col = 0; col < cols; col++) {
+        summation += (*this)({row, col});
+      }
+    }
+    return summation;
+  }
+
   /**
    *
    * @param path

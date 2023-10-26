@@ -91,7 +91,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   IndexT pb_in = InverseIndex(pb_out);
 
   VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
-                                                  params.MC_samples, params.WarmUp,
+                                                  params.MC_samples, params.WarmUp, 1,
                                                   {N / 2, N / 2}, {0.1},
                                                   StochasticGradient);
 

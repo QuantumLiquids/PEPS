@@ -38,12 +38,14 @@ enum MC_SWEEP_SCHEME {
 
 struct VMCOptimizePara {
   VMCOptimizePara(TruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
+                  size_t mc_sweeps_between_sample,
                   const std::vector<size_t> &occupancy,
                   const std::vector<double> &step_lens,
                   const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
                   const std::string wavefunction_path = kTpsPath) :
       bmps_trunc_para(trunc_para), mc_samples(samples),
       mc_warm_up_sweeps(warm_up_sweeps),
+      mc_sweeps_between_sample(mc_sweeps_between_sample),
       occupancy_num(occupancy),
       step_lens(step_lens),
       update_scheme(update_scheme),
@@ -51,12 +53,13 @@ struct VMCOptimizePara {
 
   VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax,
                   size_t samples, size_t warm_up_sweeps,
+                  size_t mc_sweeps_between_sample,
                   const std::vector<size_t> &occupancy,
                   const std::vector<double> &step_lens,
                   const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
                   const std::string wavefunction_path = kTpsPath)
       : VMCOptimizePara(TruncatePara(Dmin, Dmax, truncErr), samples,
-                        warm_up_sweeps, occupancy,
+                        warm_up_sweeps, mc_sweeps_between_sample, occupancy,
                         step_lens, update_scheme, wavefunction_path) {}
 
   operator TruncatePara() const {
@@ -65,8 +68,10 @@ struct VMCOptimizePara {
 
   TruncatePara bmps_trunc_para; // Truncation Error and bond dimensionts for compressing boundary MPS
 
+  //MC parameters
   size_t mc_samples;
   size_t mc_warm_up_sweeps;
+  size_t mc_sweeps_between_sample;
 
   // e.g. In spin model, how many spin up sites and how many spin down sites.
   std::vector<size_t> occupancy_num;
@@ -75,7 +80,7 @@ struct VMCOptimizePara {
   WAVEFUNCTION_UPDATE_SCHEME update_scheme;
   std::string wavefunction_path;
 
-  MC_SWEEP_SCHEME mc_sweep_sheme = SequentiallyNNSiteFlip;
+  MC_SWEEP_SCHEME mc_sweep_scheme = SequentiallyNNSiteFlip;
 };
 
 ///< For stochastic reconfiguration
@@ -187,7 +192,7 @@ class VMCPEPSExecutor : public Executor {
 
   EnergySolver energy_solver_;
 
-  std::vector<size_t> center_site_configs_; //used to analyze the auto correlation.
+  std::vector<size_t> sum_configs_; //used to analyze the auto correlation.
 };
 
 

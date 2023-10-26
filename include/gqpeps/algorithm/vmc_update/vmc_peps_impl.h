@@ -184,7 +184,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
   if (optimize_para.update_scheme == StochasticReconfiguration) {
     gten_samples_.reserve(optimize_para.mc_samples);
   }
-  center_site_configs_.reserve(optimize_para.mc_samples * optimize_para.update_scheme);
+  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.update_scheme);
 }
 
 
@@ -243,7 +243,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
       accept_num += MCSweep_();
       SampleEnergyAndHols_();
-      center_site_configs_.push_back(tps_sample_.config({ly_ / 2, lx_ / 2}));
+      sum_configs_.push_back(tps_sample_.config.Sum());
     }
     double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
@@ -458,10 +458,20 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void) {
-  if (optimize_para.mc_sweep_sheme == SequentiallyNNSiteFlip)
-    return tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, u_double_);
-  else if (optimize_para.mc_sweep_sheme == CompressedLatticeKagomeLocalUpdate)
-    return tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_);
+  size_t flip_times;
+  if (optimize_para.mc_sweep_scheme == SequentiallyNNSiteFlip) {
+    for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
+      flip_times = tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, u_double_);;
+    }
+  } else if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
+    for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
+      flip_times = tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_);
+    }
+  } else {
+    std::cout << "Do not support MC sweep Scheme" << std::endl;
+    exit(1);
+  }
+  return flip_times;
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -525,7 +535,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const std::string &t
   }
   world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
   tps_sample_.config.Dump(tps_path, world_.rank());
-  DumpVecData(tps_path + "/center_configs" + std::to_string(world_.rank()), center_site_configs_);
+  DumpVecData(tps_path + "/sum_configs" + std::to_string(world_.rank()), sum_configs_);
 }
 
 }//gqpeps
