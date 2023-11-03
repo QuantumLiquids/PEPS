@@ -184,7 +184,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
   if (optimize_para.update_scheme == StochasticReconfiguration) {
     gten_samples_.reserve(optimize_para.mc_samples);
   }
-  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.update_scheme);
+  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.step_lens.size());
 }
 
 
@@ -449,7 +449,8 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t iter;
-  auto natural_grad = ConjugateGradientSolver(s_matrix, grad, grad,
+  SITPST init_guess(ly_, lx_, grad.PhysicalDim()); //set 0 as initial guess
+  auto natural_grad = ConjugateGradientSolver(s_matrix, grad, init_guess,
                                               cg_params.max_iter, cg_params.tolerance,
                                               cg_params.residue_restart_step, iter, world_);
   StochGradUpdateTPS_(natural_grad, step_len);

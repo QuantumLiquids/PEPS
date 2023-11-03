@@ -170,7 +170,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
         for (size_t i = 0; i < phy_dim; i++) {
-          if ((*this)({row, col})[i].IsDefault()) {
+          if ((*this)({row, col})[i].IsDefault() || right({row, col})[i].IsDefault()) {
             continue;
           }
           Tensor ten_dag = Dag((*this)({row, col})[i]);
