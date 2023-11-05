@@ -191,8 +191,6 @@ class VMCPEPSExecutor : public Executor {
   bool warm_up_;
 
   EnergySolver energy_solver_;
-
-  std::vector<size_t> sum_configs_; //used to analyze the auto correlation.
 };
 
 

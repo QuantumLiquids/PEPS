@@ -184,7 +184,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
   if (optimize_para.update_scheme == StochasticReconfiguration) {
     gten_samples_.reserve(optimize_para.mc_samples);
   }
-  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.step_lens.size());
+//  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.step_lens.size());
 }
 
 
@@ -238,12 +238,13 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
   size_t bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
   for (size_t iter = 0; iter < optimize_para.step_lens.size(); iter++) {
     Timer grad_update_timer("gradient_update");
+    ClearEnergyAndHoleSamples_();
     double step_len = optimize_para.step_lens[iter];
     size_t accept_num = 0;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
       accept_num += MCSweep_();
       SampleEnergyAndHols_();
-      sum_configs_.push_back(tps_sample_.config.Sum());
+//      sum_configs_.push_back(tps_sample_.config.Sum());
     }
     double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
@@ -263,7 +264,6 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     }
     double tps_update_time = tps_update_timer.Elapsed();
 
-    ClearEnergyAndHoleSamples_();
     if (world_.rank() == kMasterProc) {
       double gradient_update_time = grad_update_timer.Elapsed();
       std::cout << "Iter " << std::setw(4) << iter
@@ -536,7 +536,11 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const std::string &t
   }
   world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
   tps_sample_.config.Dump(tps_path, world_.rank());
-  DumpVecData(tps_path + "/sum_configs" + std::to_string(world_.rank()), sum_configs_);
+  DumpVecData("energy_sample" + std::to_string(world_.rank()), energy_samples_);
+  if (world_.rank() == kMasterProc) {
+    DumpVecData("energy_trajectory", energy_trajectory_);
+  }
+//  DumpVecData(tps_path + "/sum_configs" + std::to_string(world_.rank()), sum_configs_);
 }
 
 }//gqpeps
