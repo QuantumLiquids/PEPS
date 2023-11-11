@@ -86,7 +86,7 @@ void BMPS<TenElemT, QNT>::RightCanonicalize(const size_t stop_idx) {
 template<typename TenElemT, typename QNT>
 void BMPS<TenElemT, QNT>::LeftCanonicalizeTen(const size_t site_idx) {
   assert(site_idx < this->size() - 1);
-  size_t ldims(2);
+  size_t ldims((*this)(site_idx)->Rank() - 1);
   auto pq = new Tensor;
   Tensor r;
   QR((*this)(site_idx), ldims, Div((*this)[site_idx]), pq, &r);
@@ -133,8 +133,8 @@ GQTensor<GQTEN_Double, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size
 
 template<typename TenElemT, typename QNT>
 double
-BMPS<TenElemT, QNT>::RightCanonicalizeTrunctate(const size_t site, const size_t Dmin,
-                                                const size_t Dmax, const GQTEN_Double trunc_err) {
+BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t Dmin,
+                                               const size_t Dmax, const double trunc_err) {
 
   GQTensor<GQTEN_Double, QNT> s;
   auto pvt = new Tensor;
@@ -312,7 +312,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(const BMPS::TransferMPO &mpo,
       assert(res[res.size() - 1].GetIndex(2).dim() == 1);
 #endif
       for (size_t i = res.size() - 1; i > 0; --i) {
-        res.RightCanonicalizeTrunctate(i, Dmin, Dmax, trunc_err);
+        res.RightCanonicalizeTruncate(i, Dmin, Dmax, trunc_err);
       }
       assert(res[0].GetIndex(0).dim() == 1);
       assert(res[res.size() - 1].GetIndex(2).dim() == 1);
@@ -496,6 +496,267 @@ BMPS<TenElemT, QNT>::MultipleMPO(const BMPS::TransferMPO &mpo,
   }
 }
 
+/**
+ *         4
+ *         |
+ *      1--t--3, and phy index 0
+ *         |
+ *         2
+ *
+ * @tparam TenElemT
+ * @tparam QNT
+ * @param mpo
+ * @param scheme
+ * @return note mpo will also be changed according position in output
+ */
+template<typename TenElemT, typename QNT>
+BMPS<TenElemT, QNT>
+BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
+                                           const size_t Dmin, const size_t Dmax,
+                                           const double trunc_err, const size_t iter_max,
+                                           const CompressMPSScheme &scheme) const {
+  assert(mpo.size() == this->size());
+  size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
+  size_t next_post = ((size_t) (position_) + 1) % 4;
+  switch (scheme) {
+    case SVD_COMPRESS: {
+      BMPS<TenElemT, QNT> res(position_, this->size());
+      IndexT idx1;
+      if (position_ > 1) {
+        std::reverse(mpo.begin(), mpo.end());
+      }
+      switch (position_) {
+        case DOWN: {
+          for (size_t i = 0; i < mpo.size(); i++) {
+            mpo[i]->Transpose({1, 2, 3, 4, 0});
+          }
+          break;
+        }
+        case UP: {
+          for (size_t i = 0; i < mpo.size(); i++) {
+            mpo[i]->Transpose({3, 4, 1, 2, 0});
+          }
+          break;
+        }
+        case LEFT: {
+          for (size_t i = 0; i < mpo.size(); i++) {
+            mpo[i]->Transpose({4, 1, 2, 3, 0});
+          }
+          break;
+        }
+        case RIGHT: {
+          for (size_t i = 0; i < mpo.size(); i++) {
+            mpo[i]->Transpose({2, 3, 4, 1, 0});
+          }
+          break;
+        }
+      }
+
+      idx1 = InverseIndex(mpo[0]->GetIndex(0));
+
+      IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
+      Tensor r = IndexCombine<TenElemT, QNT>(idx1, idx2, IN);
+      r.Transpose({2, 0, 1});
+      for (size_t i = 0; i < this->size(); i++) {
+        Tensor tmp1, tmp2;
+        Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
+        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, 0, 2, tmp2);
+        res.alloc(i);
+        if (i < this->size() - 1) {
+          tmp2.Transpose({1, 3, 4, 2, 0});
+          QNT mps_div = (*this)[i].Div();
+          r = Tensor();
+          QR(&tmp2, 3, mps_div, res(i), &r);
+        } else {
+          auto trivial_idx = tmp2.GetIndex(0);
+          Tensor tmp3({InverseIndex(trivial_idx)});
+          tmp3({0}) = 1.0;
+          Contract(&tmp3, {0}, &tmp2, {0}, res(i));
+          res(i)->Transpose({0, 2, 3, 1});
+        }
+      }
+#ifndef NDEBUG
+      for (size_t i = 0; i < this->size(); i++) {
+        assert(res[i].GetIndex(1) == mpo[i]->GetIndex(3));
+        assert(res[i].GetIndex(2) == mpo[i]->GetIndex(4)); //phy index
+      }
+      assert(res[0].GetIndex(0).dim() == 1);
+      assert(res[res.size() - 1].GetIndex(3).dim() == 1);
+#endif
+      for (size_t i = res.size() - 1; i > 0; --i) {
+        res.RightCanonicalizeTruncateWithPhyIdx_(i, Dmin, Dmax, trunc_err);
+      }
+      assert(res[0].GetIndex(0).dim() == 1);
+      assert(res[res.size() - 1].GetIndex(3).dim() == 1);
+      return res;
+    }
+    case VARIATION2Site: {
+      const double converge_tol = 1e-15;
+      size_t N = this->size();
+      if (N == 2) {
+        return MultipleMPOWithPhyIdx(mpo, Dmin, Dmax,
+                                     trunc_err, iter_max, SVD_COMPRESS);
+      }
+      BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplicationWithPhyIdx_(mpo, Dmin, Dmax, trunc_err);
+      BMPS<TenElemT, QNT> res_dag(res_init);
+      for (size_t i = 0; i < res_dag.size(); i++) {
+        res_dag[i].Dag();
+      } //initial guess for the result
+
+      std::vector<Tensor> lenvs, renvs;  // from the view of down mps
+      lenvs.reserve(N - 1);
+      renvs.reserve(N - 1);
+      IndexT index2 = InverseIndex((*this)[0].GetIndex(0));
+      IndexT index1 = InverseIndex(mpo[0]->GetIndex(0));
+      IndexT index0 = InverseIndex(res_dag[0].GetIndex(0));
+      auto lenv0 = Tensor({index0, index1, index2});
+      lenv0({0, 0, 0}) = 1;
+      lenvs.push_back(lenv0);
+      index0 = InverseIndex((*this)[N - 1].GetIndex(2));
+      index1 = InverseIndex(mpo[N - 1]->GetIndex(2));
+      index2 = InverseIndex(res_dag[N - 1].GetIndex(2));
+      auto renv0 = Tensor({index0, index1, index2});
+      renv0({0, 0, 0}) = 1;
+      renvs.push_back(renv0);
+
+      //initially grow the renvs
+      for (size_t i = N - 1; i > 1; i--) {
+        Tensor renv_next, temp_ten, temp_ten2;
+        Contract<TenElemT, QNT, true, true>((*this)[i], renvs.back(), 2, 0, 1, temp_ten);
+        Contract<TenElemT, QNT, false, false>(temp_ten, *mpo[i], 1, 1, 2, temp_ten2);
+        Contract(&temp_ten2, {0, 2, 3}, res_dag(i), {3, 1, 2}, &renv_next);
+        renvs.emplace_back(renv_next);
+      }
+
+      Tensor s12bond_last;
+      for (size_t iter = 0; iter < iter_max; iter++) {
+        //left move
+        GQTensor<GQTEN_Double, QNT> s;
+        for (size_t i = 0; i < N - 2; i++) {
+          Tensor tmp[6];
+          Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[i], 2, 0, 1, tmp[0]);
+          Contract<TenElemT, QNT, false, true>(tmp[0], *mpo[i], 1, 0, 2, tmp[1]);
+
+          Contract<TenElemT, QNT, true, true>((*this)[i + 1], renvs.back(), 2, 0, 1, tmp[2]);
+          Contract<TenElemT, QNT, false, false>(tmp[2], *mpo[i + 1], 1, 1, 2, tmp[3]);
+          Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
+          tmp[4].Dag();
+          Tensor *pu = new Tensor(), *pvt = new Tensor();
+          s = GQTensor<GQTEN_Double, QNT>();
+          double actual_trunc_err;
+          size_t D;
+          SVD(tmp + 4,
+              3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
+              pu, &s, pvt, &actual_trunc_err, &D
+          );
+
+          delete res_dag(i);
+          res_dag(i) = pu;
+
+          //grow left_tensor
+          Contract(tmp + 1, {1, 3, 4}, res_dag(i), {0, 1, 2}, tmp + 5);
+          tmp[5].Transpose({2, 1, 0});
+          lenvs.emplace_back(tmp[5]);
+          renvs.pop_back();
+          delete pvt;
+        }
+        //right move
+        for (size_t i = N - 2; i > 0; i--) {
+          Tensor tmp[6];
+          Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[i], 2, 0, 1, tmp[0]);
+          Contract<TenElemT, QNT, false, true>(tmp[0], *mpo[i], 1, 0, 2, tmp[1]);
+
+          Contract<TenElemT, QNT, true, true>((*this)[i + 1], renvs.back(), 2, 0, 1, tmp[2]);
+          Contract<TenElemT, QNT, false, false>(tmp[2], *mpo[i + 1], 1, 1, 2, tmp[3]);
+          Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
+          tmp[4].Dag();
+          Tensor *pu = new Tensor(), *pvt = new Tensor();
+          s = GQTensor<GQTEN_Double, QNT>();
+          double actual_trunc_err;
+          size_t D;
+          SVD(tmp + 4,
+              3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
+              pu, &s, pvt, &actual_trunc_err, &D
+          );
+
+          delete res_dag(i + 1);
+          pvt->Transpose({0, 2, 3, 1});
+          res_dag(i + 1) = pvt;
+          Contract(&tmp[3], {0, 2, 3}, res_dag(i + 1), {3, 1, 2}, &tmp[5]);
+          renvs.emplace_back(tmp[5]);
+          lenvs.pop_back();
+          delete pu;
+        }
+        if (iter == 0 || s.GetActualDataSize() != s12bond_last.GetActualDataSize()) {
+          s12bond_last = s;
+          continue;
+        }
+        double diff = 0.0;
+        const double *s_data = s.GetRawDataPtr();
+        const double *s_last_data = s12bond_last.GetRawDataPtr();
+        for (size_t k = 0; k < s.GetActualDataSize(); k++) {
+          diff += std::fabs(*(s_data + k) - *(s_last_data + k));
+        }
+        if (diff < converge_tol) {
+          break;
+        } else {
+          s12bond_last = s;
+        }
+      }
+      size_t i = 0;
+      Tensor tmp[6];
+      Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[i], 2, 0, 1, tmp[0]);
+      Contract<TenElemT, QNT, false, true>(tmp[0], *mpo[i], 1, 0, 2, tmp[1]);
+
+      Contract<TenElemT, QNT, true, true>((*this)[i + 1], renvs.back(), 2, 0, 1, tmp[2]);
+      Contract<TenElemT, QNT, false, false>(tmp[2], *mpo[i + 1], 1, 1, 2, tmp[3]);
+      Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
+      tmp[4].Dag();
+      Tensor u, *pvt = new Tensor();
+      GQTensor<GQTEN_Double, QNT> s;
+      double actual_trunc_err;
+      size_t D;
+      SVD(tmp + 4,
+          3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
+          &u, &s, pvt, &actual_trunc_err, &D
+      );
+
+      delete res_dag(i);
+      res_dag(i) = new Tensor();
+      Contract<TenElemT, QNT, true, true>(u, s, 3, 0, 1, res_dag[i]);
+      pvt->Transpose({0, 2, 3, 1});
+      delete (res_dag(i + 1));
+      res_dag(i + 1) = pvt;
+
+      BMPS<TenElemT, QNT> res(std::move(res_dag));
+      for (size_t i = 0; i < res.size(); i++) {
+        res[i].Dag();
+        res.tens_cano_type_[i] = MPSTenCanoType::RIGHT;
+      }
+      res.center_ = 0;
+#ifndef NDEBUG
+      QNT qn_mpo = qn0_, qn_mps = qn0_, qn_res = qn0_;
+      for (size_t i = 0; i < res.size(); i++) {
+        qn_mpo += mpo[i]->Div();
+        qn_mps += (*this)[i].Div();
+        qn_res += res[i].Div();
+      }
+      assert(qn_mpo + qn_mps == qn_res);
+      for (size_t i = 0; i < this->size(); i++) {
+        assert(res[i].GetIndex(1) == mpo[i]->GetIndex(3));
+        assert(res[i].GetIndex(2) == mpo[i]->GetIndex(4)); //phy index
+      }
+      assert(res[0].GetIndex(0).dim() == 1);
+      assert(res[res.size() - 1].GetIndex(3).dim() == 1);
+#endif
+      return res;
+    }
+    case VARIATION1Site: {
+
+    }
+  }
+}
+
 
 template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
@@ -523,7 +784,7 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(const BMPS::Trans
   BMPS mps_copy(*this);
   mps_copy.Centralize(this->size() - 1);
   for (size_t i = mps_copy.size() - 1; i > 0; --i) {
-    mps_copy.RightCanonicalizeTrunctate(i, 1, 2, 0.0);
+    mps_copy.RightCanonicalizeTruncate(i, 1, 2, 0.0);
   }
   auto multip_init = mps_copy.MultipleMPO(mpo, Dmin, Dmax, trunc_err, 0, SVD_COMPRESS);
 
@@ -533,6 +794,84 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(const BMPS::Trans
   } //initial guess for the result
 #endif
   return multip_init;
+}
+
+
+///< mpo is original mpo without reverse
+template<typename TenElemT, typename QNT>
+BMPS<TenElemT, QNT>
+BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplicationWithPhyIdx_(BMPS::TransferMPO &mpo,
+                                                                         const size_t Dmin,
+                                                                         const size_t Dmax,
+                                                                         const double trunc_err) const {
+//  const size_t N = this->size();
+//  BMPS<TenElemT, QNT> multip_init(position_, N);
+//  for (size_t i = 0; i < N; i++) {
+//    IndexT index = InverseIndex(ordered_mpo[i]->GetIndex(position_));
+//    Tensor a = Tensor({index});
+//    a({0}) = 1;
+//    multip_init.alloc(i);
+//    Contract<TenElemT, QNT, false, true>(*ordered_mpo[i], a, (size_t) position_, 0, 1, multip_init[i]);
+//    multip_init[i].Transpose({2, 1, 0});
+//  }
+//
+//#ifndef NDEBUG
+//  for (size_t i = 0; i < multip_init.size(); i++) {
+//    assert(multip_init[i].GetActualDataSize() > 0);
+//  } //initial guess for the result
+//#endif
+//  multip_init.Centralize(0);
+
+  BMPS mps_copy(*this);
+  mps_copy.Centralize(this->size() - 1);
+  for (size_t i = mps_copy.size() - 1; i > 0; --i) {
+    mps_copy.RightCanonicalizeTruncateWithPhyIdx_(i, 1, 2, 0.0);
+  }
+  auto multip_init = mps_copy.MultipleMPOWithPhyIdx(mpo, Dmin, Dmax, trunc_err, 0, SVD_COMPRESS);
+
+#ifndef NDEBUG
+  for (size_t i = 0; i < multip_init.size(); i++) {
+    assert(multip_init[i].GetActualDataSize() > 0);
+  } //initial guess for the result
+#endif
+  return multip_init;
+}
+
+
+template<typename TenElemT, typename QNT>
+double
+BMPS<TenElemT, QNT>::RightCanonicalizeTruncateWithPhyIdx_(const size_t site, const size_t Dmin,
+                                                          const size_t Dmax, const double trunc_err) {
+
+  GQTensor<GQTEN_Double, QNT> s;
+  auto pvt = new Tensor;
+  Tensor u;
+  double actual_trunc_err;
+  size_t D;
+  SVD(
+      (*this)(site),
+      1, qn0_, trunc_err, Dmin, Dmax,
+      &u, &s, pvt, &actual_trunc_err, &D
+  );
+//  std::cout << "Truncate MPS bond " << std::setw(4) << site
+//            << " TruncErr = " << std::setprecision(2) << std::scientific << actual_trunc_err << std::fixed
+//            << " D = " << std::setw(5) << D;
+//  std::cout << std::scientific << std::endl;
+
+  delete (*this)(site);
+  (*this)(site) = pvt;
+
+  Tensor temp_ten;
+  Contract(&u, &s, {{1},
+                    {0}}, &temp_ten);
+  auto pnext_ten = new Tensor;
+  Contract((*this)(site - 1), &temp_ten, {{3},
+                                          {0}}, pnext_ten);
+  delete (*this)(site - 1);
+  (*this)(site - 1) = pnext_ten;
+
+  //set ten canonical type
+  return actual_trunc_err;
 }
 
 }//gqpeps

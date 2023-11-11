@@ -13,6 +13,7 @@
 #include <iomanip>
 #include "gqpeps/algorithm/vmc_update/stochastic_reconfiguration_smatrix.h" //SRSMatrix
 #include "gqpeps/utility/conjugate_gradient_solver.h"
+#include "axis_update.h"
 
 namespace gqpeps {
 using namespace gqten;

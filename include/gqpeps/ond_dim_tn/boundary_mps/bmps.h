@@ -92,7 +92,7 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
 
   GQTensor<GQTEN_Double, QNT> RightCanonicalizeTen(const size_t);
 
-  double RightCanonicalizeTrunctate(const size_t, const size_t, const size_t, const double);
+  double RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);
 
   int GetCenter(void) const { return center_; }
 
@@ -116,8 +116,17 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
                    const size_t max_iter = 5, //only valid for variational methods
                    const CompressMPSScheme &scheme = VARIATION2Site) const;
 
+  BMPS MultipleMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const double,
+                             const size_t max_iter = 5, //only valid for variational methods
+                             const CompressMPSScheme &scheme = VARIATION2Site) const;
+
  private:
   BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const double) const;
+
+  double RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const double);
+
+  BMPS
+  InitGuessForVariationalMPOMultiplicationWithPhyIdx_(TransferMPO &, const size_t, const size_t, const double) const;
 
   const BMPSPOSITION position_; //posible to remove this member and replace it with function parameter if the function needs
   int center_;
