@@ -19,7 +19,6 @@ namespace gqpeps {
 using namespace gqten;
 using namespace gqmps2;
 
-
 enum CompressMPSScheme {
   SVD_COMPRESS,
   VARIATION2Site,
@@ -35,11 +34,10 @@ enum CompressMPSScheme {
  */
 template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
+ public:
   using Tensor = GQTensor<TenElemT, QNT>;
   using IndexT = Index<QNT>;
   using TransferMPO = std::vector<Tensor *>;
- public:
-
   BMPS(const BMPSPOSITION position, const size_t size) : TenVec<Tensor>(size), position_(position),
                                                          center_(kUncentralizedCenterIdx),
                                                          tens_cano_type_(size, NONE) {}
@@ -86,7 +84,6 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
 
   void RightCanonicalize(const size_t);
 
-
   // MPS local operations. Only tensors near the target site are needed in memory.
   void LeftCanonicalizeTen(const size_t);
 
@@ -108,11 +105,17 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
 
   void Reverse();
 
-  void InplaceMultipleMPO(const TransferMPO &, const size_t, const size_t, const double,
+  void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const double,
                           const size_t max_iter = 5, //only valid for variational methods
                           const CompressMPSScheme &scheme = VARIATION2Site);
-
-  BMPS MultipleMPO(const TransferMPO &, const size_t, const size_t, const double,
+  /**
+   * @note For SVD compress, mpo does not change after Multiplication
+   *       For Variational methods, mpo may reverse.
+   * @param max_iter
+   * @param scheme
+   * @return
+   */
+  BMPS MultipleMPO(TransferMPO &, const size_t, const size_t, const double,
                    const size_t max_iter = 5, //only valid for variational methods
                    const CompressMPSScheme &scheme = VARIATION2Site) const;
 
@@ -121,14 +124,14 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
                              const CompressMPSScheme &scheme = VARIATION2Site) const;
 
  private:
-  BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const double) const;
+  BMPS InitGuessForVariationalMPOMultiplication_(TransferMPO &, const size_t, const size_t, const double) const;
 
   double RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const double);
 
   BMPS
   InitGuessForVariationalMPOMultiplicationWithPhyIdx_(TransferMPO &, const size_t, const size_t, const double) const;
 
-  const BMPSPOSITION position_; //posible to remove this member and replace it with function parameter if the function needs
+  const BMPSPOSITION position_; //possible to remove this member and replace it with function parameter if the function needs
   int center_;
   std::vector<MPSTenCanoType> tens_cano_type_;
 

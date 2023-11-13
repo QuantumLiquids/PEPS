@@ -16,7 +16,6 @@
 #include "gqpeps/basic.h"                           //TruncatePara
 #include "gqpeps/two_dim_tn/tps/configuration.h"    //Configure
 
-
 namespace gqpeps {
 using namespace gqten;
 
@@ -47,12 +46,10 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
   //without initialization of the data of boundary mps
   TensorNetwork2D(const size_t rows, const size_t cols);
 
-
   //with initialization of the data of boundary mps
   TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config);
 
   TensorNetwork2D<TenElemT, QNT> &operator=(const TensorNetwork2D<TenElemT, QNT> &tn);
-
 
   const std::vector<BMPS<TenElemT, QNT>> &GetBMPS(const BMPSPOSITION position) const {
     return bmps_set_[position];
@@ -68,7 +65,7 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
    * @return
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para);
+  GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para, const CompressMPSScheme scheme = VARIATION2Site);
 
   /**
    * Same functionality with GrowBMPSForRow but only return the corresponding boundary MPS
@@ -116,7 +113,6 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   void BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1);
 
-
   void UpdateSiteConfig(const SiteIdx &site, const size_t update_config, const SITPS &tps,
                         bool check_envs = false);
 
@@ -152,9 +148,11 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
  * @param position
  * @return
  */
-  size_t GrowBMPSStep_(const BMPSPOSITION position, const TransferMPO &, const TruncatePara &);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const TruncatePara &,
+                       const CompressMPSScheme scheme = VARIATION2Site);
 
-  size_t GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &,
+                       const CompressMPSScheme scheme = VARIATION2Site);
 
   /**
    *
@@ -176,7 +174,6 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layer between two bmps, todo
 };
-
 
 }//gqpeps
 

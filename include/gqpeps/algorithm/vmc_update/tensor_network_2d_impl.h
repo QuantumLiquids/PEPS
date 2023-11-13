@@ -14,7 +14,6 @@
 namespace gqpeps {
 using namespace gqten;
 
-
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t cols)
     : TenMatrix<GQTensor<TenElemT, QNT>>(rows, cols) {
@@ -53,7 +52,6 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QN
   }
 }
 
-
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT> &TensorNetwork2D<TenElemT, QNT>::operator=(const TensorNetwork2D<TenElemT, QNT> &tn) {
   TenMatrix<Tensor>::operator=(tn);
@@ -70,19 +68,20 @@ TensorNetwork2D<TenElemT, QNT>::GenerateBMPSApproach(BMPSPOSITION post, const Tr
   return bmps_set_;
 }
 
-
 template<typename TenElemT, typename QNT>
 size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position,
-                                                     const TransferMPO &mpo,
-                                                     const TruncatePara &trunc_para) {
+                                                     TransferMPO mpo,
+                                                     const TruncatePara &trunc_para,
+                                                     const CompressMPSScheme scheme) {
   std::vector<BMPS<TenElemT, QNT>> &bmps_set = bmps_set_[position];
-  bmps_set.push_back(bmps_set.back().MultipleMPO(mpo, trunc_para.D_min, trunc_para.D_max, trunc_para.trunc_err));
+  bmps_set.push_back(
+      bmps_set.back().MultipleMPO(mpo, trunc_para.D_min, trunc_para.D_max, trunc_para.trunc_err, scheme));
   return bmps_set.size();
 }
 
-
 template<typename TenElemT, typename QNT>
-size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &trunc_para) {
+size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &trunc_para,
+                                                     const CompressMPSScheme scheme) {
   std::vector<BMPS<TenElemT, QNT>> &bmps_set = bmps_set_[position];
   size_t existed_bmps_num = bmps_set.size();
   assert(existed_bmps_num > 0);
@@ -95,9 +94,8 @@ size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position
     mpo_num = this->cols() - existed_bmps_num;
   }
   const TransferMPO &mpo = this->get_slice(mpo_num, Rotate(Orientation(position)));
-  return GrowBMPSStep_(position, mpo, trunc_para);
+  return GrowBMPSStep_(position, mpo, trunc_para, scheme);
 }
-
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::GrowFullBMPS(const BMPSPOSITION position, const TruncatePara &trunc_para) {
@@ -139,18 +137,19 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBMPS(const BMPSPOSITION position, c
 
 template<typename TenElemT, typename QNT>
 const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-TensorNetwork2D<TenElemT, QNT>::GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para) {
+TensorNetwork2D<TenElemT, QNT>::GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para,
+                                               const CompressMPSScheme scheme) {
   const size_t rows = this->rows();
   std::vector<BMPS<TenElemT, QNT>> &bmps_set_down = bmps_set_[DOWN];
   for (size_t row_bmps = rows - bmps_set_down.size(); row_bmps > row; row_bmps--) {
     const TransferMPO &mpo = this->get_row(row_bmps);
-    GrowBMPSStep_(DOWN, mpo, trunc_para);
+    GrowBMPSStep_(DOWN, mpo, trunc_para, scheme);
   }
 
   std::vector<BMPS<TenElemT, QNT>> &bmps_set_up = bmps_set_[UP];
   for (size_t row_bmps = bmps_set_up.size() - 1; row_bmps < row; row_bmps++) {
     const TransferMPO &mpo = this->get_row(row_bmps);
-    GrowBMPSStep_(UP, mpo, trunc_para);
+    GrowBMPSStep_(UP, mpo, trunc_para, scheme);
   }
   return bmps_set_;
 }
@@ -193,7 +192,6 @@ TensorNetwork2D<TenElemT, QNT>::GetBMPSForCol(const size_t col, const TruncatePa
   BMPST &right_bmps = bmps_set_[RIGHT][cols - 1 - col];
   return std::pair(left_bmps, right_bmps);
 }
-
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::InitBTen(const gqpeps::BTenPOSITION position, const size_t slice_num) {
@@ -282,7 +280,6 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen2(const BTenPOSITION position, cons
   ten({0, 0, 0, 0}) = TenElemT(1.0);
   bten_set2_[position].emplace_back(ten);
 }
-
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const gqpeps::BTenPOSITION position,
@@ -469,7 +466,6 @@ void TensorNetwork2D<TenElemT, QNT>::BTenMoveStep(const BTenPOSITION position) {
   GrowBTenStep_(Opposite(position));
 }
 
-
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1) {
   bten_set2_[position].pop_back();
@@ -528,7 +524,6 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep_(const BTenPOSITION post) {
   Contract(&tmp2, {0, 2}, mps_ten2, {0, 1}, &next_bten);
   bten_set_[post].emplace_back(next_bten);
 }
-
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::GrowBTen2Step_(const BTenPOSITION post, const size_t slice_num1) {
@@ -655,7 +650,6 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceOneSiteTrace(const SiteIdx &site
   return tmp[3]();
 }
 
-
 template<typename TenElemT, typename QNT>
 TenElemT
 TensorNetwork2D<TenElemT, QNT>::ReplaceNNSiteTrace(const SiteIdx &site_a, const SiteIdx &site_b,
@@ -721,7 +715,6 @@ TensorNetwork2D<TenElemT, QNT>::ReplaceNNSiteTrace(const SiteIdx &site_a, const 
   return tmp[6]();
 }
 
-
 template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left_up_site,
                                                              const DIAGONAL_DIR nnn_dir,
@@ -774,7 +767,6 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
   }
 }
 
-
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> TensorNetwork2D<TenElemT, QNT>::PunchHole(const gqpeps::SiteIdx &site,
                                                                   const gqpeps::BondOrientation mps_orient) const {
@@ -825,7 +817,6 @@ void TensorNetwork2D<TenElemT, QNT>::UpdateSiteConfig(const gqpeps::SiteIdx &sit
     }
   }
 }
-
 
 }///gqpeps
 

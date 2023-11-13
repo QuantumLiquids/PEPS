@@ -21,7 +21,6 @@
 using gqten::Timer;
 #endif
 
-
 #ifndef  NDEBUG
 
 #include <cmath>
@@ -29,7 +28,6 @@ using gqten::Timer;
 #endif
 
 namespace gqpeps {
-
 
 /**
  * solve the equation
@@ -195,7 +193,6 @@ SlaveReceiveBroadcastInstruction(boost::mpi::communicator world) {
   return instruction;
 }
 
-
 template<typename MatrixType, typename VectorType>
 VectorType ConjugateGradientSolverMaster(
     const MatrixType &matrix_a,
@@ -258,11 +255,14 @@ VectorType ConjugateGradientSolverMaster(
                 << "\t beta = " << std::fixed << beta << "."
                 << std::endl;
 #endif
+#ifndef NDEBUG
     if (beta > 1.0) {
       std::cout << "k = " << k << "\t residue norm = " << std::scientific << rkp1_2norm
+                << "\t pap = " << std::scientific << pap
                 << "\t beta = " << std::fixed << beta << "."
                 << std::endl;
     }
+#endif
     p = r + beta * p;
     rk_2norm = rkp1_2norm;
   }
