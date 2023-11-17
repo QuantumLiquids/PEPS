@@ -9,6 +9,7 @@
 
 #include <random>
 #include "gqpeps/two_dim_tn/framework/duomatrix.h"
+#include "mpi.h"        //MPI BroadCast
 
 namespace gqpeps {
 
@@ -99,6 +100,104 @@ class Configuration : public DuoMatrix<size_t> {
  private:
 
 };
+
+inline void MPI_Send(
+    Configuration &config,
+    size_t dest,
+    int tag,
+    MPI_Comm comm
+) {
+  const size_t rows = config.rows(), cols = config.cols(), N = config.size();
+  size_t *config_raw_data = new size_t[N];
+  for (size_t row = 0; row < rows; row++) {
+    for (size_t col = 0; col < cols; col++) {
+      config_raw_data[row * cols + col] = config({row, col});
+    }
+  }
+  ::MPI_Send(config_raw_data, N, MPI_UNSIGNED_LONG_LONG, dest, tag, comm);
+  delete[]config_raw_data;
+}
+
+///< config must reserve the memory space
+inline int MPI_Recv(
+    Configuration &config,
+    size_t source,
+    int tag,
+    MPI_Comm comm,
+    MPI_Status *status
+) {
+  const size_t rows = config.rows(), cols = config.cols(), N = config.size();
+  size_t *config_raw_data = new size_t[N];
+  int err_message = ::MPI_Recv(config_raw_data, N, MPI_UNSIGNED_LONG_LONG, source, tag, comm, status);
+  for (size_t row = 0; row < rows; row++) {
+    for (size_t col = 0; col < cols; col++) {
+      config({row, col}) = config_raw_data[row * cols + col];
+    }
+  }
+  delete[]config_raw_data;
+  return err_message;
+}
+
+inline int MPI_Sendrecv(
+    const Configuration &config_send,
+    size_t dest, int sendtag,
+    Configuration &config_recv,
+    size_t source, int recvtag,
+    MPI_Comm comm,
+    MPI_Status *status
+) {
+  const size_t rows = config_send.rows(), cols = config_send.cols(), N = config_send.size();
+  size_t *config_raw_data_send = new size_t[N];
+  size_t *config_raw_data_recv = new size_t[N];
+
+  for (size_t row = 0; row < rows; row++) {
+    for (size_t col = 0; col < cols; col++) {
+      config_raw_data_send[row * cols + col] = config_send({row, col});
+    }
+  }
+  int err_message = ::MPI_Sendrecv(config_raw_data_send, N, MPI_UNSIGNED_LONG_LONG, dest, sendtag,
+                                   config_raw_data_recv, N, MPI_UNSIGNED_LONG_LONG, source, recvtag,
+                                   comm, status);
+
+  for (size_t row = 0; row < rows; row++) {
+    for (size_t col = 0; col < cols; col++) {
+      config_recv({row, col}) = config_raw_data_recv[row * cols + col];
+    }
+  }
+  delete[]config_raw_data_send;
+  delete[]config_raw_data_recv;
+  return err_message;
+}
+
+
+inline void MPI_BCast(
+    Configuration &config,
+    const size_t root,
+    MPI_Comm comm
+) {
+  const size_t rows = config.rows(), cols = config.cols(), N = config.size();
+  size_t *config_raw_data = new size_t[N];
+  int my_rank;
+  MPI_Comm_rank(comm, &my_rank);
+  if (my_rank == root) {
+    for (size_t row = 0; row < rows; row++) {
+      for (size_t col = 0; col < cols; col++) {
+        config_raw_data[row * cols + col] = config({row, col});
+      }
+    }
+  }
+
+  ::MPI_Bcast(config_raw_data, N, MPI_UNSIGNED_LONG_LONG, root, comm);
+
+  if (my_rank != root) {
+    for (size_t row = 0; row < rows; row++) {
+      for (size_t col = 0; col < cols; col++) {
+        config({row, col}) = config_raw_data[row * cols + col];
+      }
+    }
+  }
+  delete[]config_raw_data;
+}
 
 }//gqpeps
 #endif //GQPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_H
