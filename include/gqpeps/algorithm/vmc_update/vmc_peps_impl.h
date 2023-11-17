@@ -536,14 +536,19 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const bool release_m
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const std::string &tps_path, const bool release_mem) {
+  std::string energy_data_path = "./energy";
   if (world_.rank() == kMasterProc) {
     split_index_tps_.Dump(tps_path, release_mem);
+    if (!gqmps2::IsPathExist(energy_data_path)) {
+      gqmps2::CreatPath(energy_data_path);
+    }
   }
   world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
   tps_sample_.config.Dump(tps_path, world_.rank());
-  DumpVecData("energy_sample" + std::to_string(world_.rank()), energy_samples_);
+  DumpVecData(energy_data_path + "/energy_sample" + std::to_string(world_.rank()), energy_samples_);
   if (world_.rank() == kMasterProc) {
-    DumpVecData("energy_trajectory", energy_trajectory_);
+    DumpVecData(energy_data_path + "/energy_trajectory", energy_trajectory_);
+    DumpVecData(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
   }
 //  DumpVecData(tps_path + "/sum_configs" + std::to_string(world_.rank()), sum_configs_);
 }
