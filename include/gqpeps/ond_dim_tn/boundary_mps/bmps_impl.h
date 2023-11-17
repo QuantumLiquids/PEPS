@@ -473,7 +473,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
       res_dag(0) = new Tensor();
       Contract<TenElemT, QNT, true, true>(u, s, 2, 0, 1, res_dag[0]);
       pvt->Transpose({0, 2, 1});
-      delete (res_dag(0 + 1));
+      delete (res_dag(1));
       res_dag(1) = pvt;
 
       BMPS<TenElemT, QNT> res(std::move(res_dag));
@@ -621,7 +621,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
       res_dag(0) = new Tensor();
       Contract<TenElemT, QNT, true, true>(u, s, 2, 0, 1, res_dag[0]);
       pvt->Transpose({0, 2, 1});
-      delete (res_dag(0 + 1));
+      delete (res_dag(1));
       res_dag(1) = pvt;
 
       // one more step in growing renvs for switching to one site update
@@ -844,13 +844,13 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           Contract<TenElemT, QNT, false, false>(tmp[2], *mpo[i + 1], 1, 1, 2, tmp[3]);
           Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
           tmp[4].Dag();
-          Tensor *pu = new Tensor(), *pvt = new Tensor();
+          Tensor *pu = new Tensor(), vt;
           s = GQTensor<GQTEN_Double, QNT>();
           double actual_trunc_err;
           size_t D;
           SVD(tmp + 4,
               3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
-              pu, &s, pvt, &actual_trunc_err, &D
+              pu, &s, &vt, &actual_trunc_err, &D
           );
 
           delete res_dag(i);
@@ -861,7 +861,6 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           tmp[5].Transpose({2, 1, 0});
           lenvs.emplace_back(tmp[5]);
           renvs.pop_back();
-          delete pvt;
         }
         //right move
         for (size_t i = N - 2; i > 0; i--) {
@@ -873,13 +872,13 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           Contract<TenElemT, QNT, false, false>(tmp[2], *mpo[i + 1], 1, 1, 2, tmp[3]);
           Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
           tmp[4].Dag();
-          Tensor *pu = new Tensor(), *pvt = new Tensor();
+          Tensor u, *pvt = new Tensor();
           s = GQTensor<GQTEN_Double, QNT>();
           double actual_trunc_err;
           size_t D;
           SVD(tmp + 4,
               3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
-              pu, &s, pvt, &actual_trunc_err, &D
+              &u, &s, pvt, &actual_trunc_err, &D
           );
 
           delete res_dag(i + 1);
@@ -888,7 +887,6 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           Contract(&tmp[3], {0, 2, 3}, res_dag(i + 1), {3, 1, 2}, &tmp[5]);
           renvs.emplace_back(tmp[5]);
           lenvs.pop_back();
-          delete pu;
         }
         if (iter == 0 || s.GetActualDataSize() != s12bond_last.GetActualDataSize()) {
           s12bond_last = s;

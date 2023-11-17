@@ -65,7 +65,11 @@ GQTensor<TenElemT, QNT> MPIMeanTensor(const GQTensor<TenElemT, QNT> &tensor,
         ten_list[proc] = new Tensor(tensor);
       }
     }
-    return Mean(ten_list, world.size());
+    Tensor res = Mean(ten_list, world.size());
+    for (auto pten: ten_list) {
+      delete pten;
+    }
+    return res;
   } else {
     send_gqten(world, kMasterProc, 2 * world.rank(), tensor);
     return Tensor();
