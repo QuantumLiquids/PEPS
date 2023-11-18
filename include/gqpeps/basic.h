@@ -12,9 +12,11 @@
 
 #include <string>     // string
 #include <vector>     // vector
+#include <random>                                   // default_random_engine
 
 namespace gqpeps {
 
+std::default_random_engine random_engine;
 
 enum BondOrientation {
   HORIZONTAL = 0,

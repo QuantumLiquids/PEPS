@@ -464,20 +464,21 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void) {
-  size_t flip_times;
+  size_t bond_flip_times, cluster_flip_times;
   if (optimize_para.mc_sweep_scheme == SequentiallyNNSiteFlip) {
     for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
-      flip_times = tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, u_double_);;
+      bond_flip_times = tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, u_double_);;
     }
   } else if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
     for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
-      flip_times = tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_);
+      tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_, cluster_flip_times,
+                                                            bond_flip_times);
     }
   } else {
     std::cout << "Do not support MC sweep Scheme" << std::endl;
     exit(1);
   }
-  return flip_times;
+  return bond_flip_times;
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>

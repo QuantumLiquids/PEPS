@@ -10,7 +10,7 @@
 #ifndef GQPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 #define GQPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 
-#include <random>                                   // default_random_engine
+
 #include "gqpeps/two_dim_tn/tps/tps.h"              // TPS
 #include "gqpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
 
@@ -23,7 +23,6 @@ namespace gqpeps {
 using namespace gqten;
 
 
-std::default_random_engine random_engine;
 
 enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticGradient,

@@ -12,8 +12,6 @@
 #include "gqpeps/two_dim_tn/tps/configuration.h"    //Configuration
 #include "gqpeps/algorithm/vmc_update/tensor_network_2d.h"
 
-std::default_random_engine random_engine;
-
 namespace gqpeps {
 template<typename TenElemT, typename QNT>
 struct TPSSample {
@@ -61,14 +59,17 @@ struct TPSSample {
 //  }
 
   size_t MCCompressedKagomeLatticeLocalUpdateSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                                                   std::uniform_real_distribution<double> &u_double) {
-    size_t accept_num_site = 0, accept_num_bond = 0;
+                                                   std::uniform_real_distribution<double> &u_double,
+                                                   size_t &accept_num_tri,
+                                                   size_t &accept_num_bond) {
+    accept_num_tri = 0;
+    accept_num_bond = 0;
     tn.GenerateBMPSApproach(UP, trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 1, true);
       for (size_t col = 0; col < tn.cols(); col++) {
-        accept_num_site += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
+        accept_num_tri += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
         if (col < tn.cols() - 1) {
           accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps,
                                                                     u_double);
@@ -88,7 +89,7 @@ struct TPSSample {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 1, true);
       for (size_t row = 0; row < tn.rows(); row++) {
-        accept_num_site += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, VERTICAL);
+        accept_num_tri += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, VERTICAL);
         if (row < tn.rows() - 1) {
           accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps,
                                                                     u_double);
