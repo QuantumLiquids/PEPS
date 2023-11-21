@@ -143,7 +143,7 @@ class VMCPEPSExecutor : public Executor {
 
   void Measure_(void);
 
-  size_t MCSweep_(void);
+  std::vector<size_t> MCSweep_(void);
 
   void MCUpdateNNSite_(const SiteIdx &site_a, BondOrientation dir);
 
@@ -156,7 +156,7 @@ class VMCPEPSExecutor : public Executor {
 
   void StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
 
-  size_t StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+  std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
 
   boost::mpi::communicator world_;
 

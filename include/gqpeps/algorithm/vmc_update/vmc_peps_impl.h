@@ -240,29 +240,39 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
-  size_t bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
+  size_t flip_bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
+  size_t cluster_num = 3 * lx_ * ly_;
   for (size_t iter = 0; iter < optimize_para.step_lens.size(); iter++) {
     Timer grad_update_timer("gradient_update");
     ClearEnergyAndHoleSamples_();
     double step_len = optimize_para.step_lens[iter];
-    size_t accept_num = 0;
+    size_t bond_flip_accept_num = 0;
+    size_t cluster_update_accept_num = 0;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-      accept_num += MCSweep_();
+      std::vector<size_t> accept_nums = MCSweep_();
+      bond_flip_accept_num += accept_nums[0];
+      if (accept_nums.size() > 1) {
+        cluster_update_accept_num += accept_nums[1];
+      }
       SampleEnergyAndHols_();
 //      sum_configs_.push_back(tps_sample_.config.Sum());
     }
-    double accept_rate = double(accept_num) / double(bond_num * optimize_para.mc_samples);
+    double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
+    double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
     GatherStatisticEnergyAndGrad_();
 
     Timer tps_update_timer("tps_update");
     size_t sr_iter;
+    double sr_natural_grad_norm;
     if (optimize_para.update_scheme == StochasticGradient) {
       StochGradUpdateTPS_(grad_, step_len);
     } else if (optimize_para.update_scheme == RandomStepStochasticGradient) {
       step_len *= u_double_(random_engine);
       StochGradUpdateTPS_(grad_, step_len);
     } else if (optimize_para.update_scheme == StochasticReconfiguration) {
-      sr_iter = StochReconfigUpdateTPS_(grad_, step_len);
+      auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
+      sr_iter = iter;
+      sr_natural_grad_norm = natural_grad_norm;
     } else {
       std::cout << "update method does not support!" << std::endl;
       exit(2);
@@ -277,10 +287,13 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
                 << energy_trajectory_.back()
                 << "+- " << std::setw(10) << std::scientific << std::setprecision(2) << energy_error_traj_.back()
                 << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
-                << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << accept_rate;
-
+                << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
+      if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
+        std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
+      }
       if (optimize_para.update_scheme == StochasticReconfiguration) {
         std::cout << "SRSolver Iter = " << std::setw(4) << sr_iter;
+        std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
       }
       std::cout << "TPS UpdateT = " << std::setw(6) << std::fixed << std::setprecision(2) << tps_update_time << "s"
                 << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
@@ -413,6 +426,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
  * @tparam EnergySolver
  * @param grad
  * @param step_len
+ * @note Normalization condition: tensors in each site are normalized.
  */
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
@@ -445,7 +459,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMC
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
+std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
     const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len) {
   SITPST *pgten_ave_ = &gten_ave_;
   if (world_.rank() != kMasterProc) {
@@ -455,30 +469,33 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t iter;
   SITPST init_guess(ly_, lx_, grad.PhysicalDim()); //set 0 as initial guess
-  auto natural_grad = ConjugateGradientSolver(s_matrix, grad, init_guess,
-                                              cg_params.max_iter, cg_params.tolerance,
-                                              cg_params.residue_restart_step, iter, world_);
+  SITPST natural_grad = ConjugateGradientSolver(s_matrix, grad, init_guess,
+                                                cg_params.max_iter, cg_params.tolerance,
+                                                cg_params.residue_restart_step, iter, world_);
+  double natural_grad_norm = natural_grad.Norm();
   StochGradUpdateTPS_(natural_grad, step_len);
-  return iter;
+  return std::make_pair(iter, natural_grad_norm);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void) {
+std::vector<size_t> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void) {
   size_t bond_flip_times, cluster_flip_times;
   if (optimize_para.mc_sweep_scheme == SequentiallyNNSiteFlip) {
     for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
       bond_flip_times = tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, u_double_);;
     }
+    return {bond_flip_times};
   } else if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
     for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
       tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_, cluster_flip_times,
                                                             bond_flip_times);
     }
+    return {bond_flip_times, cluster_flip_times};
   } else {
     std::cout << "Do not support MC sweep Scheme" << std::endl;
     exit(1);
   }
-  return bond_flip_times;
+
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
