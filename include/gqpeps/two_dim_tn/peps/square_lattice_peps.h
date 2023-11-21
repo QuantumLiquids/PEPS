@@ -16,7 +16,7 @@
 #include "gqmps2/utilities.h"             //CreatPath
 #include "gqpeps/consts.h"              //kPepsPath
 #include "gqpeps/two_dim_tn/tps/tps.h"  //ToTPS()
-#include "gqpeps/basic.h"               //BondOrientation, BMPSTruncatePara
+#include "gqpeps/basic.h"               //BondOrientation
 
 namespace gqpeps {
 using namespace gqten;
@@ -26,6 +26,14 @@ using HilbertSpaces = std::vector<std::vector<Index<QNT>>>;
 //Inner vector indices correspond to column indices
 //Direction out
 
+struct SimpleUpdateTruncatePara {
+  size_t D_min;
+  size_t D_max;
+  double trunc_err;
+
+  SimpleUpdateTruncatePara(size_t d_min, size_t d_max, double trunc_error)
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
+};
 
 /**
  *           3
@@ -130,19 +138,19 @@ class SquareLatticePEPS {
       const TenT &gate_ten,
       const SiteIdx &site,
       const BondOrientation &orientation,
-      const BMPSTruncatePara &trunc_para
+      const SimpleUpdateTruncatePara &trunc_para
   );
 
   double UpperLeftTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_left_site,
-      const BMPSTruncatePara &trunc_para
+      const SimpleUpdateTruncatePara &trunc_para
   );
 
   double LowerRightTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_site,
-      const BMPSTruncatePara &trunc_para
+      const SimpleUpdateTruncatePara &trunc_para
   );
 
   bool Dump(const std::string path = kPepsPath) const;

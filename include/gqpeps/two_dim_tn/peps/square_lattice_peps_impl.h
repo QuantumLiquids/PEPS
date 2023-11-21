@@ -206,7 +206,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten, const SiteIdx &site,
                                                                     const BondOrientation &orientation,
-                                                                    const BMPSTruncatePara &trunc_para) {
+                                                                    const SimpleUpdateTruncatePara &trunc_para) {
   double norm;
   const size_t row = site[0], col = site[1];
   TenT tmp_ten[7];
@@ -651,7 +651,7 @@ GQTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(co
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
                                                                   const SiteIdx &left_upper_site,
-                                                                  const BMPSTruncatePara &trunc_para) {
+                                                                  const SimpleUpdateTruncatePara &trunc_para) {
 #ifndef NDEBUG
   auto physical_index = Gamma(left_upper_site).GetIndex(4);
 #endif
@@ -740,7 +740,7 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
                                                                    const SiteIdx &upper_site,
-                                                                   const BMPSTruncatePara &trunc_para) {
+                                                                   const SimpleUpdateTruncatePara &trunc_para) {
 #ifndef NDEBUG
   auto physical_index = Gamma(upper_site).GetIndex(4);
 #endif
