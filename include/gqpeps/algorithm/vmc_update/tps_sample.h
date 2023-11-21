@@ -20,7 +20,7 @@ struct TPSSample {
   TensorNetwork2D<TenElemT, QNT> tn;
   TenElemT amplitude;
 
-  static TruncatePara trun_para;
+  static BMPSTruncatePara trun_para;
 
   TPSSample(const size_t rows, const size_t cols) : config(rows, cols), tn(rows, cols), amplitude(0) {}
 
@@ -345,7 +345,7 @@ struct TPSSample {
 }; //TPSSample
 
 template<typename TenElemT, typename QNT>
-TruncatePara TPSSample<TenElemT, QNT>::trun_para = TruncatePara(0, 0, 0.0);
+BMPSTruncatePara TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(0, 0, 0.0);
 }//gqpeps
 
 #endif //GRACEQ_VMC_PEPS_TPS_SAMPLE_H

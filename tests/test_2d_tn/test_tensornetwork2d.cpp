@@ -48,7 +48,7 @@ struct TestSpin2DTensorNetwork : public testing::Test {
 
   TensorNetwork2D<GQTEN_Double, U1QN> tn2d = TensorNetwork2D<GQTEN_Double, U1QN>(Ly, Lx);
 
-  TruncatePara trunc_para = TruncatePara(4, 8, 1e-12);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, VARIATION2Site);
 
   void SetUp(void) {
     TPS<GQTEN_Double, U1QN> tps(Ly, Lx);
@@ -89,7 +89,8 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTrace) {
 
 
 TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPSSingleSiteUpdate) {
-  tn2d.GrowBMPSForRow(2, trunc_para, gqpeps::VARIATION1Site);
+  trunc_para.compress_scheme = gqpeps::VARIATION1Site;
+  tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
   double psi_a = tn2d.Trace({2, 0}, HORIZONTAL);

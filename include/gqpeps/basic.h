@@ -85,15 +85,6 @@ enum DIAGONAL_DIR {
   LEFTDOWN_TO_RIGHTUP
 };
 
-struct TruncatePara {
-  size_t D_min;
-  size_t D_max;
-  double trunc_err;
-
-  TruncatePara(size_t d_min, size_t d_max, double trunc_error)
-      : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
-};
-
 
 }
 

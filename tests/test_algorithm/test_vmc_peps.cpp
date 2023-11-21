@@ -91,6 +91,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   IndexT pb_in = InverseIndex(pb_out);
 
   VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
+                                                  VARIATION2Site,
                                                   params.MC_samples, params.WarmUp, 1,
                                                   {N / 2, N / 2}, {0.1},
                                                   StochasticGradient);
@@ -160,6 +161,28 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4) {
   delete executor;
 }
 
+TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4BMPSSingleSiteVariational) {
+  optimize_para.bmps_trunc_para.compress_scheme = VARIATION1Site;
+  using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
+  VMCPEPSExecutor<GQTEN_Double, U1QN, Model> *executor(nullptr);
+
+  if (params.Continue_from_VMC) {
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para,
+                                                              Ly, Lx,
+                                                              world);
+  } else {
+    TPS<GQTEN_Double, U1QN> tps = TPS<GQTEN_Double, U1QN>(Ly, Lx);
+    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+      std::cout << "Loading simple updated TPS files is broken." << std::endl;
+      exit(-2);
+    };
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para, tps,
+                                                              world);
+  }
+
+  executor->Execute();
+  delete executor;
+}
 
 TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4StochasticReconfigration) {
   using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;

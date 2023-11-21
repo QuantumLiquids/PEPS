@@ -16,7 +16,7 @@
 #include "gqmps2/utilities.h"             //CreatPath
 #include "gqpeps/consts.h"              //kPepsPath
 #include "gqpeps/two_dim_tn/tps/tps.h"  //ToTPS()
-#include "gqpeps/basic.h"               //BondOrientation, TruncatePara
+#include "gqpeps/basic.h"               //BondOrientation, BMPSTruncatePara
 
 namespace gqpeps {
 using namespace gqten;
@@ -130,19 +130,19 @@ class SquareLatticePEPS {
       const TenT &gate_ten,
       const SiteIdx &site,
       const BondOrientation &orientation,
-      const TruncatePara &trunc_para
+      const BMPSTruncatePara &trunc_para
   );
 
   double UpperLeftTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_left_site,
-      const TruncatePara &trunc_para
+      const BMPSTruncatePara &trunc_para
   );
 
   double LowerRightTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_site,
-      const TruncatePara &trunc_para
+      const BMPSTruncatePara &trunc_para
   );
 
   bool Dump(const std::string path = kPepsPath) const;

@@ -25,6 +25,18 @@ enum CompressMPSScheme {
   VARIATION1Site
 };
 
+struct BMPSTruncatePara {
+  size_t D_min;
+  size_t D_max;
+  double trunc_err;
+  CompressMPSScheme compress_scheme;
+
+  BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
+                   CompressMPSScheme compress_scheme = VARIATION2Site)
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme) {}
+};
+
+
 /**
  *      1
  *      |
@@ -38,6 +50,7 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
   using Tensor = GQTensor<TenElemT, QNT>;
   using IndexT = Index<QNT>;
   using TransferMPO = std::vector<Tensor *>;
+
   BMPS(const BMPSPOSITION position, const size_t size) : TenVec<Tensor>(size), position_(position),
                                                          center_(kUncentralizedCenterIdx),
                                                          tens_cano_type_(size, NONE) {}
@@ -108,6 +121,7 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
   void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const double,
                           const size_t max_iter = 5, //only valid for variational methods
                           const CompressMPSScheme &scheme = VARIATION2Site);
+
   /**
    * @note For SVD compress, mpo does not change after Multiplication
    *       For Variational methods, mpo may reverse.

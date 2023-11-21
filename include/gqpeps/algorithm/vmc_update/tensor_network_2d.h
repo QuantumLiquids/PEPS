@@ -13,7 +13,7 @@
 #include "gqten/gqten.h"
 #include "gqpeps/two_dim_tn/framework/ten_matrix.h"
 #include "gqpeps/ond_dim_tn/boundary_mps/bmps.h"
-#include "gqpeps/basic.h"                           //TruncatePara
+#include "gqpeps/basic.h"                           //BMPSTruncatePara
 #include "gqpeps/two_dim_tn/tps/configuration.h"    //Configure
 
 namespace gqpeps {
@@ -56,7 +56,7 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
   }
 
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GenerateBMPSApproach(BMPSPOSITION post, const TruncatePara &trunc_para);
+  GenerateBMPSApproach(BMPSPOSITION post, const BMPSTruncatePara &trunc_para);
 
   /**
    * Generate the boundary MPS for the row-th MPO.
@@ -65,23 +65,23 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
    * @return
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForRow(const size_t row, const TruncatePara &trunc_para, const CompressMPSScheme scheme = VARIATION2Site);
+  GrowBMPSForRow(const size_t row, const BMPSTruncatePara &trunc_para);
 
   /**
    * Same functionality with GrowBMPSForRow but only return the corresponding boundary MPS
    * @param row
    * @return
    */
-  const std::pair<BMPST, BMPST> GetBMPSForRow(const size_t row, const TruncatePara &trunc_para);
+  const std::pair<BMPST, BMPST> GetBMPSForRow(const size_t row, const BMPSTruncatePara &trunc_para);
 
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForCol(const size_t col, const TruncatePara &trunc_para);
+  GrowBMPSForCol(const size_t col, const BMPSTruncatePara &trunc_para);
 
-  const std::pair<BMPST, BMPST> GetBMPSForCol(const size_t col, const TruncatePara &trunc_para);
+  const std::pair<BMPST, BMPST> GetBMPSForCol(const size_t col, const BMPSTruncatePara &trunc_para);
 
-  void BMPSMoveStep(const BMPSPOSITION position, const TruncatePara &trunc_para);
+  void BMPSMoveStep(const BMPSPOSITION position, const BMPSTruncatePara &trunc_para);
 
-  void GrowFullBMPS(const BMPSPOSITION position, const TruncatePara &trunc_para);
+  void GrowFullBMPS(const BMPSPOSITION position, const BMPSTruncatePara &trunc_para);
 
   void DeleteInnerBMPS(const BMPSPOSITION position) {
     bmps_set_[position].erase(bmps_set_[position].begin() + 1, bmps_set_[position].end());
@@ -148,11 +148,9 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
  * @param position
  * @return
  */
-  size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const TruncatePara &,
-                       const CompressMPSScheme scheme = VARIATION2Site);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const BMPSTruncatePara &);
 
-  size_t GrowBMPSStep_(const BMPSPOSITION position, const TruncatePara &,
-                       const CompressMPSScheme scheme = VARIATION2Site);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, const BMPSTruncatePara &);
 
   /**
    *

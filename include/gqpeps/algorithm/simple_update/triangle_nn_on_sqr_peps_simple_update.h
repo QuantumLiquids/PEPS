@@ -51,7 +51,7 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
 template<typename TenElemT, typename QNT>
 double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
-  TruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
+  BMPSTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   double norm = 1.0;
   double e0 = 0.0, e1 = 0.0;
 

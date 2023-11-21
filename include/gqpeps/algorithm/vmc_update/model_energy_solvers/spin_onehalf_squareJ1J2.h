@@ -40,7 +40,7 @@ TenElemT SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const
   TenElemT e1(0), e2(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const TruncatePara &trunc_para = TPSSample<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = TPSSample<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {

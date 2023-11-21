@@ -127,7 +127,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     warm_up_(false) {
   random_engine.seed((size_t)
                          std::time(nullptr) + 10086 * world.rank());
-  TPSSample<TenElemT, QNT>::trun_para = TruncatePara(optimize_para);
+  TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(optimize_para);
   tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10087 * world.rank() + std::time(nullptr));
 
   ReserveSamplesDataSpace_();
@@ -147,7 +147,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver), warm_up_(false) {
-  TPSSample<TenElemT, QNT>::trun_para = TruncatePara(optimize_para);
+  TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(optimize_para);
   random_engine.seed((size_t)
                          std::time(nullptr) + 10086 * world.rank());
   LoadTenData();

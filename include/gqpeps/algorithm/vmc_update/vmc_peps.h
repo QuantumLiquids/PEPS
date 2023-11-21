@@ -23,7 +23,6 @@ namespace gqpeps {
 using namespace gqten;
 
 
-
 enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticGradient,
   RandomStepStochasticGradient,
@@ -36,7 +35,7 @@ enum MC_SWEEP_SCHEME {
 };
 
 struct VMCOptimizePara {
-  VMCOptimizePara(TruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
+  VMCOptimizePara(BMPSTruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
                   size_t mc_sweeps_between_sample,
                   const std::vector<size_t> &occupancy,
                   const std::vector<double> &step_lens,
@@ -50,22 +49,22 @@ struct VMCOptimizePara {
       update_scheme(update_scheme),
       wavefunction_path(wavefunction_path) {}
 
-  VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax,
+  VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax, CompressMPSScheme compress_mps_scheme,
                   size_t samples, size_t warm_up_sweeps,
                   size_t mc_sweeps_between_sample,
                   const std::vector<size_t> &occupancy,
                   const std::vector<double> &step_lens,
                   const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
                   const std::string wavefunction_path = kTpsPath)
-      : VMCOptimizePara(TruncatePara(Dmin, Dmax, truncErr), samples,
+      : VMCOptimizePara(BMPSTruncatePara(Dmin, Dmax, truncErr, compress_mps_scheme), samples,
                         warm_up_sweeps, mc_sweeps_between_sample, occupancy,
                         step_lens, update_scheme, wavefunction_path) {}
 
-  operator TruncatePara() const {
+  operator BMPSTruncatePara() const {
     return bmps_trunc_para;
   }
 
-  TruncatePara bmps_trunc_para; // Truncation Error and bond dimensionts for compressing boundary MPS
+  BMPSTruncatePara bmps_trunc_para; // Truncation Error and bond dimensionts for compressing boundary MPS
 
   //MC parameters
   size_t mc_samples;
