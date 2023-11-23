@@ -31,6 +31,8 @@ struct BMPSTruncatePara {
   double trunc_err;
   CompressMPSScheme compress_scheme;
 
+  BMPSTruncatePara(void) = default;
+
   BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
                    CompressMPSScheme compress_scheme = VARIATION2Site)
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme) {}

@@ -10,8 +10,8 @@
 
 //#define PLAIN_TRANSPOSE 1
 
-#include "gqten/gqten.h"
 #include "gtest/gtest.h"
+#include "gqten/gqten.h"
 #include "gqpeps/algorithm/vmc_update/vmc_peps.h"
 #include "gqpeps/algorithm/vmc_update/model_energy_solvers/spin_onehalf_heisenberg_square.h"    // SpinOneHalfHeisenbergSquare
 #include "gqpeps/algorithm/vmc_update/model_energy_solvers/spin_onehalf_squareJ1J2.h"           // SpinOneHalfJ1J2HeisenbergSquare
@@ -93,7 +93,9 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
                                                   VARIATION2Site,
                                                   params.MC_samples, params.WarmUp, 1,
-                                                  {N / 2, N / 2}, {0.1},
+                                                  std::vector<size_t>(2, N / 2),
+                                                  Ly, Lx,
+                                                  {0.1},
                                                   StochasticGradient);
 
   DGQTensor did = DGQTensor({pb_in, pb_out});

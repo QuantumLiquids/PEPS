@@ -35,16 +35,47 @@ enum MC_SWEEP_SCHEME {
 };
 
 struct VMCOptimizePara {
+  VMCOptimizePara(void) = default;
+
   VMCOptimizePara(BMPSTruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
                   size_t mc_sweeps_between_sample,
                   const std::vector<size_t> &occupancy,
+                  const size_t rows, const size_t cols,
                   const std::vector<double> &step_lens,
                   const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
                   const std::string wavefunction_path = kTpsPath) :
       bmps_trunc_para(trunc_para), mc_samples(samples),
       mc_warm_up_sweeps(warm_up_sweeps),
       mc_sweeps_between_sample(mc_sweeps_between_sample),
-      occupancy_num(occupancy),
+      init_config(rows, cols),
+      step_lens(step_lens),
+      update_scheme(update_scheme),
+      wavefunction_path(wavefunction_path) {
+    init_config.Random(occupancy);
+  }
+
+  VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax, CompressMPSScheme compress_mps_scheme,
+                  size_t samples, size_t warm_up_sweeps,
+                  size_t mc_sweeps_between_sample,
+                  const std::vector<size_t> &occupancy,
+                  const size_t rows, const size_t cols,
+                  const std::vector<double> &step_lens,
+                  const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
+                  const std::string wavefunction_path = kTpsPath)
+      : VMCOptimizePara(BMPSTruncatePara(Dmin, Dmax, truncErr, compress_mps_scheme), samples,
+                        warm_up_sweeps, mc_sweeps_between_sample, occupancy, rows, cols,
+                        step_lens, update_scheme, wavefunction_path) {}
+
+  VMCOptimizePara(BMPSTruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
+                  size_t mc_sweeps_between_sample,
+                  const Configuration &init_config,
+                  const std::vector<double> &step_lens,
+                  const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
+                  const std::string wavefunction_path = kTpsPath) :
+      bmps_trunc_para(trunc_para), mc_samples(samples),
+      mc_warm_up_sweeps(warm_up_sweeps),
+      mc_sweeps_between_sample(mc_sweeps_between_sample),
+      init_config(init_config),
       step_lens(step_lens),
       update_scheme(update_scheme),
       wavefunction_path(wavefunction_path) {}
@@ -52,12 +83,12 @@ struct VMCOptimizePara {
   VMCOptimizePara(double truncErr, size_t Dmin, size_t Dmax, CompressMPSScheme compress_mps_scheme,
                   size_t samples, size_t warm_up_sweeps,
                   size_t mc_sweeps_between_sample,
-                  const std::vector<size_t> &occupancy,
+                  const Configuration &init_config,
                   const std::vector<double> &step_lens,
                   const WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticGradient,
                   const std::string wavefunction_path = kTpsPath)
       : VMCOptimizePara(BMPSTruncatePara(Dmin, Dmax, truncErr, compress_mps_scheme), samples,
-                        warm_up_sweeps, mc_sweeps_between_sample, occupancy,
+                        warm_up_sweeps, mc_sweeps_between_sample, init_config,
                         step_lens, update_scheme, wavefunction_path) {}
 
   operator BMPSTruncatePara() const {
@@ -71,8 +102,10 @@ struct VMCOptimizePara {
   size_t mc_warm_up_sweeps;
   size_t mc_sweeps_between_sample;
 
-  // e.g. In spin model, how many spin up sites and how many spin down sites.
-  std::vector<size_t> occupancy_num;
+//  // e.g. In spin model, how many spin up sites and how many spin down sites.
+//  std::vector<size_t> occupancy_num;
+
+  Configuration init_config;
 
   std::vector<double> step_lens;
   WAVEFUNCTION_UPDATE_SCHEME update_scheme;

@@ -291,7 +291,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;
   const double converge_tol = 1e-15;  // for variational methods
-  if (N == 2) {
+  if (N == 2 && scheme != SVD_COMPRESS) {
     return MultipleMPO(mpo, Dmin, Dmax,
                        trunc_err, iter_max, SVD_COMPRESS);
   }

@@ -26,7 +26,7 @@ class Configuration : public DuoMatrix<size_t> {
    *                  occupancy_num[i] indicates how many sites occupy the i-th state.
    * @param seed seed for random number generator
    */
-  void Random(const std::vector<size_t> &occupancy_num, size_t seed) {
+  void Random(const std::vector<size_t> &occupancy_num) {
     size_t dim = occupancy_num.size();
     size_t rows = this->rows();
     size_t cols = this->cols();
@@ -40,10 +40,13 @@ class Configuration : public DuoMatrix<size_t> {
     }
     assert(off_set == data.size());
 
-    std::srand(seed);
+    // random_device can generate different random number during the running
+    // and do not need to feed the seed;
+    // But if the mt19937 is not feed the seed, the rand number it generate in
+    // each time is the same.
     std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(data.begin(), data.end(), g);
+    std::mt19937 rand_num_gen(rd());
+    std::shuffle(data.begin(), data.end(), rand_num_gen);
 
     for (size_t row = 0; row < rows; row++) {
       for (size_t col = 0; col < cols; col++) {

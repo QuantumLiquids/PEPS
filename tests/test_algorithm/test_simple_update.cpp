@@ -9,8 +9,8 @@
 
 #define PLAIN_TRANSPOSE 1
 
-#include "gqten/gqten.h"
 #include "gtest/gtest.h"
+#include "gqten/gqten.h"
 #include "gqmps2/case_params_parser.h"
 #include "gqpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
 #include "gqpeps/algorithm/simple_update/triangle_nn_on_sqr_peps_simple_update.h"

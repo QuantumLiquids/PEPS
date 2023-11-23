@@ -38,9 +38,8 @@ struct TPSSample {
    * @param occupancy_num
    */
   void RandomInit(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                  const std::vector<size_t> &occupancy_num,
-                  const size_t rand_seed) {
-    config.Random(occupancy_num, rand_seed);
+                  const std::vector<size_t> &occupancy_num) {
+    config.Random(occupancy_num);
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
     tn.GrowBMPSForRow(0, trun_para);
     tn.GrowFullBTen(RIGHT, 0, 2, true);
@@ -58,24 +57,92 @@ struct TPSSample {
 //
 //  }
 
-  size_t MCCompressedKagomeLatticeLocalUpdateSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                                                   std::uniform_real_distribution<double> &u_double,
-                                                   size_t &accept_num_tri,
-                                                   size_t &accept_num_bond) {
+  void MCCompressedKagomeLatticeSequentiallyLocalUpdateSweepSmoothBoundary(
+      const SplitIndexTPS<TenElemT, QNT> &sitps,
+      std::uniform_real_distribution<double> &u_double,
+      size_t &accept_num_tri,
+      size_t &accept_num_bond
+  ) {
+    accept_num_tri = 0;
+    accept_num_bond = 0;
+    tn.GenerateBMPSApproach(UP, trun_para);
+    for (size_t row = 0; row < tn.rows() - 1; row++) {
+      tn.InitBTen(LEFT, row);
+      tn.GrowFullBTen(RIGHT, row, 1, true);
+      for (size_t col = 0; col < tn.cols() - 1; col++) {
+        accept_num_tri += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
+        accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps,
+                                                                  u_double);
+        tn.BTenMoveStep(RIGHT);
+      }
+      accept_num_tri += CompressedKagomeLatticeInnerSiteVerticalBondExchangeUpdate_({row, tn.cols() - 1}, sitps,
+                                                                                    u_double, HORIZONTAL);
+      tn.BMPSMoveStep(DOWN, trun_para);
+    }
+    //for the last row flip update
+    size_t last_row_idx = tn.rows() - 1;
+    tn.InitBTen(LEFT, last_row_idx);
+    tn.GrowFullBTen(RIGHT, last_row_idx, 1, true);
+    for (size_t col = 0; col < tn.cols() - 1; col++) {
+      accept_num_tri += CompressedKagomeLatticeInnerSiteHorizontalBondExchangeUpdate_({last_row_idx, col}, sitps,
+                                                                                      u_double, HORIZONTAL);
+      accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({last_row_idx, col}, {last_row_idx, col + 1},
+                                                                HORIZONTAL, sitps,
+                                                                u_double);
+      tn.BTenMoveStep(RIGHT);
+    }
+
+    tn.DeleteInnerBMPS(LEFT);
+    tn.DeleteInnerBMPS(RIGHT);
+
+    tn.GenerateBMPSApproach(LEFT, trun_para);
+    for (size_t col = 0; col < tn.cols() - 1; col++) {
+      tn.InitBTen(UP, col);
+      tn.GrowFullBTen(DOWN, col, 1, true);
+      for (size_t row = 0; row < tn.rows() - 1; row++) {
+        accept_num_tri += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, VERTICAL);
+        accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps,
+                                                                  u_double);
+        tn.BTenMoveStep(DOWN);
+      }
+      accept_num_tri += CompressedKagomeLatticeInnerSiteHorizontalBondExchangeUpdate_({tn.rows() - 1, col}, sitps,
+                                                                                      u_double, VERTICAL);
+      tn.BMPSMoveStep(RIGHT, trun_para);
+    }
+    size_t last_col_idx = tn.cols() - 1;
+    tn.InitBTen(UP, last_col_idx);
+    tn.GrowFullBTen(DOWN, last_col_idx, 1, true);
+    for (size_t row = 0; row < tn.rows() - 1; row++) {
+      accept_num_tri += CompressedKagomeLatticeInnerSiteVerticalBondExchangeUpdate_({row, last_col_idx}, sitps,
+                                                                                    u_double, VERTICAL);
+      accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, last_col_idx}, {row + 1, last_col_idx}, VERTICAL,
+                                                                sitps,
+                                                                u_double);
+      tn.BTenMoveStep(DOWN);
+    }
+    tn.DeleteInnerBMPS(UP);
+    return;
+  }
+
+
+  // has corner version
+  void MCCompressedKagomeLatticeSequentiallyLocalUpdateSweep(const SplitIndexTPS<TenElemT, QNT> &sitps,
+                                                             std::uniform_real_distribution<double> &u_double,
+                                                             size_t &accept_num_tri,
+                                                             size_t &accept_num_bond) {
     accept_num_tri = 0;
     accept_num_bond = 0;
     tn.GenerateBMPSApproach(UP, trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 1, true);
-      for (size_t col = 0; col < tn.cols(); col++) {
+      for (size_t col = 0; col < tn.cols() - 1; col++) {
         accept_num_tri += CompressedKagomeLatticeSingleSiteUpdate_({row, col}, sitps, u_double, HORIZONTAL);
-        if (col < tn.cols() - 1) {
-          accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps,
-                                                                    u_double);
-          tn.BTenMoveStep(RIGHT);
-        }
+        accept_num_bond += CompressedKagomeLatticeExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps,
+                                                                  u_double);
+        tn.BTenMoveStep(RIGHT);
       }
+      accept_num_tri += CompressedKagomeLatticeSingleSiteUpdate_({row, tn.cols() - 1}, sitps, u_double, HORIZONTAL);
       if (row < tn.rows() - 1) {
         tn.BMPSMoveStep(DOWN, trun_para);
       }
@@ -102,7 +169,6 @@ struct TPSSample {
     }
 
     tn.DeleteInnerBMPS(UP);
-    return accept_num_bond;
 //    return (accept_num_bond + accept_num_site) / 2; // a roughly estimation
   }
 
@@ -172,9 +238,6 @@ struct TPSSample {
     }
 
     std::swap(config(site1), config(site2));
-//    const size_t config_tmp = config(site1);
-//    config(site1) = config(site2);
-//    config(site2) = config_tmp;
     tn.UpdateSiteConfig(site1, config(site1), sitps);
     tn.UpdateSiteConfig(site2, config(site2), sitps);
     amplitude = psi_b;
@@ -238,6 +301,82 @@ struct TPSSample {
     tn.UpdateSiteConfig(site1, ex_config1, sitps);
     tn.UpdateSiteConfig(site2, ex_config2, sitps);
     amplitude = psi_b;
+    return exchange;
+  }
+
+  bool CompressedKagomeLatticeInnerSiteVerticalBondExchangeUpdate_(
+      const SiteIdx &site,
+      const SplitIndexTPS<TenElemT, QNT> &sitps,
+      std::uniform_real_distribution<double> &u_double,
+      const BondOrientation mps_orient
+  ) {
+    size_t config_site = config(site);
+    bool config_a = config_site & 1;
+    bool config_b = config_site >> 1 & 1;
+    if (config_a == config_b) {
+      return false;
+    }
+
+    size_t ex_config = 2 * config_a + config_b + (config_site & 4);
+
+    TenElemT psi_ex = tn.ReplaceOneSiteTrace(site, sitps(site)[ex_config], mps_orient);
+
+    bool exchange;
+    TenElemT &psi_a = amplitude;
+    if (std::fabs(psi_ex) >= std::fabs(psi_a)) {
+      exchange = true;
+    } else {
+      double div = std::fabs(psi_ex) / std::fabs(psi_a);
+      double P = div * div;
+      if (u_double(random_engine) < P) {
+        exchange = true;
+      } else {
+        exchange = false;
+        return exchange;
+      }
+    }
+
+    config(site) = ex_config;
+    tn.UpdateSiteConfig(site, ex_config, sitps);
+    amplitude = psi_ex;
+    return exchange;
+  }
+
+  bool CompressedKagomeLatticeInnerSiteHorizontalBondExchangeUpdate_(
+      const SiteIdx &site,
+      const SplitIndexTPS<TenElemT, QNT> &sitps,
+      std::uniform_real_distribution<double> &u_double,
+      const BondOrientation mps_orient
+  ) {
+    size_t config_site = config(site);
+    bool config_a = config_site & 1;
+    bool config_b = config_site >> 2 & 1;
+    if (config_a == config_b) {
+      return false;
+    }
+
+    size_t ex_config = 4 * config_a + (config_site & 2) + config_b;
+
+    TenElemT psi_ex = tn.ReplaceOneSiteTrace(site, sitps(site)[ex_config], mps_orient);
+
+    bool exchange;
+    TenElemT &psi_a = amplitude;
+    if (std::fabs(psi_ex) >= std::fabs(psi_a)) {
+      exchange = true;
+    } else {
+      double div = std::fabs(psi_ex) / std::fabs(psi_a);
+      double P = div * div;
+      if (u_double(random_engine) < P) {
+        exchange = true;
+      } else {
+        exchange = false;
+        return exchange;
+      }
+    }
+
+    config(site) = ex_config;
+    tn.UpdateSiteConfig(site, ex_config, sitps);
+    amplitude = psi_ex;
     return exchange;
   }
 

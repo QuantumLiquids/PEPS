@@ -125,11 +125,9 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver),
     warm_up_(false) {
-  random_engine.seed((size_t)
-                         std::time(nullptr) + 10086 * world.rank());
+  random_engine.seed(std::random_device{}() + 10086 * world.rank());
   TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(optimize_para);
-  tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10087 * world.rank() + std::time(nullptr));
-
+  tps_sample_ = TPSSample<TenElemT, QNT>(sitpst_init, optimize_para.init_config);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -148,8 +146,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver), warm_up_(false) {
   TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(optimize_para);
-  random_engine.seed((size_t)
-                         std::time(nullptr) + 10086 * world.rank());
+  random_engine.seed(std::random_device{}() + 10086 * world.rank());
   LoadTenData();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
@@ -487,8 +484,11 @@ std::vector<size_t> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void)
     return {bond_flip_times};
   } else if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
     for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
-      tps_sample_.MCCompressedKagomeLatticeLocalUpdateSweep(split_index_tps_, u_double_, cluster_flip_times,
-                                                            bond_flip_times);
+      tps_sample_.MCCompressedKagomeLatticeSequentiallyLocalUpdateSweepSmoothBoundary(split_index_tps_, u_double_,
+                                                                                      cluster_flip_times,
+                                                                                      bond_flip_times);
+//      tps_sample_.MCCompressedKagomeLatticeSequentiallyLocalUpdateSweep(split_index_tps_, u_double_, cluster_flip_times,
+//                                                                        bond_flip_times);
     }
     return {bond_flip_times, cluster_flip_times};
   } else {
@@ -539,9 +539,9 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string
     tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, config);
   } else {
     std::cout << "Loading configuration in rank " << world_.rank()
-              << " fails. Random generate it and warm up."
+              << " fails. Use preset configuration and random warm up."
               << std::endl;
-    tps_sample_.RandomInit(split_index_tps_, optimize_para.occupancy_num, 10089 * world_.rank() + std::time(nullptr));
+    tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, optimize_para.init_config);
     WarmUp_();
   }
   warm_up_ = true;
