@@ -26,7 +26,8 @@ using namespace gqten;
 enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticGradient,
   RandomStepStochasticGradient,
-  StochasticReconfiguration
+  StochasticReconfiguration,
+  BoundGradientElement
 };
 
 enum MC_SWEEP_SCHEME {
@@ -187,6 +188,8 @@ class VMCPEPSExecutor : public Executor {
   SITPST GatherStatisticEnergyAndGrad_(void);
 
   void StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+
+  void BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad, double step_len);
 
   std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
 

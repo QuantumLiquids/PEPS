@@ -7,8 +7,8 @@
 * Description: GraceQ/VMC-PEPS project. Unittests for PEPS class.
 */
 
-#include "gqten/gqten.h"
 #include "gtest/gtest.h"
+#include "gqten/gqten.h"
 #include "gqpeps/two_dim_tn/peps/square_lattice_peps.h"
 
 using namespace gqten;

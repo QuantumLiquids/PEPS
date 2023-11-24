@@ -270,6 +270,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
       auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
       sr_iter = iter;
       sr_natural_grad_norm = natural_grad_norm;
+    } else if (optimize_para.update_scheme == BoundGradientElement) {
+      BoundGradElementUpdateTPS_(grad_, step_len);
     } else {
       std::cout << "update method does not support!" << std::endl;
       exit(2);
@@ -277,12 +279,14 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     double tps_update_time = tps_update_timer.Elapsed();
 
     if (world_.rank() == kMasterProc) {
+      const std::string pm_sign = "\u00b1";
       double gradient_update_time = grad_update_timer.Elapsed();
       std::cout << "Iter " << std::setw(4) << iter
                 << "Alpha = " << std::setw(9) << std::scientific << std::setprecision(1) << step_len
                 << "E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
                 << energy_trajectory_.back()
-                << "+- " << std::setw(10) << std::scientific << std::setprecision(2) << energy_error_traj_.back()
+                << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
+                << energy_error_traj_.back()
                 << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
                 << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
       if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
@@ -435,6 +439,38 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMC
         double norm = 0;
         for (size_t compt = 0; compt < phy_dim; compt++) {
           split_index_tps_({row, col})[compt] += (-step_len) * grad({row, col})[compt];
+          norm += split_index_tps_({row, col})[compt].Get2Norm();
+        }
+        double inv_norm = 1.0 / norm;
+        for (size_t compt = 0; compt < phy_dim; compt++) {
+          split_index_tps_({row, col})[compt] *= inv_norm;
+          SendBroadCastGQTensor(world_, split_index_tps_({row, col})[compt], kMasterProc);
+        }
+      }
+  } else {
+    for (size_t row = 0; row < ly_; row++)
+      for (size_t col = 0; col < lx_; col++) {
+        const size_t phy_dim = grad_({row, col}).size();
+        for (size_t compt = 0; compt < phy_dim; compt++) {
+          split_index_tps_({row, col})[compt] = Tensor();
+          RecvBroadCastGQTensor(world_, split_index_tps_({row, col})[compt], kMasterProc);
+        }
+      }
+  }
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad,
+                                                                              double step_len) {
+  if (world_.rank() == kMasterProc) {
+    for (size_t row = 0; row < ly_; row++)
+      for (size_t col = 0; col < lx_; col++) {
+        const size_t phy_dim = grad_({row, col}).size();
+        double norm = 0;
+        for (size_t compt = 0; compt < phy_dim; compt++) {
+          Tensor &grad_ten = grad({row, col})[compt];
+          grad_ten.ElementWiseBoundTo(step_len);
+          split_index_tps_({row, col})[compt] += (-step_len) * grad_ten;
           norm += split_index_tps_({row, col})[compt].Get2Norm();
         }
         double inv_norm = 1.0 / norm;

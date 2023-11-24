@@ -41,6 +41,9 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
+    // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
+    tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
+    inv_psi = 1.0 / tps_sample->amplitude;
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -69,6 +72,8 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
   for (size_t col = 0; col < tn.cols(); col++) {
     tn.InitBTen(UP, col);
     tn.GrowFullBTen(DOWN, col, 2, true);
+    tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
+    inv_psi = 1.0 / tps_sample->amplitude;
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};

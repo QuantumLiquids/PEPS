@@ -7,8 +7,9 @@
 * Description: GraceQ/VMC-PEPS project. Unittests for DuoMatrix
 */
 
-#include "gqpeps/two_dim_tn/framework/duomatrix.h"
 #include "gtest/gtest.h"
+#include "gqpeps/two_dim_tn/framework/duomatrix.h"
+
 
 using namespace gqpeps;
 
@@ -54,7 +55,7 @@ void RunTestDuoMatrixConstructorsCase(const size_t rows, const size_t cols) {
   duomat_moved2 = std::move(duomat_copy2);
   for (size_t i = 0; i < rows; ++i) {
     for (size_t j = 0; j < cols; ++j) {
-      EXPECT_EQ(duomat_moved2(i,j), craw_data_copy2[i][j]);
+      EXPECT_EQ(duomat_moved2(i, j), craw_data_copy2[i][j]);
       EXPECT_EQ(duomat_moved2({i, j}), duomat({i, j}));
 
     }

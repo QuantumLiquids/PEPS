@@ -6,8 +6,8 @@
 *
 * Description: GraceQ/VMC-PEPS project. Unittests for TenMatrix
 */
-#include "gqten/gqten.h"
 #include "gtest/gtest.h"
+#include "gqten/gqten.h"
 #include "gqpeps/two_dim_tn/framework/ten_matrix.h"
 
 using namespace gqten;
