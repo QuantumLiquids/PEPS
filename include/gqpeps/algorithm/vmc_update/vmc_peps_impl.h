@@ -270,6 +270,11 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
       auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
       sr_iter = iter;
       sr_natural_grad_norm = natural_grad_norm;
+    } else if (optimize_para.update_scheme == RandomStepStochasticReconfiguration) {
+      step_len *= u_double_(random_engine);
+      auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
+      sr_iter = iter;
+      sr_natural_grad_norm = natural_grad_norm;
     } else if (optimize_para.update_scheme == BoundGradientElement) {
       BoundGradElementUpdateTPS_(grad_, step_len);
     } else {
@@ -292,7 +297,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
       if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
         std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
       }
-      if (optimize_para.update_scheme == StochasticReconfiguration) {
+      if (optimize_para.update_scheme == StochasticReconfiguration || optimize_para.update_scheme == RandomStepStochasticReconfiguration) {
         std::cout << "SRSolver Iter = " << std::setw(4) << sr_iter;
         std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
       }

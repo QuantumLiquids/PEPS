@@ -27,6 +27,7 @@ enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticGradient,
   RandomStepStochasticGradient,
   StochasticReconfiguration,
+  RandomStepStochasticReconfiguration,
   BoundGradientElement
 };
 
