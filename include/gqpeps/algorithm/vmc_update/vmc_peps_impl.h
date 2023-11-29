@@ -183,7 +183,9 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
   if (world_.rank() == kMasterProc)
     grad_norm_.reserve(optimize_para.step_lens.size());
 
-  if (optimize_para.update_scheme == StochasticReconfiguration) {
+  if (optimize_para.update_scheme == StochasticReconfiguration ||
+      optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+      optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
     gten_samples_.reserve(optimize_para.mc_samples);
   }
 //  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.step_lens.size());
@@ -275,6 +277,13 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
       auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
       sr_iter = iter;
       sr_natural_grad_norm = natural_grad_norm;
+    } else if (optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
+      auto [iter, natural_grad_norm] = NormalizedStochReconfigUpdateTPS_(grad_, step_len);
+      sr_iter = iter;
+      sr_natural_grad_norm = natural_grad_norm;
+    } else if (optimize_para.update_scheme == RandomGradientElement) {
+      GradientRandElementSign_();
+      StochGradUpdateTPS_(grad_, step_len);
     } else if (optimize_para.update_scheme == BoundGradientElement) {
       BoundGradElementUpdateTPS_(grad_, step_len);
     } else {
@@ -297,7 +306,9 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
       if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
         std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
       }
-      if (optimize_para.update_scheme == StochasticReconfiguration || optimize_para.update_scheme == RandomStepStochasticReconfiguration) {
+      if (optimize_para.update_scheme == StochasticReconfiguration ||
+          optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+          optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
         std::cout << "SRSolver Iter = " << std::setw(4) << sr_iter;
         std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
       }
@@ -334,7 +345,9 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ClearEnergyAndHoleSamples_(vo
       g_times_energy_sum_({row, col}) = gten_sum_({row, col});
     }
   }
-  if (optimize_para.update_scheme == StochasticReconfiguration) {
+  if (optimize_para.update_scheme == StochasticReconfiguration ||
+      optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+      optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
     gten_samples_.clear();
   }
 }
@@ -358,12 +371,16 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergyAndHols_(void) {
       gten_sum_({row, col})[basis] += gten;
       g_times_energy_sum_({row, col})[basis] += energy_loc * gten;
       //? when samples become large, does the summation reliable as the small number are added to large number.
-      if (optimize_para.update_scheme == StochasticReconfiguration) {
+      if (optimize_para.update_scheme == StochasticReconfiguration ||
+          optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+          optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
         gten_sample({row, col})[basis] = gten;
       }
     }
   }
-  if (optimize_para.update_scheme == StochasticReconfiguration) {
+  if (optimize_para.update_scheme == StochasticReconfiguration ||
+      optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+      optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
     gten_samples_.emplace_back(gten_sample);
   }
 }
@@ -411,7 +428,9 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
         // gather and estimate grad in master (and maybe the error bar of grad)
         grad_({row, col})[compt] = MPIMeanTensor(grad_({row, col})[compt], world_);
         // note here the grad data except in master are clear
-        if (optimize_para.update_scheme == StochasticReconfiguration) {
+        if (optimize_para.update_scheme == StochasticReconfiguration ||
+            optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+            optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
           gten_ave_({row, col})[compt] = MPIMeanTensor(gten_ave_({row, col})[compt], world_);
         }
       }
@@ -513,6 +532,38 @@ std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochRec
   double natural_grad_norm = natural_grad.Norm();
   StochGradUpdateTPS_(natural_grad, step_len);
   return std::make_pair(iter, natural_grad_norm);
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::NormalizedStochReconfigUpdateTPS_(
+    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len) {
+  SITPST *pgten_ave_ = &gten_ave_;
+  if (world_.rank() != kMasterProc) {
+    pgten_ave_ = nullptr;
+  }
+  SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
+  s_matrix.diag_shift = cg_params.diag_shift;
+  size_t iter;
+  SITPST init_guess(ly_, lx_, grad.PhysicalDim()); //set 0 as initial guess
+  SITPST natural_grad = ConjugateGradientSolver(s_matrix, grad, init_guess,
+                                                cg_params.max_iter, cg_params.tolerance,
+                                                cg_params.residue_restart_step, iter, world_);
+  double natural_grad_norm = natural_grad.Norm();
+  step_len = step_len / std::sqrt(natural_grad_norm);
+  StochGradUpdateTPS_(natural_grad, step_len);
+  return std::make_pair(iter, natural_grad_norm);
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GradientRandElementSign_() {
+  if (world_.rank() == kMasterProc)
+    for (size_t row = 0; row < ly_; row++) {
+      for (size_t col = 0; col < lx_; col++) {
+        size_t dim = split_index_tps_({row, col}).size();
+        for (size_t i = 0; i < dim; i++)
+          grad_({row, col})[i].ElementWiseRandSign(u_double_, random_engine);
+      }
+    }
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>

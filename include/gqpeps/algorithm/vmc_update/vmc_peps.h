@@ -24,11 +24,13 @@ using namespace gqten;
 
 
 enum WAVEFUNCTION_UPDATE_SCHEME {
-  StochasticGradient,
-  RandomStepStochasticGradient,
-  StochasticReconfiguration,
-  RandomStepStochasticReconfiguration,
-  BoundGradientElement
+  StochasticGradient,                     //0
+  RandomStepStochasticGradient,           //1
+  StochasticReconfiguration,              //2
+  RandomStepStochasticReconfiguration,    //3
+  NormalizedStochasticReconfiguration,    //4
+  RandomGradientElement,                  //5
+  BoundGradientElement                    //6
 };
 
 enum MC_SWEEP_SCHEME {
@@ -193,6 +195,10 @@ class VMCPEPSExecutor : public Executor {
   void BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad, double step_len);
 
   std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+
+  std::pair<size_t, double> NormalizedStochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+
+  void GradientRandElementSign_();
 
   boost::mpi::communicator world_;
 
