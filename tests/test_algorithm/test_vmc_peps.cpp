@@ -67,7 +67,6 @@ struct VMCUpdateParams : public CaseParamsParserBasic {
   std::vector<double> step_len;
 };
 
-
 // Test spin systems
 struct TestSpinSystemVMCPEPS : public testing::Test {
   VMCUpdateParams params = VMCUpdateParams(params_file);
@@ -110,7 +109,6 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
 
   boost::mpi::communicator world;
 
-
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
@@ -123,7 +121,6 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
 
     optimize_para.step_lens = params.step_len;
     optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
-
 
     did({0, 0}) = 1;
     did({1, 1}) = 1;
@@ -209,6 +206,29 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4StochasticReconfigration) {
   delete executor;
 }
 
+TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4LineSearch) {
+  using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
+  VMCPEPSExecutor<GQTEN_Double, U1QN, Model> *executor(nullptr);
+
+  optimize_para.update_scheme = GradientLineSearch;
+  if (params.Continue_from_VMC) {
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para,
+                                                              Ly, Lx,
+                                                              world);
+  } else {
+    TPS<GQTEN_Double, U1QN> tps = TPS<GQTEN_Double, U1QN>(Ly, Lx);
+    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+      std::cout << "Loading simple updated TPS files is broken." << std::endl;
+      exit(-2);
+    };
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model>(optimize_para, tps,
+                                                              world);
+  }
+
+  executor->Execute();
+  delete executor;
+}
+
 TEST_F(TestSpinSystemVMCPEPS, J1J2D4) {
   using Model = SpinOneHalfJ1J2HeisenbergSquare<GQTEN_Double, U1QN>;
   VMCPEPSExecutor<GQTEN_Double, U1QN, Model> *executor(nullptr);
@@ -254,7 +274,6 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
   executor->Execute();
   delete executor;
 }
-
 
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);

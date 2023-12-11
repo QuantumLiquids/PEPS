@@ -28,6 +28,7 @@ const std::string kRuntimeTempPath = ".temp";
 const std::string kEnvFileBaseName = "env";
 const std::string kTpsTenBaseName = "tps_ten";
 const std::string kBoundaryMpsTenBaseName = "bmps_ten";
+const std::string pm_sign = "\u00b1";         // for output standard error
 
 const size_t kMaxTaylorExpansionOrder = 1000;
 const int kEnergyOutputPrecision = 8;

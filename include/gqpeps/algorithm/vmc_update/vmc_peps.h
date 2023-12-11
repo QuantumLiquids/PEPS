@@ -10,7 +10,6 @@
 #ifndef GQPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 #define GQPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 
-
 #include "gqpeps/two_dim_tn/tps/tps.h"              // TPS
 #include "gqpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
 
@@ -22,7 +21,6 @@
 namespace gqpeps {
 using namespace gqten;
 
-
 enum WAVEFUNCTION_UPDATE_SCHEME {
   StochasticGradient,                     //0
   RandomStepStochasticGradient,           //1
@@ -31,7 +29,8 @@ enum WAVEFUNCTION_UPDATE_SCHEME {
   NormalizedStochasticReconfiguration,    //4
   RandomGradientElement,                  //5
   BoundGradientElement,                   //6
-  GradientLineSearch                      //7
+  GradientLineSearch,                     //7
+  NaturalGradientLineSearch               //8
 };
 
 enum MC_SWEEP_SCHEME {
@@ -130,7 +129,6 @@ struct ConjugateGradientParams {
       : max_iter(max_iter), tolerance(tolerance), residue_restart_step(residue_restart_step), diag_shift(diag_shift) {}
 };
 
-
 template<typename TenElemT, typename QNT, typename EnergySolver>
 class VMCPEPSExecutor : public Executor {
  public:
@@ -155,7 +153,6 @@ class VMCPEPSExecutor : public Executor {
                   const boost::mpi::communicator &world,
                   const EnergySolver &solver = EnergySolver());
 
-
   void Execute(void) override;
 
   void LoadTenData(void);
@@ -176,13 +173,19 @@ class VMCPEPSExecutor : public Executor {
 
   void WarmUp_(void);
 
-  void OptimizeTPS_(void);
+  void LineSearchOptimizeTPS_(void);
+
+  void IterativeOptimizeTPS_(void);
+
+  void IterativeOptimizeTPSStep_(const size_t iter);
 
   void Measure_(void);
 
   std::vector<size_t> MCSweep_(void);
 
   void MCUpdateNNSite_(const SiteIdx &site_a, BondOrientation dir);
+
+  void SampleEnergy_(void);
 
   void SampleEnergyAndHols_(void);
 
@@ -195,9 +198,15 @@ class VMCPEPSExecutor : public Executor {
 
   void BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad, double step_len);
 
-  std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len, const SITPST &init_guess);
+  std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
+                                                    double step_len,
+                                                    const SITPST &init_guess);
 
-  std::pair<size_t, double> NormalizedStochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len, const SITPST &init_guess);
+  std::pair<size_t, double> NormalizedStochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
+                                                              double step_len,
+                                                              const SITPST &init_guess);
+
+  size_t CalcNaturalGradient_(const VMCPEPSExecutor::SITPST &grad, const SITPST &init_guess);
 
   void GradientRandElementSign_();
 
@@ -235,7 +244,6 @@ class VMCPEPSExecutor : public Executor {
 
   EnergySolver energy_solver_;
 };
-
 
 }//gqpeps;
 

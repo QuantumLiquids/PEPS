@@ -29,6 +29,13 @@ class ModelEnergySolver {
     return energy;
   }
 
+  virtual TenElemT CalEnergy(
+      const SITPS *sitps,
+      TPSSample<TenElemT, QNT> *tps_sample
+  ) {
+    TenElemT energy(0);
+    return energy;
+  }
  protected:
 };
 

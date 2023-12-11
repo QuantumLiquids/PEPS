@@ -229,7 +229,6 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
         natural_grad_({row, col}) = std::vector<Tensor>(dim);
       }
   }
-//  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.step_lens.size());
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -257,7 +256,11 @@ template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
   SetStatus(ExecutorStatus::EXEING);
   WarmUp_();
-  OptimizeTPS_();
+  if (optimize_para.update_scheme == GradientLineSearch || optimize_para.update_scheme == NaturalGradientLineSearch) {
+    LineSearchOptimizeTPS_();
+  } else {
+    IterativeOptimizeTPS_();
+  }
   Measure_();
   DumpData();
   SetStatus(ExecutorStatus::FINISH);
@@ -271,104 +274,231 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
       MCSweep_();
     }
     double elasp_time = warm_up_timer.Elapsed();
-    std::cout << "Proc " << std::setw(4) << world_.rank() << " warm-up completes T = " << elasp_time << "s."
+    std::cout << "Proc " << std::setw(4) << world_.rank() << " warm up completes T = " << elasp_time << "s."
               << std::endl;
     warm_up_ = true;
   }
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearchOptimizeTPS_(void) {
   size_t flip_bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
   size_t cluster_num = 3 * lx_ * ly_;
-  for (size_t iter = 0; iter < optimize_para.step_lens.size(); iter++) {
-    Timer grad_update_timer("gradient_update");
+  size_t bond_flip_accept_num = 0;
+  size_t cluster_update_accept_num = 0;
+  ClearEnergyAndHoleSamples_();
+
+  Timer grad_calculation_timer("gradient_calculation");
+  for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
+    std::vector<size_t> accept_nums = MCSweep_();
+    bond_flip_accept_num += accept_nums[0];
+    if (accept_nums.size() > 1) {
+      cluster_update_accept_num += accept_nums[1];
+    }
+    SampleEnergyAndHols_();
+  }
+  double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
+  double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
+  GatherStatisticEnergyAndGrad_();
+  size_t cgsolver_iter(0);
+  double sr_natural_grad_norm(0.0);
+  SITPST *search_dir(nullptr);
+  switch (optimize_para.update_scheme) {
+    case GradientLineSearch: {
+      if (world_.rank() == kMasterProc)
+        search_dir = &grad_;
+      break;
+    }
+    case NaturalGradientLineSearch: {
+      auto init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim());
+      cgsolver_iter = CalcNaturalGradient_(grad_, init_guess);
+      if (world_.rank() == kMasterProc) {
+        search_dir = &natural_grad_;
+        sr_natural_grad_norm = natural_grad_.Norm();
+      }
+      break;
+    }
+    default: {
+      std::cerr << "update scheme is not line search scheme." << std::endl;
+      exit(1);
+    }
+  }
+
+  if (world_.rank() == kMasterProc) {
+    double gradient_calculation_time = grad_calculation_timer.Elapsed();
+    std::cout << "Initial Search Direction Calculation :\n"
+              << "E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
+              << energy_trajectory_.back()
+              << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
+              << energy_error_traj_.back()
+              << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
+              << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
+    if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
+      std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
+    }
+    if (optimize_para.update_scheme == NaturalGradientLineSearch) {
+      std::cout << "SRSolver Iter = " << std::setw(4) << cgsolver_iter;
+      std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
+    }
+    std::cout << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_calculation_time << "s"
+              << "\n";
+  }
+
+  double e0_min;
+  if (world_.rank() == kMasterProc) {
+    e0_min = energy_trajectory_[0];
+  }
+  SplitIndexTPS tps_min = split_index_tps_;
+  for (size_t point = 0; point < optimize_para.step_lens.size(); point++) {
+    Timer energy_measure_timer("energy_measure");
+    StochGradUpdateTPS_(*search_dir, optimize_para.step_lens[point]);
+    std::cout << "good 2" << std::endl;
     ClearEnergyAndHoleSamples_();
-    double step_len = optimize_para.step_lens[iter];
-    size_t bond_flip_accept_num = 0;
-    size_t cluster_update_accept_num = 0;
+    bond_flip_accept_num = 0;
+    cluster_update_accept_num = 0;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
       std::vector<size_t> accept_nums = MCSweep_();
       bond_flip_accept_num += accept_nums[0];
       if (accept_nums.size() > 1) {
         cluster_update_accept_num += accept_nums[1];
       }
-      SampleEnergyAndHols_();
+      SampleEnergy_();
     }
-    double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
-    double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
-    GatherStatisticEnergyAndGrad_();
+    TenElemT en_self = Mean(energy_samples_); //energy value in each processor
+    auto [energy, en_err] = StatisticFromProcessors(en_self, MPI_Comm(world_));
+    gqten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
+    if (world_.rank() == 0) {
+      energy_trajectory_.push_back(energy);
+      energy_error_traj_.push_back(en_err);
 
-    Timer tps_update_timer("tps_update");
-    size_t sr_iter;
-    double sr_natural_grad_norm;
-    SITPST init_guess;
-    if (iter == 0) {
-      init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim()); //set 0 as initial guess
-    } else {
-      init_guess = natural_grad_;
-    }
-    switch (optimize_para.update_scheme) {
-      case StochasticGradient:StochGradUpdateTPS_(grad_, step_len);
-        break;
-      case RandomStepStochasticGradient:step_len *= u_double_(random_engine);
-        StochGradUpdateTPS_(grad_, step_len);
-        break;
-      case StochasticReconfiguration: {
-        auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
-        sr_iter = iter_natural_grad_norm.first;
-        sr_natural_grad_norm = iter_natural_grad_norm.second;
-        break;
+      if (energy < e0_min) {
+        e0_min = energy;
+        tps_min = split_index_tps_;
       }
-      case RandomStepStochasticReconfiguration: {
-        step_len *= u_double_(random_engine);
-        auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
-        sr_iter = iter_natural_grad_norm.first;
-        sr_natural_grad_norm = iter_natural_grad_norm.second;
-        break;
-      }
-      case NormalizedStochasticReconfiguration: {
-        auto iter_natural_grad_norm = NormalizedStochReconfigUpdateTPS_(grad_, step_len, init_guess);
-        sr_iter = iter_natural_grad_norm.first;
-        sr_natural_grad_norm = iter_natural_grad_norm.second;
-        break;
-      }
-      case RandomGradientElement: {
-        GradientRandElementSign_();
-        StochGradUpdateTPS_(grad_, step_len);
-        break;
-      }
-      case BoundGradientElement:BoundGradElementUpdateTPS_(grad_, step_len);
-        break;
-      default:std::cout << "update method does not support!" << std::endl;
-        exit(2);
-    }
-    double tps_update_time = tps_update_timer.Elapsed();
 
-    if (world_.rank() == kMasterProc) {
-      const std::string pm_sign = "\u00b1";
-      double gradient_update_time = grad_update_timer.Elapsed();
-      std::cout << "Iter " << std::setw(4) << iter
-                << "Alpha = " << std::setw(9) << std::scientific << std::setprecision(1) << step_len
+      double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
+      double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
+
+      //cout
+      double energy_measure_time = energy_measure_timer.Elapsed();
+      double gradient_calculation_time = grad_calculation_timer.Elapsed();
+      std::cout << "Stride :" << std::setw(9) << optimize_para.step_lens[point]
                 << "E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
-                << energy_trajectory_.back()
+                << energy
                 << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
-                << energy_error_traj_.back()
-                << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
+                << en_err
                 << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
       if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
         std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
       }
-      if (optimize_para.update_scheme == StochasticReconfiguration ||
-          optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
-          optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
-        std::cout << "SRSolver Iter = " << std::setw(4) << sr_iter;
-        std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
-      }
-      std::cout << "TPS UpdateT = " << std::setw(6) << std::fixed << std::setprecision(2) << tps_update_time << "s"
-                << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
-                << "\n";
+      std::cout << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << energy_measure_time << "s"
+                << std::endl;
     }
+  }
+  if (world_.rank() == kMasterProc) {
+    split_index_tps_ = tps_min;
+  }
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::IterativeOptimizeTPS_(void) {
+  for (size_t iter = 0; iter < optimize_para.step_lens.size(); iter++) {
+    IterativeOptimizeTPSStep_(iter);
+  }
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::IterativeOptimizeTPSStep_(const size_t iter) {
+  size_t flip_bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
+  size_t cluster_num = 3 * lx_ * ly_;
+  size_t bond_flip_accept_num = 0;
+  size_t cluster_update_accept_num = 0;
+  ClearEnergyAndHoleSamples_();
+
+  Timer grad_update_timer("gradient_update");
+  for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
+    std::vector<size_t> accept_nums = MCSweep_();
+    bond_flip_accept_num += accept_nums[0];
+    if (accept_nums.size() > 1) {
+      cluster_update_accept_num += accept_nums[1];
+    }
+    SampleEnergyAndHols_();
+  }
+  double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
+  double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
+  GatherStatisticEnergyAndGrad_();
+
+  Timer tps_update_timer("tps_update");
+  size_t sr_iter;
+  double sr_natural_grad_norm;
+  SITPST init_guess;
+  if (iter == 0) {
+    init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim()); //set 0 as initial guess
+  } else {
+    init_guess = natural_grad_;
+  }
+
+  double step_len = optimize_para.step_lens[iter];
+  switch (optimize_para.update_scheme) {
+    case StochasticGradient:StochGradUpdateTPS_(grad_, step_len);
+      break;
+    case RandomStepStochasticGradient:step_len *= u_double_(random_engine);
+      StochGradUpdateTPS_(grad_, step_len);
+      break;
+    case StochasticReconfiguration: {
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
+      sr_iter = iter_natural_grad_norm.first;
+      sr_natural_grad_norm = iter_natural_grad_norm.second;
+      break;
+    }
+    case RandomStepStochasticReconfiguration: {
+      step_len *= u_double_(random_engine);
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
+      sr_iter = iter_natural_grad_norm.first;
+      sr_natural_grad_norm = iter_natural_grad_norm.second;
+      break;
+    }
+    case NormalizedStochasticReconfiguration: {
+      auto iter_natural_grad_norm = NormalizedStochReconfigUpdateTPS_(grad_, step_len, init_guess);
+      sr_iter = iter_natural_grad_norm.first;
+      sr_natural_grad_norm = iter_natural_grad_norm.second;
+      break;
+    }
+    case RandomGradientElement: {
+      GradientRandElementSign_();
+      StochGradUpdateTPS_(grad_, step_len);
+      break;
+    }
+    case BoundGradientElement:BoundGradElementUpdateTPS_(grad_, step_len);
+      break;
+    default:std::cout << "update method does not support!" << std::endl;
+      exit(2);
+  }
+
+  double tps_update_time = tps_update_timer.Elapsed();
+
+  if (world_.rank() == kMasterProc) {
+    double gradient_update_time = grad_update_timer.Elapsed();
+    std::cout << "Iter " << std::setw(4) << iter
+              << "Alpha = " << std::setw(9) << std::scientific << std::setprecision(1) << step_len
+              << "E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
+              << energy_trajectory_.back()
+              << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
+              << energy_error_traj_.back()
+              << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
+              << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
+    if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
+      std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
+    }
+    if (optimize_para.update_scheme == StochasticReconfiguration ||
+        optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
+        optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
+      std::cout << "SRSolver Iter = " << std::setw(4) << sr_iter;
+      std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
+    }
+    std::cout << "TPS UpdateT = " << std::setw(6) << std::fixed << std::setprecision(2) << tps_update_time << "s"
+              << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
+              << "\n";
   }
 }
 
@@ -436,6 +566,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergyAndHols_(void) {
       optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
     gten_samples_.emplace_back(gten_sample);
   }
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergy_(void) {
+  TenElemT energy_loc = energy_solver_.CalEnergy(&split_index_tps_, &tps_sample_);
+  energy_samples_.push_back(energy_loc);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -528,6 +664,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochGradUpdateTPS_(const VMC
         }
       }
   }
+  tps_sample_ = TPSSample(split_index_tps_, tps_sample_.config);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
@@ -565,38 +702,36 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::BoundGradElementUpdateTPS_(VM
 template<typename TenElemT, typename QNT, typename EnergySolver>
 std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
     const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len, const SITPST &init_guess) {
-  SITPST *pgten_ave_ = &gten_ave_;
-  if (world_.rank() != kMasterProc) {
-    pgten_ave_ = nullptr;
-  }
-  SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
-  s_matrix.diag_shift = cg_params.diag_shift;
-  size_t iter;
-  natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
-                                          cg_params.max_iter, cg_params.tolerance,
-                                          cg_params.residue_restart_step, iter, world_);
+  size_t cgsolver_iter = CalcNaturalGradient_(grad, init_guess);
   double natural_grad_norm = natural_grad_.Norm();
   StochGradUpdateTPS_(natural_grad_, step_len);
-  return std::make_pair(iter, natural_grad_norm);
+  return std::make_pair(cgsolver_iter, natural_grad_norm);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::NormalizedStochReconfigUpdateTPS_(
     const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len, const SITPST &init_guess) {
-  SITPST *pgten_ave_ = &gten_ave_;
-  if (world_.rank() != kMasterProc) {
-    pgten_ave_ = nullptr;
-  }
-  SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
-  s_matrix.diag_shift = cg_params.diag_shift;
-  size_t iter;
-  natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
-                                          cg_params.max_iter, cg_params.tolerance,
-                                          cg_params.residue_restart_step, iter, world_);
+  size_t cgsolver_iter = CalcNaturalGradient_(grad, init_guess);
   double natural_grad_norm = natural_grad_.Norm();
   step_len = step_len / std::sqrt(natural_grad_norm);
   StochGradUpdateTPS_(natural_grad_, step_len);
-  return std::make_pair(iter, natural_grad_norm);
+  return std::make_pair(cgsolver_iter, natural_grad_norm);
+}
+
+template<typename TenElemT, typename QNT, typename EnergySolver>
+size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::CalcNaturalGradient_(
+    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, const SITPST &init_guess) {
+  SITPST *pgten_ave_(nullptr);
+  if (world_.rank() == kMasterProc) {
+    pgten_ave_ = &gten_ave_;
+  }
+  SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
+  s_matrix.diag_shift = cg_params.diag_shift;
+  size_t cgsolver_iter;
+  natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
+                                          cg_params.max_iter, cg_params.tolerance,
+                                          cg_params.residue_restart_step, cgsolver_iter, world_);
+  return cgsolver_iter;
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
