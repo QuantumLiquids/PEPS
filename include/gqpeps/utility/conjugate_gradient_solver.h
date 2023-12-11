@@ -62,13 +62,14 @@ VectorType ConjugateGradientSolver(
   }
   VectorType p = r;
   VectorType x = x0;
+  double rkp1_2norm = r.Norm();
   for (size_t k = 0; k < max_iter; k++) {
-    double rk_2norm = r.Norm(); //auto is double or complex
+    double rk_2norm = rkp1_2norm;
     VectorType ap = matrix_a * p;
     auto alpha = rk_2norm / (p * ap);
     x = x + alpha * p;
     r = r - alpha * ap;
-    double rkp1_2norm = r.Norm();   // return value of norm has definitely double type.
+    rkp1_2norm = r.Norm();   // return value of norm has definitely double type.
     if (rkp1_2norm < tolerance) {
       iter = k + 1;
       return x;
@@ -77,7 +78,9 @@ VectorType ConjugateGradientSolver(
     p = r + beta * p;
   }
   iter = max_iter;
-  std::cout << "warning: convergence may fail on gradient solving linear equation." << std::endl;
+  std::cout << "warning: convergence may fail on gradient solving linear equation. rkp1_2norm = " << std::scientific
+            << rkp1_2norm
+            << std::endl;
   return x;
 }
 
@@ -267,7 +270,8 @@ VectorType ConjugateGradientSolverMaster(
     rk_2norm = rkp1_2norm;
   }
   iter = max_iter;
-  std::cout << "warning: convergence may fail on gradient solving linear equation. rkp1_2norm = " << rkp1_2norm
+  std::cout << "warning: convergence may fail on gradient solving linear equation. rkp1_2norm = " << std::scientific
+            << rkp1_2norm
             << std::endl;
   MasterBroadcastInstruction(finish, world);
   return x;

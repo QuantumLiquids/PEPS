@@ -25,7 +25,7 @@ void DumpVecData(
     const std::vector<DataType> &data
 ) {
   std::ofstream ofs(filename, std::ofstream::binary);
-  for (auto datum: data) {
+  for (auto datum : data) {
     ofs << datum << '\n';
   }
   ofs << std::endl;
@@ -294,7 +294,6 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
         cluster_update_accept_num += accept_nums[1];
       }
       SampleEnergyAndHols_();
-//      sum_configs_.push_back(tps_sample_.config.Sum());
     }
     double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
     double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
@@ -309,32 +308,40 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     } else {
       init_guess = natural_grad_;
     }
-    if (optimize_para.update_scheme == StochasticGradient) {
-      StochGradUpdateTPS_(grad_, step_len);
-    } else if (optimize_para.update_scheme == RandomStepStochasticGradient) {
-      step_len *= u_double_(random_engine);
-      StochGradUpdateTPS_(grad_, step_len);
-    } else if (optimize_para.update_scheme == StochasticReconfiguration) {
-      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
-      sr_iter = iter_natural_grad_norm.first;
-      sr_natural_grad_norm = iter_natural_grad_norm.second;
-    } else if (optimize_para.update_scheme == RandomStepStochasticReconfiguration) {
-      step_len *= u_double_(random_engine);
-      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
-      sr_iter = iter_natural_grad_norm.first;
-      sr_natural_grad_norm = iter_natural_grad_norm.second;
-    } else if (optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
-      auto iter_natural_grad_norm = NormalizedStochReconfigUpdateTPS_(grad_, step_len, init_guess);
-      sr_iter = iter_natural_grad_norm.first;
-      sr_natural_grad_norm = iter_natural_grad_norm.second;
-    } else if (optimize_para.update_scheme == RandomGradientElement) {
-      GradientRandElementSign_();
-      StochGradUpdateTPS_(grad_, step_len);
-    } else if (optimize_para.update_scheme == BoundGradientElement) {
-      BoundGradElementUpdateTPS_(grad_, step_len);
-    } else {
-      std::cout << "update method does not support!" << std::endl;
-      exit(2);
+    switch (optimize_para.update_scheme) {
+      case StochasticGradient:StochGradUpdateTPS_(grad_, step_len);
+        break;
+      case RandomStepStochasticGradient:step_len *= u_double_(random_engine);
+        StochGradUpdateTPS_(grad_, step_len);
+        break;
+      case StochasticReconfiguration: {
+        auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
+        sr_iter = iter_natural_grad_norm.first;
+        sr_natural_grad_norm = iter_natural_grad_norm.second;
+        break;
+      }
+      case RandomStepStochasticReconfiguration: {
+        step_len *= u_double_(random_engine);
+        auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
+        sr_iter = iter_natural_grad_norm.first;
+        sr_natural_grad_norm = iter_natural_grad_norm.second;
+        break;
+      }
+      case NormalizedStochasticReconfiguration: {
+        auto iter_natural_grad_norm = NormalizedStochReconfigUpdateTPS_(grad_, step_len, init_guess);
+        sr_iter = iter_natural_grad_norm.first;
+        sr_natural_grad_norm = iter_natural_grad_norm.second;
+        break;
+      }
+      case RandomGradientElement: {
+        GradientRandElementSign_();
+        StochGradUpdateTPS_(grad_, step_len);
+        break;
+      }
+      case BoundGradientElement:BoundGradElementUpdateTPS_(grad_, step_len);
+        break;
+      default:std::cout << "update method does not support!" << std::endl;
+        exit(2);
     }
     double tps_update_time = tps_update_timer.Elapsed();
 
@@ -644,18 +651,15 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCUpdateNNSite_(const SiteIdx
   tps_sample_.ExchangeUpdate(site_a, site_b, dir, split_index_tps_, u_double_);
 }
 
-
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Measure_(void) {
 
 }
 
-
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(void) {
   LoadTenData(optimize_para.wavefunction_path);
 }
-
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string &tps_path) {

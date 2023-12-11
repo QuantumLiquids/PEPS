@@ -30,7 +30,8 @@ enum WAVEFUNCTION_UPDATE_SCHEME {
   RandomStepStochasticReconfiguration,    //3
   NormalizedStochasticReconfiguration,    //4
   RandomGradientElement,                  //5
-  BoundGradientElement                    //6
+  BoundGradientElement,                   //6
+  GradientLineSearch                      //7
 };
 
 enum MC_SWEEP_SCHEME {
