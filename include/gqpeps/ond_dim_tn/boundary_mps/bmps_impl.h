@@ -696,6 +696,10 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
 #endif
       return res;
     }
+    default: {
+      std::cerr << "Do not support MPO multiplication method." << std::endl;
+      exit(1);
+    }
   }
 }//MultipleMPO
 

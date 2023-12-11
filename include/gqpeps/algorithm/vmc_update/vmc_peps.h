@@ -194,9 +194,9 @@ class VMCPEPSExecutor : public Executor {
 
   void BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad, double step_len);
 
-  std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+  std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len, const SITPST &init_guess);
 
-  std::pair<size_t, double> NormalizedStochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
+  std::pair<size_t, double> NormalizedStochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len, const SITPST &init_guess);
 
   void GradientRandElementSign_();
 
@@ -212,6 +212,7 @@ class VMCPEPSExecutor : public Executor {
   std::uniform_real_distribution<double> u_double_;
 
   SITPST grad_;
+  SITPST natural_grad_;
 
   std::vector<TenElemT> energy_samples_;
   ///<outside vector indices corresponding to the local hilbert space basis

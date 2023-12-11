@@ -51,6 +51,40 @@ GQTensor<TenElemT, QNT> Mean(const std::vector<GQTensor<TenElemT, QNT> *> &tenso
   return sum * (1.0 / double(length));
 }
 
+///< only rank 0 get the values
+std::pair<double, double> StatisticFromProcessors(
+    double data,
+    MPI_Comm comm) {
+  double mean(0), standard_err(0);
+  int comm_rank, comm_size;
+  MPI_Comm_rank(comm, &comm_rank);
+  MPI_Comm_size(comm, &comm_size);
+
+  double *gather_data;
+  if (comm_rank == kMasterProc) {
+    gather_data = new double[comm_size];
+  }
+  int err_msg = ::MPI_Gather((void *) &data, 1, MPI_DOUBLE, (void *) gather_data, 1, MPI_DOUBLE, kMasterProc, comm);
+
+  if (comm_rank == kMasterProc) {
+    double sum = 0.0;
+    for (size_t i = 0; i < comm_size; i++) {
+      sum += *(gather_data + i);
+    }
+    mean = sum / comm_size;
+    if (comm_size > 1) {
+      double sum_square = 0.0;
+      for (size_t i = 0; i < comm_size; i++) {
+        sum_square += gather_data[i] * gather_data[i];
+      }
+      double variance = sum_square / comm_size - mean * mean;
+      standard_err = std::sqrt(variance / (comm_size - 1));
+    }
+    delete gather_data;
+  }
+  return std::make_pair(mean, standard_err);
+}
+
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> MPIMeanTensor(const GQTensor<TenElemT, QNT> &tensor,
                                       boost::mpi::communicator &world) {
@@ -66,7 +100,7 @@ GQTensor<TenElemT, QNT> MPIMeanTensor(const GQTensor<TenElemT, QNT> &tensor,
       }
     }
     Tensor res = Mean(ten_list, world.size());
-    for (auto pten: ten_list) {
+    for (auto pten : ten_list) {
       delete pten;
     }
     return res;
@@ -91,7 +125,7 @@ T Variance(const std::vector<T> data,
 template<typename T>
 T StandardError(const std::vector<T> data,
                 const T &mean) {
-  return std::sqrt(Variance(data, mean));
+  return std::sqrt(Variance(data, mean) / (T) data.size());
 }
 
 template<typename T>
@@ -119,6 +153,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     tps_sample_(ly_, lx_),
     u_double_(0, 1),
     grad_(ly_, lx_),
+    natural_grad_(ly_, lx_),
 //    gten_samples_(ly_, lx_),
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_),
@@ -140,7 +175,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
                                                               const EnergySolver &solver):
     world_(world), optimize_para(optimize_para), lx_(lx), ly_(ly),
     split_index_tps_(ly, lx), tps_sample_(ly, lx),
-    u_double_(0, 1), grad_(ly_, lx_),
+    u_double_(0, 1), grad_(ly_, lx_), natural_grad_(ly_, lx_),
 //    gten_samples_(ly_, lx_),
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
@@ -152,7 +187,6 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
 }
-
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void) {
@@ -177,9 +211,11 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
       size_t dim = split_index_tps_({row, col}).size();
       grad_({row, col}) = std::vector<Tensor>(dim);
     }
+  if (world_.rank() == 0) {
+    energy_trajectory_.reserve(optimize_para.step_lens.size());
+    energy_error_traj_.reserve(optimize_para.step_lens.size());
+  }
 
-  energy_trajectory_.reserve(optimize_para.step_lens.size());
-  energy_error_traj_.reserve(optimize_para.step_lens.size());
   if (world_.rank() == kMasterProc)
     grad_norm_.reserve(optimize_para.step_lens.size());
 
@@ -187,10 +223,14 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
       optimize_para.update_scheme == RandomStepStochasticReconfiguration ||
       optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
     gten_samples_.reserve(optimize_para.mc_samples);
+    for (size_t row = 0; row < ly_; row++)
+      for (size_t col = 0; col < lx_; col++) {
+        size_t dim = split_index_tps_({row, col}).size();
+        natural_grad_({row, col}) = std::vector<Tensor>(dim);
+      }
   }
 //  sum_configs_.reserve(optimize_para.mc_samples * optimize_para.step_lens.size());
 }
-
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
@@ -204,6 +244,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
               << optimize_para.bmps_trunc_para.D_max << "\n";
     std::cout << std::setw(30) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
     std::cout << std::setw(30) << "Gradient update times:" << optimize_para.step_lens.size() << "\n";
+    std::cout << std::setw(30) << "PEPS update strategy:" << optimize_para.update_scheme << "\n";
 
     std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
     std::cout << std::setw(40) << "The number of processors (including master):" << world_.size() << "\n";
@@ -211,7 +252,6 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
               << "\n";
   }
 }
-
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
@@ -263,24 +303,30 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::OptimizeTPS_(void) {
     Timer tps_update_timer("tps_update");
     size_t sr_iter;
     double sr_natural_grad_norm;
+    SITPST init_guess;
+    if (iter == 0) {
+      init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim()); //set 0 as initial guess
+    } else {
+      init_guess = natural_grad_;
+    }
     if (optimize_para.update_scheme == StochasticGradient) {
       StochGradUpdateTPS_(grad_, step_len);
     } else if (optimize_para.update_scheme == RandomStepStochasticGradient) {
       step_len *= u_double_(random_engine);
       StochGradUpdateTPS_(grad_, step_len);
     } else if (optimize_para.update_scheme == StochasticReconfiguration) {
-      auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
-      sr_iter = iter;
-      sr_natural_grad_norm = natural_grad_norm;
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
+      sr_iter = iter_natural_grad_norm.first;
+      sr_natural_grad_norm = iter_natural_grad_norm.second;
     } else if (optimize_para.update_scheme == RandomStepStochasticReconfiguration) {
       step_len *= u_double_(random_engine);
-      auto [iter, natural_grad_norm] = StochReconfigUpdateTPS_(grad_, step_len);
-      sr_iter = iter;
-      sr_natural_grad_norm = natural_grad_norm;
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess);
+      sr_iter = iter_natural_grad_norm.first;
+      sr_natural_grad_norm = iter_natural_grad_norm.second;
     } else if (optimize_para.update_scheme == NormalizedStochasticReconfiguration) {
-      auto [iter, natural_grad_norm] = NormalizedStochReconfigUpdateTPS_(grad_, step_len);
-      sr_iter = iter;
-      sr_natural_grad_norm = natural_grad_norm;
+      auto iter_natural_grad_norm = NormalizedStochReconfigUpdateTPS_(grad_, step_len, init_guess);
+      sr_iter = iter_natural_grad_norm.first;
+      sr_natural_grad_norm = iter_natural_grad_norm.second;
     } else if (optimize_para.update_scheme == RandomGradientElement) {
       GradientRandElementSign_();
       StochGradUpdateTPS_(grad_, step_len);
@@ -389,18 +435,12 @@ template<typename TenElemT, typename QNT, typename EnergySolver>
 SplitIndexTPS<TenElemT, QNT>
 VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void) {
   TenElemT en_self = Mean(energy_samples_); //energy value in each processor
-  std::vector<TenElemT> en_list;
-  boost::mpi::gather(world_, en_self, en_list, kMasterProc);
-  TenElemT energy, en_err;
+  auto [energy, en_err] = StatisticFromProcessors(en_self, MPI_Comm(world_));
+  gqten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
   if (world_.rank() == 0) {
-    energy = Mean(en_list);
-    en_err = StandardError(en_list, energy);
+    energy_trajectory_.push_back(energy);
+    energy_error_traj_.push_back(en_err);
   }
-  boost::mpi::broadcast(world_, energy, kMasterProc);
-  boost::mpi::broadcast(world_, en_err, kMasterProc);
-  energy_trajectory_.push_back(energy);
-  energy_error_traj_.push_back(en_err);
-
 
   //calculate grad in each processor
   const size_t sample_num = optimize_para.mc_samples;
@@ -417,7 +457,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
 //              (-energy) * Mean(gten_samples_({row, col})[compt], sample_num);
 //        }
         grad_({row, col})[compt] = g_times_energy_sum_({row, col})[compt] * (1.0 / sample_num)
-                                   + (-energy) * gten_ave_({row, col})[compt];
+            + (-energy) * gten_ave_({row, col})[compt];
       }
     }
   }
@@ -517,7 +557,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::BoundGradElementUpdateTPS_(VM
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
-    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len) {
+    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len, const SITPST &init_guess) {
   SITPST *pgten_ave_ = &gten_ave_;
   if (world_.rank() != kMasterProc) {
     pgten_ave_ = nullptr;
@@ -525,18 +565,17 @@ std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochRec
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t iter;
-  SITPST init_guess(ly_, lx_, grad.PhysicalDim()); //set 0 as initial guess
-  SITPST natural_grad = ConjugateGradientSolver(s_matrix, grad, init_guess,
-                                                cg_params.max_iter, cg_params.tolerance,
-                                                cg_params.residue_restart_step, iter, world_);
-  double natural_grad_norm = natural_grad.Norm();
-  StochGradUpdateTPS_(natural_grad, step_len);
+  natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
+                                          cg_params.max_iter, cg_params.tolerance,
+                                          cg_params.residue_restart_step, iter, world_);
+  double natural_grad_norm = natural_grad_.Norm();
+  StochGradUpdateTPS_(natural_grad_, step_len);
   return std::make_pair(iter, natural_grad_norm);
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver>
 std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::NormalizedStochReconfigUpdateTPS_(
-    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len) {
+    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len, const SITPST &init_guess) {
   SITPST *pgten_ave_ = &gten_ave_;
   if (world_.rank() != kMasterProc) {
     pgten_ave_ = nullptr;
@@ -544,13 +583,12 @@ std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Normaliz
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t iter;
-  SITPST init_guess(ly_, lx_, grad.PhysicalDim()); //set 0 as initial guess
-  SITPST natural_grad = ConjugateGradientSolver(s_matrix, grad, init_guess,
-                                                cg_params.max_iter, cg_params.tolerance,
-                                                cg_params.residue_restart_step, iter, world_);
-  double natural_grad_norm = natural_grad.Norm();
+  natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
+                                          cg_params.max_iter, cg_params.tolerance,
+                                          cg_params.residue_restart_step, iter, world_);
+  double natural_grad_norm = natural_grad_.Norm();
   step_len = step_len / std::sqrt(natural_grad_norm);
-  StochGradUpdateTPS_(natural_grad, step_len);
+  StochGradUpdateTPS_(natural_grad_, step_len);
   return std::make_pair(iter, natural_grad_norm);
 }
 
