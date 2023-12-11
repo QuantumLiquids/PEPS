@@ -238,7 +238,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
     std::cout << "\n";
     std::cout << "=====> VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS <=====" << "\n";
     std::cout << std::setw(30) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
-    std::cout << std::setw(30) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
+    std::cout << std::setw(30) << "PEPS bond dimension:" << split_index_tps_.GetMinBondDimension() << "/"
+              << split_index_tps_.GetMaxBondDimension() << "\n";
     std::cout << std::setw(30) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
               << optimize_para.bmps_trunc_para.D_max << "\n";
     std::cout << std::setw(30) << "Sampling numbers:" << optimize_para.mc_samples << "\n";

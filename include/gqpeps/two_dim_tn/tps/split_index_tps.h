@@ -20,10 +20,9 @@ inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,
                                            const size_t row, const size_t col,
                                            const size_t compt) {
   return tps_path + "/" +
-         kTpsTenBaseName + std::to_string(row) + "_" + std::to_string(col) + "_" + std::to_string(compt) + "." +
-         kGQTenFileSuffix;
+      kTpsTenBaseName + std::to_string(row) + "_" + std::to_string(col) + "_" + std::to_string(compt) + "." +
+      kGQTenFileSuffix;
 }
-
 
 template<typename TenElemT, typename QNT>
 class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
@@ -87,17 +86,12 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return TN2D((*this), config);
   }
 
-  size_t GetMaxBondDimension(void) const {
-    size_t dmax = 0;
-    for (size_t row = 0; row < this->rows(); ++row) {
-      for (size_t col = 0; col < this->cols(); ++col) {
-        const Tensor &tensor = (*this)({row, col})[0];
-        dmax = std::max(dmax, tensor.GetShape()[0]);
-        dmax = std::max(dmax, tensor.GetShape()[1]);
-      }
-    }
-    return dmax;
-  };
+  size_t GetMinBondDimension(void) const;
+  size_t GetMaxBondDimension(void) const;
+
+  std::pair<size_t, size_t> GetMinMaxBondDimension(void) const;
+
+  std::vector<size_t> GetAllInnerBondDimensions(void) const;
 
   bool IsBondDimensionEven(void) const;
 
@@ -233,7 +227,6 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
     return true; // Successfully dumped the tensor
   }
 
-
   ///< assume has alloc memory
   bool LoadTen(const size_t row, const size_t col, const size_t compt, const std::string &file) {
     std::ifstream ifs(file, std::ifstream::binary);
@@ -253,6 +246,50 @@ class SplitIndexTPS : public TenMatrix<std::vector<GQTensor<TenElemT, QNT>>> {
 
   bool Load(const std::string &tps_path = kTpsPath);
 };
+
+template<typename TenElemT, typename QNT>
+size_t SplitIndexTPS<TenElemT, QNT>::GetMaxBondDimension() const {
+  size_t dmax = 0;
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      const Tensor &tensor = (*this)({row, col})[0];
+      dmax = std::max(dmax, tensor.GetShape()[0]);
+      dmax = std::max(dmax, tensor.GetShape()[1]);
+    }
+  }
+  return dmax;
+};
+
+template<typename TenElemT, typename QNT>
+size_t SplitIndexTPS<TenElemT, QNT>::GetMinBondDimension() const {
+  auto bond_dims = GetAllInnerBondDimensions();
+  return *std::min_element(bond_dims.cbegin(), bond_dims.cend());
+}
+
+template<typename TenElemT, typename QNT>
+std::pair<size_t, size_t> SplitIndexTPS<TenElemT, QNT>::GetMinMaxBondDimension() const {
+  auto bond_dims = GetAllInnerBondDimensions();
+  return std::make_pair(*std::min_element(bond_dims.cbegin(), bond_dims.cend()),
+                        *std::max_element(bond_dims.cbegin(), bond_dims.cend()));
+}
+
+template<typename TenElemT, typename QNT>
+std::vector<size_t> SplitIndexTPS<TenElemT, QNT>::GetAllInnerBondDimensions() const {
+  std::vector<size_t> bond_dims;
+  bond_dims.reserve(this->rows() * this->cols() - this->rows() - this->cols());
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      const Tensor &tensor = (*this)({row, col})[0];
+      if (row < this->rows() - 1) {
+        bond_dims.push_back(tensor.GetShape()[1]);
+      }
+      if (col < this->cols() - 1) {
+        bond_dims.push_back(tensor.GetShape()[2]);
+      }
+    }
+  }
+  return bond_dims;
+}
 
 template<typename TenElemT, typename QNT>
 bool SplitIndexTPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
@@ -333,7 +370,6 @@ operator*(const GQTEN_Double scalar, const SplitIndexTPS<GQTEN_Complex, QNT> &sp
   return split_idx_tps * GQTEN_Complex(scalar, 0.0);
 }
 
-
 template<typename TenElemT, typename QNT>
 void CGSolverBroadCastVector(
     SplitIndexTPS<TenElemT, QNT> &v,
@@ -390,7 +426,6 @@ void CGSolverSendVector(
     }
   }
 }
-
 
 template<typename TenElemT, typename QNT>
 size_t CGSolverRecvVector(
