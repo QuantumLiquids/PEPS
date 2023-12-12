@@ -33,6 +33,11 @@ enum WAVEFUNCTION_UPDATE_SCHEME {
   NaturalGradientLineSearch               //8
 };
 
+const std::vector<WAVEFUNCTION_UPDATE_SCHEME> stochastic_reconfiguration_method({StochasticReconfiguration,
+                                                                                 RandomStepStochasticReconfiguration,
+                                                                                 NormalizedStochasticReconfiguration,
+                                                                                 NaturalGradientLineSearch});
+
 enum MC_SWEEP_SCHEME {
   SequentiallyNNSiteFlip,
   CompressedLatticeKagomeLocalUpdate
@@ -183,8 +188,6 @@ class VMCPEPSExecutor : public Executor {
 
   std::vector<size_t> MCSweep_(void);
 
-  void MCUpdateNNSite_(const SiteIdx &site_a, BondOrientation dir);
-
   void SampleEnergy_(void);
 
   void SampleEnergyAndHols_(void);
@@ -210,19 +213,19 @@ class VMCPEPSExecutor : public Executor {
 
   void GradientRandElementSign_();
 
+  // Input Data Region
   boost::mpi::communicator world_;
 
   size_t lx_; //cols
   size_t ly_; //rows
 
-  SITPST split_index_tps_;
+  EnergySolver energy_solver_;
 
+  //Runtime Data Region
+  SITPST split_index_tps_;  //also can be input/output
+  bool warm_up_;
+  bool stochastic_reconfiguration_update_class_;
   TPSSample<TenElemT, QNT> tps_sample_;
-
-  std::uniform_real_distribution<double> u_double_;
-
-  SITPST grad_;
-  SITPST natural_grad_;
 
   std::vector<TenElemT> energy_samples_;
   ///<outside vector indices corresponding to the local hilbert space basis
@@ -236,13 +239,13 @@ class VMCPEPSExecutor : public Executor {
   SITPST gten_ave_; // average of gten_sum_;
   SITPST g_times_energy_sum_;
 
-  std::vector<TenElemT> energy_trajectory_;
-  std::vector<TenElemT> energy_error_traj_;
+  SITPST grad_;
+  SITPST natural_grad_;
   std::vector<double> grad_norm_;
 
-  bool warm_up_;
-
-  EnergySolver energy_solver_;
+  //Output/Dump Data Region
+  std::vector<TenElemT> energy_trajectory_;
+  std::vector<TenElemT> energy_error_traj_;
 };
 
 }//gqpeps;

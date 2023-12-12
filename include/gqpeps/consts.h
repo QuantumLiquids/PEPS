@@ -19,7 +19,7 @@
 
 #include <string>     // string
 #include <vector>     // vector
-
+#include <random>     // uniform distribution
 namespace gqpeps {
 
 const std::string kTpsPath = "tps";
@@ -35,6 +35,7 @@ const int kEnergyOutputPrecision = 8;
 
 const size_t kMasterProc = 0;
 
+std::uniform_real_distribution<double> unit_even_distribution(0, 1);
 } /* gqpeps */
 
 

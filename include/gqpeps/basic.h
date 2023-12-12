@@ -12,7 +12,7 @@
 
 #include <string>     // string
 #include <vector>     // vector
-#include <random>                                   // default_random_engine
+#include <random>     // default_random_engine
 
 namespace gqpeps {
 
@@ -68,23 +68,17 @@ size_t MPOIndex(const BMPSPOSITION post) {
 BMPSPOSITION Opposite(const BMPSPOSITION post) {
   return static_cast<BMPSPOSITION>((static_cast<size_t>(post) + 2) % 4);
   switch (post) {
-    case DOWN:
-      return UP;
-    case UP:
-      return DOWN;
-    case LEFT:
-      return RIGHT;
-    case RIGHT:
-      return LEFT;
+    case DOWN:return UP;
+    case UP:return DOWN;
+    case LEFT:return RIGHT;
+    case RIGHT:return LEFT;
   }
 }
-
 
 enum DIAGONAL_DIR {
   LEFTUP_TO_RIGHTDOWN,
   LEFTDOWN_TO_RIGHTUP
 };
-
 
 }
 
