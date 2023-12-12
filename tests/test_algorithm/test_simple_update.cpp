@@ -153,7 +153,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
   SimpleUpdatePara update_para(5, 0.01, 1, 4, 1e-5);
   DGQTensor ham_nn;
   Contract(&dsz, {}, &dsz, {}, &ham_nn);
-  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe = new SquareLatticeNNSimpleUpdateExecutor(update_para, peps0,
+  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe = new SquareLatticeNNSimpleUpdateExecutor<GQTEN_Double, U1QN>(update_para, peps0,
                                                                                              ham_nn);
   su_exe->Execute();
   delete su_exe;
@@ -173,7 +173,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
 
   SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
 
-  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe = new SquareLatticeNNSimpleUpdateExecutor(update_para, peps0,
+  SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe = new SquareLatticeNNSimpleUpdateExecutor<GQTEN_Double, U1QN>(update_para, peps0,
                                                                                              ham_hei_nn);
   su_exe->Execute();
 
@@ -194,7 +194,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD8) {
 
   SimpleUpdatePara update_para(10, 0.1, 1, 8, 1e-10);
 
-  auto su_exe = new SquareLatticeNNSimpleUpdateExecutor(update_para, peps0, ham_hei_nn);
+  auto su_exe = new SquareLatticeNNSimpleUpdateExecutor<GQTEN_Double, U1QN>(update_para, peps0, ham_hei_nn);
   su_exe->Execute();
 
   auto tps8 = TPS<GQTEN_Double, U1QN>(su_exe->GetPEPS());
@@ -219,7 +219,7 @@ TEST_F(TestSimpleUpdateSpinSystem, TriangleNNHeisenberg) {
   SimpleUpdatePara update_para(20, 0.1, 1, 2, 1e-5);
 
   SimpleUpdateExecutor<GQTEN_Double, U1QN> *su_exe
-      = new TriangleNNModelSquarePEPSSimpleUpdateExecutor(update_para, peps0,
+      = new TriangleNNModelSquarePEPSSimpleUpdateExecutor<GQTEN_Double, U1QN>(update_para, peps0,
                                                           ham_hei_nn,
                                                           ham_hei_tri);
   su_exe->Execute();

@@ -172,49 +172,45 @@ class VMCPEPSExecutor : public Executor {
 
   ConjugateGradientParams cg_params = ConjugateGradientParams(100, 1e-8, 20, 1e-2);
  protected:
-  void PrintExecutorInfo_(void);
-
-  void ReserveSamplesDataSpace_(void);
-
+  // Level 1 Member Functions
   void WarmUp_(void);
 
   void LineSearchOptimizeTPS_(void);
-
   void IterativeOptimizeTPS_(void);
-
-  void IterativeOptimizeTPSStep_(const size_t iter);
 
   void Measure_(void);
 
-  std::vector<size_t> MCSweep_(void);
+  // Level 2 Member Functions
+  void PrintExecutorInfo_(void);
+  void ReserveSamplesDataSpace_(void);
 
-  void SampleEnergy_(void);
+  void IterativeOptimizeTPSStep_(const size_t iter);
+  void LineSearch_(const SITPST& search_dir,
+                   const std::vector<double> &strides);
 
-  void SampleEnergyAndHols_(void);
-
-  void ClearEnergyAndHoleSamples_(void);
-
-  //return the grad;
-  SITPST GatherStatisticEnergyAndGrad_(void);
-
-  void StochGradUpdateTPS_(const VMCPEPSExecutor::SITPST &grad, double step_len);
-
+  // Level 3 Member Functions
+  void UpdateTPSByVecAndSynchronize_(const VMCPEPSExecutor::SITPST &grad, double step_len);
   void BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad, double step_len);
-
   std::pair<size_t, double> StochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
                                                     double step_len,
-                                                    const SITPST &init_guess);
+                                                    const SITPST &init_guess,
+                                                    const bool normalize_natural_grad);
 
-  std::pair<size_t, double> NormalizedStochReconfigUpdateTPS_(const VMCPEPSExecutor::SITPST &grad,
-                                                              double step_len,
-                                                              const SITPST &init_guess);
+  // Lowest Level Member functions who could directly change data
+  ///< functions who cloud directly act on sample data
+  TenElemT SampleEnergy_(void);
+  void SampleEnergyAndHols_(void);
+  void ClearEnergyAndHoleSamples_(void);
 
+  ///< statistic and gradient operation functions
+  ///< return the gradient;
+  SITPST GatherStatisticEnergyAndGrad_(void);
+  void GradientRandElementSign_();
   size_t CalcNaturalGradient_(const VMCPEPSExecutor::SITPST &grad, const SITPST &init_guess);
 
-  void GradientRandElementSign_();
-
+  std::vector<size_t> MCSweep_(void);
   // Input Data Region
-  boost::mpi::communicator world_;
+  const boost::mpi::communicator world_;
 
   size_t lx_; //cols
   size_t ly_; //rows

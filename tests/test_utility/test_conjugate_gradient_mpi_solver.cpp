@@ -20,14 +20,14 @@ namespace gqpeps {
 template<typename ElemT>
 void CGSolverBroadCastVector(
     MyVector<ElemT> &x0,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 ) {
   broadcast(world, x0.GetElements(), kMasterProc);
 }
 
 template<typename ElemT>
 void CGSolverSendVector(
-    boost::mpi::communicator &world,
+    const boost::mpi::communicator &world,
     const MyVector<ElemT> &v,
     const size_t dest,
     const int tag
@@ -37,7 +37,7 @@ void CGSolverSendVector(
 
 template<typename ElemT>
 size_t CGSolverRecvVector(
-    boost::mpi::communicator &world,
+    const boost::mpi::communicator &world,
     MyVector<ElemT> &v,
     const size_t src,
     const int tag
@@ -64,10 +64,9 @@ void RunTestPlainCGSolverParallelCase(
   if (world.rank() == kMasterProc) {
     x.Print();
     auto diff_vec = x - x_res;
-    EXPECT_NEAR(diff_vec.Norm(), 0.0, 1e-13);
+    EXPECT_NEAR(diff_vec.NormSquare(), 0.0, 1e-13);
   }
 }
-
 
 TEST(TestPlainCGSolver, Parallel) {
   boost::mpi::communicator world;
@@ -107,7 +106,6 @@ TEST(TestPlainCGSolver, Parallel) {
 //  MyVector<GQTEN_Complex> zx_res1({33.0, -8.0, -2.0});
 //  RunTestPlainCGSolverParallelCase(zmat1, zb1, zx01, zx_res1, world);
 }
-
 
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);

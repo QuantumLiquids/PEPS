@@ -25,7 +25,7 @@ void RunTestPlainCGSolverNoParallelCase(
   size_t iter;
   auto x = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, iter);
   auto diff_vec = x - x_res;
-  EXPECT_NEAR(diff_vec.Norm(), 0.0, 1e-13);
+  EXPECT_NEAR(diff_vec.NormSquare(), 0.0, 1e-13);
 }
 
 

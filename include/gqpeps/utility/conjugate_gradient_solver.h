@@ -38,7 +38,7 @@ namespace gqpeps {
  * @tparam MatrixType
  * @tparam VectorType
  *          has the following methods
- *          Norm(), return the 2-norm, v^dag*v
+ *          NormSquare(), return the 2-norm, v^dag*v
  *          operator*(VectorType v2), return v^dag * v2
  * @param matrix_a
  * @param b
@@ -56,20 +56,20 @@ VectorType ConjugateGradientSolver(
     size_t &iter   //return
 ) {
   VectorType r = b - matrix_a * x0;
-  if (r.Norm() < tolerance) {
+  if (r.NormSquare() < tolerance) {
     iter = 0;
     return x0;
   }
   VectorType p = r;
   VectorType x = x0;
-  double rkp1_2norm = r.Norm();
+  double rkp1_2norm = r.NormSquare();
   for (size_t k = 0; k < max_iter; k++) {
     double rk_2norm = rkp1_2norm;
     VectorType ap = matrix_a * p;
     auto alpha = rk_2norm / (p * ap);
     x = x + alpha * p;
     r = r - alpha * ap;
-    rkp1_2norm = r.Norm();   // return value of norm has definitely double type.
+    rkp1_2norm = r.NormSquare();   // return value of norm has definitely double type.
     if (rkp1_2norm < tolerance) {
       iter = k + 1;
       return x;
@@ -89,20 +89,20 @@ VectorType ConjugateGradientSolver(
 template<typename MatrixType, typename VectorType>
 void MatrixMultiplyVectorSlave(
     const MatrixType &mat,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 );
 
 template<typename MatrixType, typename VectorType>
 VectorType MatrixMultiplyVectorMaster(
     const MatrixType &mat,
     const VectorType &v,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 );
 
 template<typename MatrixType, typename VectorType>
 void ConjugateGradientSolverSlave(
     const MatrixType &matrix_a,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 );
 
 template<typename MatrixType, typename VectorType>
@@ -114,7 +114,7 @@ VectorType ConjugateGradientSolverMaster(
     double tolerance,
     int,
     size_t &iter,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 );
 
 // virtual forward declaration
@@ -122,12 +122,12 @@ VectorType ConjugateGradientSolverMaster(
 //template<typename VectorType>
 //void CGSolverBroadCastVector(
 //    VectorType &x0,
-//    boost::mpi::communicator &world
+//const boost::mpi::communicator &world
 //);
 //
 //template<typename VectorType>
 //void CGSolverSendVector(
-//    boost::mpi::communicator &world,
+//const boost::mpi::communicator &world,
 //    const VectorType &v,
 //    const size_t dest,
 //    const int tag
@@ -135,7 +135,7 @@ VectorType ConjugateGradientSolverMaster(
 //
 //template<typename VectorType>
 //size_t CGSolverRecvVector(
-//    boost::mpi::communicator &world,
+//const boost::mpi::communicator &world,
 //    VectorType &v,
 //    const size_t src,
 //    const int tag
@@ -163,7 +163,7 @@ VectorType ConjugateGradientSolver(
     const double tolerance,
     const int residue_restart_step,
     size_t &iter,    //return value
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 ) {
   if (world.rank() == kMasterProc) {
     return ConjugateGradientSolverMaster(
@@ -185,12 +185,12 @@ enum ConjugateGradientSolverInstruction {
 
 inline void MasterBroadcastInstruction(
     const ConjugateGradientSolverInstruction order,
-    boost::mpi::communicator &world) {
+    const boost::mpi::communicator &world) {
   boost::mpi::broadcast(world, const_cast<ConjugateGradientSolverInstruction &>(order), kMasterProc);
 }
 
 inline ConjugateGradientSolverInstruction
-SlaveReceiveBroadcastInstruction(boost::mpi::communicator world) {
+SlaveReceiveBroadcastInstruction(const boost::mpi::communicator world) {
   ConjugateGradientSolverInstruction instruction;
   boost::mpi::broadcast(world, instruction, kMasterProc);
   return instruction;
@@ -205,15 +205,15 @@ VectorType ConjugateGradientSolverMaster(
     double tolerance,
     int residue_restart_step,
     size_t &iter,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 ) {
   MasterBroadcastInstruction(start, world);
 
-  double tol = b.Norm() * tolerance;
+  double tol = b.NormSquare() * tolerance;
 
   VectorType ax0 = MatrixMultiplyVectorMaster(matrix_a, x0, world);
   VectorType r = b - ax0;
-  double rk_2norm = r.Norm();
+  double rk_2norm = r.NormSquare();
   if (rk_2norm < tol) {
     iter = 0;
     MasterBroadcastInstruction(finish, world);
@@ -245,7 +245,7 @@ VectorType ConjugateGradientSolverMaster(
     } else {
       r += (-alpha) * ap;
     }
-    rkp1_2norm = r.Norm();   // return value of norm has definitely double type.
+    rkp1_2norm = r.NormSquare();   // return value of norm has definitely double type.
 
     if (rkp1_2norm < tol) {
       iter = k + 1;
@@ -280,7 +280,7 @@ VectorType ConjugateGradientSolverMaster(
 template<typename MatrixType, typename VectorType>
 void ConjugateGradientSolverSlave(
     const MatrixType &matrix_a,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 ) {
   auto instrct = SlaveReceiveBroadcastInstruction(world);
   assert(instrct == start);
@@ -297,7 +297,7 @@ template<typename MatrixType, typename VectorType>
 VectorType MatrixMultiplyVectorMaster(
     const MatrixType &mat,
     const VectorType &v,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 ) {
 #ifdef GQPEPS_TIMING_MODE
   Timer cg_mat_vec_mult_timer("conjugate gradient matrix vector multiplication");
@@ -332,7 +332,7 @@ VectorType MatrixMultiplyVectorMaster(
 template<typename MatrixType, typename VectorType>
 void MatrixMultiplyVectorSlave(
     const MatrixType &mat,
-    boost::mpi::communicator &world
+    const boost::mpi::communicator &world
 ) {
   VectorType v;
   CGSolverBroadCastVector(v, world);

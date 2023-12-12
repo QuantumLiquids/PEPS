@@ -43,7 +43,6 @@ class MyVector {
     return elements_.size();
   }
 
-
   MyVector<T> operator+(const MyVector<T> &rhs) const {
     MyVector<T> result(GetSize());
     const std::vector<T> &otherElements = rhs.GetElements();
@@ -109,9 +108,9 @@ class MyVector {
     return result;
   }
 
-  double Norm() const {
+  double NormSquare() const {
     double res = 0;
-    for (auto elem: elements_) {
+    for (auto elem : elements_) {
       res += std::abs(elem) * std::abs(elem);
     }
     return res;
@@ -119,7 +118,7 @@ class MyVector {
 
   void Print() const {
     std::cout << "[";
-    for (const auto &element: elements_) {
+    for (const auto &element : elements_) {
       std::cout << " " << element;
     }
     std::cout << "]" << std::endl;
@@ -155,7 +154,6 @@ MyVector<GQTEN_Complex> operator*(const double scalar, const MyVector<GQTEN_Comp
   return other * GQTEN_Complex(scalar, 0.0);
 }
 
-
 template<typename ElemT>
 class MySquareMatrix {
  public:
@@ -175,7 +173,6 @@ class MySquareMatrix {
   MyVector<ElemT> operator*(const MyVector<ElemT> &vector) const {
     std::vector<ElemT> vectorElements = vector.GetElements();
 
-
     if (Length() != vector.GetSize()) {
       assert(Length() == vector.GetSize());
       throw std::runtime_error("Matrix and vector dimensions do not match.");
@@ -193,10 +190,8 @@ class MySquareMatrix {
 
   size_t Length() const { return data_.size(); };
 
-
  private:
   std::vector<std::vector<ElemT>> data_;
 };
-
 
 #endif //GRACEQ_VMC_PEPS_MY_VECTOR_MATRIX_H
