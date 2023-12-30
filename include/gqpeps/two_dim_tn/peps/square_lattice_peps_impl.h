@@ -19,21 +19,13 @@ namespace gqpeps {
 using namespace gqten;
 
 template<typename TenElemT, typename QNT>
-SquareLatticePEPS<TenElemT, QNT>::SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces): rows_(
-    hilbert_spaces.size()),
-                                                                                               cols_(
-                                                                                                   hilbert_spaces[0].size()),
-                                                                                               Gamma(
-                                                                                                   hilbert_spaces.size(),
-                                                                                                   hilbert_spaces[0].size()),
-                                                                                               lambda_vert(
-                                                                                                   hilbert_spaces.size() +
-                                                                                                   1,
-                                                                                                   hilbert_spaces[0].size()),
-                                                                                               lambda_horiz(
-                                                                                                   hilbert_spaces.size(),
-                                                                                                   hilbert_spaces[0].size() +
-                                                                                                   1) {
+SquareLatticePEPS<TenElemT, QNT>::
+SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces):
+    rows_(hilbert_spaces.size()),
+    cols_(hilbert_spaces[0].size()),
+    Gamma(hilbert_spaces.size(), hilbert_spaces[0].size()),
+    lambda_vert(hilbert_spaces.size() + 1, hilbert_spaces[0].size()),
+    lambda_horiz(hilbert_spaces.size(), hilbert_spaces[0].size() + 1) {
 #ifndef NDEBUG
   for (size_t i = 0; i < hilbert_spaces.size(); i++) {
     for (size_t j = 0; j < hilbert_spaces[0].size(); j++) {
@@ -69,7 +61,7 @@ SquareLatticePEPS<TenElemT, QNT>::SquareLatticePEPS(const HilbertSpaces<QNT> &hi
   }
 }
 
-// Helper function to generate a Hilbert space with the same local hilber space repeated
+// Helper function to generate a Hilbert space with the same local hilbert space repeated
 template<typename QNT>
 HilbertSpaces<QNT> GenerateHilbertSpace(size_t rows, size_t cols, const Index<QNT> &local_hilbert_space) {
   HilbertSpaces<QNT> hilbert_spaces(rows, std::vector<Index<QNT>>(cols, local_hilbert_space));
@@ -78,8 +70,36 @@ HilbertSpaces<QNT> GenerateHilbertSpace(size_t rows, size_t cols, const Index<QN
 
 template<typename TenElemT, typename QNT>
 SquareLatticePEPS<TenElemT, QNT>::SquareLatticePEPS(const Index<QNT> &local_hilbert_space, size_t rows, size_t cols)
-    : SquareLatticePEPS(
-    GenerateHilbertSpace(rows, cols, local_hilbert_space)) {}
+    : SquareLatticePEPS(GenerateHilbertSpace(rows, cols, local_hilbert_space)) {}
+
+///< activates has the same size with the SquareLatticePEPS
+template<typename TenElemT, typename QNT>
+void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> &activates) {
+  for (size_t row = 0; row < rows_; row++) {
+    for (size_t col = 0; col < cols_; col++) {
+      TenT &the_gamma = Gamma({row, col});
+      the_gamma({0, 0, 0, 0, activates[row][col]}) = 1.0;
+    }
+  }
+
+  for (size_t row = 0; row < lambda_vert.rows(); row++) {
+    for (size_t col = 0; col < lambda_vert.cols(); col++) {
+      auto &the_lambda = lambda_vert({row, col});
+      if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
+        the_lambda({0, 0}) = TenElemT(1.0);
+      }
+    }
+  }
+
+  for (size_t row = 0; row < lambda_horiz.rows(); row++) {
+    for (size_t col = 0; col < lambda_horiz.cols(); col++) {
+      auto &the_lambda = lambda_horiz({row, col});
+      if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
+        the_lambda({0, 0}) = TenElemT(1.0);
+      }
+    }
+  }
+}
 
 template<typename TenElemT, typename QNT>
 std::pair<size_t, size_t> SquareLatticePEPS<TenElemT, QNT>::GetMinMaxBondDim(void) const {
@@ -172,35 +192,6 @@ bool SquareLatticePEPS<TenElemT, QNT>::operator==(const SquareLatticePEPS<TenEle
 
   // If all elements are equal, return true
   return true;
-}
-
-///< activates has the same size with the SquareLatticePEPS
-template<typename TenElemT, typename QNT>
-void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> &activates) {
-  for (size_t row = 0; row < rows_; row++) {
-    for (size_t col = 0; col < cols_; col++) {
-      TenT &the_gamma = Gamma({row, col});
-      the_gamma({0, 0, 0, 0, activates[row][col]}) = 1.0;
-    }
-  }
-
-  for (size_t row = 0; row < lambda_vert.rows(); row++) {
-    for (size_t col = 0; col < lambda_vert.cols(); col++) {
-      auto &the_lambda = lambda_vert({row, col});
-      if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
-        the_lambda({0, 0}) = TenElemT(1.0);
-      }
-    }
-  }
-
-  for (size_t row = 0; row < lambda_horiz.rows(); row++) {
-    for (size_t col = 0; col < lambda_horiz.cols(); col++) {
-      auto &the_lambda = lambda_horiz({row, col});
-      if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
-        the_lambda({0, 0}) = TenElemT(1.0);
-      }
-    }
-  }
 }
 
 template<typename TenElemT, typename QNT>
@@ -449,7 +440,6 @@ SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const GQTensor<TenElemT, 
   return res;
 }
 
-
 template<typename TenElemT, typename QNT>
 bool SquareLatticePEPS<TenElemT, QNT>::Dump(const std::string path) const {
   // Dump Gamma, lambda_vert, and lambda_horiz tensors one by one
@@ -638,7 +628,6 @@ GQTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(co
   return res;
 }
 
-
 /**
  *
  * @tparam TenElemT
@@ -726,7 +715,6 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
 #endif
   return norm;
 }
-
 
 /**
  *

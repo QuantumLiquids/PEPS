@@ -139,6 +139,11 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
                                const BondOrientation mps_orient,
                                const Tensor &ten_left, const Tensor &ten_right) const;
 
+  TenElemT ReplaceSqrt5DistTwoSiteTrace(const SiteIdx &left_up_site,
+                                        const DIAGONAL_DIR sqrt5link_dir,
+                                        const BondOrientation mps_orient, //mps orientation is the same with longer side orientation
+                                        const Tensor &ten_left, const Tensor &ten_right) const;
+
   Tensor PunchHole(const SiteIdx &site, const BondOrientation mps_orient) const;
 
  private:
@@ -168,9 +173,15 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
    */
   void GrowBTen2Step_(const BTenPOSITION post, const size_t slice_num1);
 
+  /** bmps_set_
+   * left bmps: mps are numbered from left to right, mps tensors are numbered from top to bottom
+   * down bmps: mps are numbered from bottom to top, mps tensors are numbered from left to right
+   * right bmps: mps are numbered from right to left, mps tensors are numbered from bottom to top
+   * up bmps: mps are numbered from top to bottom mps tensors are numbered from right to left
+   */
   std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> bmps_set_;
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps
-  std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layer between two bmps, todo
+  std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layers between two bmps
 };
 
 }//gqpeps

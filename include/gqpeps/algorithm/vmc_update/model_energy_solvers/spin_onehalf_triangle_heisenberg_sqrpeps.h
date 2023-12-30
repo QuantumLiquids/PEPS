@@ -40,12 +40,14 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::CalEnergyAndHoles(const
   TenElemT e(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = TPSSample < TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = TPSSample<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
+    tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
+    inv_psi = 1.0 / tps_sample->amplitude;
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -94,6 +96,8 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::CalEnergyAndHoles(const
   for (size_t col = 0; col < tn.cols(); col++) {
     tn.InitBTen(UP, col);
     tn.GrowFullBTen(DOWN, col, 2, true);
+    tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
+    inv_psi = 1.0 / tps_sample->amplitude;
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
@@ -122,12 +126,14 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::CalEnergy(const SITPS *
   TenElemT e(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = TPSSample < TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = TPSSample<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
+    tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
+    inv_psi = 1.0 / tps_sample->amplitude;
     for (size_t col = 0; col < tn.cols() - 1; col++) {
       const SiteIdx site1 = {row, col};
       //Calculate horizontal bond energy contribution
@@ -172,6 +178,8 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::CalEnergy(const SITPS *
   for (size_t col = 0; col < tn.cols(); col++) {
     tn.InitBTen(UP, col);
     tn.GrowFullBTen(DOWN, col, 2, true);
+    tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
+    inv_psi = 1.0 / tps_sample->amplitude;
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
