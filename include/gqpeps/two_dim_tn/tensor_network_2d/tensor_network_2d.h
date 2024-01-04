@@ -186,6 +186,6 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
 }//gqpeps
 
-#include "gqpeps/algorithm/vmc_update/tensor_network_2d_impl.h"
+#include "tensor_network_2d_impl.h"
 
 #endif //VMC_PEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H

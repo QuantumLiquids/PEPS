@@ -14,7 +14,7 @@
 #include "gqpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
 
 #include "gqpeps/algorithm/vmc_update/model_energy_solver.h"
-#include "gqpeps/algorithm/vmc_update/tps_sample.h"
+#include "gqpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_nn_flip.h"
 
 #include "boost/mpi.hpp"                            //boost::mpi
 
@@ -134,7 +134,15 @@ struct ConjugateGradientParams {
       : max_iter(max_iter), tolerance(tolerance), residue_restart_step(residue_restart_step), diag_shift(diag_shift) {}
 };
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
+/**
+ * Finite-size PEPS optimization executor in Variational Monte-Carlo method.
+ *
+ * @tparam TenElemT wavefunctional elementary type, real or complex
+ * @tparam QNT quantum number type
+ * @tparam EnergySolver Energy solver, corresponding to the model
+ * @tparam WaveFunctionComponentType the derived class of WaveFunctionComponent, control the monte carlo sweep method
+ */
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
 class VMCPEPSExecutor : public Executor {
  public:
   using Tensor = GQTensor<TenElemT, QNT>;
@@ -185,7 +193,7 @@ class VMCPEPSExecutor : public Executor {
   void ReserveSamplesDataSpace_(void);
 
   void IterativeOptimizeTPSStep_(const size_t iter);
-  void LineSearch_(const SITPST& search_dir,
+  void LineSearch_(const SITPST &search_dir,
                    const std::vector<double> &strides);
 
   // Level 3 Member Functions
@@ -208,7 +216,7 @@ class VMCPEPSExecutor : public Executor {
   void GradientRandElementSign_();
   size_t CalcNaturalGradient_(const VMCPEPSExecutor::SITPST &grad, const SITPST &init_guess);
 
-  std::vector<size_t> MCSweep_(void);
+  std::vector<double> MCSweep_(void);
   // Input Data Region
   const boost::mpi::communicator world_;
 
@@ -221,7 +229,7 @@ class VMCPEPSExecutor : public Executor {
   SITPST split_index_tps_;  //also can be input/output
   bool warm_up_;
   bool stochastic_reconfiguration_update_class_;
-  TPSSample<TenElemT, QNT> tps_sample_;
+  WaveFunctionComponentType tps_sample_;
 
   std::vector<TenElemT> energy_samples_;
   ///<outside vector indices corresponding to the local hilbert space basis

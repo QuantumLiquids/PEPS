@@ -9,7 +9,7 @@
 
 #include "gtest/gtest.h"
 #include "gqten/gqten.h"
-#include "gqpeps/algorithm/vmc_update/tensor_network_2d.h"
+#include "gqpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "gqpeps/two_dim_tn/tps/split_index_tps.h"    //TPS, SplitIndexTPS
 
 using namespace gqten;

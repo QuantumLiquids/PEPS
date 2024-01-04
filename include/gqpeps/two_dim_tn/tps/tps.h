@@ -19,7 +19,7 @@
 #include "gqpeps/two_dim_tn/framework/ten_matrix.h"     // TenMatrix
 #include "gqmps2/utilities.h"                           // CreatPath
 #include "gqpeps/consts.h"                              // kTpsPath
-#include "gqpeps/algorithm/vmc_update/tensor_network_2d.h"
+#include "gqpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "gqpeps/two_dim_tn/tps/configuration.h"
 
 namespace gqpeps {

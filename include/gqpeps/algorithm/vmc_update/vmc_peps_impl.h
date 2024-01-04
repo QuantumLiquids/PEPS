@@ -133,18 +133,27 @@ T Variance(const std::vector<T> data) {
   return Variance(data, Mean(data));
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
-                                                              const TPST &tps_init,
-                                                              const boost::mpi::communicator &world,
-                                                              const EnergySolver &solver) :
-    VMCPEPSExecutor<TenElemT, QNT, EnergySolver>(optimize_para, SITPST(tps_init), world, solver) {}
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+VMCPEPSExecutor<TenElemT,
+                QNT,
+                EnergySolver,
+                WaveFunctionComponentType>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
+                                                            const TPST &tps_init,
+                                                            const boost::mpi::communicator &world,
+                                                            const EnergySolver &solver) :
+    VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>(optimize_para,
+                                                                            SITPST(tps_init),
+                                                                            world,
+                                                                            solver) {}
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
-                                                              const SITPST &sitpst_init,
-                                                              const boost::mpi::communicator &world,
-                                                              const EnergySolver &solver) :
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+VMCPEPSExecutor<TenElemT,
+                QNT,
+                EnergySolver,
+                WaveFunctionComponentType>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
+                                                            const SITPST &sitpst_init,
+                                                            const boost::mpi::communicator &world,
+                                                            const EnergySolver &solver) :
     world_(world),
     optimize_para(optimize_para),
     lx_(sitpst_init.cols()),
@@ -160,8 +169,8 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
     energy_solver_(solver),
     warm_up_(false) {
   random_engine.seed(std::random_device{}() + 10086 * world.rank());
-  TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(optimize_para);
-  tps_sample_ = TPSSample<TenElemT, QNT>(sitpst_init, optimize_para.init_config);
+  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
+  tps_sample_ = WaveFunctionComponentType(sitpst_init, optimize_para.init_config);
   if (std::find(stochastic_reconfiguration_method.cbegin(),
                 stochastic_reconfiguration_method.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
@@ -174,11 +183,14 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
   this->SetStatus(ExecutorStatus::INITED);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
-                                                              const size_t ly, const size_t lx,
-                                                              const boost::mpi::communicator &world,
-                                                              const EnergySolver &solver):
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+VMCPEPSExecutor<TenElemT,
+                QNT,
+                EnergySolver,
+                WaveFunctionComponentType>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
+                                                            const size_t ly, const size_t lx,
+                                                            const boost::mpi::communicator &world,
+                                                            const EnergySolver &solver):
     world_(world), optimize_para(optimize_para), lx_(lx), ly_(ly),
     split_index_tps_(ly, lx), tps_sample_(ly, lx),
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
@@ -186,7 +198,7 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
     energy_solver_(solver), warm_up_(false) {
-  TPSSample<TenElemT, QNT>::trun_para = BMPSTruncatePara(optimize_para);
+  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
   random_engine.seed(std::random_device{}() + 10086 * world.rank());
   if (std::find(stochastic_reconfiguration_method.cbegin(),
                 stochastic_reconfiguration_method.cend(),
@@ -201,8 +213,8 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::VMCPEPSExecutor(const VMCOptimizeP
   this->SetStatus(ExecutorStatus::INITED);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::Execute(void) {
   SetStatus(ExecutorStatus::EXEING);
   WarmUp_();
   if (optimize_para.update_scheme == GradientLineSearch || optimize_para.update_scheme == NaturalGradientLineSearch) {
@@ -215,8 +227,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Execute(void) {
   SetStatus(ExecutorStatus::FINISH);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::ReserveSamplesDataSpace_(void) {
   energy_samples_.reserve(optimize_para.mc_samples);
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
@@ -256,8 +268,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ReserveSamplesDataSpace_(void
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::PrintExecutorInfo_(void) {
   if (world_.rank() == kMasterProc) {
     std::cout << std::left;  // Set left alignment for the output
     std::cout << "\n";
@@ -278,8 +290,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::PrintExecutorInfo_(void) {
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::WarmUp_(void) {
   if (!warm_up_) {
     Timer warm_up_timer("warm_up");
     for (size_t sweep = 0; sweep < optimize_para.mc_warm_up_sweeps; sweep++) {
@@ -292,26 +304,29 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::WarmUp_(void) {
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearchOptimizeTPS_(void) {
-  size_t flip_bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
-  size_t cluster_num = 3 * lx_ * ly_;
-  size_t bond_flip_accept_num = 0;
-  size_t cluster_update_accept_num = 0;
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::LineSearchOptimizeTPS_(void) {
+  std::vector<double> accept_rates_accum;
   ClearEnergyAndHoleSamples_();
 
   Timer grad_calculation_timer("gradient_calculation");
   for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-    std::vector<size_t> accept_nums = MCSweep_();
-    bond_flip_accept_num += accept_nums[0];
-    if (accept_nums.size() > 1) {
-      cluster_update_accept_num += accept_nums[1];
+    std::vector<double> accept_rates = MCSweep_();
+    if (sweep == 0) {
+      accept_rates_accum = accept_rates;
+    } else {
+      for (size_t i = 0; i < accept_rates_accum.size(); i++) {
+        accept_rates_accum[i] += accept_rates[i];
+      }
     }
     SampleEnergyAndHols_();
   }
-  double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
-  double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
+  auto accept_rates_avg = accept_rates_accum;
+  for (double &rates : accept_rates_avg) {
+    rates /= double(optimize_para.mc_samples);
+  }
   GatherStatisticEnergyAndGrad_();
+
   size_t cgsolver_iter(0);
   double sr_natural_grad_norm(0.0);
   SITPST *search_dir(nullptr);
@@ -344,10 +359,11 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearchOptimizeTPS_(void) 
               << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
               << energy_error_traj_.back()
               << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
-              << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
-    if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
-      std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
+              << "Accept rate = [";
+    for (double &rate : accept_rates_avg) {
+      std::cout << std::setw(5) << std::fixed << std::setprecision(2) << rate;
     }
+    std::cout << "]";
     if (stochastic_reconfiguration_update_class_) {
       std::cout << "SRSolver Iter = " << std::setw(4) << cgsolver_iter;
       std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
@@ -358,11 +374,11 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearchOptimizeTPS_(void) 
   LineSearch_(*search_dir, optimize_para.step_lens);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearch_(const SplitIndexTPS<TenElemT, QNT> &search_dir,
-                                                               const std::vector<double> &strides) {
-  size_t flip_bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
-  size_t cluster_num = 3 * lx_ * ly_;
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::LineSearch_(const SplitIndexTPS<TenElemT,
+                                                                                                              QNT> &search_dir,
+                                                                                          const std::vector<double> &strides) {
+
   double e0_min;
   if (world_.rank() == kMasterProc) {
     e0_min = energy_trajectory_[0];
@@ -372,13 +388,15 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearch_(const SplitIndexT
     Timer energy_measure_timer("energy_measure");
     UpdateTPSByVecAndSynchronize_(search_dir, strides[point]);
     ClearEnergyAndHoleSamples_();
-    size_t bond_flip_accept_num = 0;
-    size_t cluster_update_accept_num = 0;
+    std::vector<double> accept_rates_accum;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-      std::vector<size_t> accept_nums = MCSweep_();
-      bond_flip_accept_num += accept_nums[0];
-      if (accept_nums.size() > 1) {
-        cluster_update_accept_num += accept_nums[1];
+      std::vector<double> accept_rates = MCSweep_();
+      if (sweep == 0) {
+        accept_rates_accum = accept_rates;
+      } else {
+        for (size_t i = 0; i < accept_rates_accum.size(); i++) {
+          accept_rates_accum[i] += accept_rates[i];
+        }
       }
       SampleEnergy_();
     }
@@ -389,13 +407,14 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearch_(const SplitIndexT
       energy_trajectory_.push_back(energy);
       energy_error_traj_.push_back(en_err);
 
+      auto accept_rates_avg = accept_rates_accum;
+      for (double &rates : accept_rates_avg) {
+        rates /= double(optimize_para.mc_samples);
+      }
       if (energy < e0_min) {
         e0_min = energy;
         tps_min = split_index_tps_;
       }
-
-      double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
-      double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
 
       //cout
       double energy_measure_time = energy_measure_timer.Elapsed();
@@ -404,10 +423,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearch_(const SplitIndexT
                 << energy
                 << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
                 << en_err
-                << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
-      if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
-        std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
+                << "Accept rate = [";
+      for (double &rate : accept_rates_avg) {
+        std::cout << std::setw(5) << std::fixed << std::setprecision(2) << rate;
       }
+      std::cout << "]";
+
       std::cout << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << energy_measure_time << "s"
                 << std::endl;
     }
@@ -417,32 +438,37 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LineSearch_(const SplitIndexT
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::IterativeOptimizeTPS_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::IterativeOptimizeTPS_(void) {
   for (size_t iter = 0; iter < optimize_para.step_lens.size(); iter++) {
     IterativeOptimizeTPSStep_(iter);
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::IterativeOptimizeTPSStep_(const size_t iter) {
-  size_t flip_bond_num = lx_ * (ly_ - 1) + ly_ * (lx_ - 1);
-  size_t cluster_num = 3 * lx_ * ly_;
-  size_t bond_flip_accept_num = 0;
-  size_t cluster_update_accept_num = 0;
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT,
+                     QNT,
+                     EnergySolver,
+                     WaveFunctionComponentType>::IterativeOptimizeTPSStep_(const size_t iter) {
+  std::vector<double> accept_rates_accum;
   ClearEnergyAndHoleSamples_();
 
   Timer grad_update_timer("gradient_update");
   for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-    std::vector<size_t> accept_nums = MCSweep_();
-    bond_flip_accept_num += accept_nums[0];
-    if (accept_nums.size() > 1) {
-      cluster_update_accept_num += accept_nums[1];
+    std::vector<double> accept_rates = MCSweep_();
+    if (sweep == 0) {
+      accept_rates_accum = accept_rates;
+    } else {
+      for (size_t i = 0; i < accept_rates_accum.size(); i++) {
+        accept_rates_accum[i] += accept_rates[i];
+      }
     }
     SampleEnergyAndHols_();
   }
-  double bond_accept_rate = double(bond_flip_accept_num) / double(flip_bond_num * optimize_para.mc_samples);
-  double cluster_accept_rate = double(cluster_update_accept_num) / double(cluster_num * optimize_para.mc_samples);
+  std::vector<double> accept_rates_avg = accept_rates_accum;
+  for (double &rates : accept_rates_avg) {
+    rates /= double(optimize_para.mc_samples);
+  }
   GatherStatisticEnergyAndGrad_();
 
   Timer tps_update_timer("tps_update");
@@ -503,10 +529,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::IterativeOptimizeTPSStep_(con
               << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
               << energy_error_traj_.back()
               << "Grad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << grad_norm_.back()
-              << "Accept rate = " << std::setw(5) << std::fixed << std::setprecision(2) << bond_accept_rate;
-    if (optimize_para.mc_sweep_scheme == CompressedLatticeKagomeLocalUpdate) {
-      std::cout << std::setw(5) << std::fixed << std::setprecision(2) << cluster_accept_rate;
+              << "Accept rate = [";
+    for (double &rate : accept_rates_avg) {
+      std::cout << std::setw(5) << std::fixed << std::setprecision(2) << rate;
     }
+    std::cout << "]";
+
     if (stochastic_reconfiguration_update_class_) {
       std::cout << "SRSolver Iter = " << std::setw(4) << sr_iter;
       std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
@@ -517,8 +545,8 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::IterativeOptimizeTPSStep_(con
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ClearEnergyAndHoleSamples_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::ClearEnergyAndHoleSamples_(void) {
   energy_samples_.clear();
 //  for (size_t row = 0; row < ly_; row++) {
 //    for (size_t col = 0; col < lx_; col++) {
@@ -547,10 +575,12 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::ClearEnergyAndHoleSamples_(vo
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergyAndHols_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::SampleEnergyAndHols_(void) {
   TensorNetwork2D<TenElemT, QNT> holes(ly_, lx_);
-  TenElemT energy_loc = energy_solver_.CalEnergyAndHoles(&split_index_tps_, &tps_sample_, holes);
+  TenElemT energy_loc = energy_solver_.template CalEnergyAndHoles<WaveFunctionComponentType, true>(&split_index_tps_,
+                                                                                                   &tps_sample_,
+                                                                                                   holes);
   TenElemT inv_psi = 1.0 / tps_sample_.amplitude;
   energy_samples_.push_back(energy_loc);
   SITPST gten_sample(ly_, lx_, split_index_tps_.PhysicalDim());// only useful for Stochastic Reconfiguration
@@ -576,16 +606,19 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergyAndHols_(void) {
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-TenElemT VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SampleEnergy_(void) {
-  TenElemT energy_loc = energy_solver_.CalEnergy(&split_index_tps_, &tps_sample_);
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+TenElemT VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::SampleEnergy_(void) {
+  TensorNetwork2D<TenElemT, QNT> holes(1, 1); //useless
+  TenElemT energy_loc = energy_solver_.template CalEnergyAndHoles<WaveFunctionComponentType, false>(&split_index_tps_,
+                                                                                                    &tps_sample_,
+                                                                                                    holes);
   energy_samples_.push_back(energy_loc);
   return energy_loc;
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
 SplitIndexTPS<TenElemT, QNT>
-VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void) {
+VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::GatherStatisticEnergyAndGrad_(void) {
   TenElemT en_self = Mean(energy_samples_); //energy value in each processor
   auto [energy, en_err] = StatisticFromProcessors(en_self, MPI_Comm(world_));
   gqten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
@@ -643,20 +676,26 @@ VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GatherStatisticEnergyAndGrad_(void
  * @param step_len
  * @note Normalization condition: tensors in each site are normalized.
  */
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::UpdateTPSByVecAndSynchronize_(const VMCPEPSExecutor::SITPST &grad,
-                                                                                 double step_len) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT,
+                     QNT,
+                     EnergySolver,
+                     WaveFunctionComponentType>::UpdateTPSByVecAndSynchronize_(const VMCPEPSExecutor::SITPST &grad,
+                                                                               double step_len) {
   if (world_.rank() == kMasterProc) {
     split_index_tps_ += (-step_len) * grad;
     split_index_tps_.NormalizeAllSite();
   }
   BroadCast(split_index_tps_, world_);
-  tps_sample_ = TPSSample(split_index_tps_, tps_sample_.config);
+  tps_sample_ = WaveFunctionComponentType(split_index_tps_, tps_sample_.config);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad,
-                                                                              double step_len) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT,
+                     QNT,
+                     EnergySolver,
+                     WaveFunctionComponentType>::BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad,
+                                                                            double step_len) {
   if (world_.rank() == kMasterProc) {
     for (size_t row = 0; row < ly_; row++)
       for (size_t col = 0; col < lx_; col++) {
@@ -686,9 +725,14 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::BoundGradElementUpdateTPS_(VM
   }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochReconfigUpdateTPS_(
-    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, double step_len, const SITPST &init_guess,
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+std::pair<size_t, double> VMCPEPSExecutor<TenElemT,
+                                          QNT,
+                                          EnergySolver,
+                                          WaveFunctionComponentType>::StochReconfigUpdateTPS_(
+    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::SITPST &grad,
+    double step_len,
+    const SITPST &init_guess,
     const bool normalize_natural_grad) {
   size_t cgsolver_iter = CalcNaturalGradient_(grad, init_guess);
   double natural_grad_norm = natural_grad_.NormSquare();
@@ -697,9 +741,10 @@ std::pair<size_t, double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::StochRec
   return std::make_pair(cgsolver_iter, natural_grad_norm);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::CalcNaturalGradient_(
-    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::SITPST &grad, const SITPST &init_guess) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::CalcNaturalGradient_(
+    const VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::SITPST &grad,
+    const SITPST &init_guess) {
   SITPST *pgten_ave_(nullptr);
   if (world_.rank() == kMasterProc) {
     pgten_ave_ = &gten_ave_;
@@ -713,8 +758,8 @@ size_t VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::CalcNaturalGradient_(
   return cgsolver_iter;
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GradientRandElementSign_() {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::GradientRandElementSign_() {
   if (world_.rank() == kMasterProc)
     for (size_t row = 0; row < ly_; row++) {
       for (size_t col = 0; col < lx_; col++) {
@@ -725,46 +770,27 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::GradientRandElementSign_() {
     }
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-std::vector<size_t> VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::MCSweep_(void) {
-  size_t bond_flip_times, cluster_flip_times;
-  switch (optimize_para.mc_sweep_scheme) {
-    case SequentiallyNNSiteFlip: {
-      for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
-        bond_flip_times = tps_sample_.MCSequentiallyNNFlipSweep(split_index_tps_, unit_even_distribution);;
-      }
-      return {bond_flip_times};
-    }
-    case CompressedLatticeKagomeLocalUpdate: {
-      for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
-        tps_sample_.MCCompressedKagomeLatticeSequentiallyLocalUpdateSweepSmoothBoundary(split_index_tps_,
-                                                                                        unit_even_distribution,
-                                                                                        cluster_flip_times,
-                                                                                        bond_flip_times);
-//      tps_sample_.MCCompressedKagomeLatticeSequentiallyLocalUpdateSweep(split_index_tps_, unit_even_distribution, cluster_flip_times,
-//                                                                        bond_flip_times);
-      }
-      return {bond_flip_times, cluster_flip_times};
-    }
-    default: {
-      std::cerr << "Do not support MC sweep Scheme" << std::endl;
-      exit(1);
-    }
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+std::vector<double> VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::MCSweep_(void) {
+  std::vector<double> accept_rates;
+  for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
+    tps_sample_.MonteCarloSweepUpdate(split_index_tps_, unit_even_distribution, accept_rates);
   }
+  return accept_rates;
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::Measure_(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::Measure_(void) {
 
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(void) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::LoadTenData(void) {
   LoadTenData(optimize_para.wavefunction_path);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string &tps_path) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::LoadTenData(const std::string &tps_path) {
   if (!split_index_tps_.Load(tps_path)) {
     std::cout << "Loading TPS files fails." << std::endl;
     exit(-1);
@@ -772,24 +798,25 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::LoadTenData(const std::string
   Configuration config(ly_, lx_);
   bool load_config = config.Load(tps_path, world_.rank());
   if (load_config) {
-    tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, config);
+    tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
   } else {
     std::cout << "Loading configuration in rank " << world_.rank()
               << " fails. Use preset configuration and random warm up."
               << std::endl;
-    tps_sample_ = TPSSample<TenElemT, QNT>(split_index_tps_, optimize_para.init_config);
+    tps_sample_ = WaveFunctionComponentType(split_index_tps_, optimize_para.init_config);
     WarmUp_();
   }
   warm_up_ = true;
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const bool release_mem) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::DumpData(const bool release_mem) {
   DumpData(optimize_para.wavefunction_path, release_mem);
 }
 
-template<typename TenElemT, typename QNT, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, EnergySolver>::DumpData(const std::string &tps_path, const bool release_mem) {
+template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::DumpData(const std::string &tps_path,
+                                                                                       const bool release_mem) {
   std::string energy_data_path = "./energy";
   if (world_.rank() == kMasterProc) {
     split_index_tps_.Dump(tps_path, release_mem);

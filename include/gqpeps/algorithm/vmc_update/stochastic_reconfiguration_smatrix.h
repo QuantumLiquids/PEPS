@@ -10,7 +10,7 @@
 #define GRACEQ_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H
 
 #include "gqpeps/two_dim_tn/tps/split_index_tps.h"
-#include "gqpeps/algorithm/vmc_update/tps_sample.h"
+#include "gqpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_nn_flip.h"
 
 namespace gqpeps {
 using namespace gqten;
