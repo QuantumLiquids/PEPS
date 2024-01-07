@@ -10,7 +10,6 @@
 #include "gtest/gtest.h"
 #include "gqpeps/two_dim_tn/framework/duomatrix.h"
 
-
 using namespace gqpeps;
 
 template<typename ElemT>
@@ -107,4 +106,30 @@ TEST(TestDuoMatrix, TestElemAllocDealloc) {
 
   intduomat.dealloc(1, 1);
   EXPECT_EQ(intduomat.cdata()[1][1], nullptr);
+}
+
+TEST(TestDuoMatrix, TestIterator) {
+  DuoMatrix<int> intduomat(2, 2);
+  for (size_t r = 0; r < intduomat.rows(); r++) {
+    for (size_t c = 0; c < intduomat.cols(); c++) {
+      intduomat({r, c}) = r + c;
+    }
+  }
+  for (auto &elem : intduomat) {
+    std::cout << "elem :" << elem << std::endl;
+  }
+
+  std::for_each(intduomat.begin(), intduomat.end(), [](int &element) {
+    // Do something with the element
+    std::cout << "Element: " << element << std::endl;
+  });
+
+  const DuoMatrix<int> &intduomat2 = intduomat;
+  for (const auto &elem : intduomat2) {
+    std::cout << "elem2 :" << elem << std::endl;
+  }
+  std::for_each(intduomat2.cbegin(), intduomat2.cend(), [](const int &element) {
+    // Do something with the element
+    std::cout << "Element2: " << element << std::endl;
+  });
 }

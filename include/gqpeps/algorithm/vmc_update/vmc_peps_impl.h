@@ -13,76 +13,21 @@
 #include <iomanip>
 #include "gqpeps/algorithm/vmc_update/stochastic_reconfiguration_smatrix.h" //SRSMatrix
 #include "gqpeps/utility/conjugate_gradient_solver.h"
-#include "axis_update.h"
+#include "gqpeps/algorithm/vmc_update/axis_update.h"
+#include "gqpeps/monte_carlo_tools/statistics.h"
 
 namespace gqpeps {
 using namespace gqten;
 
-// helpers
-template<typename DataType>
-void DumpVecData(
-    const std::string &filename,
-    const std::vector<DataType> &data
-) {
-  std::ofstream ofs(filename, std::ofstream::binary);
-  for (auto datum : data) {
-    ofs << datum << '\n';
-  }
-  ofs << std::endl;
-  ofs.close();
-}
-
-template<typename T>
-T Mean(const std::vector<T> data) {
-  if (data.empty()) {
-    return T(0);
-  }
-  auto const count = static_cast<T>(data.size());
-//  return std::reduce(data.begin(), data.end()) / count;
-  return std::accumulate(data.begin(), data.end(), T(0)) / count;
-}
-
+//help
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> Mean(const std::vector<GQTensor<TenElemT, QNT> *> &tensor_list,
                              const size_t length) {
   std::vector<TenElemT> coefs(tensor_list.size(), TenElemT(1.0));
   GQTensor<TenElemT, QNT> sum;
   LinearCombine(coefs, tensor_list, TenElemT(0.0), &sum);
-  return sum * (1.0 / double(length));
-}
-
-///< only rank 0 get the values
-std::pair<double, double> StatisticFromProcessors(
-    double data,
-    MPI_Comm comm) {
-  double mean(0), standard_err(0);
-  int comm_rank, comm_size;
-  MPI_Comm_rank(comm, &comm_rank);
-  MPI_Comm_size(comm, &comm_size);
-
-  double *gather_data;
-  if (comm_rank == kMasterProc) {
-    gather_data = new double[comm_size];
-  }
-  int err_msg = ::MPI_Gather((void *) &data, 1, MPI_DOUBLE, (void *) gather_data, 1, MPI_DOUBLE, kMasterProc, comm);
-
-  if (comm_rank == kMasterProc) {
-    double sum = 0.0;
-    for (size_t i = 0; i < comm_size; i++) {
-      sum += *(gather_data + i);
-    }
-    mean = sum / comm_size;
-    if (comm_size > 1) {
-      double sum_square = 0.0;
-      for (size_t i = 0; i < comm_size; i++) {
-        sum_square += gather_data[i] * gather_data[i];
-      }
-      double variance = sum_square / comm_size - mean * mean;
-      standard_err = std::sqrt(variance / (comm_size - 1));
-    }
-    delete gather_data;
-  }
-  return std::make_pair(mean, standard_err);
+  return sum * (1.0 / double(length)
+  );
 }
 
 template<typename TenElemT, typename QNT>
@@ -108,29 +53,6 @@ GQTensor<TenElemT, QNT> MPIMeanTensor(const GQTensor<TenElemT, QNT> &tensor,
     send_gqten(world, kMasterProc, 2 * world.rank(), tensor);
     return Tensor();
   }
-}
-
-/// Note the definition
-template<typename T>
-T Variance(const std::vector<T> data,
-           const T &mean) {
-  size_t data_size = data.size();
-  std::vector<T> diff(data_size);
-  std::transform(data.begin(), data.end(), diff.begin(), [mean](double x) { return x - mean; });
-  T sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
-  auto const count = static_cast<T>(data_size);
-  return sq_sum / count;
-}
-
-template<typename T>
-T StandardError(const std::vector<T> data,
-                const T &mean) {
-  return std::sqrt(Variance(data, mean) / (T) data.size());
-}
-
-template<typename T>
-T Variance(const std::vector<T> data) {
-  return Variance(data, Mean(data));
 }
 
 template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
@@ -401,7 +323,7 @@ void VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::Li
       SampleEnergy_();
     }
     TenElemT en_self = Mean(energy_samples_); //energy value in each processor
-    auto [energy, en_err] = StatisticFromProcessors(en_self, MPI_Comm(world_));
+    auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(world_));
     gqten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
     if (world_.rank() == 0) {
       energy_trajectory_.push_back(energy);
@@ -620,7 +542,7 @@ template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFu
 SplitIndexTPS<TenElemT, QNT>
 VMCPEPSExecutor<TenElemT, QNT, EnergySolver, WaveFunctionComponentType>::GatherStatisticEnergyAndGrad_(void) {
   TenElemT en_self = Mean(energy_samples_); //energy value in each processor
-  auto [energy, en_err] = StatisticFromProcessors(en_self, MPI_Comm(world_));
+  auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(world_));
   gqten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
   if (world_.rank() == 0) {
     energy_trajectory_.push_back(energy);

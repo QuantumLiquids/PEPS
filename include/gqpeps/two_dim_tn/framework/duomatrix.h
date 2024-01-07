@@ -64,8 +64,8 @@ class DuoMatrix {
    * @param rhs A DuoMatrix instance.
    */
   DuoMatrix<ElemT> &operator=(const DuoMatrix<ElemT> &rhs) {
-    for (auto &row: raw_data_) {
-      for (auto &elem: row) {
+    for (auto &row : raw_data_) {
+      for (auto &elem : row) {
         if (elem != nullptr) {
           delete elem;
         }
@@ -103,8 +103,8 @@ class DuoMatrix {
    * @param rhs A DuoMatrix instance.
    */
   DuoMatrix<ElemT> &operator=(DuoMatrix<ElemT> &&rhs) noexcept {
-    for (auto &row: raw_data_) {
-      for (auto &elem: row) {
+    for (auto &row : raw_data_) {
+      for (auto &elem : row) {
         if (elem != nullptr) {
           delete elem;
         }
@@ -122,8 +122,8 @@ class DuoMatrix {
    * Destruct a DuoMatrix. Release memory it maintained.
    */
   virtual ~DuoMatrix(void) {
-    for (auto &row: raw_data_) {
-      for (auto &elem: row) {
+    for (auto &row : raw_data_) {
+      for (auto &elem : row) {
         if (elem != nullptr) {
           delete elem;
         }
@@ -181,9 +181,9 @@ class DuoMatrix {
    */
   const std::vector<std::vector<const ElemT *>> cdata(void) const {
     std::vector<std::vector<const ElemT *>> craw_data;
-    for (const auto &row: raw_data_) {
+    for (const auto &row : raw_data_) {
       std::vector<const ElemT *> crow;
-      for (const auto &elem: row) {
+      for (const auto &elem : row) {
         crow.push_back(elem);
       }
       craw_data.push_back(crow);
@@ -256,8 +256,8 @@ class DuoMatrix {
    * Check whether the matrix is empty.
    */
   bool empty(void) const {
-    for (const auto &row: raw_data_) {
-      for (const auto &elem: row) {
+    for (const auto &row : raw_data_) {
+      for (const auto &elem : row) {
         if (elem != nullptr) {
           return false;
         }
@@ -294,6 +294,154 @@ class DuoMatrix {
     } else {
       return get_col(num);
     }
+  }
+
+  // Define an iterator class for DuoMatrix
+  class Iterator {
+   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = ElemT;
+    using difference_type = std::ptrdiff_t;
+    using pointer = ElemT *;
+    using reference = ElemT &;
+
+    Iterator(DuoMatrix<ElemT> &matrix, size_t row = 0, size_t col = 0)
+        : matrix_(matrix), row_(row), col_(col) {}
+
+    // Dereference operator
+    reference operator*() const {
+      return matrix_({row_, col_});
+    }
+
+    // Pre-increment operator
+    Iterator &operator++() {
+      incrementPosition();
+      return *this;
+    }
+
+    // Post-increment operator
+    Iterator operator++(int) {
+      Iterator temp = *this;
+      incrementPosition();
+      return temp;
+    }
+
+    // Equality operator
+    bool operator==(const Iterator &other) const {
+      return (&matrix_ == &other.matrix_) && (row_ == other.row_) && (col_ == other.col_);
+    }
+
+    // Inequality operator
+    bool operator!=(const Iterator &other) const {
+      return !(*this == other);
+    }
+
+   private:
+    void incrementPosition() {
+      if (col_ < matrix_.cols() - 1) {
+        col_++;
+      } else if (row_ < matrix_.rows() - 1) {
+        row_++;
+        col_ = 0;
+      } else {
+        // Reached the end of the matrix, set to invalid position
+        row_ = matrix_.rows();
+        col_ = matrix_.cols();
+      }
+    }
+
+    DuoMatrix<ElemT> &matrix_;
+    size_t row_;
+    size_t col_;
+  };
+
+  // Begin iterator for DuoMatrix
+  Iterator begin() {
+    return Iterator(*this);
+  }
+
+  // End iterator for DuoMatrix
+  Iterator end() {
+    return Iterator(*this, rows(), cols());
+  }
+
+  // Define a const iterator class for DuoMatrix
+  class ConstIterator {
+   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = const ElemT;
+    using difference_type = std::ptrdiff_t;
+    using pointer = const ElemT *;
+    using reference = const ElemT &;
+
+    ConstIterator(const DuoMatrix<ElemT> &matrix, size_t row = 0, size_t col = 0)
+        : matrix_(matrix), row_(row), col_(col) {}
+
+    // Dereference operator
+    reference operator*() const {
+      return matrix_({row_, col_});
+    }
+
+    // Pre-increment operator
+    ConstIterator &operator++() {
+      incrementPosition();
+      return *this;
+    }
+
+    // Post-increment operator
+    ConstIterator operator++(int) {
+      ConstIterator temp = *this;
+      incrementPosition();
+      return temp;
+    }
+
+    // Equality operator
+    bool operator==(const ConstIterator &other) const {
+      return (&matrix_ == &other.matrix_) && (row_ == other.row_) && (col_ == other.col_);
+    }
+
+    // Inequality operator
+    bool operator!=(const ConstIterator &other) const {
+      return !(*this == other);
+    }
+
+   private:
+    void incrementPosition() {
+      if (col_ < matrix_.cols() - 1) {
+        col_++;
+      } else if (row_ < matrix_.rows() - 1) {
+        row_++;
+        col_ = 0;
+      } else {
+        // Reached the end of the matrix, set to invalid position
+        row_ = matrix_.rows();
+        col_ = matrix_.cols();
+      }
+    }
+
+    const DuoMatrix<ElemT> &matrix_;
+    size_t row_;
+    size_t col_;
+  };
+
+  // Begin const iterator for DuoMatrix
+  ConstIterator cbegin() const {
+    return ConstIterator(*this);
+  }
+
+  // End const iterator for DuoMatrix
+  ConstIterator cend() const {
+    return ConstIterator(*this, rows(), cols());
+  }
+
+  // Begin const iterator for DuoMatrix (const overload)
+  ConstIterator begin() const {
+    return cbegin();
+  }
+
+  // End const iterator for DuoMatrix (const overload)
+  ConstIterator end() const {
+    return cend();
   }
 
  private:

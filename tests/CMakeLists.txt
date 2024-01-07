@@ -168,7 +168,7 @@ endmacro()
 #add_unittest(test_site_vec test_site_vec.cc "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "")
 #
 
-## Test basis for tensr networks
+## Test basis for tensor networks
 # Test DuoVMatrix class
 add_unittest(test_duomatrix test_2d_tn/test_duomatrix.cpp "" "" "" "")
 # Test TenMatrix class
@@ -187,6 +187,16 @@ add_unittest(test_tn2d
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 
+## Test monte carlo tools
+add_unittest(test_statistics
+        "test_monte_carlo_tools/test_statistics.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+
+add_mpi_unittest(test_statistics_mpi
+        "test_monte_carlo_tools/test_statistics_mpi.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
+)
 ## Test algorithms
 # Test simple update
 add_unittest(test_simple_update
@@ -203,6 +213,12 @@ add_unittest(test_vmc_peps
 add_mpi_unittest(test_vmc_peps_mpi
         "test_algorithm/test_vmc_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "2"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
+
+add_unittest(test_measure
+        "test_algorithm/test_mc_peps_measure.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 

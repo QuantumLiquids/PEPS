@@ -33,8 +33,6 @@ using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
 
 using TPSSampleNNFlipT = SquareTPSSampleNNFlip<GQTEN_Double, U1QN>;
 
-boost::mpi::environment env;
-
 using gqmps2::CaseParamsParserBasic;
 
 char *params_file;
@@ -326,6 +324,7 @@ TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
 }
 
 int main(int argc, char *argv[]) {
+  boost::mpi::environment env;
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   params_file = argv[1];
