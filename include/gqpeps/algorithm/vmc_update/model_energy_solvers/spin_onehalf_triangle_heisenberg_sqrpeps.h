@@ -223,7 +223,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
     }
   }
   res.energy_loc = energy_loc;
-  res.one_point_functions_loc.reserve(tn.rows() * tn.cols() * 3);
+  res.one_point_functions_loc.reserve(tn.rows() * tn.cols());
   for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }

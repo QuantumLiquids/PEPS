@@ -60,6 +60,11 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
+          if (std::abs(psi_ex * inv_psi) > 1.0e8) {
+            std::cerr << "psi_exchange : " << std::scientific << psi_ex
+                      << ", psi_0 : " << std::scientific << tps_sample->amplitude
+                      << std::endl;
+          }
           energy += (-0.25 + psi_ex * inv_psi * 0.5);
         }
         tn.BTenMoveStep(RIGHT);
@@ -86,6 +91,11 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
+        if (std::abs(psi_ex * inv_psi) > 1.0e8) {
+          std::cerr << "psi_exchange : " << std::scientific << psi_ex
+                    << ", psi_0 : " << std::scientific << tps_sample->amplitude
+                    << std::endl;
+        }
         energy += (-0.25 + psi_ex * inv_psi * 0.5);
       }
       if (row < tn.rows() - 2) {
@@ -95,9 +105,6 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
     if (col < tn.cols() - 1) {
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
-  }
-  if (energy < -1.0e8) {
-    std::cout << "Warning: sample's energy = " << energy << std::endl;
   }
   return energy;
 }
