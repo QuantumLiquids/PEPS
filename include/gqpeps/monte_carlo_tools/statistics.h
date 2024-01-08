@@ -48,10 +48,17 @@ double Variance(const std::vector<T> data,
   size_t data_size = data.size();
   std::vector<T> diff(data_size);
   std::transform(data.begin(), data.end(), diff.begin(), [mean](T x) { return x - mean; });
+#if __cplusplus < 202002L
+  double sq_sum = 0.0;
+  for (const auto &num : diff) {
+    sq_sum += std::norm(num);
+  }
+#else
   double sq_sum = std::transform_reduce(diff.begin(), diff.end(), 0.0, std::plus{},
                                         [](const T &num) {
                                           return std::norm(num);
                                         });
+#endif
   auto const count = static_cast<double>(data_size);
   return sq_sum / count;
 }
