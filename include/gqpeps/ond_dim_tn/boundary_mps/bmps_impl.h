@@ -268,6 +268,7 @@ bool MultipleMPOResCheck_(const typename BMPS<TenElemT, QNT>::TransferMPO &mpo, 
 }
 
 /**
+ * MultipleMPO
  *         3
  *         |
  *      0--t--2
@@ -303,23 +304,16 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
       BMPS<TenElemT, QNT> res(position_, N);
       IndexT idx1;
       if (MPOIndex(position_) < 2) {
-        idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
-      } else {
-        idx1 = InverseIndex(mpo.back()->GetIndex(pre_post));
+        std::reverse(mpo.begin(), mpo.end());
       }
+      idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
       IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
       Tensor r = IndexCombine<TenElemT, QNT>(idx1, idx2, IN);
       r.Transpose({2, 0, 1});
       for (size_t i = 0; i < N; i++) {
         Tensor tmp1, tmp2;
         Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
-        size_t mpo_idx;
-        if (MPOIndex(position_) < 2) {
-          mpo_idx = i;
-        } else {
-          mpo_idx = N - 1 - i;
-        }
-        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[mpo_idx], 3, pre_post, 2, tmp2);
+        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, pre_post, 2, tmp2);
         res.alloc(i);
         if (i < this->size() - 1) {
           tmp2.Transpose({1, 3, 2, 0});
@@ -344,13 +338,11 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
     }
     case VARIATION2Site: {
       BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmin, Dmax, trunc_err);
-      if (position_ == RIGHT || position_ == UP) {
-        std::reverse(mpo.begin(), mpo.end());
-      }
+      //here mpo was reverse for (position_ == RIGHT || position_ == UP)
       BMPS<TenElemT, QNT> res_dag(res_init);
       for (size_t i = 0; i < res_dag.size(); i++) {
         res_dag[i].Dag();
-      } //initial guess for the result
+      }
 
       std::vector<Tensor> lenvs, renvs;  // from the view of down mps
       lenvs.reserve(N - 1);
@@ -490,9 +482,6 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
     case VARIATION1Site: {
       // Copy the code from VARIATIONAL2Site
       BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmax, Dmax, 0.0);
-      if (position_ == RIGHT || position_ == UP) {
-        std::reverse(mpo.begin(), mpo.end());
-      }
       BMPS<TenElemT, QNT> res_dag(res_init);
       for (size_t i = 0; i < res_dag.size(); i++) {
         res_dag[i].Dag();

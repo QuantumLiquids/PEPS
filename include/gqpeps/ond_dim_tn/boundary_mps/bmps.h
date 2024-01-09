@@ -34,10 +34,9 @@ struct BMPSTruncatePara {
   BMPSTruncatePara(void) = default;
 
   BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
-                   CompressMPSScheme compress_scheme = VARIATION2Site)
+                   CompressMPSScheme compress_scheme)
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme) {}
 };
-
 
 /**
  *      1
@@ -147,7 +146,8 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
   BMPS
   InitGuessForVariationalMPOMultiplicationWithPhyIdx_(TransferMPO &, const size_t, const size_t, const double) const;
 
-  const BMPSPOSITION position_; //possible to remove this member and replace it with function parameter if the function needs
+  const BMPSPOSITION
+      position_; //possible to remove this member and replace it with function parameter if the function needs
   int center_;
   std::vector<MPSTenCanoType> tens_cano_type_;
 

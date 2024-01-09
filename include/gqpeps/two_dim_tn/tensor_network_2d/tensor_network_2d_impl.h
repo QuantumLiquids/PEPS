@@ -230,6 +230,13 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen(const gqpeps::BTenPOSITION positio
   bten_set_[position].emplace_back(ten);
 }
 
+template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::TruncateBTen(const gqpeps::BTenPOSITION position, const size_t length) {
+  auto &btens = bten_set_.at(position);
+  if (btens.size() > length) {
+    btens.resize(length);
+  }
+}
 ///< slice_num1 is the small row/col value.
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::InitBTen2(const BTenPOSITION position, const size_t slice_num1) {
@@ -513,7 +520,7 @@ void TensorNetwork2D<TenElemT, QNT>::BMPSMoveStep(const BMPSPOSITION position, c
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::BTenMoveStep(const BTenPOSITION position) {
   bten_set_[position].pop_back();
-  GrowBTenStep_(Opposite(position));
+  GrowBTenStep(Opposite(position));
 }
 
 template<typename TenElemT, typename QNT>
@@ -523,7 +530,7 @@ void TensorNetwork2D<TenElemT, QNT>::BTen2MoveStep(const BTenPOSITION position, 
 }
 
 template<typename TenElemT, typename QNT>
-void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep_(const BTenPOSITION post) {
+void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep(const BTenPOSITION post) {
   size_t ctrct_mpo_start_idx = (size_t(post) + 3) % 4;
   BMPSPOSITION pre_post = BMPSPOSITION(ctrct_mpo_start_idx);
   BMPSPOSITION next_post = BMPSPOSITION((size_t(post) + 1) % 4);

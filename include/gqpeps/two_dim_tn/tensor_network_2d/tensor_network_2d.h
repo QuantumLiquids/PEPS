@@ -98,6 +98,13 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
 
   void InitBTen2(const BTenPOSITION position, const size_t slice_num1);
 
+  /**
+ *
+ * @param post the postion of the boundary tensor which will be grown.
+ * @note the data of bmps should just clip one layer of mpo.
+ */
+  void GrowBTenStep(const BTenPOSITION post);
+
   //< if init = false, the existed environment tensor data is correct.
   void
   GrowFullBTen(const BTenPOSITION position, const size_t slice_num, const size_t remain_sites = 2, bool init = true);
@@ -111,6 +118,7 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
    */
   void BTenMoveStep(const BTenPOSITION position);
 
+  void TruncateBTen(const BTenPOSITION position, const size_t length);
   void BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1);
 
   void UpdateSiteConfig(const SiteIdx &site, const size_t update_config, const SITPS &tps,
@@ -156,13 +164,6 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
   size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const BMPSTruncatePara &);
 
   size_t GrowBMPSStep_(const BMPSPOSITION position, const BMPSTruncatePara &);
-
-  /**
-   *
-   * @param post the postion of the boundary tensor which will be grown.
-   * @note the data of bmps should just clip one layer of mpo.
-   */
-  void GrowBTenStep_(const BTenPOSITION post);
 
   /**
    *

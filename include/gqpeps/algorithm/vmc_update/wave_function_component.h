@@ -33,7 +33,7 @@ class WaveFunctionComponent {
 };
 
 template<typename TenElemT, typename QNT>
-BMPSTruncatePara WaveFunctionComponent<TenElemT, QNT>::trun_para = BMPSTruncatePara(0, 0, 0.0);
+BMPSTruncatePara WaveFunctionComponent<TenElemT, QNT>::trun_para = BMPSTruncatePara(0, 0, 0.0, VARIATION2Site);
 
 }//gqpeps
 
