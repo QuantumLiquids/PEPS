@@ -616,6 +616,15 @@ double SquareLatticePEPS<TenElemT, QNT>::SingleSiteProject(const SquareLatticePE
  * @tparam QNT
  * @param site
  * @return physical index 0, auxiliary indexes follow original order
+ *
+ * res:
+ *          3
+ *          |
+ *          |
+ *    0-----T------2   and physical idx = 4
+ *          |
+ *          |
+ *          1
  */
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(const SiteIdx &site) const {
@@ -629,6 +638,17 @@ GQTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(co
 }
 
 /**
+ *
+ *      |             |
+ *      |             |
+ * -----B-------------A--------
+ *      |             |
+ *      |             |
+ *      |             |
+ * -----C----------------------
+ *      |             |
+ *      |             |
+ *
  *
  * @tparam TenElemT
  * @tparam QNT
@@ -718,6 +738,15 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
 
 /**
  *
+ *      |             |
+ *      |             |
+ * -------------------A--------
+ *      |             |
+ *      |             |
+ *      |             |
+ * -----C-------------B--------
+ *      |             |
+ *      |             |
  * @tparam TenElemT
  * @tparam QNT
  * @param gate_ten  order of the indexes: upper-right site; lower-right site; lower-left site.
@@ -776,8 +805,8 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareL
    *       4
    *       |
    *  0---vt2--2, physical index = 3
-   *      |
-   *      1
+   *       |
+   *       1
    */
   norm *= s2.Normalize();
   lambda_horiz({right_down_site}) = s2;
@@ -797,6 +826,130 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareL
   assert(physical_index == Gamma(upper_site).GetIndex(4));
   assert(physical_index == Gamma(left_site).GetIndex(4));
   assert(physical_index == Gamma(right_down_site).GetIndex(4));
+#endif
+  return norm;
+}
+
+/**
+ *
+ *      |             |
+ *      |             |
+ * -----A----------------------
+ *      |             |
+ *      |             |
+ *      |             |
+ * -----B-------------C--------
+ *      |             |
+ *      |             |
+ * @tparam TenElemT
+ * @tparam QNT
+ * @param gate_ten  order of the indexes: upper-left site; lower-left site; lower-right site.
+ * @param upper_site
+ * @param trunc_para
+ * @return
+ */
+template<typename TenElemT, typename QNT>
+double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const GQTensor<TenElemT, QNT> &gate_ten,
+                                                                  const gqpeps::SiteIdx &upper_left_site,
+                                                                  const gqpeps::SimpleUpdateTruncatePara &trunc_para) {
+  double norm = 1;
+  size_t row = upper_left_site[0], col = upper_left_site[1];
+  SiteIdx lower_left_site = {row + 1, col};
+  SiteIdx lower_right_site = {row + 1, col + 1};
+#ifndef NDEBUG
+  auto index_1 = Gamma(upper_left_site).GetIndexes();
+  auto index_2 = Gamma(lower_left_site).GetIndexes();
+  auto index_3 = Gamma(lower_right_site).GetIndexes();
+#endif
+  TenT tmp_ten[11], q0, r0, q1, r1;
+  tmp_ten[0] = Eat3SurroundLambdas_(upper_left_site, DOWN);
+  QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
+  tmp_ten[1] = Eat3SurroundLambdas_(lower_right_site, LEFT);
+  QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
+  /**
+   *       2
+   *       |
+   *  3---q1---1
+   *      |
+   *      0
+   *
+   */
+  tmp_ten[2] = EatSurroundLambdas_(lower_left_site);
+  Contract<TenElemT, QNT, true, false>(r0, tmp_ten[2], 2, 3, 1, tmp_ten[3]);
+  Contract<TenElemT, QNT, true, false>(tmp_ten[3], r1, 5, 2, 1, tmp_ten[4]);
+  Contract(tmp_ten + 4, {1, 2, 6}, &gate_ten, {0, 1, 2}, tmp_ten + 5);
+
+  /**
+   *  tmp_ten[5] is a rank-7 tensor
+   *         0
+   *         |
+   *  1--tmp_ten[5]--3, physical index = 4,5,6, with order upper-left site->lower-left site->lower-right site.
+   *        |
+   *        2
+   */
+  tmp_ten[5].Transpose({0, 4, 5, 1, 2, 6, 3}); //(0,4) for upper site, (5,1,2) for left-lower site, (6,3) for right site
+  TenT u1, vt1, u2, vt2;
+  DTensor s1, s2;
+  double trunc_err;
+  size_t D;
+  gqten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
+             trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+             &u1, &s1, &vt1, &trunc_err, &D);
+  lambda_horiz({lower_right_site}) = s1;
+  tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_right_site, LEFT, trunc_para.trunc_err);
+  /**
+   *       3
+   *       |
+   *  0--tmp6--2    no phy idx
+   *      |
+   *      1
+   */
+  Gamma(lower_right_site) = TenT();
+  Contract<TenElemT, QNT, true, true>(vt1, tmp_ten[6], 2, 0, 1, Gamma(lower_right_site));
+  Gamma(lower_right_site).Transpose({0, 2, 3, 4, 1});
+
+  Contract(&u1, {5}, &s1, {0}, &tmp_ten[7]);
+  gqten::SVD(tmp_ten + 7, 2, qn0_, trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+             &u2, &s2, &vt2, &trunc_err, &D);
+  /**
+   *       0
+   *       |
+   *  2---vt2--4, physical index = 1
+   *       |
+   *       3
+   */
+#ifndef NDEBUG
+  assert(vt2.GetIndex(1) == index_2.back());
+#endif
+  norm *= s2.Normalize();
+  lambda_vert({lower_left_site}) = s2;
+  tmp_ten[8] = QTenSplitOutLambdas_(q0, upper_left_site, DOWN, trunc_para.trunc_err);
+/*
+ *        1
+ *        |
+ *  2--tmp_ten[8]--0
+ *        |
+ *        3
+ */
+  Gamma(upper_left_site) = TenT();
+  Contract<TenElemT, QNT, true, true>(tmp_ten[8], u2, 3, 0, 1, Gamma(upper_left_site));
+  Gamma(upper_left_site).Transpose({2, 4, 0, 1, 3});
+
+  auto inv_lam = ElementWiseInv(s1, trunc_para.trunc_err);
+  Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
+  inv_lam = ElementWiseInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
+  Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 3, 0, 1, tmp_ten[10]);
+  inv_lam = ElementWiseInv(lambda_horiz({row + 1, col}), trunc_para.trunc_err);
+  Gamma({lower_left_site}) = TenT();
+  Contract<TenElemT, QNT, false, false>(tmp_ten[10], inv_lam, 3, 1, 1, Gamma({lower_left_site}));
+  Gamma({lower_left_site}).Transpose({4, 0, 1, 2, 3});
+#ifndef NDEBUG
+  auto index_1p = Gamma(upper_left_site).GetIndexes();
+  auto index_2p = Gamma(lower_left_site).GetIndexes();
+  auto index_3p = Gamma(lower_right_site).GetIndexes();
+  assert(index_1.back() == index_1p.back());
+  assert(index_2.back() == index_2p.back());
+  assert(index_3.back() == index_3p.back());
 #endif
   return norm;
 }

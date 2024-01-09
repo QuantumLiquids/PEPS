@@ -127,7 +127,6 @@ class SquareLatticePEPS {
   // if the bond dimensions of each lambda are the same, except boundary lambdas
   bool IsBondDimensionEven(void) const;
 
-
   double SingleSiteProject(
       const TenT &gate_ten,
       const SiteIdx &site
@@ -149,7 +148,13 @@ class SquareLatticePEPS {
 
   double LowerRightTriangleProject(
       const TenT &gate_ten,
-      const SiteIdx &upper_site,
+      const SiteIdx &upper_right_site,
+      const SimpleUpdateTruncatePara &trunc_para
+  );
+
+  double LowerLeftTriangleProject(
+      const TenT &gate_ten,
+      const SiteIdx &upper_left_site,
       const SimpleUpdateTruncatePara &trunc_para
   );
 
@@ -179,7 +184,6 @@ class SquareLatticePEPS {
   size_t rows_; // Number of rows in the SquareLatticePEPS
   size_t cols_; // Number of columns in the SquareLatticePEPS
 };
-
 
 template<typename TenElemT, typename QNT>
 const QNT SquareLatticePEPS<TenElemT, QNT>::qn0_ = QNT::Zero();
