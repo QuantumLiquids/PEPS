@@ -107,7 +107,7 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
           diag_corr.push_back(psi_ex * inv_psi);
         }
       }
-      tps_sample(site1) = (*split_index_tps)(site1)[config(site1)]; // change back
+      tn(site1) = (*split_index_tps)(site1)[config(site1)]; // change back
 
       if (config(site1) == 1) {
         for (size_t i = 1; i <= lx / 2; i++) {  //sp(i) * sm(j) = 0

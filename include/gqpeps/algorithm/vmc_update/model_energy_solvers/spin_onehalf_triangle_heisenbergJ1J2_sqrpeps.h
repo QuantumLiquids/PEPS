@@ -28,6 +28,11 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<TenElemT, Q
       TensorNetwork2D<TenElemT, QNT> &hole_res
   );
 
+  template<typename WaveFunctionComponentType>
+  ObservablesLocal<TenElemT> SampleMeasure(
+      const SITPS *sitps,
+      WaveFunctionComponentType *tps_sample
+  );
  private:
   double j2_;
 };
@@ -168,6 +173,19 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     }
   }
   return e1 + j2_ * e2;
+}
+
+template<typename TenElemT, typename QNT>
+template<typename WaveFunctionComponentType>
+ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::SampleMeasure(
+    const SITPS *split_index_tps,
+    WaveFunctionComponentType *tps_sample
+) {
+
+
+
+
+
 }
 
 }//gqpeps

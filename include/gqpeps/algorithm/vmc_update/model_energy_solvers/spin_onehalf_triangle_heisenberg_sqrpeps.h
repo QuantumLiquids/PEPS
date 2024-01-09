@@ -136,7 +136,9 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
 
   TenElemT energy_loc(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
+  const size_t lx = tn.cols();
   res.bond_energys_loc.reserve(tn.rows() * tn.cols() * 3);
+  res.two_point_functions_loc.reserve(tn.cols() / 2 * 3);
   const Configuration &config = tps_sample->config;
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNFlip<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
@@ -165,6 +167,49 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
         tn.BTenMoveStep(RIGHT);
       }
     }
+
+    if (row == tn.rows() / 2) { //measure correlation in the middle bonds
+      SiteIdx site1 = {row, lx / 4};
+
+      // sz(i) * sz(j)
+      double sz1 = config(site1) - 0.5;
+      for (size_t i = 1; i <= lx / 2; i++) {
+        SiteIdx site2 = {row, lx / 4 + i};
+        double sz2 = config(site2) - 0.5;
+        res.two_point_functions_loc.push_back(sz1 * sz2);
+      }
+
+      std::vector<TenElemT> diag_corr(lx / 4);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
+      tn(site1) = (*split_index_tps)(site1)[1 - config(site1)]; //temporally change
+      tn.TruncateBTen(LEFT, lx / 4); // may be above two lines should be summarized as an API
+      tn.GrowBTenStep(LEFT);
+      tn.GrowFullBTen(RIGHT, row, lx / 4 + 1, false);
+      tn.GrowFullBTen(LEFT, row, lx / 4 + 1, false);
+      for (size_t i = 1; i <= lx / 2; i++) {
+        SiteIdx site2 = {row, lx / 4 + i};
+        //sm(i) * sp(j)
+        if (config(site2) == config(site1)) {
+          diag_corr.push_back(0.0);
+        } else {
+          TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1], HORIZONTAL);
+          diag_corr.push_back(psi_ex * inv_psi);
+        }
+      }
+      tn(site1) = (*split_index_tps)(site1)[config(site1)]; // change back
+
+      if (config(site1) == 1) {
+        for (size_t i = 1; i <= lx / 2; i++) {  //sp(i) * sm(j) = 0
+          res.two_point_functions_loc.push_back(0.0);
+        }
+        res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), diag_corr.begin(), diag_corr.end());
+      } else {
+        res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), diag_corr.begin(), diag_corr.end());
+        for (size_t i = 1; i <= lx / 2; i++) {  //sm(i) * sp(j) = 0
+          res.two_point_functions_loc.push_back(0.0);
+        }
+      }
+    }
+
     if (row < tn.rows() - 1) {
       //calculate J2 energy
       tn.InitBTen2(LEFT, row);
@@ -227,7 +272,6 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
   for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }
-  res.two_point_functions_loc = std::vector<TenElemT>();
   return res;
 }
 

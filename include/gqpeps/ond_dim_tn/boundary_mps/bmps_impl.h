@@ -303,7 +303,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
     case SVD_COMPRESS: {
       BMPS<TenElemT, QNT> res(position_, N);
       IndexT idx1;
-      if (MPOIndex(position_) < 2) {
+      if (MPOIndex(position_) > 1) {
         std::reverse(mpo.begin(), mpo.end());
       }
       idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
