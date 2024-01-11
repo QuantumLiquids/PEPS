@@ -123,21 +123,22 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
 ) {
   ObservablesLocal<TenElemT> res;
   TenElemT energy(0);
+  const double bond_energy_extremly_large = 1.0e5;
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
-  const size_t lx = tn.cols();
-  res.bond_energys_loc.reserve(tn.rows() * tn.cols() * 2);
-  res.two_point_functions_loc.reserve(tn.cols() / 2 * 3);
+  const size_t lx = tn.cols(), ly = tn.rows();
+  res.bond_energys_loc.reserve(lx * ly * 2);
+  res.two_point_functions_loc.reserve(lx / 2 * 3);
   const Configuration &config = tps_sample->config;
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNFlip<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
-  for (size_t row = 0; row < tn.rows(); row++) {
+  for (size_t row = 0; row < ly; row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
     tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
-    for (size_t col = 0; col < tn.cols(); col++) {
+    for (size_t col = 0; col < lx; col++) {
       const SiteIdx site1 = {row, col};
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
@@ -149,17 +150,22 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
-          if (std::abs(psi_ex * inv_psi) > 1.0e8) {
-            std::cerr << "Site : (" << row << ", " << col << ") "
+          TenElemT ratio = psi_ex * inv_psi;
+          if (std::abs(ratio) > bond_energy_extremly_large) {
+            std::cout << "Warning for possible numeric floating point err: \n"
+                      << "Site : (" << row << ", " << col << ") "
                       << "Bond Orientation :" << "Horizontal"
                       << "psi_exchange : " << std::scientific << psi_ex
                       << ", psi_0 : " << std::scientific << tps_sample->amplitude
+                      << ", ratio : " << std::scientific << ratio
                       << "original tensor norms : (" << tn(site1).Norm2() << ", " << tn(site2).Norm2() << ") "
                       << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Norm2()
                       << ", " << (*split_index_tps)(site2)[config(site1)].Norm2() << ") "
                       << std::endl;
+            // set the bond energy = 0.0
+          } else {
+            horizontal_bond_energy = (-0.25 + ratio * 0.5);
           }
-          horizontal_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
         }
         energy += horizontal_bond_energy;
         res.bond_energys_loc.push_back(horizontal_bond_energy);
@@ -229,17 +235,22 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
-        if (std::abs(psi_ex * inv_psi) > 1.0e8) {
-          std::cerr << "Site : (" << row << ", " << col << ") "
+        TenElemT ratio = psi_ex * inv_psi;
+        if (std::abs(ratio) > bond_energy_extremly_large) {
+          std::cout << "Warning for possible numeric floating point err: \n"
+                    << "Site : (" << row << ", " << col << ") "
                     << "Bond Orientation :" << "Vertical"
                     << "psi_exchange : " << std::scientific << psi_ex
                     << ", psi_0 : " << std::scientific << tps_sample->amplitude
+                    << ", ratio : " << std::scientific << ratio
                     << "original tensor norms : (" << tn(site1).Norm2() << ", " << tn(site2).Norm2() << ") "
                     << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Norm2()
                     << ", " << (*split_index_tps)(site2)[config(site1)].Norm2() << ") "
                     << std::endl;
+          // set the bond energy = 0.0
+        } else {
+          vertical_bond_energy = (-0.25 + ratio * 0.5);
         }
-        vertical_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
       }
       energy += vertical_bond_energy;
       res.bond_energys_loc.push_back(vertical_bond_energy);
