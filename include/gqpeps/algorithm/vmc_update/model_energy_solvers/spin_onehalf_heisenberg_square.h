@@ -39,6 +39,7 @@ template<typename WaveFunctionComponentType, bool calchols>
 TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_index_tps,
                                                                        WaveFunctionComponentType *tps_sample,
                                                                        TensorNetwork2D<TenElemT, QNT> &hole_res) {
+  const double bond_energy_extremly_large = 1.0e5;
   TenElemT energy(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
@@ -66,12 +67,22 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
-          if (std::abs(psi_ex * inv_psi) > 1.0e8) {
-            std::cerr << "psi_exchange : " << std::scientific << psi_ex
+          TenElemT ratio = psi_ex * inv_psi;
+          if (std::abs(ratio) > bond_energy_extremly_large) {
+            std::cout << "Warning for possible numeric floating point err: \n"
+                      << "Site : (" << row << ", " << col << ") "
+                      << "Bond Orientation :" << "Horizontal"
+                      << "psi_exchange : " << std::scientific << psi_ex
                       << ", psi_0 : " << std::scientific << tps_sample->amplitude
+                      << ", ratio : " << std::scientific << ratio
+                      << "original tensor norms : (" << tn(site1).Get2Norm() << ", " << tn(site2).Get2Norm() << ") "
+                      << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Get2Norm()
+                      << ", " << (*split_index_tps)(site2)[config(site1)].Get2Norm() << ") "
                       << std::endl;
+            // set the bond energy = 0.0
+          } else {
+            energy += (-0.25 + ratio * 0.5);
           }
-          energy += (-0.25 + psi_ex * inv_psi * 0.5);
         }
         tn.BTenMoveStep(RIGHT);
       }
@@ -97,12 +108,22 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
-        if (std::abs(psi_ex * inv_psi) > 1.0e8) {
-          std::cerr << "psi_exchange : " << std::scientific << psi_ex
+        TenElemT ratio = psi_ex * inv_psi;
+        if (std::abs(ratio) > bond_energy_extremly_large) {
+          std::cout << "Warning for possible numeric floating point err: \n"
+                    << "Site : (" << row << ", " << col << ") "
+                    << "Bond Orientation :" << "Vertical"
+                    << "psi_exchange : " << std::scientific << psi_ex
                     << ", psi_0 : " << std::scientific << tps_sample->amplitude
+                    << ", ratio : " << std::scientific << ratio
+                    << "original tensor norms : (" << tn(site1).Get2Norm() << ", " << tn(site2).Get2Norm() << ") "
+                    << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Get2Norm()
+                    << ", " << (*split_index_tps)(site2)[config(site1)].Get2Norm() << ") "
                     << std::endl;
+          // set the bond energy = 0.0
+        } else {
+          energy += (-0.25 + ratio * 0.5);
         }
-        energy += (-0.25 + psi_ex * inv_psi * 0.5);
       }
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
@@ -158,11 +179,11 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
                       << "psi_exchange : " << std::scientific << psi_ex
                       << ", psi_0 : " << std::scientific << tps_sample->amplitude
                       << ", ratio : " << std::scientific << ratio
-                      << "original tensor norms : (" << tn(site1).Norm2() << ", " << tn(site2).Norm2() << ") "
-                      << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Norm2()
-                      << ", " << (*split_index_tps)(site2)[config(site1)].Norm2() << ") "
+                      << "original tensor norms : (" << tn(site1).Get2Norm() << ", " << tn(site2).Get2Norm() << ") "
+                      << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Get2Norm()
+                      << ", " << (*split_index_tps)(site2)[config(site1)].Get2Norm() << ") "
                       << std::endl;
-            // set the bond energy = 0.0
+            horizontal_bond_energy = 0.0;
           } else {
             horizontal_bond_energy = (-0.25 + ratio * 0.5);
           }
@@ -243,11 +264,11 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
                     << "psi_exchange : " << std::scientific << psi_ex
                     << ", psi_0 : " << std::scientific << tps_sample->amplitude
                     << ", ratio : " << std::scientific << ratio
-                    << "original tensor norms : (" << tn(site1).Norm2() << ", " << tn(site2).Norm2() << ") "
-                    << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Norm2()
-                    << ", " << (*split_index_tps)(site2)[config(site1)].Norm2() << ") "
+                    << "original tensor norms : (" << tn(site1).Get2Norm() << ", " << tn(site2).Get2Norm() << ") "
+                    << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Get2Norm()
+                    << ", " << (*split_index_tps)(site2)[config(site1)].Get2Norm() << ") "
                     << std::endl;
-          // set the bond energy = 0.0
+          vertical_bond_energy = 0.0;
         } else {
           vertical_bond_energy = (-0.25 + ratio * 0.5);
         }

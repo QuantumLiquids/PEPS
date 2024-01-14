@@ -37,19 +37,7 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QN
   }
 
   //generate the boundary bmps_set_[position][0]
-  for (size_t post_int = 0; post_int < 4; post_int++) {
-    const BMPSPOSITION post = BMPSPOSITION(post_int);
-    SiteIdx refer_site;
-    if (post_int < 2) {
-      refer_site = {this->rows() - 1, 0}; // left,down
-    } else {
-      refer_site = {0, this->cols() - 1}; //right, up
-    }
-    IndexT idx = InverseIndex((*this)(refer_site).GetIndex(post));
-    const size_t mps_size = this->length(Rotate(Orientation(post)));
-    BMPS<TenElemT, QNT> boundary_bmps(post, mps_size, idx);
-    bmps_set_[post].push_back(boundary_bmps);
-  }
+  InitBMPS();
 }
 
 template<typename TenElemT, typename QNT>
@@ -58,6 +46,27 @@ TensorNetwork2D<TenElemT, QNT> &TensorNetwork2D<TenElemT, QNT>::operator=(const 
   bmps_set_ = tn.bmps_set_;
   bten_set_ = tn.bten_set_;
   return *this;
+}
+
+template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::InitBMPS(void) {
+  for (size_t post_int = 0; post_int < 4; post_int++) {
+    InitBMPS((BMPSPOSITION) post_int);
+  }
+}
+
+template<typename TenElemT, typename QNT>
+void TensorNetwork2D<TenElemT, QNT>::InitBMPS(const gqpeps::BMPSPOSITION post) {
+  SiteIdx refer_site;
+  if (post < 2) {
+    refer_site = {this->rows() - 1, 0}; // left,down
+  } else {
+    refer_site = {0, this->cols() - 1}; //right, up
+  }
+  IndexT idx = InverseIndex((*this)(refer_site).GetIndex(post));
+  const size_t mps_size = this->length(Rotate(Orientation(post)));
+  BMPS<TenElemT, QNT> boundary_bmps(post, mps_size, idx);
+  bmps_set_[post].push_back(boundary_bmps);
 }
 
 template<typename TenElemT, typename QNT>

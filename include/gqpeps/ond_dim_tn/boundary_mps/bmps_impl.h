@@ -369,7 +369,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
         renvs.emplace_back(renv_next);
       }
 
-      Tensor s12bond_last;
+      GQTensor<GQTEN_Double, QNT> s12bond_last;
       for (size_t iter = 0; iter < iter_max; iter++) {
         //left move
         GQTensor<GQTEN_Double, QNT> s;
@@ -463,7 +463,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
 
       delete res_dag(0);
       res_dag(0) = new Tensor();
-      Contract<TenElemT, QNT, true, true>(u, s, 2, 0, 1, res_dag[0]);
+      Contract(&u, &s, {{2}, {0}}, res_dag(0));
       pvt->Transpose({0, 2, 1});
       delete (res_dag(1));
       res_dag(1) = pvt;
@@ -512,7 +512,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
         renvs.emplace_back(renv_next);
       }
 
-      Tensor s12bond_last;
+      GQTensor<GQTEN_Double, QNT> s12bond_last;
       // do once 2 site update to make sure the bond dimension = Dmax
       for (size_t iter = 0; iter < 1; iter++) {
         //right moving
@@ -608,7 +608,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
 
       delete res_dag(0);
       res_dag(0) = new Tensor();
-      Contract<TenElemT, QNT, true, true>(u, s, 2, 0, 1, res_dag[0]);
+      Contract(&u, &s, {{2}, {0}}, res_dag(0));
       pvt->Transpose({0, 2, 1});
       delete (res_dag(1));
       res_dag(1) = pvt;

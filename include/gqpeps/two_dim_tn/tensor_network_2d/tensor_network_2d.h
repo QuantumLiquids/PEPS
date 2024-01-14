@@ -55,6 +55,10 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
     return bmps_set_[position];
   }
 
+  void InitBMPS();
+
+  void InitBMPS(const BMPSPOSITION post);
+
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
   GenerateBMPSApproach(BMPSPOSITION post, const BMPSTruncatePara &trunc_para);
 
