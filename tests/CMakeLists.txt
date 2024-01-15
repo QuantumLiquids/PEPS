@@ -192,10 +192,13 @@ add_unittest(test_statistics
         "test_monte_carlo_tools/test_statistics.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
-
 add_mpi_unittest(test_statistics_mpi
         "test_monte_carlo_tools/test_statistics_mpi.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
+)
+add_unittest(test_non_detailed_balance_mcmc
+        "test_monte_carlo_tools/test_non_detailed_balance_mcmc.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 ## Test algorithms
 # Test simple update

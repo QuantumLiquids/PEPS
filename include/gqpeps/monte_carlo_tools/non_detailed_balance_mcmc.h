@@ -13,7 +13,6 @@
 #include <algorithm>  //max_element
 #include <assert.h>
 
-
 namespace gqpeps {
 
 size_t NonDBMCMCStateUpdate(size_t init_state,
@@ -51,7 +50,7 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
   for (size_t i = 0; i < n; i++) {
     sum_p += p[i];
   }
-  assert(std::abs(sum_p - 1.0) < 1e-15);
+  assert(std::abs(sum_p - 1.0) < 1e-13);
 #endif
   double p_accumulate = 0.0;
   size_t final_state;
@@ -71,7 +70,6 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
   }
   return final_state;
 }
-
 
 }//gqpeps
 

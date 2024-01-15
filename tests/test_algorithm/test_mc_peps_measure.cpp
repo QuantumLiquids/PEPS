@@ -155,6 +155,20 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
   delete executor;
 }
 
+TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
+  using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<GQTEN_Double, U1QN>;
+  MonteCarloMeasurementExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  Model trianglej1j2_hei_solver(0.2);
+  optimize_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
+  executor = new MonteCarloMeasurementExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
+                                                                                            Ly,
+                                                                                            Lx,
+                                                                                            world,
+                                                                                            trianglej1j2_hei_solver);
+  executor->Execute();
+  delete executor;
+}
+
 int main(int argc, char *argv[]) {
   boost::mpi::environment env;
   testing::InitGoogleTest(&argc, argv);
