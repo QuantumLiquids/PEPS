@@ -13,10 +13,9 @@
 
 #include "gqmps2/utilities.h"       //mock_gqten::SVD
 
-using gqmps2::mock_gqten::SVD;
-
 namespace gqpeps {
 using namespace gqten;
+using gqmps2::mock_gqten::SVD;
 
 template<typename TenElemT, typename QNT>
 SquareLatticePEPS<TenElemT, QNT>::

@@ -238,6 +238,7 @@ class MonteCarloMeasurementExecutor : public Executor {
 
   // observable
   struct SampleData {
+    std::vector<TenElemT> wave_function_amplitude_samples;
     std::vector<TenElemT> energy_samples;
     std::vector<std::vector<TenElemT>> bond_energy_samples;
     std::vector<std::vector<TenElemT>>
@@ -246,13 +247,15 @@ class MonteCarloMeasurementExecutor : public Executor {
         two_point_function_samples;
 
     void Reserve(const size_t sample_num) {
+      wave_function_amplitude_samples.reserve(sample_num);
       energy_samples.reserve(sample_num);
       bond_energy_samples.reserve(sample_num);
       one_point_function_samples.reserve(sample_num);
       two_point_function_samples.reserve(sample_num);
     }
 
-    void PushBack(ObservablesLocal<TenElemT> &&observables_sample) {
+    void PushBack(TenElemT wave_function_amplitude, ObservablesLocal<TenElemT> &&observables_sample) {
+      wave_function_amplitude_samples.push_back(wave_function_amplitude);
       energy_samples.push_back(observables_sample.energy_loc);
       bond_energy_samples.push_back(std::move(observables_sample.bond_energys_loc));
       one_point_function_samples.push_back(std::move(observables_sample.one_point_functions_loc));
@@ -339,7 +342,7 @@ void MonteCarloMeasurementExecutor<TenElemT,
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::MeasureSample_() {
   ObservablesLocal<TenElemT> observables_local = measurement_solver_.SampleMeasure(&split_index_tps_, &tps_sample_);
-  sample_data_.PushBack(std::move(observables_local));
+  sample_data_.PushBack(tps_sample_.amplitude, std::move(observables_local));
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
@@ -374,10 +377,14 @@ MonteCarloMeasurementExecutor<TenElemT,
   tps_sample_.config.Dump(tps_path, world_.rank());
 
   std::string energy_raw_path = "energy_raw_data/";
+  std::string wf_amplitude_path = "wave_function_amplitudes/";
   if (world_.rank() == kMasterProc && !IsPathExist(energy_raw_path))
     CreatPath(energy_raw_path);
+  if (world_.rank() == kMasterProc && !IsPathExist(wf_amplitude_path))
+    CreatPath(wf_amplitude_path);
   world_.barrier();
   DumpVecData(energy_raw_path + "/energy" + std::to_string(world_.rank()), sample_data_.energy_samples);
+  DumpVecData(energy_raw_path + "/psi" + std::to_string(world_.rank()), sample_data_.wave_function_amplitude_samples);
 
   if (world_.rank() == kMasterProc) {
     res.Dump();
