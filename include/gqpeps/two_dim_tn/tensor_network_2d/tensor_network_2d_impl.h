@@ -712,6 +712,12 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceOneSiteTrace(const SiteIdx &site
   const size_t row = site[0];
   const size_t col = site[1];
   if (mps_orient == HORIZONTAL) {
+#ifndef NDEBUG
+    assert(bmps_set_.at(UP).size() > row);
+    assert(bmps_set_.at(DOWN).size() + 1 > this->rows() - row);
+    assert(bten_set_.at(LEFT).size() > col);
+    assert(bten_set_.at(RIGHT).size() + 1 > this->cols() - col);
+#endif
     const Tensor &up_mps_ten = bmps_set_.at(UP)[row][this->cols() - col - 1];
     const Tensor &down_mps_ten = bmps_set_.at(DOWN)[this->rows() - row - 1][col];
     Contract<TenElemT, QNT, true, true>(up_mps_ten, bten_set_.at(LEFT)[col], 2, 0, 1, tmp[0]);

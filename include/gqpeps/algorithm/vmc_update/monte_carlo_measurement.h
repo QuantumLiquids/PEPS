@@ -384,7 +384,7 @@ MonteCarloMeasurementExecutor<TenElemT,
     CreatPath(wf_amplitude_path);
   world_.barrier();
   DumpVecData(energy_raw_path + "/energy" + std::to_string(world_.rank()), sample_data_.energy_samples);
-  DumpVecData(energy_raw_path + "/psi" + std::to_string(world_.rank()), sample_data_.wave_function_amplitude_samples);
+  DumpVecData(wf_amplitude_path + "/psi" + std::to_string(world_.rank()), sample_data_.wave_function_amplitude_samples);
 
   if (world_.rank() == kMasterProc) {
     res.Dump();

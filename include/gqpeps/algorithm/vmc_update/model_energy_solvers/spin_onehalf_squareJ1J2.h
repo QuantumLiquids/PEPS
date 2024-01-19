@@ -91,21 +91,21 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
         res.two_point_functions_loc.push_back(sz1 * sz2);
       }
 
-      std::vector<TenElemT> diag_corr(lx / 4);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
+      std::vector<TenElemT> diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
       tn(site1) = (*split_index_tps)(site1)[1 - config(site1)]; //temporally change
-      tn.TruncateBTen(LEFT, lx / 4); // may be above two lines should be summarized as an API
+      tn.TruncateBTen(LEFT, lx / 4 + 1); // may be above two lines should be summarized as an API
       tn.GrowBTenStep(LEFT);
-      tn.GrowFullBTen(RIGHT, row, lx / 4 + 1, false);
-      tn.GrowFullBTen(LEFT, row, lx / 4 + 1, false);
+      tn.GrowFullBTen(RIGHT, row, lx / 4 + 2, false);
       for (size_t i = 1; i <= lx / 2; i++) {
         SiteIdx site2 = {row, lx / 4 + i};
         //sm(i) * sp(j)
         if (config(site2) == config(site1)) {
-          diag_corr.push_back(0.0);
+          diag_corr[i-1] = 0.0;
         } else {
-          TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1], HORIZONTAL);
-          diag_corr.push_back(psi_ex * inv_psi);
+          TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
+          diag_corr[i-1]=psi_ex * inv_psi;
         }
+        tn.BTenMoveStep(RIGHT);
       }
       tn(site1) = (*split_index_tps)(site1)[config(site1)]; // change back
 
