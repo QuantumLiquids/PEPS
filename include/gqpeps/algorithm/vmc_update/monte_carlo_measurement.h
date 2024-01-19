@@ -200,7 +200,9 @@ class MonteCarloMeasurementExecutor : public Executor {
     std::vector<TenElemT> two_point_function_errs;
 
     std::vector<TenElemT> energy_auto_corr;
+    std::vector<TenElemT> energy_auto_corr_err;
     std::vector<TenElemT> one_point_functions_auto_corr;
+    std::vector<TenElemT> one_point_functions_auto_corr_err;
 
     Result(void) = default;
 
@@ -266,6 +268,7 @@ class MonteCarloMeasurementExecutor : public Executor {
       Result res_thread;
       res_thread.energy = Mean(energy_samples);
       res_thread.en_err = 0.0;
+      res_thread.bond_energys = AveListOfData(bond_energy_samples);
       res_thread.energy_auto_corr = CalAutoCorrelation(energy_samples, res_thread.energy);
       res_thread.one_point_functions = AveListOfData(one_point_function_samples);
       res_thread.two_point_functions = AveListOfData(two_point_function_samples);
@@ -365,6 +368,15 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
                             world_,
                             res.two_point_functions,
                             res.two_point_function_errs);
+  GatherStatisticListOfData(res_thread.energy_auto_corr,
+                            world_,
+                            res.energy_auto_corr,
+                            res.energy_auto_corr_err);
+  GatherStatisticListOfData(res_thread.one_point_functions_auto_corr,
+                            world_,
+                            res.one_point_functions_auto_corr,
+                            res.one_point_functions_auto_corr_err);
+
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
