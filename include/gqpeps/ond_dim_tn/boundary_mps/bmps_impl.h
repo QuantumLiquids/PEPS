@@ -283,60 +283,27 @@ bool MultipleMPOResCheck_(const typename BMPS<TenElemT, QNT>::TransferMPO &mpo, 
  */
 template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
-BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
+BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme &scheme,
                                  const size_t Dmin, const size_t Dmax,
-                                 const double trunc_err, const size_t iter_max,
-                                 const CompressMPSScheme &scheme) const {
+                                 const double trunc_err,
+                                 const std::optional<double> variational_converge_tol,
+                                 const std::optional<size_t> max_iter //only valid for variational methods
+) const {
   const size_t N = this->size();
   assert(mpo.size() == N);
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;
-  const double converge_tol = 1e-15;  // for variational methods
-  if (N == 2 && scheme != SVD_COMPRESS) {
-    return MultipleMPO(mpo, Dmin, Dmax,
-                       trunc_err, iter_max, SVD_COMPRESS);
+  if (N == 2 && scheme != CompressMPSScheme::SVD_COMPRESS) {
+    return MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
   }
 #ifndef NDEBUG
   auto mpo_original = mpo;
 #endif
   switch (scheme) {
-    case SVD_COMPRESS: {
-      BMPS<TenElemT, QNT> res(position_, N);
-      IndexT idx1;
-      if (MPOIndex(position_) > 1) {
-        std::reverse(mpo.begin(), mpo.end());
-      }
-      idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
-      IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
-      Tensor r = IndexCombine<TenElemT, QNT>(idx1, idx2, IN);
-      r.Transpose({2, 0, 1});
-      for (size_t i = 0; i < N; i++) {
-        Tensor tmp1, tmp2;
-        Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
-        Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, pre_post, 2, tmp2);
-        res.alloc(i);
-        if (i < this->size() - 1) {
-          tmp2.Transpose({1, 3, 2, 0});
-          QNT mps_div = (*this)[i].Div();
-          r = Tensor();
-          QR(&tmp2, 2, mps_div, res(i), &r);
-        } else {
-          auto trivial_idx = tmp2.GetIndex(0);
-          Tensor tmp3({InverseIndex(trivial_idx)});
-          tmp3({0}) = 1.0;
-          Contract(&tmp3, {0}, &tmp2, {0}, res(i));
-          res(i)->Transpose({0, 2, 1});
-        }
-      }
-      for (size_t i = N - 1; i > 0; --i) {
-        res.RightCanonicalizeTruncate(i, Dmin, Dmax, trunc_err);
-      }
-#ifndef NDEBUG
-      MultipleMPOResCheck_(mpo_original, *this, res, position_);
-#endif
-      return res;
+    case CompressMPSScheme::SVD_COMPRESS: {
+      MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
     }
-    case VARIATION2Site: {
+    case CompressMPSScheme::VARIATION2Site: {
       BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmin, Dmax, trunc_err);
       //here mpo was reverse for (position_ == RIGHT || position_ == UP)
       BMPS<TenElemT, QNT> res_dag(res_init);
@@ -370,7 +337,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
       }
 
       GQTensor<GQTEN_Double, QNT> s12bond_last;
-      for (size_t iter = 0; iter < iter_max; iter++) {
+      for (size_t iter = 0; iter < max_iter.value(); iter++) {
         //left move
         GQTensor<GQTEN_Double, QNT> s;
         for (size_t i = 0; i < N - 2; i++) {
@@ -438,7 +405,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
         for (size_t k = 0; k < s.GetActualDataSize(); k++) {
           diff += std::fabs(*(s_data + k) - *(s_last_data + k));
         }
-        if (diff < converge_tol) {
+        if (diff / (*s_data) < variational_converge_tol.value()) {
           break;
         } else {
           s12bond_last = s;
@@ -479,7 +446,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
 #endif
       return res;
     }
-    case VARIATION1Site: {
+    case CompressMPSScheme::VARIATION1Site: {
       // Copy the code from VARIATIONAL2Site
       BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmax, Dmax, 0.0);
       BMPS<TenElemT, QNT> res_dag(res_init);
@@ -512,9 +479,8 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
         renvs.emplace_back(renv_next);
       }
 
-      GQTensor<GQTEN_Double, QNT> s12bond_last;
       // do once 2 site update to make sure the bond dimension = Dmax
-      for (size_t iter = 0; iter < 1; iter++) {
+      {
         //right moving
         GQTensor<GQTEN_Double, QNT> s;
         for (size_t i = 0; i < N - 2; i++) {
@@ -573,21 +539,6 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
           lenvs.pop_back();
           delete pu;
         }
-        if (iter == 0 || s.GetActualDataSize() != s12bond_last.GetActualDataSize()) {
-          s12bond_last = s;
-          continue;
-        }
-        double diff = 0.0;
-        const double *s_data = s.GetRawDataPtr();
-        const double *s_last_data = s12bond_last.GetRawDataPtr();
-        for (size_t k = 0; k < s.GetActualDataSize(); k++) {
-          diff += std::fabs(*(s_data + k) - *(s_last_data + k));
-        }
-        if (diff < converge_tol) {
-          break;
-        } else {
-          s12bond_last = s;
-        }
       }
       Tensor tmp[6];
       Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[0], 2, 0, 1, tmp[0]);
@@ -619,7 +570,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
 
       // one site update begin
       double last_r_norm = 0, r_norm = 0;
-      for (size_t iter = 0; iter < iter_max; iter++) {
+      for (size_t iter = 0; iter < max_iter.value(); iter++) {
         //right moving
         for (size_t i = 0; i < N - 1; i++) {
           Tensor tmp[4];
@@ -642,7 +593,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
         for (size_t i = N - 1; i > 0; i--) {
           Tensor tmp[4];
           Contract<TenElemT, QNT, true, true>((*this)[i], renvs.back(), 2, 0, 1, tmp[0]);
-          Contract<TenElemT, QNT, false, false>(tmp[2], *mpo[i], 1, position_, 2, tmp[1]);
+          Contract<TenElemT, QNT, false, false>(tmp[0], *mpo[i], 1, position_, 2, tmp[1]);
           Contract(tmp + 1, {3, 1}, &lenvs.back(), {1, 2}, tmp + 2);
           tmp[2].Dag();
           Tensor *pq = new Tensor(), r;
@@ -653,12 +604,12 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo,
           res_dag(i) = pq;
           //grow renvs
           Contract(&tmp[1], {2, 0}, res_dag(i), {1, 2}, &tmp[3]);
-          renvs.emplace_back(tmp[5]);
+          renvs.emplace_back(tmp[3]);
           lenvs.pop_back();
 
           r_norm = r.Get2Norm();
         }
-        if (iter == 0 || std::abs(r_norm - last_r_norm) > converge_tol) {
+        if (iter == 0 || std::abs(r_norm - last_r_norm) / std::abs(r_norm) > variational_converge_tol.value()) {
           last_r_norm = r_norm;
           continue;
         } else {
@@ -715,7 +666,7 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;
   switch (scheme) {
-    case SVD_COMPRESS: {
+    case CompressMPSScheme::SVD_COMPRESS: {
       BMPS<TenElemT, QNT> res(position_, this->size());
       IndexT idx1;
       if (position_ > 1) {
@@ -786,12 +737,12 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
       assert(res[res.size() - 1].GetIndex(3).dim() == 1);
       return res;
     }
-    case VARIATION2Site: {
+    case CompressMPSScheme::VARIATION2Site: {
       const double converge_tol = 1e-15;
       size_t N = this->size();
       if (N == 2) {
         return MultipleMPOWithPhyIdx(mpo, Dmin, Dmax,
-                                     trunc_err, iter_max, SVD_COMPRESS);
+                                     trunc_err, iter_max, CompressMPSScheme::SVD_COMPRESS);
       }
       BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplicationWithPhyIdx_(mpo, Dmin, Dmax, trunc_err);
       BMPS<TenElemT, QNT> res_dag(res_init);
@@ -945,10 +896,57 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
 #endif
       return res;
     }
-    case VARIATION1Site: {
+    case CompressMPSScheme::VARIATION1Site: {
 
     }
   }
+}
+
+template<typename TenElemT, typename QNT>
+BMPS<TenElemT, QNT>
+BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(TransferMPO &mpo,
+                                             const size_t Dmin, const size_t Dmax, const double trunc_err) const {
+  const size_t N = this->size();
+#ifndef NDEBUG
+  assert(mpo.size() == N);
+  auto mpo_original = mpo;
+#endif
+  size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
+  size_t next_post = ((size_t) (position_) + 1) % 4;
+  BMPS<TenElemT, QNT> res(position_, N);
+  IndexT idx1;
+  if (MPOIndex(position_) > 1) {
+    std::reverse(mpo.begin(), mpo.end());
+  }
+  idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
+  IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
+  Tensor r = IndexCombine<TenElemT, QNT>(idx1, idx2, IN);
+  r.Transpose({2, 0, 1});
+  for (size_t i = 0; i < N; i++) {
+    Tensor tmp1, tmp2;
+    Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
+    Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, pre_post, 2, tmp2);
+    res.alloc(i);
+    if (i < this->size() - 1) {
+      tmp2.Transpose({1, 3, 2, 0});
+      QNT mps_div = (*this)[i].Div();
+      r = Tensor();
+      QR(&tmp2, 2, mps_div, res(i), &r);
+    } else {
+      auto trivial_idx = tmp2.GetIndex(0);
+      Tensor tmp3({InverseIndex(trivial_idx)});
+      tmp3({0}) = 1.0;
+      Contract(&tmp3, {0}, &tmp2, {0}, res(i));
+      res(i)->Transpose({0, 2, 1});
+    }
+  }
+  for (size_t i = N - 1; i > 0; --i) {
+    res.RightCanonicalizeTruncate(i, Dmin, Dmax, trunc_err);
+  }
+#ifndef NDEBUG
+  MultipleMPOResCheck_(mpo_original, *this, res, position_);
+#endif
+  return res;
 }
 
 template<typename TenElemT, typename QNT>
@@ -979,7 +977,7 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(BMPS::TransferMPO
   for (size_t i = mps_copy.size() - 1; i > 0; --i) {
     mps_copy.RightCanonicalizeTruncate(i, 1, 2, 0.0);
   }
-  auto multip_init = mps_copy.MultipleMPO(mpo, Dmin, Dmax, trunc_err, 0, SVD_COMPRESS);
+  auto multip_init = mps_copy.MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
 
 #ifndef NDEBUG
   for (size_t i = 0; i < multip_init.size(); i++) {
@@ -1019,7 +1017,7 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplicationWithPhyIdx_(BMPS::T
   for (size_t i = mps_copy.size() - 1; i > 0; --i) {
     mps_copy.RightCanonicalizeTruncateWithPhyIdx_(i, 1, 2, 0.0);
   }
-  auto multip_init = mps_copy.MultipleMPOWithPhyIdx(mpo, Dmin, Dmax, trunc_err, 0, SVD_COMPRESS);
+  auto multip_init = mps_copy.MultipleMPOWithPhyIdx(mpo, Dmin, Dmax, trunc_err, 0, CompressMPSScheme::SVD_COMPRESS);
 
 #ifndef NDEBUG
   for (size_t i = 0; i < multip_init.size(); i++) {

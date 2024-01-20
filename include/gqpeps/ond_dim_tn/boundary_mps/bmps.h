@@ -19,7 +19,7 @@ namespace gqpeps {
 using namespace gqten;
 using namespace gqmps2;
 
-enum CompressMPSScheme {
+enum class CompressMPSScheme {
   SVD_COMPRESS,
   VARIATION2Site,
   VARIATION1Site
@@ -120,25 +120,32 @@ class BMPS : public TenVec<GQTensor<TenElemT, QNT>> {
   void Reverse();
 
   void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const double,
-                          const size_t max_iter = 5, //only valid for variational methods
-                          const CompressMPSScheme &scheme = VARIATION2Site);
+                          const size_t max_iter, //only valid for variational methods
+                          const CompressMPSScheme &scheme);
 
   /**
-   * @note For SVD compress, mpo does not change after Multiplication
-   *       For Variational methods, mpo may reverse.
+   * @note mpo will be reversed if the position is RIGHT or UP.
    * @param max_iter
    * @param scheme
    * @return
    */
-  BMPS MultipleMPO(TransferMPO &, const size_t, const size_t, const double,
-                   const size_t max_iter = 5, //only valid for variational methods
-                   const CompressMPSScheme &scheme = VARIATION2Site) const;
+  BMPS MultipleMPO(TransferMPO &, const CompressMPSScheme &,
+                   const size_t, const size_t, const double,
+                   const std::optional<double> variational_converge_tol,//only valid for variational methods
+                   const std::optional<size_t> max_iter
+  ) const;
 
   BMPS MultipleMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const double,
-                             const size_t max_iter = 5, //only valid for variational methods
-                             const CompressMPSScheme &scheme = VARIATION2Site) const;
+                             const size_t max_iter, //only valid for variational methods
+                             const CompressMPSScheme &) const;
 
  private:
+  /**
+   * @note mpo will be reversed if the position is RIGHT or UP.
+   */
+  BMPS MultipleMPOSVDCompress_(TransferMPO &,
+                               const size_t, const size_t, const double) const;
+
   BMPS InitGuessForVariationalMPOMultiplication_(TransferMPO &, const size_t, const size_t, const double) const;
 
   double RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const double);

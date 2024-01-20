@@ -194,252 +194,6 @@ bool SquareLatticePEPS<TenElemT, QNT>::operator==(const SquareLatticePEPS<TenEle
 }
 
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten, const SiteIdx &site,
-                                                                    const BondOrientation &orientation,
-                                                                    const SimpleUpdateTruncatePara &trunc_para) {
-  double norm;
-  const size_t row = site[0], col = site[1];
-  TenT tmp_ten[7];
-  TenT q0, r0, q1, r1;
-  TenT u, vt;
-  double actual_trunc_err;
-  size_t actual_D;
-  TenT inv_lambda;
-#ifndef NDEBUG
-  auto physical_index = Gamma(row, col)->GetIndex(4);
-#endif
-  switch (orientation) {
-    case HORIZONTAL: {
-      /*                          0                                         0
-       *                          |                                         |
-       *                    Lam_v[rows_][cols_]                          Lam_v[rows_][cols_+1]
-       *                          |                                         |
-       *                          1                                         1
-       *                          3                                         3
-       *                          |                                         |
-       *0-Lam_h[rows_][cols_]-1 0-Gamma[rows_][cols_]-2 0-Lam_h[rows_][cols_+1]-1 0-Gamma[rows_][cols_+1]-2 0-Lam_h[rows_][cols_+2]-1
-       *                          |                                         |
-       *                          1                                         1
-       *                          0                                         0
-       *                          |                                         |
-       *                  Lam_v[rows_+1][cols_]                          Lam_v[rows_+1][cols_+1]
-       *                          |                                         |
-       *                          1                                         1
-       */
-      const size_t lcol = col;
-      const size_t rcol = lcol + 1;
-      assert(rcol < Cols());
-      const SiteIdx r_site = {row, rcol};
-
-      //Contract left site 3 lambdas
-      tmp_ten[0] = Eat3SurroundLambdas_(site, RIGHT);
-      QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
-
-      //Contract right site 3 lambdas
-      tmp_ten[1] = Eat3SurroundLambdas_(r_site, LEFT);
-      QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
-
-      Contract(&r0, {2}, lambda_horiz(row, rcol), {0}, tmp_ten + 2);
-      Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
-      Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
-
-      tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_horiz({row, rcol}) = TenT();
-      SVD(tmp_ten + 4, 2, qn0_,
-          trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-          &u, lambda_horiz(row, rcol), &vt,
-          &actual_trunc_err, &actual_D);
-
-      // hand over lambdas from q0, q1, contract u or vt, setting Gammas
-      //left site
-      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, RIGHT, trunc_para.trunc_err);
-      Gamma(site) = TenT();
-      Contract<TenElemT, QNT, false, true>(tmp_ten[5], u, 0, 0, 1, Gamma(site));
-      Gamma(site).Transpose({1, 2, 4, 0, 3});
-
-      tmp_ten[6] = QTenSplitOutLambdas_(q1, r_site, LEFT, trunc_para.trunc_err);
-      Gamma(r_site) = TenT();
-      Contract<TenElemT, QNT, false, false>(tmp_ten[6], vt, 0, 1, 1, Gamma(r_site));
-      Gamma(r_site).Transpose({4, 0, 1, 2, 3});
-      norm = lambda_horiz(row, col + 1)->Normalize();
-      break;
-    }
-    case VERTICAL: {
-      /*                           0
-      *                            |
-      *                     Lam_v[rows_][cols_]
-      *                            |
-      *                            1
-      *                            3
-      *                            |
-      *  0-Lam_h[rows_][cols_]-1 0-Gamma[rows_][cols_]-2 0-Lam_h[rows_][cols_+1]-1
-      *                            |
-      *                            1
-      *                            0
-      *                            |
-      *                    Lam_v[rows_+1][cols_]
-      *                            |
-      *                            1
-      *                            3
-      *                            |
-      *0-Lam_h[rows_+1][cols_]-1 0-Gamma[rows_+1][cols_]-2 0-Lam_h[rows_+1][cols_+1]-1
-      *                            |
-      *                            1
-      *                            0
-      *                            |
-      *                    Lam_v[rows_+2][cols_]
-      *                            |
-      *                            1
-      */
-      assert(row + 1 < this->Rows());
-      tmp_ten[0] = Eat3SurroundLambdas_(site, DOWN);
-      QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
-
-      tmp_ten[1] = Eat3SurroundLambdas_({row + 1, col}, UP);
-      QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
-
-      Contract<TenElemT, QNT, true, true>(r0, lambda_vert({row + 1, col}), 2, 0, 1, tmp_ten[2]);
-      Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
-      Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
-
-      tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_vert({row + 1, col}) = TenT();
-      SVD(tmp_ten + 4, 2, qn0_,
-          trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-          &u, lambda_vert(row + 1, col), &vt,
-          &actual_trunc_err, &actual_D);\
-
-      // hand over lambdas from q0, q1, contract u or vt, setting Gammas
-      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, DOWN, trunc_para.trunc_err);
-      Gamma(site) = TenT();
-      Contract<TenElemT, QNT, true, true>(tmp_ten[5], u, 3, 0, 1, Gamma(site));
-      Gamma(site).Transpose({2, 4, 0, 1, 3});
-
-      tmp_ten[6] = QTenSplitOutLambdas_(q1, {row + 1, col}, UP, trunc_para.trunc_err);
-      Gamma({row + 1, col}) = TenT();
-      Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({row + 1, col}));
-      Gamma({row + 1, col}).Transpose({2, 1, 0, 4, 3});
-
-      norm = lambda_vert(row + 1, col)->Normalize();
-      break;
-    }
-    default: {
-      std::cout << "We suppose square lattice now." << std::endl;
-    }
-  }
-#ifndef NDEBUG
-  assert(physical_index == Gamma(row, col)->GetIndex(4));
-  assert(Gamma(row, col)->GetIndex(1) == lambda_vert(row + 1, col)->GetIndex(1));
-  for (size_t i = 0; i < 7; i++) {
-    assert(!std::isnan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
-  }
-#endif
-  return norm;
-}
-
-template<typename TenElemT, typename QNT>
-GQTensor<TenElemT, QNT>
-SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const GQTensor<TenElemT, QNT> &q, const SiteIdx &site,
-                                                       const BTenPOSITION remaining_idx,
-                                                       double inv_tolerance) const {
-  TenT tmp_ten[2], res, inv_lambda;
-  const size_t row = site[0], col = site[1];
-  switch (remaining_idx) {
-    case RIGHT: {
-      /* input:
-       *      0
-       *      |
-       *  1---q---3
-       *      |
-       *      2
-       */
-      inv_lambda = ElementWiseInv(lambda_vert({row, col}), inv_tolerance);
-      Contract<TenElemT, QNT, false, false>(q, inv_lambda, 0, 1, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col}), inv_tolerance);
-      Contract<TenElemT, QNT, false, false>(tmp_ten[0], inv_lambda, 0, 1, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
-      Contract<TenElemT, QNT, false, true>(tmp_ten[1], inv_lambda, 0, 0, 1, res);
-      /*  output:
-       *      1
-       *      |
-       *  2--res--0
-       *      |
-       *      3
-       */
-      return res;
-    }
-    case LEFT: {
-      /* input:
-       *      2
-       *      |
-       *  3---q---1
-       *      |
-       *      0
-       */
-      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
-      Contract<TenElemT, QNT, false, false>(q, inv_lambda, 0, 0, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
-      Contract<TenElemT, QNT, false, false>(tmp_ten[0], inv_lambda, 0, 0, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_vert({row, col}), inv_tolerance);
-      Contract<TenElemT, QNT, false, true>(tmp_ten[1], inv_lambda, 0, 1, 1, res);
-      /*  output:
-       *      3
-       *      |
-       *  0--res--2
-       *      |
-       *      1
-       */
-      return res;
-    }
-    case DOWN: {
-      /*      1
-       *      |
-       *  2---q---0
-       *      |
-       *      3
-       */
-      inv_lambda = ElementWiseInv(lambda_vert(site), inv_tolerance);
-      Contract<TenElemT, QNT, true, true>(inv_lambda, q, 1, 1, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_horiz(site), inv_tolerance);
-      Contract<TenElemT, QNT, true, true>(inv_lambda, tmp_ten[0], 1, 1, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
-      Contract<TenElemT, QNT, false, true>(inv_lambda, tmp_ten[1], 0, 2, 1, res);
-      /*  output:
-       *      1
-       *      |
-       *  2--res--0
-       *      |
-       *      3
-       */
-      return res;
-    }
-    case UP: {
-      /*      3
-       *      |
-       *  2---q---0
-       *      |
-       *      1
-       */
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
-      Contract<TenElemT, QNT, false, true>(inv_lambda, q, 0, 0, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
-      Contract<TenElemT, QNT, false, true>(inv_lambda, tmp_ten[0], 0, 1, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col}), inv_tolerance);
-      Contract<TenElemT, QNT, true, true>(inv_lambda, tmp_ten[1], 1, 1, 1, res);
-      /*  output:
-       *      1
-       *      |
-       *  0--res--2
-       *      |
-       *      3
-       */
-      return res;
-    }
-  }
-  return res;
-}
-
-template<typename TenElemT, typename QNT>
 bool SquareLatticePEPS<TenElemT, QNT>::Dump(const std::string path) const {
   // Dump Gamma, lambda_vert, and lambda_horiz tensors one by one
   if (!gqmps2::IsPathExist(path)) { gqmps2::CreatPath(path); }
@@ -609,31 +363,189 @@ double SquareLatticePEPS<TenElemT, QNT>::SingleSiteProject(const SquareLatticePE
   return 1;
 }
 
-/**
- *
- * @tparam TenElemT
- * @tparam QNT
- * @param site
- * @return physical index 0, auxiliary indexes follow original order
- *
- * res:
- *          3
- *          |
- *          |
- *    0-----T------2   and physical idx = 4
- *          |
- *          |
- *          1
- */
 template<typename TenElemT, typename QNT>
-GQTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(const SiteIdx &site) const {
-  TenT tmp_ten[3], res;
+double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten, const SiteIdx &site,
+                                                                    const BondOrientation &orientation,
+                                                                    const SimpleUpdateTruncatePara &trunc_para) {
+  double norm;
   const size_t row = site[0], col = site[1];
-  Contract<TenElemT, QNT, false, false>(Gamma(site), lambda_horiz(site), 0, 1, 1, tmp_ten[0]);
-  Contract<TenElemT, QNT, false, true>(tmp_ten[0], lambda_vert({row + 1, col}), 0, 0, 1, tmp_ten[1]);
-  Contract<TenElemT, QNT, false, true>(tmp_ten[1], lambda_horiz({row, col + 1}), 0, 0, 1, tmp_ten[2]);
-  Contract<TenElemT, QNT, false, false>(tmp_ten[2], lambda_vert(site), 0, 1, 1, res);
-  return res;
+  TenT tmp_ten[7];
+  TenT q0, r0, q1, r1;
+  TenT u, vt;
+  double actual_trunc_err;
+  size_t actual_D;
+  TenT inv_lambda;
+#ifndef NDEBUG
+  auto physical_index = Gamma(row, col)->GetIndex(4);
+#endif
+  switch (orientation) {
+    case HORIZONTAL: {
+      /*                          0                                         0
+       *                          |                                         |
+       *                    Lam_v[rows_][cols_]                          Lam_v[rows_][cols_+1]
+       *                          |                                         |
+       *                          1                                         1
+       *                          3                                         3
+       *                          |                                         |
+       *0-Lam_h[rows_][cols_]-1 0-Gamma[rows_][cols_]-2 0-Lam_h[rows_][cols_+1]-1 0-Gamma[rows_][cols_+1]-2 0-Lam_h[rows_][cols_+2]-1
+       *                          |                                         |
+       *                          1                                         1
+       *                          0                                         0
+       *                          |                                         |
+       *                  Lam_v[rows_+1][cols_]                          Lam_v[rows_+1][cols_+1]
+       *                          |                                         |
+       *                          1                                         1
+       */
+      const size_t lcol = col;
+      const size_t rcol = lcol + 1;
+      assert(rcol < Cols());
+      const SiteIdx r_site = {row, rcol};
+
+      //Contract left site 3 lambdas
+      tmp_ten[0] = Eat3SurroundLambdas_(site, RIGHT);
+      QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
+
+      //Contract right site 3 lambdas
+      tmp_ten[1] = Eat3SurroundLambdas_(r_site, LEFT);
+      QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
+
+      Contract(&r0, {2}, lambda_horiz(row, rcol), {0}, tmp_ten + 2);
+      Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
+      Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
+
+      tmp_ten[4].Transpose({0, 2, 1, 3});
+      lambda_horiz({row, rcol}) = TenT();
+      SVD(tmp_ten + 4, 2, qn0_,
+          trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+          &u, lambda_horiz(row, rcol), &vt,
+          &actual_trunc_err, &actual_D);
+
+      // hand over lambdas from q0, q1, contract u or vt, setting Gammas
+      //left site
+      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, RIGHT, trunc_para.trunc_err);
+      Gamma(site) = TenT();
+      Contract<TenElemT, QNT, false, true>(tmp_ten[5], u, 0, 0, 1, Gamma(site));
+      Gamma(site).Transpose({1, 2, 4, 0, 3});
+
+      tmp_ten[6] = QTenSplitOutLambdas_(q1, r_site, LEFT, trunc_para.trunc_err);
+      Gamma(r_site) = TenT();
+      Contract<TenElemT, QNT, false, false>(tmp_ten[6], vt, 0, 1, 1, Gamma(r_site));
+      Gamma(r_site).Transpose({4, 0, 1, 2, 3});
+      norm = lambda_horiz(row, col + 1)->Normalize();
+      break;
+    }
+    case VERTICAL: {
+      /*                           0
+      *                            |
+      *                     Lam_v[rows_][cols_]
+      *                            |
+      *                            1
+      *                            3
+      *                            |
+      *  0-Lam_h[rows_][cols_]-1 0-Gamma[rows_][cols_]-2 0-Lam_h[rows_][cols_+1]-1
+      *                            |
+      *                            1
+      *                            0
+      *                            |
+      *                    Lam_v[rows_+1][cols_]
+      *                            |
+      *                            1
+      *                            3
+      *                            |
+      *0-Lam_h[rows_+1][cols_]-1 0-Gamma[rows_+1][cols_]-2 0-Lam_h[rows_+1][cols_+1]-1
+      *                            |
+      *                            1
+      *                            0
+      *                            |
+      *                    Lam_v[rows_+2][cols_]
+      *                            |
+      *                            1
+      */
+      assert(row + 1 < this->Rows());
+      tmp_ten[0] = Eat3SurroundLambdas_(site, DOWN);
+      QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
+
+      tmp_ten[1] = Eat3SurroundLambdas_({row + 1, col}, UP);
+      QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
+
+      Contract<TenElemT, QNT, true, true>(r0, lambda_vert({row + 1, col}), 2, 0, 1, tmp_ten[2]);
+      Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
+      Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
+
+      tmp_ten[4].Transpose({0, 2, 1, 3});
+      lambda_vert({row + 1, col}) = TenT();
+      SVD(tmp_ten + 4, 2, qn0_,
+          trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+          &u, lambda_vert(row + 1, col), &vt,
+          &actual_trunc_err, &actual_D);\
+
+      // hand over lambdas from q0, q1, contract u or vt, setting Gammas
+      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, DOWN, trunc_para.trunc_err);
+      Gamma(site) = TenT();
+      Contract<TenElemT, QNT, true, true>(tmp_ten[5], u, 3, 0, 1, Gamma(site));
+      Gamma(site).Transpose({2, 4, 0, 1, 3});
+
+      tmp_ten[6] = QTenSplitOutLambdas_(q1, {row + 1, col}, UP, trunc_para.trunc_err);
+      Gamma({row + 1, col}) = TenT();
+      Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({row + 1, col}));
+      Gamma({row + 1, col}).Transpose({2, 1, 0, 4, 3});
+
+      norm = lambda_vert(row + 1, col)->Normalize();
+      break;
+    }
+    default: {
+      std::cout << "We suppose square lattice now." << std::endl;
+    }
+  }
+#ifndef NDEBUG
+  assert(physical_index == Gamma(row, col)->GetIndex(4));
+  assert(Gamma(row, col)->GetIndex(1) == lambda_vert(row + 1, col)->GetIndex(1));
+  for (size_t i = 0; i < 7; i++) {
+    assert(!std::isnan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
+  }
+#endif
+  return norm;
+}
+
+template<typename TenElemT, typename QNT>
+double SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const TenT &gate_ten,
+                                                                        const gqpeps::SiteIdx &first_site,
+                                                                        const gqpeps::BondOrientation &orientation,
+                                                                        const gqpeps::SimpleUpdateTruncatePara &trunc_para) {
+  double norm;
+  const size_t row = first_site[0], col = first_site[1];
+  TenT tmp_ten[11];
+  TenT q0, r0, q1, r1;
+  TenT u1, vt1, u2, vt2;
+  GQTensor<GQTEN_Double, QNT> s1, s2;
+  double actual_trunc_err;
+  size_t actual_D;
+  TenT inv_lambda;
+  switch (orientation) {
+    case HORIZONTAL: {
+      const size_t lcol = col;
+      const size_t mcol = col + 1;
+      const size_t rcol = col + 2;
+      const SiteIdx lsite = {row, lcol};
+      const SiteIdx msite = {row, mcol};
+      const SiteIdx rsite = {row, rcol};
+
+      tmp_ten[0] = Eat3SurroundLambdas_(lsite, RIGHT);
+      QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
+      tmp_ten[1] = Eat3SurroundLambdas_(rsite, LEFT);
+      QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
+      tmp_ten[2] = EatSurroundLambdas_(msite);
+
+      break;
+    }
+    case VERTICAL: {
+
+      break;
+    }
+    default: {
+      std::cerr << std::endl;
+    }
+  }
 }
 
 /**
@@ -953,6 +865,33 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const GQTensor
   return norm;
 }
 
+/**
+ *
+ * @tparam TenElemT
+ * @tparam QNT
+ * @param site
+ * @return physical index 0, auxiliary indexes follow original order
+ *
+ * res:
+ *          3
+ *          |
+ *          |
+ *    0-----T------2   and physical idx = 4
+ *          |
+ *          |
+ *          1
+ */
+template<typename TenElemT, typename QNT>
+GQTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(const SiteIdx &site) const {
+  TenT tmp_ten[3], res;
+  const size_t row = site[0], col = site[1];
+  Contract<TenElemT, QNT, false, false>(Gamma(site), lambda_horiz(site), 0, 1, 1, tmp_ten[0]);
+  Contract<TenElemT, QNT, false, true>(tmp_ten[0], lambda_vert({row + 1, col}), 0, 0, 1, tmp_ten[1]);
+  Contract<TenElemT, QNT, false, true>(tmp_ten[1], lambda_horiz({row, col + 1}), 0, 0, 1, tmp_ten[2]);
+  Contract<TenElemT, QNT, false, false>(tmp_ten[2], lambda_vert(site), 0, 1, 1, res);
+  return res;
+}
+
 template<typename TenElemT, typename QNT>
 GQTensor<TenElemT, QNT>
 SquareLatticePEPS<TenElemT, QNT>::Eat3SurroundLambdas_(const SiteIdx &site,
@@ -1015,6 +954,108 @@ SquareLatticePEPS<TenElemT, QNT>::Eat3SurroundLambdas_(const SiteIdx &site,
       return TenT();
     }
   }
+}
+
+template<typename TenElemT, typename QNT>
+GQTensor<TenElemT, QNT>
+SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const GQTensor<TenElemT, QNT> &q, const SiteIdx &site,
+                                                       const BTenPOSITION remaining_idx,
+                                                       double inv_tolerance) const {
+  TenT tmp_ten[2], res, inv_lambda;
+  const size_t row = site[0], col = site[1];
+  switch (remaining_idx) {
+    case RIGHT: {
+      /* input:
+       *      0
+       *      |
+       *  1---q---3
+       *      |
+       *      2
+       */
+      inv_lambda = ElementWiseInv(lambda_vert({row, col}), inv_tolerance);
+      Contract<TenElemT, QNT, false, false>(q, inv_lambda, 0, 1, 1, tmp_ten[0]);
+      inv_lambda = ElementWiseInv(lambda_horiz({row, col}), inv_tolerance);
+      Contract<TenElemT, QNT, false, false>(tmp_ten[0], inv_lambda, 0, 1, 1, tmp_ten[1]);
+      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
+      Contract<TenElemT, QNT, false, true>(tmp_ten[1], inv_lambda, 0, 0, 1, res);
+      /*  output:
+       *      1
+       *      |
+       *  2--res--0
+       *      |
+       *      3
+       */
+      return res;
+    }
+    case LEFT: {
+      /* input:
+       *      2
+       *      |
+       *  3---q---1
+       *      |
+       *      0
+       */
+      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
+      Contract<TenElemT, QNT, false, false>(q, inv_lambda, 0, 0, 1, tmp_ten[0]);
+      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
+      Contract<TenElemT, QNT, false, false>(tmp_ten[0], inv_lambda, 0, 0, 1, tmp_ten[1]);
+      inv_lambda = ElementWiseInv(lambda_vert({row, col}), inv_tolerance);
+      Contract<TenElemT, QNT, false, true>(tmp_ten[1], inv_lambda, 0, 1, 1, res);
+      /*  output:
+       *      3
+       *      |
+       *  0--res--2
+       *      |
+       *      1
+       */
+      return res;
+    }
+    case DOWN: {
+      /*      1
+       *      |
+       *  2---q---0
+       *      |
+       *      3
+       */
+      inv_lambda = ElementWiseInv(lambda_vert(site), inv_tolerance);
+      Contract<TenElemT, QNT, true, true>(inv_lambda, q, 1, 1, 1, tmp_ten[0]);
+      inv_lambda = ElementWiseInv(lambda_horiz(site), inv_tolerance);
+      Contract<TenElemT, QNT, true, true>(inv_lambda, tmp_ten[0], 1, 1, 1, tmp_ten[1]);
+      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
+      Contract<TenElemT, QNT, false, true>(inv_lambda, tmp_ten[1], 0, 2, 1, res);
+      /*  output:
+       *      1
+       *      |
+       *  2--res--0
+       *      |
+       *      3
+       */
+      return res;
+    }
+    case UP: {
+      /*      3
+       *      |
+       *  2---q---0
+       *      |
+       *      1
+       */
+      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
+      Contract<TenElemT, QNT, false, true>(inv_lambda, q, 0, 0, 1, tmp_ten[0]);
+      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
+      Contract<TenElemT, QNT, false, true>(inv_lambda, tmp_ten[0], 0, 1, 1, tmp_ten[1]);
+      inv_lambda = ElementWiseInv(lambda_horiz({row, col}), inv_tolerance);
+      Contract<TenElemT, QNT, true, true>(inv_lambda, tmp_ten[1], 1, 1, 1, res);
+      /*  output:
+       *      1
+       *      |
+       *  0--res--2
+       *      |
+       *      3
+       */
+      return res;
+    }
+  }
+  return res;
 }
 }//gqpeps
 

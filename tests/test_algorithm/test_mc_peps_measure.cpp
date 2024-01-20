@@ -93,7 +93,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   IndexT pb_in = InverseIndex(pb_out);
 
   VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
-                                                  VARIATION2Site,
+                                                  CompressMPSScheme::VARIATION2Site,
                                                   params.MC_samples, params.WarmUp, 1,
                                                   std::vector<size_t>(2, N / 2),
                                                   Ly, Lx,

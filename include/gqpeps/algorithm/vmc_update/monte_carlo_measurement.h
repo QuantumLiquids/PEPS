@@ -139,7 +139,7 @@ class MonteCarloMeasurementExecutor : public Executor {
                                 const MeasurementSolver &solver = MeasurementSolver());
 
   MonteCarloMeasurementExecutor(const VMCOptimizePara &optimize_para,
-                                const SITPST &sitpst_init,
+                                const SITPST &sitpst,
                                 const boost::mpi::communicator &world,
                                 const MeasurementSolver &solver = MeasurementSolver());
 
@@ -280,6 +280,50 @@ class MonteCarloMeasurementExecutor : public Executor {
   // the lattice site number = Lx * Ly * 3,  first the unit cell, then column idx, then row index.
 };//MonteCarloMeasurementExecutor
 
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+MonteCarloMeasurementExecutor<TenElemT,
+                              QNT,
+                              WaveFunctionComponentType,
+                              MeasurementSolver>::MonteCarloMeasurementExecutor(
+    const VMCOptimizePara &optimize_para,
+    const size_t ly, const size_t lx,
+    const boost::mpi::communicator &world,
+    const MeasurementSolver &solver):
+    optimize_para(optimize_para), world_(world), lx_(lx), ly_(ly),
+    split_index_tps_(ly, lx), tps_sample_(ly, lx),
+    u_double_(0, 1), warm_up_(false),
+    measurement_solver_(solver) {
+  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
+  random_engine.seed(std::random_device{}() + world.rank() * 10086);
+  LoadTenData();
+  ReserveSamplesDataSpace_();
+  PrintExecutorInfo_();
+  this->SetStatus(ExecutorStatus::INITED);
+}
+
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+MonteCarloMeasurementExecutor<TenElemT,
+                              QNT,
+                              WaveFunctionComponentType,
+                              MeasurementSolver>::MonteCarloMeasurementExecutor(
+    const VMCOptimizePara &optimize_para,
+    const SITPST &sitpst,
+    const boost::mpi::communicator &world,
+    const MeasurementSolver &solver):
+    optimize_para(optimize_para), world_(world),
+    lx_(sitpst.cols()),
+    ly_(sitpst.rows()),
+    split_index_tps_(sitpst),
+    tps_sample_(ly_, lx_),
+    u_double_(0, 1), warm_up_(false),
+    measurement_solver_(solver) {
+  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
+  random_engine.seed(std::random_device{}() + world.rank() * 10086);
+  tps_sample_ = WaveFunctionComponentType(sitpst, optimize_para.init_config);
+  ReserveSamplesDataSpace_();
+  PrintExecutorInfo_();
+  this->SetStatus(ExecutorStatus::INITED);
+}
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::ReplicaTest() {
@@ -331,6 +375,15 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
   world_.barrier();
   DumpVecData(replica_overlap_path + "/replica_overlap" + std::to_string(world_.rank()), overlaps);
   tps_sample_.config.Dump(optimize_para.wavefunction_path, world_.rank());
+}
+
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::Execute(void) {
+  SetStatus(ExecutorStatus::EXEING);
+  WarmUp_();
+  Measure_();
+  DumpData();
+  SetStatus(ExecutorStatus::FINISH);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
@@ -404,51 +457,6 @@ MonteCarloMeasurementExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-MonteCarloMeasurementExecutor<TenElemT,
-                              QNT,
-                              WaveFunctionComponentType,
-                              MeasurementSolver>::MonteCarloMeasurementExecutor(
-    const VMCOptimizePara &optimize_para,
-    const size_t ly, const size_t lx,
-    const boost::mpi::communicator &world,
-    const MeasurementSolver &solver):
-    optimize_para(optimize_para), world_(world), lx_(lx), ly_(ly),
-    split_index_tps_(ly, lx), tps_sample_(ly, lx),
-    u_double_(0, 1), warm_up_(false),
-    measurement_solver_(solver) {
-  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
-  random_engine.seed(std::random_device{}() + world.rank() * 10086);
-  LoadTenData();
-  ReserveSamplesDataSpace_();
-  PrintExecutorInfo_();
-  this->SetStatus(ExecutorStatus::INITED);
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-MonteCarloMeasurementExecutor<TenElemT,
-                              QNT,
-                              WaveFunctionComponentType,
-                              MeasurementSolver>::MonteCarloMeasurementExecutor(
-    const VMCOptimizePara &optimize_para,
-    const SITPST &sitpst_init,
-    const boost::mpi::communicator &world,
-    const MeasurementSolver &solver):
-    optimize_para(optimize_para), world_(world),
-    lx_(sitpst_init.cols()),
-    ly_(sitpst_init.rows()),
-    split_index_tps_(sitpst_init),
-    tps_sample_(ly_, lx_),
-    u_double_(0, 1), warm_up_(false),
-    measurement_solver_(solver) {
-  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
-  random_engine.seed(std::random_device{}() + world.rank() * 10086);
-  tps_sample_ = WaveFunctionComponentType(sitpst_init, optimize_para.init_config);
-  ReserveSamplesDataSpace_();
-  PrintExecutorInfo_();
-  this->SetStatus(ExecutorStatus::INITED);
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
                                    QNT,
                                    WaveFunctionComponentType,
@@ -468,14 +476,6 @@ void MonteCarloMeasurementExecutor<TenElemT,
     std::cout << std::setw(40) << "The number of threads per processor:" << hp_numeric::GetTensorManipulationThreads()
               << "\n";
   }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::Execute(void) {
-  SetStatus(ExecutorStatus::EXEING);
-  Measure_();
-  DumpData();
-  SetStatus(ExecutorStatus::FINISH);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>

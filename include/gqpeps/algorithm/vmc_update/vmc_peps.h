@@ -36,10 +36,10 @@ struct ConjugateGradientParams {
  *
  * @tparam TenElemT wavefunctional elementary type, real or complex
  * @tparam QNT quantum number type
- * @tparam EnergySolver Energy solver, corresponding to the model
  * @tparam WaveFunctionComponentType the derived class of WaveFunctionComponent, control the monte carlo sweep method
+ * @tparam EnergySolver Energy solver, corresponding to the model
  */
-template<typename TenElemT, typename QNT, typename EnergySolver, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 class VMCPEPSExecutor : public Executor {
  public:
   using Tensor = GQTensor<TenElemT, QNT>;

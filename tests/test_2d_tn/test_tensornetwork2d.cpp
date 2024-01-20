@@ -164,7 +164,8 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
 
 TEST_F(Test2DIsingTensorNetworkNoQN, Test2DIsingOBCTensorNetworkRealNumber) {
   double psi[22];
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, VARIATION2Site);
+  auto dtn2d_copy = dtn2d;
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -180,7 +181,7 @@ TEST_F(Test2DIsingTensorNetworkNoQN, Test2DIsingOBCTensorNetworkRealNumber) {
   dtn2d.BTenMoveStep(BTenPOSITION::UP);
   psi[3] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
 
-  trunc_para.compress_scheme = gqpeps::VARIATION1Site;
+  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -260,6 +261,12 @@ TEST_F(Test2DIsingTensorNetworkNoQN, Test2DIsingOBCTensorNetworkRealNumber) {
     EXPECT_NEAR(-(std::log(psi[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
   dtn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
+  for (size_t i = 0; i < dtn2d_copy.rows(); i++) {
+    for (size_t j = 0; j < dtn2d_copy.cols(); j++) {
+      EXPECT_NE(dtn2d_copy(i, j), dtn2d(i, j));
+      EXPECT_EQ(dtn2d_copy({i, j}), dtn2d({i, j}));
+    }
+  }
 }
 
 struct Test2DIsingTensorNetwork : public testing::Test {
@@ -409,7 +416,7 @@ struct Test2DIsingTensorNetwork : public testing::Test {
 
 TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
   double psi[22];
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -425,7 +432,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
   dtn2d.BTenMoveStep(BTenPOSITION::UP);
   psi[3] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
 
-  trunc_para.compress_scheme = gqpeps::VARIATION1Site;
+  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -509,7 +516,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
 
 TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
   GQTEN_Complex psi[22];
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
   ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -525,7 +532,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
   ztn2d.BTenMoveStep(BTenPOSITION::UP);
   psi[3] = ztn2d.Trace({Ly - 3, 1}, VERTICAL);
 
-  trunc_para.compress_scheme = gqpeps::VARIATION1Site;
+  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
   ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -639,7 +646,7 @@ struct TestSpin2DTensorNetwork : public testing::Test {
 
   TensorNetwork2D<GQTEN_Double, U1QN> tn2d = TensorNetwork2D<GQTEN_Double, U1QN>(Ly, Lx);
 
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, CompressMPSScheme::VARIATION2Site);
 
   void SetUp(void) {
     TPS<GQTEN_Double, U1QN> tps(Ly, Lx);
@@ -679,7 +686,7 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPS2SiteVariationUpdate) {
 }
 
 TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPSSingleSiteVariationUpdate) {
-  trunc_para.compress_scheme = gqpeps::VARIATION1Site;
+  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
   tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);

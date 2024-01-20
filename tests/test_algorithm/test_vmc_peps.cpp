@@ -92,7 +92,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   IndexT pb_in = InverseIndex(pb_out);
 
   VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
-                                                  VARIATION2Site,
+                                                  CompressMPSScheme::VARIATION2Site,
                                                   params.MC_samples, params.WarmUp, 1,
                                                   std::vector<size_t>(2, N / 2),
                                                   Ly, Lx,
@@ -142,10 +142,10 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
 
 TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
   using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world);
   } else {
@@ -154,7 +154,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world);
   }
 
@@ -163,12 +163,12 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
 }
 
 TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
-  optimize_para.bmps_trunc_para.compress_scheme = VARIATION1Site;
+  optimize_para.bmps_trunc_para.compress_scheme = CompressMPSScheme::VARIATION1Site;
   using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world);
   } else {
@@ -177,7 +177,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world);
   }
 
@@ -187,11 +187,11 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
 
 TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
   using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   optimize_para.update_scheme = StochasticReconfiguration;
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world);
   } else {
@@ -200,7 +200,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world);
   }
 
@@ -210,11 +210,11 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
 
 TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
   using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   optimize_para.update_scheme = GradientLineSearch;
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world);
   } else {
@@ -223,7 +223,7 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world);
   }
 
@@ -233,11 +233,11 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
 
 TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
   using Model = SpinOneHalfHeisenbergSquare<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   optimize_para.update_scheme = NaturalGradientLineSearch;
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world);
   } else {
@@ -246,7 +246,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world);
   }
 
@@ -256,11 +256,11 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
 
 TEST_F(TestSpinSystemVMCPEPS, SquareJ1J2D4) {
   using Model = SpinOneHalfJ1J2HeisenbergSquare<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   double j2 = 0.2;
   Model j1j2solver(j2);
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world, j1j2solver);
   } else {
@@ -269,7 +269,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareJ1J2D4) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world, j1j2solver);
   }
 
@@ -279,11 +279,11 @@ TEST_F(TestSpinSystemVMCPEPS, SquareJ1J2D4) {
 
 TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
   optimize_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world, triangle_hei_solver);
   } else {
@@ -292,7 +292,7 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world, triangle_hei_solver);
   }
 
@@ -302,11 +302,11 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
 
 TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<GQTEN_Double, U1QN>;
-  VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT> *executor(nullptr);
+  VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);
   optimize_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world, trianglej1j2_hei_solver);
   } else {
@@ -315,7 +315,7 @@ TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, Model, TPSSampleNNFlipT>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
                                                                                 world, trianglej1j2_hei_solver);
   }
 

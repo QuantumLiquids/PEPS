@@ -140,6 +140,13 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &trunc_para
   );
 
+  double NextNearestNeighborSiteProject(
+      const TenT &gate_ten,
+      const SiteIdx &first_site,
+      const BondOrientation &orientation,
+      const SimpleUpdateTruncatePara &trunc_para
+  );
+
   double UpperLeftTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_left_site,

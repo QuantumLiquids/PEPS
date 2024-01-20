@@ -77,14 +77,17 @@ TensorNetwork2D<TenElemT, QNT>::GenerateBMPSApproach(BMPSPOSITION post, const BM
   return bmps_set_;
 }
 
+///< TODO: set API to set the convergence tolerance and maximum iteration times
 template<typename TenElemT, typename QNT>
 size_t TensorNetwork2D<TenElemT, QNT>::GrowBMPSStep_(const BMPSPOSITION position,
                                                      TransferMPO mpo,
                                                      const BMPSTruncatePara &trunc_para) {
   std::vector<BMPS<TenElemT, QNT>> &bmps_set = bmps_set_[position];
   bmps_set.push_back(
-      bmps_set.back().MultipleMPO(mpo, trunc_para.D_min, trunc_para.D_max, trunc_para.trunc_err,
-                                  trunc_para.compress_scheme));
+      bmps_set.back().MultipleMPO(mpo, trunc_para.compress_scheme,
+                                  trunc_para.D_min, trunc_para.D_max, trunc_para.trunc_err,
+                                  std::make_optional<double>(1e-12),
+                                  std::make_optional<size_t>(10)));
   return bmps_set.size();
 }
 
