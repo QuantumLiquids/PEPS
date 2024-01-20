@@ -8,6 +8,7 @@
 #ifndef GQPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H
 #define GQPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H
 
+#include <optional>                             //std::optional<T>
 #include "gqten/gqten.h"
 #include "gqmps2/one_dim_tn/framework/ten_vec.h"
 #include "gqmps2/one_dim_tn/mps/finite_mps/finite_mps.h"

@@ -16,6 +16,41 @@
 
 using namespace gqpeps;
 
+void TestSingleModeNonDBMarkovChainDistribution(
+    const std::vector<double> &weights,
+    const size_t num_iterations
+) {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<double> dis(0.0, 1.0);
+
+  // Create a map to store the count of each state
+  std::vector<size_t> state_counts(weights.size(), 0);
+
+  // Generate the Markov chain and count the occurrences of each state
+  size_t state = 0;
+  for (int i = 0; i < num_iterations; ++i) {
+    state = gqpeps::NonDBMCMCStateUpdate(state, weights, dis(gen));
+    state_counts[state]++;
+  }
+
+  // Calculate the distribution of states in the Markov chain
+  std::vector<double> state_distribution(weights.size(), 0.0);
+  for (size_t i = 0; i < state_counts.size(); i++) {
+    state_distribution[i] = static_cast<double>(state_counts[i]) / num_iterations;
+  }
+
+  // Verify if the generated distribution matches the initial weights
+  for (size_t i = 0; i < weights.size(); ++i) {
+    EXPECT_NEAR(state_distribution[i], weights[i], 1e-3);
+  }
+}
+
+TEST(NonDBMCMCTest, SingleModeMarkovChainDistribution) {
+  TestSingleModeNonDBMarkovChainDistribution({0.4, 0.35, 0.25}, 1000000);
+  TestSingleModeNonDBMarkovChainDistribution({0.01, 0.1, 0.6, 0.29}, 1000000);
+}
+
 // Potts Model Monte Carlo Simulation Class
 class PottsModel {
  public:
@@ -39,7 +74,7 @@ class PottsModel {
     std::uniform_real_distribution<double> dis(0.0, 1.0);
 
     for (size_t i = 0; i < size_ * size_; ++i) {
-      size_t spin = spins_[i];
+      const size_t spin = spins_[i];
       std::vector<double> weights(q_, 0.0);
 
       for (size_t j = 0; j < q_; ++j) {
@@ -145,9 +180,9 @@ class PottsModel {
     return energy;
   }
 
-  size_t size_;  // Lattice size
-  size_t q_;     // Number of spin states
-  double temperature_;  // Temperature
+  const size_t size_;  // Lattice size
+  const size_t q_;     // Number of spin states
+  const double temperature_;  // Temperature
   std::vector<size_t> spins_;
   std::vector<double> energy_samples_;
 };
@@ -176,7 +211,9 @@ TEST(PottsModelTest, MonteCarloSimulationTest) {
   EXPECT_NEAR(model.GetEnergy(), energy_ex, model.GetEnergyErr(10));
 }
 
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
