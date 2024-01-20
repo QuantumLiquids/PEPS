@@ -290,19 +290,16 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
                                  const std::optional<size_t> max_iter //only valid for variational methods
 ) const {
   const size_t N = this->size();
+  if (N == 2 || scheme == CompressMPSScheme::SVD_COMPRESS) {
+    return MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
+  }
   assert(mpo.size() == N);
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;
-  if (N == 2 && scheme != CompressMPSScheme::SVD_COMPRESS) {
-    return MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
-  }
 #ifndef NDEBUG
   auto mpo_original = mpo;
 #endif
   switch (scheme) {
-    case CompressMPSScheme::SVD_COMPRESS: {
-      MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
-    }
     case CompressMPSScheme::VARIATION2Site: {
       BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmin, Dmax, trunc_err);
       //here mpo was reverse for (position_ == RIGHT || position_ == UP)
