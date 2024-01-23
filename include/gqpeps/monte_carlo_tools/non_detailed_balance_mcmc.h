@@ -52,10 +52,7 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
       p[j] = v[j] / weights[init_state];
   }
 #ifndef NDEBUG
-  double sum_p = 0.0;
-  for (size_t i = 0; i < n; i++) {
-    sum_p += p[i];
-  }
+  double sum_p = std::reduce(p.begin(), p.end());
   assert(std::abs(sum_p - 1.0) < 1e-13);
 #endif
   double p_accumulate = 0.0;

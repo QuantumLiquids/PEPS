@@ -515,7 +515,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
 }
 
 TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
-  GQTEN_Complex psi[22];
+  GQTEN_Complex psi[24];
   BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
@@ -541,43 +541,48 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
   ztn2d.BTenMoveStep(BTenPOSITION::RIGHT);
   psi[5] = ztn2d.Trace({2, 1}, HORIZONTAL);
 
+  psi[6] = ztn2d.ReplaceTNNSiteTrace({2, 1}, HORIZONTAL,
+                                     ztn2d({2, 1}), ztn2d({2, 2}), ztn2d({2, 3}));
+
   ztn2d.GrowBMPSForCol(1, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::DOWN, 1);
   ztn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[6] = ztn2d.Trace({Ly - 2, 1}, VERTICAL);
+  psi[7] = ztn2d.Trace({Ly - 2, 1}, VERTICAL);
   ztn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[7] = ztn2d.Trace({Ly - 3, 1}, VERTICAL);
+  psi[8] = ztn2d.Trace({Ly - 3, 1}, VERTICAL);
+  psi[9] = ztn2d.ReplaceTNNSiteTrace({Ly - 3, 1}, VERTICAL,
+                                     ztn2d({Ly - 3, 1}), ztn2d({Ly - 2, 1}), ztn2d({Ly - 1, 1}));
 
   /***** HORIZONTAL MPS *****/
   ztn2d.GrowBMPSForRow(1, trunc_para);
   ztn2d.InitBTen2(BTenPOSITION::LEFT, 1);
   ztn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
 
-  psi[8] = ztn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                     HORIZONTAL,
-                                     ztn2d({2, 0}), ztn2d({1, 1})); // trace original tn
-  psi[9] = ztn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                     HORIZONTAL,
-                                     ztn2d({1, 0}), ztn2d({2, 1})); // trace original tn
+  psi[10] = ztn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
+                                      HORIZONTAL,
+                                      ztn2d({2, 0}), ztn2d({1, 1})); // trace original tn
+  psi[11] = ztn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
+                                      HORIZONTAL,
+                                      ztn2d({1, 0}), ztn2d({2, 1})); // trace original tn
 
   ztn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
-  psi[10] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+  psi[12] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
                                       HORIZONTAL,
                                       ztn2d({2, 1}), ztn2d({1, 2})); // trace original tn
 
-  psi[11] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+  psi[13] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
                                       HORIZONTAL,
                                       ztn2d({1, 1}), ztn2d({2, 2})); // trace original tn
-  psi[12] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
+  psi[14] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
                                                HORIZONTAL,
                                                ztn2d({2, 0}), ztn2d({1, 2})); // trace original tn
-  psi[13] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+  psi[15] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
                                                HORIZONTAL,
                                                ztn2d({2, 1}), ztn2d({1, 3})); // trace original tn
-  psi[14] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
+  psi[16] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
                                                HORIZONTAL,
                                                ztn2d({1, 0}), ztn2d({2, 2})); // trace original tn
-  psi[15] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+  psi[17] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
                                                HORIZONTAL,
                                                ztn2d({1, 1}), ztn2d({2, 3})); // trace original tn
 
@@ -588,29 +593,29 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
   ztn2d.GrowBMPSForCol(1, trunc_para);
   ztn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
   ztn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
-  psi[16] = ztn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
+  psi[18] = ztn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
                                       VERTICAL,
                                       ztn2d({3, 1}), ztn2d({2, 2})); // trace original tn
-  psi[17] = ztn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
+  psi[19] = ztn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
                                       VERTICAL,
                                       ztn2d({2, 1}), ztn2d({3, 2})); // trace original tn
 
   ztn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
-  psi[18] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+  psi[20] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
                                       VERTICAL,
                                       ztn2d({2, 1}), ztn2d({1, 2})); // trace original tn
 
-  psi[19] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+  psi[21] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
                                       VERTICAL,
                                       ztn2d({1, 1}), ztn2d({2, 2})); // trace original tn
-  psi[20] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+  psi[22] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
                                                VERTICAL,
                                                ztn2d({3, 1}), ztn2d({1, 2})); // trace original tn
-  psi[21] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+  psi[23] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
                                                VERTICAL,
                                                ztn2d({1, 1}), ztn2d({3, 2})); // trace original tn
 
-  for (size_t i = 1; i < 22; i++) {
+  for (size_t i = 1; i < 24; i++) {
     EXPECT_NEAR(-(std::log(psi[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_DOUBLE_EQ(psi[i].imag(), 0.0);
   }

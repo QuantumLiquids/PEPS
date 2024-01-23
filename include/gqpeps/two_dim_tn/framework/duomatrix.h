@@ -447,10 +447,6 @@ class DuoMatrix {
  private:
   std::vector<std::vector<ElemT *>> raw_data_;
 };
-
-///< Site Index
-using SiteIdx = std::array<size_t, 2>; //rows_, cols_
-
 }//gqpeps
 
 

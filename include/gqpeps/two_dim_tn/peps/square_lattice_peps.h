@@ -13,6 +13,7 @@
 
 #include "gqten/gqten.h"
 #include "gqpeps/two_dim_tn/framework/ten_matrix.h"
+#include "gqpeps/two_dim_tn/framework/site_idx.h"
 #include "gqmps2/utilities.h"             //CreatPath
 #include "gqpeps/consts.h"              //kPepsPath
 #include "gqpeps/two_dim_tn/tps/tps.h"  //ToTPS()

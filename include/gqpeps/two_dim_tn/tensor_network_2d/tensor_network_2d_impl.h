@@ -854,10 +854,18 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
      * MPS DOWN  ++-----mps_ten2--mps_ten3------++
      *
     */
+#ifndef NDEBUG
+    const Tensor &mps_ten1 = bmps_set_.at(UP).at(row1)[this->cols() - col1 - 1];
+    const Tensor &mps_ten2 = bmps_set_.at(DOWN).at(this->rows() - 1 - row2)[col1];
+    const Tensor &mps_ten3 = bmps_set_.at(DOWN).at(this->rows() - 1 - row2)[col2];
+    const Tensor &mps_ten4 = bmps_set_.at(UP).at(row1)[this->cols() - col2 - 1];
+#else
     const Tensor &mps_ten1 = bmps_set_.at(UP)[row1][this->cols() - col1 - 1];
     const Tensor &mps_ten2 = bmps_set_.at(DOWN)[this->rows() - 1 - row2][col1];
     const Tensor &mps_ten3 = bmps_set_.at(DOWN)[this->rows() - 1 - row2][col2];
     const Tensor &mps_ten4 = bmps_set_.at(UP)[row1][this->cols() - col2 - 1];
+#endif
+
     Tensor mpo_ten1, mpo_ten3;
     const Tensor *mpo_ten2, *mpo_ten4;
     const Tensor &left_bten = bten_set2_.at(LEFT)[col1];
@@ -908,12 +916,17 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
     const size_t row2 = row1 + 1;
     const size_t col1 = left_up_site[1];
     const size_t col2 = col1 + 1;
-
+#ifndef NDEBUG
+    const Tensor &mps_ten1 = bmps_set_.at(LEFT).at(col1)[row2];
+    const Tensor &mps_ten2 = bmps_set_.at(RIGHT).at(this->cols() - 1 - col2)[this->rows() - 1 - row2];
+    const Tensor &mps_ten3 = bmps_set_.at(LEFT).at(col1)[row1];
+    const Tensor &mps_ten4 = bmps_set_.at(RIGHT).at(this->cols() - 1 - col2)[this->rows() - 1 - row1];
+#else
     const Tensor &mps_ten1 = bmps_set_.at(LEFT)[col1][row2];
     const Tensor &mps_ten2 = bmps_set_.at(RIGHT)[this->cols() - 1 - col2][this->rows() - 1 - row2];
     const Tensor &mps_ten3 = bmps_set_.at(LEFT)[col1][row1];
     const Tensor &mps_ten4 = bmps_set_.at(RIGHT)[this->cols() - 1 - col2][this->rows() - 1 - row1];
-
+#endif
     const Tensor &top_bten = bten_set2_.at(UP)[row1];
     const Tensor &bottom_bten = bten_set2_.at(DOWN)[this->rows() - row2 - 1];
 
@@ -947,6 +960,121 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
 }
 
 template<typename TenElemT, typename QNT>
+TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceTNNSiteTrace(const SiteIdx &site0,
+                                                             const BondOrientation mps_orient,
+                                                             const TensorNetwork2D::Tensor &replaced_ten0,
+                                                             const TensorNetwork2D::Tensor &replaced_ten1,
+                                                             const TensorNetwork2D::Tensor &replaced_ten2) const {
+  Tensor tmp[10];
+  if (mps_orient == HORIZONTAL) {
+    /*
+     *       BTEN-LEFT                               BTEN-RIGHT
+     * MPS UP    ++-----mps_ten0--mps_ten2--mps_ten4------++
+     *           ||        |         |         |          ||
+     *           ||        |         |         |          ||
+     * TN ROW    ||------mpo_t0----mpo_t1----mpo_t2-------||
+     *           ||        |         |         |          ||
+     *           ||        |         |         |          ||
+     * MPS DOWN  ++-----mps_ten1--mps_ten3--mps_ten5------++
+     *
+    */
+    const size_t row = site0.row();
+    const size_t col0 = site0.col();
+    const size_t col1 = col0 + 1;
+    const size_t col2 = col0 + 2;
+    const SiteIdx site1 = {row, col1};
+    const SiteIdx site2 = {row, col2};
+#ifndef NDEBUG
+    const Tensor &mps_ten0 = bmps_set_.at(UP).at(row)[this->cols() - col0 - 1];
+    const Tensor &mps_ten1 = bmps_set_.at(DOWN).at(this->rows() - 1 - row)[col0];
+    const Tensor &mps_ten2 = bmps_set_.at(UP).at(row)[this->cols() - col1 - 1];
+    const Tensor &mps_ten3 = bmps_set_.at(DOWN).at(this->rows() - 1 - row)[col1];
+    const Tensor &mps_ten4 = bmps_set_.at(UP).at(row)[this->cols() - col2 - 1];
+    const Tensor &mps_ten5 = bmps_set_.at(DOWN).at(this->rows() - 1 - row)[col2];
+    const Tensor &left_bten = bten_set_.at(LEFT).at(col0);
+    const Tensor &right_bten = bten_set_.at(RIGHT).at(this->cols() - col2 - 1);
+#else
+    const Tensor &mps_ten0 = bmps_set_.at(UP)[row][this->cols() - col0 - 1];
+    const Tensor &mps_ten1 = bmps_set_.at(DOWN)[this->rows() - 1 - row][col0];
+    const Tensor &mps_ten2 = bmps_set_.at(UP)[row][this->cols() - col1 - 1];
+    const Tensor &mps_ten3 = bmps_set_.at(DOWN)[this->rows() - 1 - row][col1];
+    const Tensor &mps_ten4 = bmps_set_.at(UP)[row][this->cols() - col2 - 1];
+    const Tensor &mps_ten5 = bmps_set_.at(DOWN)[this->rows() - 1 - row][col2];
+    const Tensor &left_bten = bten_set_.at(LEFT)[col0];
+    const Tensor &right_bten = bten_set_.at(RIGHT)[this->cols() - col2 - 1];
+#endif
+
+    const Tensor &mpo_ten0 = replaced_ten0,
+        mpo_ten1 = replaced_ten1,
+        mpo_ten2 = replaced_ten2;
+
+    Contract<TenElemT, QNT, true, true>(mps_ten0, left_bten, 2, 0, 1, tmp[0]);
+    Contract<TenElemT, QNT, false, false>(tmp[0], mpo_ten0, 1, 3, 2, tmp[1]);
+    Contract(&tmp[1], {0, 2}, &mps_ten1, {0, 1}, &tmp[2]);
+
+    Contract<TenElemT, QNT, true, true>(mps_ten2, tmp[2], 2, 0, 1, tmp[3]);
+    Contract<TenElemT, QNT, false, false>(tmp[3], mpo_ten1, 1, 3, 2, tmp[4]);
+    Contract(&tmp[4], {0, 2}, &mps_ten3, {0, 1}, &tmp[5]);
+
+    Contract<TenElemT, QNT, true, true>(mps_ten4, tmp[5], 2, 0, 1, tmp[6]);
+    Contract<TenElemT, QNT, false, false>(tmp[6], mpo_ten2, 1, 3, 2, tmp[7]);
+    Contract(&tmp[7], {0, 2}, &mps_ten5, {0, 1}, &tmp[8]);
+
+    Contract(&tmp[8], {0, 1, 2}, &right_bten, {2, 1, 0}, &tmp[9]);
+    return tmp[9]();
+  } else {
+    /*
+     *        MPS-LEFT            MPS-RIGHT
+     * BTEN-UP   ++=================++
+     *           |         |         |
+     *           |         |         |
+     * TN ROW1   mps1----mpo0-------mps0
+     *           |         |         |
+     *           |         |         |
+     * TN ROW2   mps3----mpo1-------mps2
+     *           |         |         |
+     *           |         |         |
+     * TN ROW3   mps5----mpo2-------mps4
+     *           |         |         |
+     *           |         |         |
+     * BTEN-DOWN ++=================++
+     *
+     */
+    const size_t col = site0[1];
+    const size_t row0 = site0[0];
+    const size_t row1 = row0 + 1;
+    const size_t row2 = row1 + 1;
+    const SiteIdx site1 = {row1, col};
+    const SiteIdx site2 = {row2, col};
+
+    const Tensor &mps_ten0 = bmps_set_.at(RIGHT)[this->cols() - 1 - col][this->rows() - 1 - row0];
+    const Tensor &mps_ten1 = bmps_set_.at(LEFT)[col][row0];
+    const Tensor &mps_ten2 = bmps_set_.at(RIGHT)[this->cols() - 1 - col][this->rows() - 1 - row1];
+    const Tensor &mps_ten3 = bmps_set_.at(LEFT)[col][row1];
+    const Tensor &mps_ten4 = bmps_set_.at(RIGHT)[this->cols() - 1 - col][this->rows() - 1 - row2];
+    const Tensor &mps_ten5 = bmps_set_.at(LEFT)[col][row2];
+
+    const Tensor &top_bten = bten_set_.at(UP)[row0];
+    const Tensor &bottom_bten = bten_set_.at(DOWN)[this->rows() - row2 - 1];
+
+    Contract<TenElemT, QNT, true, true>(mps_ten0, top_bten, 2, 0, 1, tmp[0]);
+    Contract<TenElemT, QNT, false, false>(tmp[0], replaced_ten0, 1, 2, 2, tmp[1]);
+    Contract(&tmp[1], {0, 2}, &mps_ten1, {0, 1}, &tmp[2]);
+
+    Contract<TenElemT, QNT, true, true>(mps_ten2, tmp[2], 2, 0, 1, tmp[3]);
+    Contract<TenElemT, QNT, false, false>(tmp[3], replaced_ten1, 1, 2, 2, tmp[4]);
+    Contract(&tmp[4], {0, 2}, &mps_ten3, {0, 1}, &tmp[5]);
+
+    Contract<TenElemT, QNT, true, true>(mps_ten4, tmp[5], 2, 0, 1, tmp[6]);
+    Contract<TenElemT, QNT, false, false>(tmp[6], replaced_ten2, 1, 2, 2, tmp[7]);
+    Contract(&tmp[7], {0, 2}, &mps_ten5, {0, 1}, &tmp[8]);
+
+    Contract(&tmp[8], {0, 1, 2}, &bottom_bten, {2, 1, 0}, &tmp[9]);
+    return tmp[9]();
+  }
+}
+
+template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const SiteIdx &left_up_site,
                                                                       const DIAGONAL_DIR sqrt5link_dir,
                                                                       const BondOrientation mps_orient, //mps orientation is the same with longer side orientation
@@ -969,9 +1097,9 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const Site
      * MPS DOWN  ++---mps_ten2--mps_ten4--mps_ten6----++
      *
      */
-    const size_t row1 = left_up_site[0];
+    const size_t row1 = left_up_site.row();
     const size_t row2 = row1 + 1;
-    const size_t col1 = left_up_site[1];
+    const size_t col1 = left_up_site.col();
     const size_t col2 = col1 + 1;
     const size_t col3 = col2 + 1;
 
@@ -1036,10 +1164,10 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const Site
      * BTEN-DOWN ++=========================++
      *
      */
-    const size_t row1 = left_up_site[0];
+    const size_t row1 = left_up_site.row();
     const size_t row2 = row1 + 1;
     const size_t row3 = row2 + 1;
-    const size_t col1 = left_up_site[1];
+    const size_t col1 = left_up_site.col();
     const size_t col2 = col1 + 1;
 
     const Tensor &mps_ten1 = bmps_set_.at(LEFT)[col1][row3];

@@ -12,6 +12,7 @@
 
 #include "gqten/gqten.h"
 #include "gqpeps/two_dim_tn/framework/ten_matrix.h"
+#include "gqpeps/two_dim_tn/framework/site_idx.h"
 #include "gqpeps/ond_dim_tn/boundary_mps/bmps.h"
 #include "gqpeps/basic.h"                           //BMPSTruncatePara
 #include "gqpeps/two_dim_tn/tps/configuration.h"    //Configure
@@ -150,6 +151,12 @@ class TensorNetwork2D : public TenMatrix<GQTensor<TenElemT, QNT>> {
                                const DIAGONAL_DIR nnn_dir,
                                const BondOrientation mps_orient,
                                const Tensor &ten_left, const Tensor &ten_right) const;
+  //Third Nearest-Neighbor
+  TenElemT ReplaceTNNSiteTrace(const SiteIdx &site0,
+                               const BondOrientation mps_orient,
+                               const Tensor &replaced_ten0,
+                               const Tensor &replaced_ten1,
+                               const Tensor &replaced_ten2) const;
 
   TenElemT ReplaceSqrt5DistTwoSiteTrace(const SiteIdx &left_up_site,
                                         const DIAGONAL_DIR sqrt5link_dir,

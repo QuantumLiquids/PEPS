@@ -100,7 +100,7 @@ class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
                        const SplitIndexTPS<TenElemT, QNT> &sitps,
                        std::uniform_real_distribution<double> &u_double) {
     if (this->config(site1) == this->config(site2)) {
-      return true;
+      return false;
     }
     assert(sitps(site1)[this->config(site1)].GetIndexes() == sitps(site1)[this->config(site2)].GetIndexes());
     TenElemT psi_b = tn.ReplaceNNSiteTrace(site1, site2, bond_dir, sitps(site1)[this->config(site2)],
