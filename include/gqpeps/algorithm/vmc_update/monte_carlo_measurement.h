@@ -89,8 +89,8 @@ std::vector<T> CalAutoCorrelation(
  *
  * 1/N Sum_i <S_i(t)*S_i(t+delta t)> - 1/N Sum_i <S_i>^2
  *
- * Where S_i = 0 or 1; or equivalently \pm 0.5
- * and correspondingly we assume <S_i> = 0.5; or 0. But this assumption may not correct.
+ * Where we define <S_i> = 0. As an example, S_i = \pm 0.5 (distinct with 0/1).
+ * Note to use the consistent definition as the input.
  * @param local_sz_samples
  * @return
  */
@@ -106,7 +106,7 @@ std::vector<ElemT> CalSpinAutoCorrelation(
     for (size_t j = 0; j < local_sz_samples.size() - t; j++) {
       overlap_sum += SpinConfigurationOverlap(local_sz_samples[j], local_sz_samples[j + t]);
     }
-    res[t] = (double) overlap_sum / (local_sz_samples.size() - t) / N - 0.25;
+    res[t] = (double) overlap_sum / (local_sz_samples.size() - t) / N;
   }
   return res;
 }
