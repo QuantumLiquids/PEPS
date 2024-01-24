@@ -35,11 +35,6 @@ const std::vector<WAVEFUNCTION_UPDATE_SCHEME> stochastic_reconfiguration_method(
                                                                                  NormalizedStochasticReconfiguration,
                                                                                  NaturalGradientLineSearch});
 
-enum MC_SWEEP_SCHEME {  // 5th Jan, 2024 note : useless definition
-  SequentiallyNNSiteFlip,
-  CompressedLatticeKagomeLocalUpdate
-};
-
 
 struct VMCOptimizePara {
   VMCOptimizePara(void) = default;
@@ -117,8 +112,6 @@ struct VMCOptimizePara {
   std::vector<double> step_lens;
   WAVEFUNCTION_UPDATE_SCHEME update_scheme;
   std::string wavefunction_path;
-
-  MC_SWEEP_SCHEME mc_sweep_scheme = SequentiallyNNSiteFlip;
 };
 
 }//gqpeps

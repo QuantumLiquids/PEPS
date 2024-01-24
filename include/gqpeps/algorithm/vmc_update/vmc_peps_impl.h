@@ -193,21 +193,29 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Re
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::PrintExecutorInfo_(void) {
   if (world_.rank() == kMasterProc) {
-    std::cout << std::left;  // Set left alignment for the output
+    const size_t indent = 40;
+    std::cout << std::left;
     std::cout << "\n";
     std::cout << "=====> VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS <=====" << "\n";
-    std::cout << std::setw(30) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
-    std::cout << std::setw(30) << "PEPS bond dimension:" << split_index_tps_.GetMinBondDimension() << "/"
+    std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
+    std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMinBondDimension() << "/"
               << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(30) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
+    std::cout << std::setw(indent) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
               << optimize_para.bmps_trunc_para.D_max << "\n";
-    std::cout << std::setw(30) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
-    std::cout << std::setw(30) << "Gradient update times:" << optimize_para.step_lens.size() << "\n";
-    std::cout << std::setw(30) << "PEPS update strategy:" << optimize_para.update_scheme << "\n";
-
+    std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
+              << static_cast<int>(optimize_para.bmps_trunc_para.compress_scheme) << "\n";
+    std::cout << std::setw(indent) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
+    std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << optimize_para.mc_sweeps_between_sample
+              << "\n";
+    std::cout << std::setw(indent) << "PEPS update times:" << optimize_para.step_lens.size() << "\n";
+    std::cout << std::setw(indent) << "PEPS update strategy:" << optimize_para.update_scheme << "\n";
+    if (stochastic_reconfiguration_update_class_) {
+      std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:" << cg_params.diag_shift << "\n";
+    }
     std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
-    std::cout << std::setw(40) << "The number of processors (including master):" << world_.size() << "\n";
-    std::cout << std::setw(40) << "The number of threads per processor:" << hp_numeric::GetTensorManipulationThreads()
+    std::cout << std::setw(indent) << "The number of processors (including master):" << world_.size() << "\n";
+    std::cout << std::setw(indent) << "The number of threads per processor:"
+              << hp_numeric::GetTensorManipulationThreads()
               << "\n";
   }
 }
