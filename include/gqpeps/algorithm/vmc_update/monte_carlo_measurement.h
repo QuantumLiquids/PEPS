@@ -102,7 +102,7 @@ std::vector<ElemT> CalSpinAutoCorrelation(
   const size_t N = local_sz_samples[0].size();// lattice size
   std::vector<double> res(res_len, 0.0);
   for (size_t t = 0; t < res_len; t++) {
-    size_t overlap_sum(0);
+    double overlap_sum(0);
     for (size_t j = 0; j < local_sz_samples.size() - t; j++) {
       overlap_sum += SpinConfigurationOverlap(local_sz_samples[j], local_sz_samples[j + t]);
     }
