@@ -2,11 +2,11 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-01-07
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for Monte-Carlo Statistic MPI functions.
+* Description: QuantumLiquids/PEPS project. Unittests for Monte-Carlo Statistic MPI functions.
 */
 
 #include "gtest/gtest.h"
-#include "gqpeps/monte_carlo_tools/statistics.h"
+#include "qlpeps/monte_carlo_tools/statistics.h"
 
 boost::mpi::environment env;
 
@@ -28,7 +28,7 @@ class StatisticsTest : public ::testing::Test {
 
 TEST_F(StatisticsTest, GatherStatisticSingleDataTest) {
   double data = world.rank();
-  std::pair<double, double> actualResult = gqpeps::GatherStatisticSingleData(data, MPI_Comm(world));
+  std::pair<double, double> actualResult = qlpeps::GatherStatisticSingleData(data, MPI_Comm(world));
   if (world.rank() == 0) {
     double expectedMean = (double) (world.size() - 1) / 2.0;
     double n = world.size();
@@ -48,7 +48,7 @@ TEST_F(StatisticsTest, GatherStatisticListOfDataTest) {
 
   std::vector<double> actual_avgs;
   std::vector<double> actual_std_errs;
-  gqpeps::GatherStatisticListOfData(data, world, actual_avgs, actual_std_errs);
+  qlpeps::GatherStatisticListOfData(data, world, actual_avgs, actual_std_errs);
   if (world.rank() == 0) {
     std::vector<double> expected_avgs = {1.0, 2.0, 3.0, 4.0, 5.0};
     for (auto &avg : expected_avgs) {

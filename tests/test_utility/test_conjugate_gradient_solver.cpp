@@ -4,15 +4,15 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-10-17
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for conjugate gradient solver
+* Description: QuantumLiquids/PEPS project. Unittests for conjugate gradient solver
 */
 
-#include "gqpeps/utility/conjugate_gradient_solver.h"
+#include "qlpeps/utility/conjugate_gradient_solver.h"
 #include "gtest/gtest.h"
 #include "my_vector_matrix.h"
 
-using namespace gqten;
-using namespace gqpeps;
+using namespace qlten;
+using namespace qlpeps;
 
 
 template<typename ElemT>
@@ -38,12 +38,12 @@ TEST(TestPlainCGSolver, NoParallel) {
   MyVector<double> dx_res1({33.0, -8.0, -2.0});
   RunTestPlainCGSolverNoParallelCase(dmat1, db1, dx01, dx_res1);
 
-  MySquareMatrix<GQTEN_Complex> zmat1({{1.0, 2.0, 3.0},
+  MySquareMatrix<QLTEN_Complex> zmat1({{1.0, 2.0, 3.0},
                                        {2.0, 5.0, 7.0},
                                        {3.0, 7.0, 15.0}});
-  MyVector<GQTEN_Complex> zb1({11.0, 12.0, 13.0});
-  MyVector<GQTEN_Complex> zx01({-1.0, 1.0, 0.0});
-  MyVector<GQTEN_Complex> zx_res1({33.0, -8.0, -2.0});
+  MyVector<QLTEN_Complex> zb1({11.0, 12.0, 13.0});
+  MyVector<QLTEN_Complex> zx01({-1.0, 1.0, 0.0});
+  MyVector<QLTEN_Complex> zx_res1({33.0, -8.0, -2.0});
   RunTestPlainCGSolverNoParallelCase(zmat1, zb1, zx01, zx_res1);
 }
 

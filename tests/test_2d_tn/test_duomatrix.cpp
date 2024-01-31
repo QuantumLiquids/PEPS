@@ -4,13 +4,13 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-07-20
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for DuoMatrix
+* Description: QuantumLiquids/PEPS project. Unittests for DuoMatrix
 */
 
 #include "gtest/gtest.h"
-#include "gqpeps/two_dim_tn/framework/duomatrix.h"
+#include "qlpeps/two_dim_tn/framework/duomatrix.h"
 
-using namespace gqpeps;
+using namespace qlpeps;
 
 template<typename ElemT>
 void RunTestDuoMatrixConstructorsCase(const size_t rows, const size_t cols) {

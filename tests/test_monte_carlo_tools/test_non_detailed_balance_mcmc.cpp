@@ -2,7 +2,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-01-15
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for Non-detailed balance Markov-chain Monte-Carlo.
+* Description: QuantumLiquids/PEPS project. Unittests for Non-detailed balance Markov-chain Monte-Carlo.
 */
 
 
@@ -11,12 +11,12 @@
 #include <random>
 #include <cmath>
 #include <algorithm>
-#include "gqten/utility/timer.h"                                  //Timer
-#include "gqpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"
-#include "gqpeps/monte_carlo_tools/statistics.h"                  //Mean
+#include "qlten/utility/timer.h"                                  //Timer
+#include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"
+#include "qlpeps/monte_carlo_tools/statistics.h"                  //Mean
 
-using gqten::Timer;
-using namespace gqpeps;
+using qlten::Timer;
+using namespace qlpeps;
 
 void TestSingleModeNonDBMarkovChainDistribution(
     const std::vector<double> &weights,
@@ -32,7 +32,7 @@ void TestSingleModeNonDBMarkovChainDistribution(
   // Generate the Markov chain and count the occurrences of each state
   size_t state = 0;
   for (int i = 0; i < num_iterations; ++i) {
-    state = gqpeps::NonDBMCMCStateUpdate(state, weights, dis(gen));
+    state = qlpeps::NonDBMCMCStateUpdate(state, weights, dis(gen));
     state_counts[state]++;
   }
 

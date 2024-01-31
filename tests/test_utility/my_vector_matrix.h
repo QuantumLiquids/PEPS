@@ -5,17 +5,17 @@
 #ifndef GRACEQ_VMC_PEPS_MY_VECTOR_MATRIX_H
 #define GRACEQ_VMC_PEPS_MY_VECTOR_MATRIX_H
 
-#include "gqten/gqten.h"
+#include "qlten/qlten.h"
 
-using namespace gqten;
+using namespace qlten;
 
 using std::vector;
 
-GQTEN_Complex MyConj(GQTEN_Complex a) {
+QLTEN_Complex MyConj(QLTEN_Complex a) {
   return conj(a);
 }
 
-GQTEN_Double MyConj(GQTEN_Double a) {
+QLTEN_Double MyConj(QLTEN_Double a) {
   return a;
 }
 
@@ -150,8 +150,8 @@ MyVector<T> operator*(const T scalar, const MyVector<T> &other) {
   return other * scalar;
 }
 
-MyVector<GQTEN_Complex> operator*(const double scalar, const MyVector<GQTEN_Complex> &other) {
-  return other * GQTEN_Complex(scalar, 0.0);
+MyVector<QLTEN_Complex> operator*(const double scalar, const MyVector<QLTEN_Complex> &other) {
+  return other * QLTEN_Complex(scalar, 0.0);
 }
 
 template<typename ElemT>

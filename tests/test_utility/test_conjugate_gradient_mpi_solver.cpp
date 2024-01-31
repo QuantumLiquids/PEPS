@@ -4,19 +4,19 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-10-17
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for conjugate gradient solver, mpi version
+* Description: QuantumLiquids/PEPS project. Unittests for conjugate gradient solver, mpi version
 */
 
 
 #include "gtest/gtest.h"
 #include "my_vector_matrix.h"
-#include "gqpeps/consts.h"    //kMasterProc
+#include "qlpeps/consts.h"    //kMasterProc
 
-using namespace gqten;
+using namespace qlten;
 
 using namespace boost::mpi;
 
-namespace gqpeps {
+namespace qlpeps {
 template<typename ElemT>
 void CGSolverBroadCastVector(
     MyVector<ElemT> &x0,
@@ -47,9 +47,9 @@ size_t CGSolverRecvVector(
 }
 }
 
-#include "gqpeps/utility/conjugate_gradient_solver.h"
+#include "qlpeps/utility/conjugate_gradient_solver.h"
 
-using namespace gqpeps;
+using namespace qlpeps;
 
 template<typename ElemT>
 void RunTestPlainCGSolverParallelCase(
@@ -98,12 +98,12 @@ TEST(TestPlainCGSolver, Parallel) {
   MyVector<double> dx_res1({33.0, -8.0, -2.0});
   RunTestPlainCGSolverParallelCase(dmat1, db1, dx01, dx_res1, world);
 
-//  MySquareMatrix<GQTEN_Complex> zmat1({{1.0, 2.0, 3.0},
+//  MySquareMatrix<QLTEN_Complex> zmat1({{1.0, 2.0, 3.0},
 //                                       {2.0, 5.0, 7.0},
 //                                       {3.0, 7.0, 15.0}});
-//  MyVector<GQTEN_Complex> zb1({11.0, 12.0, 13.0});
-//  MyVector<GQTEN_Complex> zx01({-1.0, 1.0, 0.0});
-//  MyVector<GQTEN_Complex> zx_res1({33.0, -8.0, -2.0});
+//  MyVector<QLTEN_Complex> zb1({11.0, 12.0, 13.0});
+//  MyVector<QLTEN_Complex> zx01({-1.0, 1.0, 0.0});
+//  MyVector<QLTEN_Complex> zx_res1({33.0, -8.0, -2.0});
 //  RunTestPlainCGSolverParallelCase(zmat1, zb1, zx01, zx_res1, world);
 }
 

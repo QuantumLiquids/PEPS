@@ -4,37 +4,37 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-01-06
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for Monte-Carlo Measurement for finite-size PEPS.
+* Description: QuantumLiquids/PEPS project. Unittests for Monte-Carlo Measurement for finite-size PEPS.
 */
 
 
 
 #include "gtest/gtest.h"
-#include "gqten/gqten.h"
-#include "gqpeps/algorithm/vmc_update/monte_carlo_measurement.h"
-#include "gqpeps/algorithm/vmc_update/model_energy_solvers/spin_onehalf_heisenberg_square.h"    // SpinOneHalfHeisenbergSquare
-#include "gqpeps/algorithm/vmc_update/model_energy_solvers/spin_onehalf_squareJ1J2.h"           // SpinOneHalfJ1J2HeisenbergSquare
-#include "gqpeps/algorithm/vmc_update/model_energy_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
-#include "gqpeps/algorithm/vmc_update/model_energy_solvers/spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
+#include "qlten/qlten.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"    // SpinOneHalfHeisenbergSquare
+#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_squareJ1J2.h"           // SpinOneHalfJ1J2HeisenbergSquare
+#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
 
-#include "gqmps2/case_params_parser.h"
+#include "qlmps/case_params_parser.h"
 
-using namespace gqten;
-using namespace gqpeps;
+using namespace qlten;
+using namespace qlpeps;
 
-using gqten::special_qn::U1QN;
+using qlten::special_qn::U1QN;
 using IndexT = Index<U1QN>;
 using QNSctT = QNSector<U1QN>;
 using QNSctVecT = QNSectorVec<U1QN>;
 
-using DGQTensor = GQTensor<GQTEN_Double, U1QN>;
-using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
+using DQLTensor = QLTensor<QLTEN_Double, U1QN>;
+using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
 
-using TPSSampleNNFlipT = SquareTPSSampleNNFlip<GQTEN_Double, U1QN>;
+using TPSSampleNNFlipT = SquareTPSSampleNNFlip<QLTEN_Double, U1QN>;
 
 boost::mpi::environment env;
 
-using gqmps2::CaseParamsParserBasic;
+using qlmps::CaseParamsParserBasic;
 
 char *params_file;
 
@@ -82,33 +82,33 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
-                         GQTenIndexDirType::OUT
+                         TenIndexDirType::OUT
   );
 #else
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
-                         GQTenIndexDirType::OUT
+                         TenIndexDirType::OUT
   );
 #endif
   IndexT pb_in = InverseIndex(pb_out);
 
-  VMCOptimizePara optimize_para = VMCOptimizePara(1e-15, params.Db_min, params.Db_max,
-                                                  CompressMPSScheme::VARIATION2Site,
-                                                  params.MC_samples, params.WarmUp, 1,
-                                                  std::vector<size_t>(2, N / 2),
-                                                  Ly, Lx,
-                                                  {0.1},
-                                                  StochasticGradient);
+  VMCOptimizePara optimize_para = VMCOptimizePara(
+      BMPSTruncatePara(params.Db_min, params.Db_max, 1e-10, CompressMPSScheme::VARIATION2Site),
+      params.MC_samples, params.WarmUp, 1,
+      std::vector<size_t>(2, N / 2),
+      Ly, Lx,
+      {0.1},
+      StochasticGradient);
 
-  DGQTensor did = DGQTensor({pb_in, pb_out});
-  DGQTensor dsz = DGQTensor({pb_in, pb_out});
-  DGQTensor dsp = DGQTensor({pb_in, pb_out});
-  DGQTensor dsm = DGQTensor({pb_in, pb_out});
+  DQLTensor did = DQLTensor({pb_in, pb_out});
+  DQLTensor dsz = DQLTensor({pb_in, pb_out});
+  DQLTensor dsp = DQLTensor({pb_in, pb_out});
+  DQLTensor dsm = DQLTensor({pb_in, pb_out});
 
-  ZGQTensor zid = ZGQTensor({pb_in, pb_out});
-  ZGQTensor zsz = ZGQTensor({pb_in, pb_out});
-  ZGQTensor zsp = ZGQTensor({pb_in, pb_out});
-  ZGQTensor zsm = ZGQTensor({pb_in, pb_out});
+  ZQLTensor zid = ZQLTensor({pb_in, pb_out});
+  ZQLTensor zsz = ZQLTensor({pb_in, pb_out});
+  ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
+  ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
 
   boost::mpi::communicator world;
 
@@ -119,8 +119,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
       delete listeners.Release(listeners.default_result_printer());
     }
 
-    gqten::hp_numeric::SetTensorManipulationThreads(1);
-    gqten::hp_numeric::SetTensorTransposeNumThreads(1);
+    qlten::hp_numeric::SetTensorManipulationThreads(1);
 
     optimize_para.step_lens = params.step_len;
     optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
@@ -142,12 +141,12 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
 };
 
 TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
-  using Model = SpinOneHalfTriHeisenbergSqrPEPS<GQTEN_Double, U1QN>;
-  MonteCarloMeasurementExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS<QLTEN_Double, U1QN>;
+  MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
   optimize_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
 
-  executor = new MonteCarloMeasurementExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
+  executor = new MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                             Ly, Lx,
                                                                                             world, triangle_hei_solver);
 
@@ -156,11 +155,11 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
 }
 
 TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
-  using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<GQTEN_Double, U1QN>;
-  MonteCarloMeasurementExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<QLTEN_Double, U1QN>;
+  MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);
   optimize_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
-  executor = new MonteCarloMeasurementExecutor<GQTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
+  executor = new MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                             Ly,
                                                                                             Lx,
                                                                                             world,

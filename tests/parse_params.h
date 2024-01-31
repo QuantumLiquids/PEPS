@@ -2,7 +2,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-09-14
 *
-* Description: GraceQ/VMC-PEPS project. Helper function for test
+* Description: QuantumLiquids/PEPS project. Helper function for test
 */
 
 

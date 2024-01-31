@@ -3,7 +3,7 @@
 # Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 # Creation Date: 2023-07-19
 #
-#  Description: GraceQ/VMC-PEPS project. CMake file to control unittest.
+#  Description: QuantumLiquids/PEPS project. CMake file to control unittest.
 # Including the setting for MKL compile flags and link flags.
 
 if (APPLE)
@@ -72,9 +72,9 @@ macro(add_unittest
 
     target_include_directories(${TEST_NAME}
             PRIVATE ${hptt_INCLUDE_DIR}
-            PRIVATE ${GQTENSOR_HEADER_PATH}
-            PRIVATE ${GQMPS2_HEADER_PATH}
-            PRIVATE ${GQPEPS_HEADER_PATH}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
@@ -108,9 +108,9 @@ macro(add_mpi_unittest
     )
     target_include_directories(${TEST_NAME}
             PRIVATE ${hptt_INCLUDE_DIR}
-            PRIVATE ${GQTENSOR_HEADER_PATH}
-            PRIVATE ${GQMPS2_HEADER_PATH}
-            PRIVATE ${GQPEPS_HEADER_PATH}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
@@ -147,9 +147,9 @@ macro(compile_unittest
     )
     target_include_directories(${TEST_NAME}
             PRIVATE ${hptt_INCLUDE_DIR}
-            PRIVATE ${GQTENSOR_HEADER_PATH}
-            PRIVATE ${GQMPS2_HEADER_PATH}
-            PRIVATE ${GQPEPS_HEADER_PATH}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}

@@ -1,0 +1,180 @@
+/*
+* Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
+* Creation Date: 2023-08-01
+*
+* Description: QuantumLiquids/PEPS project. Boundary MPS
+*/
+
+#ifndef QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H
+#define QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H
+
+#include <optional>                             //std::optional<T>
+#include "qlten/qlten.h"
+#include "qlmps/one_dim_tn/framework/ten_vec.h"
+#include "qlmps/one_dim_tn/mps/finite_mps/finite_mps.h"
+#include "qlmps/one_dim_tn/mpo/mpo.h"
+#include "qlpeps/basic.h"                       //BMPSPOSITION
+//if above include doesn't work, include mps_all.h
+
+namespace qlpeps {
+using namespace qlten;
+using namespace qlmps;
+
+enum class CompressMPSScheme {
+  SVD_COMPRESS,
+  VARIATION2Site,
+  VARIATION1Site
+};
+
+struct BMPSTruncatePara {
+  size_t D_min;
+  size_t D_max;
+  double trunc_err;
+  CompressMPSScheme compress_scheme;
+
+  BMPSTruncatePara(void) = default;
+
+  BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
+                   CompressMPSScheme compress_scheme)
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme) {}
+};
+
+/**
+ *      1
+ *      |
+ *  0---T---2
+ * @tparam TenElemT
+ * @tparam QNT
+ */
+template<typename TenElemT, typename QNT>
+class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
+ public:
+  using Tensor = QLTensor<TenElemT, QNT>;
+  using IndexT = Index<QNT>;
+  using TransferMPO = std::vector<Tensor *>;
+
+  BMPS(const BMPSPOSITION position, const size_t size) : TenVec<Tensor>(size), position_(position),
+                                                         center_(kUncentralizedCenterIdx),
+                                                         tens_cano_type_(size, NONE) {}
+
+  /**
+   * Initialize the MPS as direct product state
+   *
+   * @param position
+   * @param size
+   * @param local_hilbert_space local_hilbert_space.dim() == 1
+   */
+  BMPS(const BMPSPOSITION position, const size_t size, const IndexT &local_hilbert_space);
+
+  BMPS(const BMPS<TenElemT, QNT> &rhs) : TenVec<QLTensor<TenElemT, QNT>>(rhs),
+                                         position_(rhs.position_),
+                                         center_(rhs.center_),
+                                         tens_cano_type_(rhs.tens_cano_type_) {}
+
+  BMPS &operator=(const BMPS<TenElemT, QNT> &rhs) {
+    assert(position_ == rhs.position_);
+    TenVec<QLTensor<TenElemT, QNT>>::operator=(rhs);
+    center_ = rhs.center_;
+    tens_cano_type_ = rhs.tens_cano_type_;
+    return *this;
+  }
+
+  // MPS local tensor access, set function
+  Tensor &operator[](const size_t idx);
+
+  // get function
+  const Tensor &operator[](const size_t idx) const;
+
+  // set function
+  Tensor *&operator()(const size_t idx);
+
+  // get function
+  const Tensor *operator()(const size_t idx) const;
+
+  // MPS global operations
+  void Centralize(const int);
+
+  // MPS partial global operations.
+  void LeftCanonicalize(const size_t);
+
+  void RightCanonicalize(const size_t);
+
+  // MPS local operations. Only tensors near the target site are needed in memory.
+  void LeftCanonicalizeTen(const size_t);
+
+  QLTensor<QLTEN_Double, QNT> RightCanonicalizeTen(const size_t);
+
+  double RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);
+
+  int GetCenter(void) const { return center_; }
+
+  std::vector<MPSTenCanoType> GetTensCanoType(void) const {
+    return tens_cano_type_;
+  }
+
+  MPSTenCanoType GetTenCanoType(const size_t idx) const {
+    return tens_cano_type_[idx];
+  }
+
+  std::vector<double> GetEntanglementEntropy(size_t n);
+
+  void Reverse();
+
+  void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const double,
+                          const size_t max_iter, //only valid for variational methods
+                          const CompressMPSScheme &scheme);
+
+  /**
+   * @note mpo will be reversed if the position is RIGHT or UP.
+   * @param max_iter
+   * @param scheme
+   * @return
+   */
+  BMPS MultipleMPO(TransferMPO &, const CompressMPSScheme &,
+                   const size_t, const size_t, const double,
+                   const std::optional<double> variational_converge_tol,//only valid for variational methods
+                   const std::optional<size_t> max_iter
+  ) const;
+
+  BMPS MultipleMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const double,
+                             const size_t max_iter, //only valid for variational methods
+                             const CompressMPSScheme &) const;
+
+ private:
+  /**
+   * @note mpo will be reversed if the position is RIGHT or UP.
+   */
+  BMPS MultipleMPOSVDCompress_(TransferMPO &,
+                               const size_t, const size_t, const double) const;
+
+  BMPS InitGuessForVariationalMPOMultiplication_(TransferMPO &, const size_t, const size_t, const double) const;
+
+  double RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const double);
+
+  BMPS
+  InitGuessForVariationalMPOMultiplicationWithPhyIdx_(TransferMPO &, const size_t, const size_t, const double) const;
+
+  const BMPSPOSITION
+      position_; //possible to remove this member and replace it with function parameter if the function needs
+  int center_;
+  std::vector<MPSTenCanoType> tens_cano_type_;
+
+  static const QNT qn0_;
+  static const IndexT index0_in_;
+  static const IndexT index0_out_;
+};
+
+template<typename TenElemT, typename QNT>
+const QNT BMPS<TenElemT, QNT>::qn0_ = QNT::Zero();
+
+template<typename TenElemT, typename QNT>
+const Index<QNT> BMPS<TenElemT, QNT>::index0_in_ = Index<QNT>({QNSector(qn0_, 1)}, IN);
+
+template<typename TenElemT, typename QNT>
+const Index<QNT> BMPS<TenElemT, QNT>::index0_out_ = Index<QNT>({QNSector(qn0_, 1)}, OUT);
+
+}//qlpeps
+
+#include "qlpeps/ond_dim_tn/boundary_mps/bmps_impl.h"
+
+#endif //QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H

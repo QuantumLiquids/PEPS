@@ -4,42 +4,42 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-08-03
 *
-* Description: GraceQ/VMC-PEPS project. Unittests for TensorNetwork2D
+* Description: QuantumLiquids/PEPS project. Unittests for TensorNetwork2D
 */
 
 #include "gtest/gtest.h"
-#include "gqten/gqten.h"
-#include "gqpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "gqpeps/two_dim_tn/tps/split_index_tps.h"    //TPS, SplitIndexTPS
+#include "qlten/qlten.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
+#include "qlpeps/two_dim_tn/tps/split_index_tps.h"    //TPS, SplitIndexTPS
 
-using namespace gqten;
-using namespace gqpeps;
+using namespace qlten;
+using namespace qlpeps;
 
-using gqten::special_qn::U1QN;
-using gqten::special_qn::U1U1ZnQN;
+using qlten::special_qn::U1QN;
+using qlten::special_qn::U1U1ZnQN;
 
 struct Test2DIsingTensorNetworkNoQN : public testing::Test {
   using QNT = U1QN;
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<QNT>;
   using QNSctVecT = QNSectorVec<QNT>;
-  using DGQTensor = GQTensor<GQTEN_Double, QNT>;
-  using ZGQTensor = GQTensor<GQTEN_Complex, QNT>;
+  using DQLTensor = QLTensor<QLTEN_Double, QNT>;
+  using ZQLTensor = QLTensor<QLTEN_Complex, QNT>;
 
   const size_t Lx = 20;
   const size_t Ly = 20;
   const double beta = std::log(1 + std::sqrt(2.0)) / 2.0; // critical point
   IndexT vb_out = IndexT({QNSctT(QNT(0), 2)},
-                         GQTenIndexDirType::OUT
+                         TenIndexDirType::OUT
   );
   IndexT vb_in = InverseIndex(vb_out);
   IndexT trivial_out = IndexT({QNSctT(QNT(0), 1)},
-                              GQTenIndexDirType::OUT
+                              TenIndexDirType::OUT
   );
   IndexT trivial_in = InverseIndex(trivial_out);
 
-  TensorNetwork2D<GQTEN_Double, QNT> dtn2d = TensorNetwork2D<GQTEN_Double, QNT>(Ly, Lx);
-  TensorNetwork2D<GQTEN_Complex, QNT> ztn2d = TensorNetwork2D<GQTEN_Complex, QNT>(Ly, Lx);
+  TensorNetwork2D<QLTEN_Double, QNT> dtn2d = TensorNetwork2D<QLTEN_Double, QNT>(Ly, Lx);
+  TensorNetwork2D<QLTEN_Complex, QNT> ztn2d = TensorNetwork2D<QLTEN_Complex, QNT>(Ly, Lx);
 
   double F_ex = -2.0709079359461788;
 //  double F_ex = -std::log(2.0) / beta; //high temperature approx
@@ -47,20 +47,20 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
   double Z_ex = std::exp(-F_ex * beta * Lx * Ly); //partition function, exact value
   double tn_free_en_norm_factor = 0.0;
   void SetUp(void) {
-    DGQTensor boltzmann_weight = DGQTensor({vb_in, vb_out});
+    DQLTensor boltzmann_weight = DQLTensor({vb_in, vb_out});
     double e = -1.0; // FM Ising
     boltzmann_weight({0, 0}) = std::exp(-1.0 * beta * e);
     boltzmann_weight({0, 1}) = std::exp(1.0 * beta * e);
     boltzmann_weight({1, 0}) = std::exp(1.0 * beta * e);
     boltzmann_weight({1, 1}) = std::exp(-1.0 * beta * e);
 
-    DGQTensor core_ten_m = DGQTensor({vb_in, vb_out, vb_out, vb_in});
+    DQLTensor core_ten_m = DQLTensor({vb_in, vb_out, vb_out, vb_in});
     for (size_t i = 0; i < 2; i++) {
       core_ten_m({i, i, i, i}) = 1.0;
     }
-    DGQTensor t_m;// = DGQTensor({vb_in, vb_out, vb_out, vb_in});
+    DQLTensor t_m;// = DQLTensor({vb_in, vb_out, vb_out, vb_in});
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight, {1}, &core_ten_m, {3}, temp);
       Contract(&boltzmann_weight, {0}, temp, {3}, &t_m);
       t_m.Transpose({2, 3, 0, 1});
@@ -72,10 +72,10 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
       }
     }
 
-    DGQTensor core_ten_up = DGQTensor({vb_in, vb_out, vb_out, trivial_in});
-    DGQTensor core_ten_left = DGQTensor({trivial_in, vb_out, vb_out, vb_in});
-    DGQTensor core_ten_down = DGQTensor({vb_in, trivial_out, vb_out, vb_in});
-    DGQTensor core_ten_right = DGQTensor({vb_in, vb_out, trivial_out, vb_in});
+    DQLTensor core_ten_up = DQLTensor({vb_in, vb_out, vb_out, trivial_in});
+    DQLTensor core_ten_left = DQLTensor({trivial_in, vb_out, vb_out, vb_in});
+    DQLTensor core_ten_down = DQLTensor({vb_in, trivial_out, vb_out, vb_in});
+    DQLTensor core_ten_right = DQLTensor({vb_in, vb_out, trivial_out, vb_in});
     for (size_t i = 0; i < 2; i++) {
       core_ten_left({0, i, i, i}) = 1.0;
       core_ten_up({i, i, i, 0}) = 1.0;
@@ -83,16 +83,16 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
       core_ten_right({i, i, 0, i}) = 1.0;
     }
 
-    DGQTensor t_up, t_left, t_down, t_right;
+    DQLTensor t_up, t_left, t_down, t_right;
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       temp[0] = core_ten_up;
       temp[0].Transpose({3, 0, 1, 2});
       Contract(&boltzmann_weight, {0}, temp, {3}, &t_up);
       t_up.Transpose({2, 3, 0, 1});
     }
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight, {1}, &core_ten_left, {3}, temp);
       Contract(&boltzmann_weight, {0}, temp, {3}, &t_left);
       t_left.Transpose({2, 3, 0, 1});
@@ -103,7 +103,7 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
       t_right.Transpose({1, 2, 3, 0});
     }
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight, {1}, &core_ten_down, {3}, temp);
       Contract(&boltzmann_weight, {0}, temp, {3}, &t_down);
       t_down.Transpose({2, 3, 0, 1});
@@ -118,10 +118,10 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
       dtn2d({Ly - 1, col}) = t_down;
     }
 
-    DGQTensor core_ten_left_upper = DGQTensor({trivial_in, vb_out, vb_out, trivial_in});
-    DGQTensor core_ten_left_lower = DGQTensor({trivial_in, trivial_out, vb_out, vb_in});
-    DGQTensor core_ten_right_lower = DGQTensor({vb_in, trivial_out, trivial_out, vb_in});
-    DGQTensor core_ten_right_upper = DGQTensor({vb_in, vb_out, trivial_out, trivial_in});
+    DQLTensor core_ten_left_upper = DQLTensor({trivial_in, vb_out, vb_out, trivial_in});
+    DQLTensor core_ten_left_lower = DQLTensor({trivial_in, trivial_out, vb_out, vb_in});
+    DQLTensor core_ten_right_lower = DQLTensor({vb_in, trivial_out, trivial_out, vb_in});
+    DQLTensor core_ten_right_upper = DQLTensor({vb_in, vb_out, trivial_out, trivial_in});
     for (size_t i = 0; i < 2; i++) {
       for (size_t j = 0; j < 2; j++) {
         double elem = boltzmann_weight({i, j});
@@ -136,9 +136,9 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
       core_ten_right_upper({i, i, 0, 0}) = ten_elem;
     }
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight, {1}, &core_ten_left_lower, {3}, temp);
-      core_ten_left_lower = DGQTensor();
+      core_ten_left_lower = DQLTensor();
       Contract(&boltzmann_weight, {0}, temp, {3}, &core_ten_left_lower);
       core_ten_left_lower.Transpose({2, 3, 0, 1});
     }
@@ -181,7 +181,7 @@ TEST_F(Test2DIsingTensorNetworkNoQN, Test2DIsingOBCTensorNetworkRealNumber) {
   dtn2d.BTenMoveStep(BTenPOSITION::UP);
   psi[3] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
 
-  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -274,37 +274,37 @@ struct Test2DIsingTensorNetwork : public testing::Test {
   using IndexT = Index<U1U1ZnQN<2>>;
   using QNSctT = QNSector<U1U1ZnQN<2>>;
   using QNSctVecT = QNSectorVec<U1U1ZnQN<2>>;
-  using DGQTensor = GQTensor<GQTEN_Double, U1U1ZnQN<2>>;
-  using ZGQTensor = GQTensor<GQTEN_Complex, U1U1ZnQN<2>>;
+  using DQLTensor = QLTensor<QLTEN_Double, U1U1ZnQN<2>>;
+  using ZQLTensor = QLTensor<QLTEN_Complex, U1U1ZnQN<2>>;
 
   const size_t Lx = 20;
   const size_t Ly = 20;
   const double beta = std::log(1 + std::sqrt(2.0)) / 2.0; // critical point
   IndexT vb_out = IndexT({QNSctT(U1U1ZnQN<2>(0, 0, 0), 1),
                           QNSctT(U1U1ZnQN<2>(0, 0, 1), 1)},
-                         GQTenIndexDirType::OUT
+                         TenIndexDirType::OUT
   );
   IndexT vb_in = InverseIndex(vb_out);
   IndexT trivial_out = IndexT({QNSctT(U1U1ZnQN<2>(0, 0, 0), 1)},
-                              GQTenIndexDirType::OUT
+                              TenIndexDirType::OUT
   );
   IndexT trivial_in = InverseIndex(trivial_out);
 
-  TensorNetwork2D<GQTEN_Double, QNT> dtn2d = TensorNetwork2D<GQTEN_Double, QNT>(Ly, Lx);
-  TensorNetwork2D<GQTEN_Complex, QNT> ztn2d = TensorNetwork2D<GQTEN_Complex, QNT>(Ly, Lx);
+  TensorNetwork2D<QLTEN_Double, QNT> dtn2d = TensorNetwork2D<QLTEN_Double, QNT>(Ly, Lx);
+  TensorNetwork2D<QLTEN_Complex, QNT> ztn2d = TensorNetwork2D<QLTEN_Complex, QNT>(Ly, Lx);
 
   double F_ex = -2.0709079359461788;
   double Z_ex = std::exp(-F_ex * beta * Lx * Ly); //partition function, exact value
   double tn_free_en_norm_factor = 0.0;
   void SetUp(void) {
-    DGQTensor boltzmann_weight = DGQTensor({vb_in, vb_out});
+    DQLTensor boltzmann_weight = DQLTensor({vb_in, vb_out});
     double e = -1.0; // FM Ising
     boltzmann_weight({0, 0}) = std::exp(-1.0 * beta * e) + std::exp(1.0 * beta * e);
     boltzmann_weight({1, 1}) = std::exp(-1.0 * beta * e) - std::exp(1.0 * beta * e);
     auto boltzmann_weight_sqrt = boltzmann_weight;
     boltzmann_weight_sqrt({0, 0}) = std::sqrt(boltzmann_weight_sqrt({0, 0}));
     boltzmann_weight_sqrt({1, 1}) = std::sqrt(boltzmann_weight_sqrt({1, 1}));
-    DGQTensor core_ten_m = DGQTensor({vb_in, vb_out, vb_out, vb_in});
+    DQLTensor core_ten_m = DQLTensor({vb_in, vb_out, vb_out, vb_in});
     for (size_t i = 0; i < 2; i++) {
       for (size_t j = 0; j < 2; j++) {
         for (size_t k = 0; k < 2; k++) {
@@ -313,9 +313,9 @@ struct Test2DIsingTensorNetwork : public testing::Test {
         }
       }
     }
-    DGQTensor t_m;// = DGQTensor({vb_in, vb_out, vb_out, vb_in});
+    DQLTensor t_m;// = DQLTensor({vb_in, vb_out, vb_out, vb_in});
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight_sqrt, {1}, &core_ten_m, {3}, temp);
       Contract(&boltzmann_weight_sqrt, {0}, temp, {3}, temp + 1);
       Contract(&boltzmann_weight_sqrt, {0}, temp + 1, {3}, temp + 2);
@@ -329,10 +329,10 @@ struct Test2DIsingTensorNetwork : public testing::Test {
       }
     }
 
-    DGQTensor core_ten_up = DGQTensor({vb_in, vb_out, vb_out, trivial_in});
-    DGQTensor core_ten_left = DGQTensor({trivial_in, vb_out, vb_out, vb_in});
-    DGQTensor core_ten_down = DGQTensor({vb_in, trivial_out, vb_out, vb_in});
-    DGQTensor core_ten_right = DGQTensor({vb_in, vb_out, trivial_out, vb_in});
+    DQLTensor core_ten_up = DQLTensor({vb_in, vb_out, vb_out, trivial_in});
+    DQLTensor core_ten_left = DQLTensor({trivial_in, vb_out, vb_out, vb_in});
+    DQLTensor core_ten_down = DQLTensor({vb_in, trivial_out, vb_out, vb_in});
+    DQLTensor core_ten_right = DQLTensor({vb_in, vb_out, trivial_out, vb_in});
     for (size_t i = 0; i < 2; i++) {
       for (size_t j = 0; j < 2; j++) {
         size_t k = (i + j) % 2;
@@ -342,9 +342,9 @@ struct Test2DIsingTensorNetwork : public testing::Test {
         core_ten_right({i, j, 0, k}) = 1.0 / std::sqrt(2.0);
       }
     }
-    DGQTensor t_up, t_left, t_down, t_right;
+    DQLTensor t_up, t_left, t_down, t_right;
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       temp[0] = core_ten_up;
       temp[0].Transpose({3, 0, 1, 2});
       Contract(&boltzmann_weight_sqrt, {0}, temp, {3}, temp + 1);
@@ -352,7 +352,7 @@ struct Test2DIsingTensorNetwork : public testing::Test {
       Contract(&boltzmann_weight_sqrt, {1}, temp + 2, {3}, &t_up);
     }
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight_sqrt, {1}, &core_ten_left, {3}, temp);
       Contract(&boltzmann_weight_sqrt, {0}, temp, {3}, temp + 1);
       Contract(&boltzmann_weight_sqrt, {0}, temp + 1, {3}, temp + 2);
@@ -360,14 +360,14 @@ struct Test2DIsingTensorNetwork : public testing::Test {
       t_left = temp[2];
     }
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight_sqrt, {1}, &core_ten_right, {3}, temp);
       temp->Transpose({3, 0, 1, 2});
       Contract(&boltzmann_weight_sqrt, {0}, temp, {3}, temp + 2);
       Contract(&boltzmann_weight_sqrt, {1}, temp + 2, {3}, &t_right);
     }
     {
-      DGQTensor temp[3];
+      DQLTensor temp[3];
       Contract(&boltzmann_weight_sqrt, {1}, &core_ten_down, {3}, temp);
       Contract(&boltzmann_weight_sqrt, {0}, temp, {3}, temp + 1);
       (temp + 1)->Transpose({3, 0, 1, 2});
@@ -383,10 +383,10 @@ struct Test2DIsingTensorNetwork : public testing::Test {
       dtn2d({Ly - 1, col}) = t_down;
     }
 
-    DGQTensor core_ten_left_upper = DGQTensor({trivial_in, vb_out, vb_out, trivial_in});
-    DGQTensor core_ten_left_lower = DGQTensor({trivial_in, trivial_out, vb_out, vb_in});
-    DGQTensor core_ten_right_lower = DGQTensor({vb_in, trivial_out, trivial_out, vb_in});
-    DGQTensor core_ten_right_upper = DGQTensor({vb_in, vb_out, trivial_out, trivial_in});
+    DQLTensor core_ten_left_upper = DQLTensor({trivial_in, vb_out, vb_out, trivial_in});
+    DQLTensor core_ten_left_lower = DQLTensor({trivial_in, trivial_out, vb_out, vb_in});
+    DQLTensor core_ten_right_lower = DQLTensor({vb_in, trivial_out, trivial_out, vb_in});
+    DQLTensor core_ten_right_upper = DQLTensor({vb_in, vb_out, trivial_out, trivial_in});
     for (size_t i = 0; i < 2; i++) {
       double ten_elem = std::exp(-1.0 * beta * e) + (i == 0 ? 1.0 : -1.0) * std::exp(1.0 * beta * e);
       core_ten_left_upper({0, i, i, 0}) = ten_elem;
@@ -432,7 +432,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
   dtn2d.BTenMoveStep(BTenPOSITION::UP);
   psi[3] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
 
-  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -515,7 +515,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
 }
 
 TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
-  GQTEN_Complex psi[24];
+  QLTEN_Complex psi[24];
   BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
@@ -532,7 +532,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
   ztn2d.BTenMoveStep(BTenPOSITION::UP);
   psi[3] = ztn2d.Trace({Ly - 3, 1}, VERTICAL);
 
-  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
   ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -626,8 +626,8 @@ struct TestSpin2DTensorNetwork : public testing::Test {
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<U1QN>;
   using QNSctVecT = QNSectorVec<U1QN>;
-  using DGQTensor = GQTensor<GQTEN_Double, U1QN>;
-  using ZGQTensor = GQTensor<GQTEN_Complex, U1QN>;
+  using DQLTensor = QLTensor<QLTEN_Double, U1QN>;
+  using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
 
   const size_t Lx = 4;  // cols
   const size_t Ly = 4;  // rows
@@ -636,12 +636,12 @@ struct TestSpin2DTensorNetwork : public testing::Test {
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
-                         GQTenIndexDirType::OUT
+                         TenIndexDirType::OUT
   );
 #else
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
-                         GQTenIndexDirType::OUT
+                         TenIndexDirType::OUT
   );
 #endif
 
@@ -649,23 +649,23 @@ struct TestSpin2DTensorNetwork : public testing::Test {
 
   Configuration config = Configuration(Ly, Lx);
 
-  TensorNetwork2D<GQTEN_Double, U1QN> tn2d = TensorNetwork2D<GQTEN_Double, U1QN>(Ly, Lx);
+  TensorNetwork2D<QLTEN_Double, U1QN> tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(Ly, Lx);
 
   BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, CompressMPSScheme::VARIATION2Site);
 
   void SetUp(void) {
-    TPS<GQTEN_Double, U1QN> tps(Ly, Lx);
-//    gqten::hp_numeric::SetTensorManipulationThreads(1);
-//    gqten::hp_numeric::SetTensorTransposeNumThreads(1);
+    TPS<QLTEN_Double, U1QN> tps(Ly, Lx);
+//    qlten::hp_numeric::SetTensorManipulationThreads(1);
+//    qlten::hp_numeric::SetTensorTransposeNumThreads(1);
     tps.Load("tps_heisenberg_D4");
 
-    SplitIndexTPS<GQTEN_Double, U1QN> split_index_tps(tps);
+    SplitIndexTPS<QLTEN_Double, U1QN> split_index_tps(tps);
     for (size_t i = 0; i < Lx; i++) { //col index
       for (size_t j = 0; j < Ly; j++) { //row index
         config({j, i}) = (i + j) % 2;
       }
     }
-    tn2d = TensorNetwork2D<GQTEN_Double, U1QN>(split_index_tps, config);
+    tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(split_index_tps, config);
   }
 };
 
@@ -691,7 +691,7 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPS2SiteVariationUpdate) {
 }
 
 TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPSSingleSiteVariationUpdate) {
-  trunc_para.compress_scheme = gqpeps::CompressMPSScheme::VARIATION1Site;
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
   tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
