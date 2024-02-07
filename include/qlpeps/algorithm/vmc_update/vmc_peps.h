@@ -95,8 +95,8 @@ class VMCPEPSExecutor : public Executor {
   void ClearEnergyAndHoleSamples_(void);
 
   ///< statistic and gradient operation functions
-  ///< return the gradient;
-  SITPST GatherStatisticEnergyAndGrad_(void);
+  ///< return [energy, gradient];
+  std::pair<TenElemT, SITPST> GatherStatisticEnergyAndGrad_(void);
   void GradientRandElementSign_();
   size_t CalcNaturalGradient_(const VMCPEPSExecutor::SITPST &grad, const SITPST &init_guess);
 
@@ -131,7 +131,10 @@ class VMCPEPSExecutor : public Executor {
   SITPST natural_grad_;
   std::vector<double> grad_norm_;
 
+  double en_min_;
+
   //Output/Dump Data Region
+  SITPST tps_lowest_; //lowest energy tps
   std::vector<TenElemT> energy_trajectory_;
   std::vector<TenElemT> energy_error_traj_;
 };
