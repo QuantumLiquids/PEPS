@@ -7,8 +7,8 @@
 * Description: QuantumLiquids/PEPS project. Site Index (row, col)
 */
 
-#ifndef GRACEQ_QLPEPS_TWO_DIM_TN_FRAMEWORK_SITEIDX_H
-#define GRACEQ_QLPEPS_TWO_DIM_TN_FRAMEWORK_SITEIDX_H
+#ifndef QLPEPS_QLPEPS_TWO_DIM_TN_FRAMEWORK_SITEIDX_H
+#define QLPEPS_QLPEPS_TWO_DIM_TN_FRAMEWORK_SITEIDX_H
 
 #include <array>
 #include <stddef.h>   //size_t
@@ -23,4 +23,4 @@ class SiteIdx : public std::array<size_t, 2> {
 };
 
 }//qlpeps
-#endif //GRACEQ_QLPEPS_TWO_DIM_TN_FRAMEWORK_SITEIDX_H
+#endif //QLPEPS_QLPEPS_TWO_DIM_TN_FRAMEWORK_SITEIDX_H

@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. The split index TPS class, implementation for functions
 */
 
-#ifndef GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
-#define GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
+#ifndef QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
+#define QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 
 namespace qlpeps {
 using namespace qlten;
@@ -308,4 +308,4 @@ size_t CGSolverRecvVector(
 
 }//qlpeps
 
-#endif //GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
+#endif //QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H

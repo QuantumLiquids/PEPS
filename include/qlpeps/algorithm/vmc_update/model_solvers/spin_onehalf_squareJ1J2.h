@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Model Energy Solver for spin-1/2 J1-J2 Heisenberg model in square lattice
 */
 
-#ifndef GRACEQ_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
-#define GRACEQ_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
+#ifndef QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
+#define QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"    //ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
@@ -309,4 +309,4 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
 }//qlpeps
 
 
-#endif //GRACEQ_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
+#endif //QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H

@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. The split index TPS class, where the tensor are stored in tensors splited in physical index
 */
 
-#ifndef GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_H
-#define GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_H
+#ifndef QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H
+#define QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/framework/ten_matrix.h"
@@ -223,4 +223,4 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
 }//qlpeps
 
 #include "qlpeps/two_dim_tn/tps/split_index_tps_impl.h"
-#endif //GRACEQ_VMC_PEPS_SPLIT_INDEX_TPS_H
+#endif //QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H

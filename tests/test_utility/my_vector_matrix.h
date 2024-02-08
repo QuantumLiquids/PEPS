@@ -2,8 +2,8 @@
 // Created by haoxinwang on 17/10/2023.
 //
 
-#ifndef GRACEQ_VMC_PEPS_MY_VECTOR_MATRIX_H
-#define GRACEQ_VMC_PEPS_MY_VECTOR_MATRIX_H
+#ifndef QLPEPS_VMC_PEPS_MY_VECTOR_MATRIX_H
+#define QLPEPS_VMC_PEPS_MY_VECTOR_MATRIX_H
 
 #include "qlten/qlten.h"
 
@@ -194,4 +194,4 @@ class MySquareMatrix {
   std::vector<std::vector<ElemT>> data_;
 };
 
-#endif //GRACEQ_VMC_PEPS_MY_VECTOR_MATRIX_H
+#endif //QLPEPS_VMC_PEPS_MY_VECTOR_MATRIX_H

@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Explicit class of wave function component in square lattice. Monte Carlo sweep realized by NN bond flip.
 */
 
-#ifndef GRACEQ_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
-#define GRACEQ_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
+#ifndef QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
+#define QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
 
 #include "qlpeps/algorithm/vmc_update/wave_function_component.h"    //WaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
@@ -130,4 +130,4 @@ class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
 
 }//qlpeps
 
-#endif //GRACEQ_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
+#endif //QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H

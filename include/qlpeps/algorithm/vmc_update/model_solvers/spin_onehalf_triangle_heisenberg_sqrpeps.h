@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Model Energy Solver for spin-1/2 Triangle Heisenberg model on square PEPS
 */
 
-#ifndef GRACEQ_VMC_PEPS_SPIN_ONEHALF_TRIANGLE_HEISENBERG_SQRPEPS_H
-#define GRACEQ_VMC_PEPS_SPIN_ONEHALF_TRIANGLE_HEISENBERG_SQRPEPS_H
+#ifndef QLPEPS_VMC_PEPS_SPIN_ONEHALF_TRIANGLE_HEISENBERG_SQRPEPS_H
+#define QLPEPS_VMC_PEPS_SPIN_ONEHALF_TRIANGLE_HEISENBERG_SQRPEPS_H
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
@@ -279,4 +279,4 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
 
 
 
-#endif //GRACEQ_VMC_PEPS_SPIN_ONEHALF_TRIANGLE_HEISENBERG_SQRPEPS_H
+#endif //QLPEPS_VMC_PEPS_SPIN_ONEHALF_TRIANGLE_HEISENBERG_SQRPEPS_H

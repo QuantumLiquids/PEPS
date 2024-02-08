@@ -8,8 +8,8 @@
 */
 
 
-#ifndef GRACEQ_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H
-#define GRACEQ_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H
+#ifndef QLPEPS_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H
+#define QLPEPS_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H
 
 namespace qlpeps {
 using namespace qlten;
@@ -1269,4 +1269,4 @@ void TensorNetwork2D<TenElemT, QNT>::UpdateSiteConfig(const qlpeps::SiteIdx &sit
 
 }///qlpeps
 
-#endif //GRACEQ_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H
+#endif //QLPEPS_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H

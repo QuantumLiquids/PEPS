@@ -4,11 +4,11 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-09-25
 *
-* Description: GraceQ/VMC-SquareLatticePEPS project. Simple Update Implementation.
+* Description: QuantumLiquids/VMC-SquareLatticePEPS project. Simple Update Implementation.
 */
 
-#ifndef GRACEQ_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
-#define GRACEQ_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
+#ifndef QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
+#define QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
 
 
 namespace qlpeps {
@@ -150,4 +150,4 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
 }
 
 }//qlpeps;
-#endif //GRACEQ_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
+#endif //QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H

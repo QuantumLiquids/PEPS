@@ -7,8 +7,8 @@
 * Description: QuantumLiquids/PEPS project. Implementation for conjugate gradient solver
 */
 
-#ifndef GRACEQ_VMC_PEPS_CONJUGATE_GRADIENT_SOLVER_H
-#define GRACEQ_VMC_PEPS_CONJUGATE_GRADIENT_SOLVER_H
+#ifndef QLPEPS_VMC_PEPS_CONJUGATE_GRADIENT_SOLVER_H
+#define QLPEPS_VMC_PEPS_CONJUGATE_GRADIENT_SOLVER_H
 
 #include <stddef.h>   //size_t
 #include <boost/mpi.hpp>
@@ -343,4 +343,4 @@ void MatrixMultiplyVectorSlave(
 
 }//qlpeps
 
-#endif //GRACEQ_VMC_PEPS_CONJUGATE_GRADIENT_SOLVER_H
+#endif //QLPEPS_VMC_PEPS_CONJUGATE_GRADIENT_SOLVER_H

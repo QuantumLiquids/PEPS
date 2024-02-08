@@ -4,7 +4,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-07-20
 *
-* Description: GraceQ/VMC-SquareLatticePEPS project. The SquareLatticePEPS class.
+* Description: QuantumLiquids/VMC-SquareLatticePEPS project. The SquareLatticePEPS class.
 */
 
 

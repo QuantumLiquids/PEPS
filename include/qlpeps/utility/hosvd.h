@@ -8,8 +8,8 @@
 */
 
 
-#ifndef GRACEQ_UTILITY_HOSVD_H
-#define GRACEQ_UTILITY_HOSVD_H
+#ifndef QLPEPS_UTILITY_HOSVD_H
+#define QLPEPS_UTILITY_HOSVD_H
 
 #include "qlten/qlten.h"
 
@@ -100,4 +100,4 @@ HOSVDRes<TenElemT, QNT> HOSVD(
 }
 
 }//qlpeps
-#endif //GRACEQ_UTILITY_HOSVD_H
+#endif //QLPEPS_UTILITY_HOSVD_H

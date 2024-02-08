@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. PRL 105, 120603 (2010)
 */
 
-#ifndef GRACEQ_VMC_PEPS_NON_DETAILED_BALANCE_MCMC_H
-#define GRACEQ_VMC_PEPS_NON_DETAILED_BALANCE_MCMC_H
+#ifndef QLPEPS_VMC_PEPS_NON_DETAILED_BALANCE_MCMC_H
+#define QLPEPS_VMC_PEPS_NON_DETAILED_BALANCE_MCMC_H
 
 #include <cstddef>    //size_t
 #include <vector>
@@ -76,4 +76,4 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
 
 }//qlpeps
 
-#endif //GRACEQ_VMC_PEPS_NON_DETAILED_BALANCE_MCMC_H
+#endif //QLPEPS_VMC_PEPS_NON_DETAILED_BALANCE_MCMC_H

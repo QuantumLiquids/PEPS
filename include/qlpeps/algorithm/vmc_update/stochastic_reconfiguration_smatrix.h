@@ -6,8 +6,8 @@
 */
 
 
-#ifndef GRACEQ_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H
-#define GRACEQ_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H
+#ifndef QLPEPS_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H
+#define QLPEPS_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H
 
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_nn_flip.h"
@@ -49,4 +49,4 @@ class SRSMatrix {
 
 }//qlpeps
 
-#endif //GRACEQ_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H
+#endif //QLPEPS_VMC_PEPS_STOCHASTIC_RECONFIGURATION_SMATRIX_H

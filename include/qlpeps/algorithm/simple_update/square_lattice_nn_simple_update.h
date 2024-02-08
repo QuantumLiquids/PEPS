@@ -4,12 +4,12 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-09-28
 *
-* Description: GraceQ/VMC-SquareLatticePEPS project.
+* Description: QuantumLiquids/VMC-SquareLatticePEPS project.
 *              Simple Update for nearest-neighbor interaction models in square lattice
 */
 
-#ifndef GRACEQ_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
-#define GRACEQ_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#ifndef QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#define QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
 
 #include "qlpeps/algorithm/simple_update/simple_update.h"
 
@@ -80,4 +80,4 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
 }
 
 
-#endif //GRACEQ_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#endif //QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H

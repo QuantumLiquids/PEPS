@@ -7,8 +7,8 @@
 * Description: QuantumLiquids/PEPS project. Implementation for the axis update.
 */
 
-#ifndef GRACEQ_VMC_PEPS_AXIS_UPDATE_H
-#define GRACEQ_VMC_PEPS_AXIS_UPDATE_H
+#ifndef QLPEPS_VMC_PEPS_AXIS_UPDATE_H
+#define QLPEPS_VMC_PEPS_AXIS_UPDATE_H
 
 
 namespace qlpeps {
@@ -53,4 +53,4 @@ QLTensor<TenElemT, QNT> GrowPhyIndexFromSplitIndexTensorsWithouQN_(
 
 
 }//qlpeps
-#endif //GRACEQ_VMC_PEPS_AXIS_UPDATE_H
+#endif //QLPEPS_VMC_PEPS_AXIS_UPDATE_H

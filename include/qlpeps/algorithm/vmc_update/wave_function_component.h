@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Abstract class of wavefunction component.
 */
 
-#ifndef GRACEQ_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
-#define GRACEQ_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
+#ifndef QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
+#define QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 
 #include "qlpeps/two_dim_tn/tps/configuration.h"    //Configuration
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    //BMPSTruncatePara
@@ -38,4 +38,4 @@ BMPSTruncatePara WaveFunctionComponent<TenElemT, QNT>::trun_para = BMPSTruncateP
 }//qlpeps
 
 
-#endif //GRACEQ_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
+#endif //QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
