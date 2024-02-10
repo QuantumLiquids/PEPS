@@ -1,26 +1,29 @@
 /*
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
-* Creation Date: 2023-07-09
+* Creation Date: 2024-02-10
 *
-* Description: QuantumLiquids/PEPS project. Explicit class of wave function component in square lattice. Monte Carlo sweep realized by NN bond flip.
+* Description: QuantumLiquids/PEPS project. Explicit class of wave function component in square lattice.
+*              Monte Carlo sweep realized by NN bond flip without U1 quantum number conservation.
 */
 
-#ifndef QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
-#define QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
+#ifndef QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_FULL_SPACE_NN_FLIP_H
+#define QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_FULL_SPACE_NN_FLIP_H
 
 #include "qlpeps/algorithm/vmc_update/wave_function_component.h"    //WaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
+#include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 
 namespace qlpeps {
 template<typename TenElemT, typename QNT>
-class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
+class SquareTPSSampleFullSpaceNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
   using WaveFunctionComponentT = WaveFunctionComponent<TenElemT, QNT>;
  public:
   TensorNetwork2D<TenElemT, QNT> tn;
 
-  SquareTPSSampleNNFlip(const size_t rows, const size_t cols) : WaveFunctionComponentT(rows, cols), tn(rows, cols) {}
+  SquareTPSSampleFullSpaceNNFlip(const size_t rows, const size_t cols) : WaveFunctionComponentT(rows, cols),
+                                                                         tn(rows, cols) {}
 
-  SquareTPSSampleNNFlip(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
+  SquareTPSSampleFullSpaceNNFlip(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
       : WaveFunctionComponentT(config), tn(config.rows(), config.cols()) {
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
     tn.GrowBMPSForRow(0, this->trun_para);
@@ -43,16 +46,6 @@ class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
     this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
   }
 
-
-//  SplitIndexTPS<TenElemT, QNT> operator*(const SplitIndexTPS<TenElemT, QNT> &sitps) const {
-//
-//
-//  }
-//
-//  operator SplitIndexTPS<TenElemT, QNT>() const {
-//
-//  }
-
   void MonteCarloSweepUpdate(const SplitIndexTPS<TenElemT, QNT> &sitps,
                              std::uniform_real_distribution<double> &u_double,
                              std::vector<double> &accept_rates) {
@@ -62,7 +55,7 @@ class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 2, true);
       for (size_t col = 0; col < tn.cols() - 1; col++) {
-        flip_accept_num += ExchangeUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps, u_double);
+        flip_accept_num += NNFlipUpdate_({row, col}, {row, col + 1}, HORIZONTAL, sitps, u_double);
         if (col < tn.cols() - 2) {
           tn.BTenMoveStep(RIGHT);
         }
@@ -80,7 +73,7 @@ class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 2, true);
       for (size_t row = 0; row < tn.rows() - 1; row++) {
-        flip_accept_num += ExchangeUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
+        flip_accept_num += NNFlipUpdate_({row, col}, {row + 1, col}, VERTICAL, sitps, u_double);
         if (row < tn.rows() - 2) {
           tn.BTenMoveStep(DOWN);
         }
@@ -96,38 +89,42 @@ class SquareTPSSampleNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
   }
 
  private:
-  bool ExchangeUpdate_(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
-                       const SplitIndexTPS<TenElemT, QNT> &sitps,
-                       std::uniform_real_distribution<double> &u_double) {
-    if (this->config(site1) == this->config(site2)) {
-      return false;
-    }
+  bool NNFlipUpdate_(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
+                     const SplitIndexTPS<TenElemT, QNT> &sitps,
+                     std::uniform_real_distribution<double> &u_double) {
+    size_t dim = sitps.PhysicalDim();
+    std::vector<TenElemT> alternative_psi(dim * dim);
+    size_t init_config = this->config(site1) * dim + this->config(site2);
     assert(sitps(site1)[this->config(site1)].GetIndexes() == sitps(site1)[this->config(site2)].GetIndexes());
-    TenElemT psi_b = tn.ReplaceNNSiteTrace(site1, site2, bond_dir, sitps(site1)[this->config(site2)],
-                                           sitps(site2)[this->config(site1)]);
-    bool exchange;
-    TenElemT &psi_a = this->amplitude;
-    if (std::fabs(psi_b) >= std::fabs(psi_a)) {
-      exchange = true;
-    } else {
-      double div = std::fabs(psi_b) / std::fabs(psi_a);
-      double P = div * div;
-      if (u_double(random_engine) < P) {
-        exchange = true;
-      } else {
-        exchange = false;
-        return exchange;
+    alternative_psi[init_config] = this->amplitude;
+    for (size_t config1 = 0; config1 < dim; config1++) {
+      for (size_t config2 = 0; config2 < dim; config2++) {
+        size_t config = config1 * dim + config2;
+        if (config != init_config) {
+          alternative_psi[config] =
+              tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
+                                    sitps(site1)[config1],
+                                    sitps(site2)[config2]);
+        }
       }
     }
-
-    std::swap(this->config(site1), this->config(site2));
+    std::vector<double> weights(dim * dim);
+    for (size_t i = 0; i < dim * dim; i++) {
+      weights[i] = std::norm(alternative_psi[i]);
+    }
+    size_t final_state = NonDBMCMCStateUpdate(init_config, weights, u_double(random_engine));
+    if (final_state == init_config) {
+      return false;
+    }
+    this->config(site1) = final_state / dim;
+    this->config(site2) = final_state % dim;
+    this->amplitude = alternative_psi[final_state];
     tn.UpdateSiteConfig(site1, this->config(site1), sitps);
     tn.UpdateSiteConfig(site2, this->config(site2), sitps);
-    this->amplitude = psi_b;
-    return exchange;
+    return true;
   }
-}; //SquareTPSSampleNNFlip
+}; //SquareTPSSampleFullSpaceNNFlip
 
 }//qlpeps
 
-#endif //QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_FLIP_H
+#endif //QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_FULL_SPACE_NN_FLIP_H

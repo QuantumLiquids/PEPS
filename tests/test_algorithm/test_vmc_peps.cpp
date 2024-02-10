@@ -18,6 +18,7 @@
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_3site_exchange.h"
+#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_full_space_nn_flip.h"
 
 #include "qlmps/case_params_parser.h"
 
@@ -32,8 +33,9 @@ using QNSctVecT = QNSectorVec<U1QN>;
 using DQLTensor = QLTensor<QLTEN_Double, U1QN>;
 using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
 
-using TPSSampleNNFlipT = SquareTPSSampleNNFlip<QLTEN_Double, U1QN>;
+using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
 using SquareTPSSample3SiteExchangeT = SquareTPSSample3SiteExchange<QLTEN_Double, U1QN>;
+using SquareTPSSampleFullSpaceNNFlipT = SquareTPSSampleFullSpaceNNFlip<QLTEN_Double, U1QN>;
 
 using qlmps::CaseParamsParserBasic;
 
@@ -140,10 +142,10 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
 
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
-  VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  VMCPEPSExecutor<QLTEN_Double, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model> *executor(nullptr);
 
   if (params.Continue_from_VMC) {
-    executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para,
+    executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(optimize_para,
                                                                                 Ly, Lx,
                                                                                 world);
   } else {
@@ -152,7 +154,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model>(optimize_para, tps,
+    executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(optimize_para, tps,
                                                                                 world);
   }
 

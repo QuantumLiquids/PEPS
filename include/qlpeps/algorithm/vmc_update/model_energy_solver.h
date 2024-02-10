@@ -10,7 +10,7 @@
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"      //SplitIndexTPS
-#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_nn_flip.h"     //SquareTPSSampleNNFlip
+#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_nn_exchange.h"     //SquareTPSSampleNNExchange
 
 namespace qlpeps {
 

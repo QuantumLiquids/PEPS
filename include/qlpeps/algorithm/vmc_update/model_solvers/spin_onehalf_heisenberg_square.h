@@ -44,7 +44,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
   bool has_unreasonable_bond_energy(false);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNFlip<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   std::vector<TenElemT> psi_gather;
   psi_gather.reserve(tn.rows() + tn.cols() - 2);
@@ -158,7 +158,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
   res.bond_energys_loc.reserve(lx * ly * 2);
   res.two_point_functions_loc.reserve(lx / 2 * 3);
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNFlip<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < ly; row++) {

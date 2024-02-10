@@ -30,7 +30,7 @@ using QNSctVecT = QNSectorVec<U1QN>;
 using DQLTensor = QLTensor<QLTEN_Double, U1QN>;
 using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
 
-using TPSSampleNNFlipT = SquareTPSSampleNNFlip<QLTEN_Double, U1QN>;
+using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
 
 boost::mpi::environment env;
 

@@ -6,37 +6,54 @@
 #  Description: QuantumLiquids/PEPS project. CMake file to control unittest.
 # Including the setting for MKL compile flags and link flags.
 
-if (APPLE)
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-        set(MATH_LIB_COMPILE_FLAGS "-I$ENV{MKLROOT}/include")
-        #Need test
-        set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -liomp5 -lpthread -lm -ldl)
+option(QLTEN_USE_OPENBLAS "Use openblas rather mkl" OFF)
+
+if (NOT QLTEN_USE_OPENBLAS)
+    if (APPLE)
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+            set(MATH_LIB_COMPILE_FLAGS "-I$ENV{MKLROOT}/include")
+            #Need test
+            set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -liomp5 -lpthread -lm -ldl)
+        endif ()
+        if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
+            # May not work
+            set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -L$ENV{MKLROOT}/lib -L$ENV{CMPLR_ROOT}/mac/compiler/lib/ -liomp5 -lpthread -lm -ldl)
+        endif ()
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
+            # Note as of Intel oneAPI 2021.2, "source /opt/intel/oneapi/compiler/latest/env/vars.sh"
+            set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -L$ENV{MKLROOT}/lib -L$ENV{CMPLR_ROOT}/mac/compiler/lib/ -Wl, -rpath $ENV{CMPLR_ROOT}/mac/compiler/lib/libiomp5.dylib -liomp5 -lpthread -lm -ldl)
+        endif ()
+    elseif (UNIX)
+        #UNIX include APPLE, but we except it here
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+            set(MATH_LIB_COMPILE_FLAGS "-I$ENV{MKLROOT}/include")
+            set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -liomp5 -lpthread -lm -ldl)
+        endif ()
+        if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
+            # Link the Intel's OpenMP library to avoid performance issue when the library calls the MKL's gesdd function.
+            set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -L$ENV{MKLROOT}/lib/intel64 -liomp5 -lpthread -lm -ldl)
+        endif ()
+        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
+            set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -L$ENV{MKLROOT}/lib/intel64 -liomp5 -lpthread -lm -ldl)
+        endif ()
     endif ()
-    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-        # May not work
-        set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -L$ENV{MKLROOT}/lib -L$ENV{CMPLR_ROOT}/mac/compiler/lib/ -liomp5 -lpthread -lm -ldl)
-    endif ()
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-        # Note as of Intel oneAPI 2021.2, "source /opt/intel/oneapi/compiler/latest/env/vars.sh"
-        set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -L$ENV{MKLROOT}/lib -L$ENV{CMPLR_ROOT}/mac/compiler/lib/ -Wl, -rpath $ENV{CMPLR_ROOT}/mac/compiler/lib/libiomp5.dylib -liomp5 -lpthread -lm -ldl)
-    endif ()
-elseif (UNIX)
-    #UNIX include APPLE, but we except it here
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-        set(MATH_LIB_COMPILE_FLAGS "-I$ENV{MKLROOT}/include")
-        set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -liomp5 -lpthread -lm -ldl)
-    endif ()
-    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-        set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-        # Link the Intel's OpenMP library to avoid performance issue when the library calls the MKL's gesdd function.
-        set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -L$ENV{MKLROOT}/lib/intel64 -liomp5 -lpthread -lm -ldl)
-    endif ()
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-        set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -L$ENV{MKLROOT}/lib/intel64 -liomp5 -lpthread -lm -ldl)
-    endif ()
+else ()
+    add_definitions(-DUSE_OPENBLAS)
+    set(BLA_VENDOR OpenBLAS)
+    #        FIND_PACKAGE(BLAS REQUIRED)
+    #        FIND_PACKAGE(LAPACK REQUIRED)
+    set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas/")
+    set(Lapack_ROOT "/opt/homebrew/opt/lapack")
+    message(${OpenBLAS_ROOT})
+    set(OpenBLAS_INCLUDE_DIRS "${OpenBLAS_ROOT}/include")
+    set(OpenBLAS_LIBRARIES "${OpenBLAS_ROOT}/lib/libblas.dylib")
+    message(${OpenBLAS_LIBRARIES})
+    set(MATH_LIB_COMPILE_FLAGS -I${OpenBLAS_INCLUDE_DIRS} -pthread)
+    set(MATH_LIB_LINK_FLAGS ${OpenBLAS_LIBRARIES} ${OpenBLAS_ROOT}/lib/liblapack.dylib -lm -lpthread -ldl -fopenmp -lclapack)
 endif ()
 
 
@@ -164,9 +181,6 @@ macro(compile_unittest
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
 endmacro()
 
-### Test sites vector.
-#add_unittest(test_site_vec test_site_vec.cc "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "")
-#
 
 ## Test basis for tensor networks
 # Test DuoVMatrix class
@@ -237,10 +251,3 @@ add_mpi_unittest(test_conjugate_gradient_mpi_solver
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "3"
         ""
 )
-
-#
-## Test mpi two site update
-#add_mpi_unittest(test_mpi_two_site_update_finite_vmps
-#        "test_mpi_algorithm/test_mpi_two_site_update_finite_vmps.cc"
-#        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "4"
-#        )
