@@ -7,6 +7,7 @@
 * Description: QuantumLiquids/PEPS project. Unittests for TensorNetwork2D
 */
 
+#include <bitset>
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
@@ -18,16 +19,117 @@ using namespace qlpeps;
 using qlten::special_qn::U1QN;
 using qlten::special_qn::U1U1ZnQN;
 
-struct Test2DIsingTensorNetworkNoQN : public testing::Test {
+///< Exact solution for Finite-size OBC Square Ising model
+class SquareIsingModel {
+ public:
+  SquareIsingModel(size_t lx, size_t ly, double temperature)
+      : lx_(lx), ly_(ly),
+        N_(lx * ly),
+        temperature_(temperature) {
+    if (lx_ < ly_) {
+      std::swap(lx_, ly_);
+    }
+    transfer_mat_dim_ = (1 << ly_);
+    transfer_matrix_ = std::vector<std::vector<double>>(transfer_mat_dim_,
+                                                        std::vector<double>(transfer_mat_dim_, 0));
+    boundary_vec_ = std::vector<double>(transfer_mat_dim_, 0);
+  }
+
+  double CalculateExactFreeEnergy() {
+    // Calculate the transfer matrix
+    CalculateBoundaryVec_();
+    CalculateTransferMatrix_();
+
+    // Calculate the partition function using the transfer matrix
+    double partition_function = CalculatePartitionFunction();
+    // Calculate the free energy
+    double free_energy = -log(partition_function) / N_ * temperature_;
+
+    return free_energy;
+  }
+
+  double CalculatePartitionFunction() {
+    std::vector<double> current_state(boundary_vec_);
+    std::vector<double> next_state(transfer_matrix_.size(), 0.0);
+
+    for (size_t i = 0; i < lx_ - 1; ++i) {
+      for (size_t j = 0; j < transfer_matrix_.size(); ++j) {
+        for (size_t k = 0; k < transfer_matrix_.size(); ++k) {
+          next_state[k] += current_state[j] * transfer_matrix_[j][k];
+        }
+      }
+      std::swap(current_state, next_state);
+      std::fill(next_state.begin(), next_state.end(), 0.0);
+    }
+
+    double partition_function = 0.0;
+    for (size_t i = 0; i < boundary_vec_.size(); ++i) {
+      partition_function += current_state[i] * boundary_vec_[i];
+    }
+    return partition_function;
+  }
+
+ private:
+  void CalculateTransferMatrix_() {
+    for (size_t row = 0; row < transfer_mat_dim_; ++row) {
+      std::bitset<64> config(row);
+      double e_row = CalHalfEnergyChain_(config);
+      for (size_t j = row; j < transfer_mat_dim_; ++j) {
+        std::bitset<64> next_config(j);
+        double e = e_row + CalHalfEnergyChain_(next_config) + CalLadderEnergy_(config, next_config);
+        transfer_matrix_[row][j] = exp(-e / temperature_);
+        if (row != j) {
+          transfer_matrix_[j][row] = transfer_matrix_[row][j];
+        }
+      }
+    }
+  }
+
+  void CalculateBoundaryVec_() {
+    for (size_t idx = 0; idx < transfer_mat_dim_; ++idx) {
+      std::bitset<64> config(idx);
+      boundary_vec_[idx] = exp(-CalHalfEnergyChain_(config) / temperature_);
+    }
+  }
+
+  template<size_t N>
+  double CalHalfEnergyChain_(const std::bitset<N> &config) const {
+    std::bitset<N> shift_config = (config >> 1);
+    size_t different_bond_num = (config ^ shift_config).count() - config[ly_ - 1];
+    size_t bond_num = ly_ - 1;
+    return (double) different_bond_num - (double) bond_num / 2.0; //FM
+  }
+
+  template<size_t N>
+  double CalLadderEnergy_(const std::bitset<N> &config, const std::bitset<N> &next_config) const {
+    size_t different_bond_num = (config ^ next_config).count();
+    size_t bond_num = ly_;
+    return 2.0 * different_bond_num - (double) bond_num; //FM
+  }
+
+  template<size_t N>
+  double CalculateTransferMatrixEffEnergy_(const std::bitset<N> &config, const std::bitset<N> &next_config) const {
+    return CalHalfEnergyChain_(config) + CalHalfEnergyChain_(next_config) + CalLadderEnergy_(config, next_config);
+  }
+
+  size_t lx_;               // linear size
+  size_t ly_;               // linear size
+  const size_t N_;                // Site number
+  const double temperature_;      // Temperature
+  size_t transfer_mat_dim_;
+  std::vector<std::vector<double>> transfer_matrix_;
+  std::vector<double> boundary_vec_;
+};
+
+struct TwoDimensionalIsingOBCTensorNetworkWithoutQN : public testing::Test {
   using QNT = U1QN;
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<QNT>;
-  using QNSctVecT = QNSectorVec<QNT>;
   using DQLTensor = QLTensor<QLTEN_Double, QNT>;
   using ZQLTensor = QLTensor<QLTEN_Complex, QNT>;
 
-  const size_t Lx = 20;
-  const size_t Ly = 20;
+  const size_t Lx = 12;
+  const size_t Ly = 12;
   const double beta = std::log(1 + std::sqrt(2.0)) / 2.0; // critical point
   IndexT vb_out = IndexT({QNSctT(QNT(0), 2)},
                          TenIndexDirType::OUT
@@ -41,10 +143,10 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
   TensorNetwork2D<QLTEN_Double, QNT> dtn2d = TensorNetwork2D<QLTEN_Double, QNT>(Ly, Lx);
   TensorNetwork2D<QLTEN_Complex, QNT> ztn2d = TensorNetwork2D<QLTEN_Complex, QNT>(Ly, Lx);
 
-  double F_ex = -2.0709079359461788;
+  double F_ex; //-2.0709079359461788;
 //  double F_ex = -std::log(2.0) / beta; //high temperature approx
 //  double F_ex = -(2.0 - (Lx+Ly)/(Lx*Ly)); //low temperature approx
-  double Z_ex = std::exp(-F_ex * beta * Lx * Ly); //partition function, exact value
+  double Z_ex; //partition function, exact value
   double tn_free_en_norm_factor = 0.0;
   void SetUp(void) {
     DQLTensor boltzmann_weight = DQLTensor({vb_in, vb_out});
@@ -158,11 +260,13 @@ struct Test2DIsingTensorNetworkNoQN : public testing::Test {
     ztn2d.InitBMPS();
 
     // calculate exact partition function
-
+    SquareIsingModel model(Lx, Ly, 1.0 / beta);
+    F_ex = model.CalculateExactFreeEnergy();
+    Z_ex = std::exp(-F_ex * beta * Lx * Ly);
   }//SetUp
 };
 
-TEST_F(Test2DIsingTensorNetworkNoQN, Test2DIsingOBCTensorNetworkRealNumber) {
+TEST_F(TwoDimensionalIsingOBCTensorNetworkWithoutQN, Test2DIsingOBCTensorNetworkRealNumber) {
   double psi[22];
   auto dtn2d_copy = dtn2d;
   BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
@@ -277,8 +381,8 @@ struct Test2DIsingTensorNetwork : public testing::Test {
   using DQLTensor = QLTensor<QLTEN_Double, U1U1ZnQN<2>>;
   using ZQLTensor = QLTensor<QLTEN_Complex, U1U1ZnQN<2>>;
 
-  const size_t Lx = 20;
-  const size_t Ly = 20;
+  const size_t Lx = 10;
+  const size_t Ly = 24;
   const double beta = std::log(1 + std::sqrt(2.0)) / 2.0; // critical point
   IndexT vb_out = IndexT({QNSctT(U1U1ZnQN<2>(0, 0, 0), 1),
                           QNSctT(U1U1ZnQN<2>(0, 0, 1), 1)},
@@ -293,8 +397,8 @@ struct Test2DIsingTensorNetwork : public testing::Test {
   TensorNetwork2D<QLTEN_Double, QNT> dtn2d = TensorNetwork2D<QLTEN_Double, QNT>(Ly, Lx);
   TensorNetwork2D<QLTEN_Complex, QNT> ztn2d = TensorNetwork2D<QLTEN_Complex, QNT>(Ly, Lx);
 
-  double F_ex = -2.0709079359461788;
-  double Z_ex = std::exp(-F_ex * beta * Lx * Ly); //partition function, exact value
+  double F_ex;
+  double Z_ex; //partition function, exact value
   double tn_free_en_norm_factor = 0.0;
   void SetUp(void) {
     DQLTensor boltzmann_weight = DQLTensor({vb_in, vb_out});
@@ -410,13 +514,15 @@ struct Test2DIsingTensorNetwork : public testing::Test {
     ztn2d.InitBMPS();
 
     // calculate exact partition function
-
+    SquareIsingModel model(Lx, Ly, 1.0 / beta);
+    F_ex = model.CalculateExactFreeEnergy();
+    Z_ex = std::exp(-F_ex * beta * Lx * Ly);
   }//SetUp
 };
 
 TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
   double psi[22];
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(1, 10, 1e-15, CompressMPSScheme::SVD_COMPRESS);
   dtn2d.GrowBMPSForRow(2, trunc_para);
   dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
   dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -509,7 +615,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
                                                dtn2d({1, 1}), dtn2d({3, 2})); // trace original tn
 
   for (size_t i = 1; i < 22; i++) {
-    EXPECT_NEAR(-(std::log(psi[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+    EXPECT_NEAR(-(std::log(psi[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-10);
   }
   dtn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
 }

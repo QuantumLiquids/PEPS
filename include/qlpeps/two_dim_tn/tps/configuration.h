@@ -8,6 +8,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_H
 
 #include <random>
+#include "qlmps/qlmps.h"
 #include "qlpeps/two_dim_tn/framework/duomatrix.h"
 #include "mpi.h"        //MPI BroadCast
 
@@ -18,6 +19,7 @@ class Configuration : public DuoMatrix<size_t> {
 
   using DuoMatrix<size_t>::DuoMatrix;
   using DuoMatrix<size_t>::operator();
+  using DuoMatrix<size_t>::operator==;
 
   /**
    * Random generate a configuration
@@ -30,15 +32,13 @@ class Configuration : public DuoMatrix<size_t> {
     size_t dim = occupancy_num.size();
     size_t rows = this->rows();
     size_t cols = this->cols();
-    std::vector<size_t> data(rows * cols);
+    std::vector<size_t> configuration_list(rows * cols);
     size_t off_set = 0;
     for (size_t i = 0; i < dim; i++) {
-      for (size_t j = off_set; j < off_set + occupancy_num[i]; j++) {
-        data[j] = i;
-      }
+      std::fill(configuration_list.begin() + off_set, configuration_list.begin() + off_set + occupancy_num[i], i);
       off_set += occupancy_num[i];
     }
-    assert(off_set == data.size());
+    assert(off_set == configuration_list.size());
 
     // random_device can generate different random number during the running
     // and do not need to feed the seed;
@@ -46,11 +46,11 @@ class Configuration : public DuoMatrix<size_t> {
     // each time is the same.
     std::random_device rd;
     std::mt19937 rand_num_gen(rd());
-    std::shuffle(data.begin(), data.end(), rand_num_gen);
+    std::shuffle(configuration_list.begin(), configuration_list.end(), rand_num_gen);
 
     for (size_t row = 0; row < rows; row++) {
       for (size_t col = 0; col < cols; col++) {
-        (*this)({row, col}) = data[row * cols + col];
+        (*this)({row, col}) = configuration_list.at(row * cols + col);
       }
     }
   }
@@ -77,11 +77,11 @@ class Configuration : public DuoMatrix<size_t> {
     std::string file = path + "/configuration" + std::to_string(label);
     std::ofstream ofs(file, std::ofstream::binary);
     for (size_t row = 0; row < this->rows(); row++) {
-      for (size_t col = 0; col < this->cols(); col++) {
-        ofs << (*this)({row, col}) << std::endl;
+      for (size_t col = 0; col < this->cols() - 1; col++) {
+        ofs << (*this)({row, col}) << " ";
       }
+      ofs << (*this)({row, this->cols() - 1}) << std::endl;
     }
-    ofs << std::endl;
     ofs.close();
   }
 
@@ -111,7 +111,7 @@ inline void MPI_Send(
     MPI_Comm comm
 ) {
   const size_t rows = config.rows(), cols = config.cols(), N = config.size();
-  size_t *config_raw_data = new size_t[N];
+  auto *config_raw_data = new size_t[N];
   for (size_t row = 0; row < rows; row++) {
     for (size_t col = 0; col < cols; col++) {
       config_raw_data[row * cols + col] = config({row, col});
@@ -171,7 +171,6 @@ inline int MPI_Sendrecv(
   delete[]config_raw_data_recv;
   return err_message;
 }
-
 
 inline void MPI_BCast(
     Configuration &config,

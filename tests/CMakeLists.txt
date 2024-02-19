@@ -58,7 +58,7 @@ endif ()
 
 
 find_package(Boost
-        1.76.0
+        1.74.0
         REQUIRED
         COMPONENTS serialization mpi)
 
@@ -88,10 +88,10 @@ macro(add_unittest
     )
 
     target_include_directories(${TEST_NAME}
+            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
@@ -124,10 +124,10 @@ macro(add_mpi_unittest
             PRIVATE ${OMP_FLAGS}
     )
     target_include_directories(${TEST_NAME}
+            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
@@ -163,10 +163,10 @@ macro(compile_unittest
             PRIVATE ${OMP_FLAGS}
     )
     target_include_directories(${TEST_NAME}
+            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
@@ -190,7 +190,11 @@ add_unittest(test_ten_mat
         "test_2d_tn/test_ten_matrix.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
-
+# Test Configuration class
+add_unittest(test_configuration
+        "test_2d_tn/test_configuration.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 ## Test 2D tensor networks.
 add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"

@@ -87,6 +87,23 @@ class DuoMatrix {
     return *this;
   }
 
+  bool operator==(const DuoMatrix<ElemT> &rhs) const {
+    if (rows() != rhs.rows() || cols() != rhs.cols()) {
+      return false;
+    }
+    for (size_t i = 0; i < rows(); ++i) {
+      for (size_t j = 0; j < cols(); ++j) {
+        if ((*this)(i, j) == nullptr || rhs(i, j) == nullptr) { //invalid data
+          return false;
+        }
+        if ((*this)({i, j}) != rhs({i, j})) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   /**
    * Create a DuoMatrix by moving raw data from another DuoMatrix instance.
    * @param duomat A DuoMatrix instance.
