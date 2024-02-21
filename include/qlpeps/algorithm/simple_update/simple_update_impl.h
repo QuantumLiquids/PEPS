@@ -10,11 +10,9 @@
 #ifndef QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
 #define QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
 
-
 namespace qlpeps {
 
 using namespace qlten;
-
 
 /**
  * Calculate the exp(-tau*H) with tau a small number by Taylor expansion
@@ -65,12 +63,12 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
     transpose_axes[N + i] = 2 * i + 1;
   }
   ham_scale.Transpose(transpose_axes);
-  //generate the Indentity tensor
+  //generate the Identity tensor
   Tensor id = Tensor(ham_scale.GetIndexes());
   ShapeT shape = ham_scale.GetShape();
   shape.erase(shape.begin() + N, shape.end());
   std::vector<CoorsT> all_coors = GenAllCoors(shape);
-  for (auto coor: all_coors) {
+  for (auto coor : all_coors) {
     auto coor_copy = coor;
     coor.insert(coor.end(), coor_copy.begin(), coor_copy.end());
     id(coor) = 1.0;
@@ -101,7 +99,6 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
   }
   return expH;
 }
-
 
 /**
  *
@@ -136,7 +133,6 @@ SimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateExecutor(const SimpleUpdatePara
             << "\n";
   SetStatus(qlten::INITED);
 }
-
 
 template<typename TenElemT, typename QNT>
 void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {

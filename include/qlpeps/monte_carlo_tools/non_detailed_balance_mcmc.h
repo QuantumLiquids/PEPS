@@ -11,7 +11,8 @@
 #include <cstddef>    //size_t
 #include <vector>
 #include <algorithm>  //max_element
-#include <assert.h>
+#include <numeric>    //reduce
+#include <cassert>
 
 namespace qlpeps {
 

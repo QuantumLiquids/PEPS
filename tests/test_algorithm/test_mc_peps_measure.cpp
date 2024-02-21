@@ -71,7 +71,7 @@ struct VMCUpdateParams : public CaseParamsParserBasic {
 };
 
 // Test spin systems
-struct TestSpinSystemVMCPEPS : public testing::Test {
+struct SpinSystemVMCPEPS : public testing::Test {
   VMCUpdateParams params = VMCUpdateParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
@@ -140,7 +140,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   }
 };
 
-TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
+TEST_F(SpinSystemVMCPEPS, TriHeisenbergD4) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS<QLTEN_Double, U1QN>;
   MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
@@ -154,7 +154,7 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
+TEST_F(SpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<QLTEN_Double, U1QN>;
   MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);

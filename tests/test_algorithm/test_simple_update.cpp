@@ -41,7 +41,7 @@ struct SimpleUpdateParams : public CaseParamsParserBasic {
 };
 
 // Test spin systems
-struct TestSimpleUpdateSpinSystem : public testing::Test {
+struct SpinSystemSimpleUpdate : public testing::Test {
   size_t Lx; //cols
   size_t Ly;
 
@@ -134,7 +134,7 @@ struct TestSimpleUpdateSpinSystem : public testing::Test {
   }
 };
 
-TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
+TEST_F(SpinSystemSimpleUpdate, NNIsing) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
@@ -158,10 +158,9 @@ TEST_F(TestSimpleUpdateSpinSystem, NNIsing) {
   delete su_exe;
 }
 
-TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
+TEST_F(SpinSystemSimpleUpdate, NNHeisenberg) {
   SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
-  size_t sz_int = 0;
   for (size_t y = 0; y < Ly; y++) {
     for (size_t x = 0; x < Lx; x++) {
       size_t sz_int = x + y;
@@ -188,7 +187,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenberg) {
   delete su_exe;
 }
 
-TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD8) {
+TEST_F(SpinSystemSimpleUpdate, NNHeisenbergD8) {
   SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   peps0.Load("su_update_resultD4");
 
@@ -204,7 +203,7 @@ TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD8) {
   delete su_exe;
 }
 
-TEST_F(TestSimpleUpdateSpinSystem, TriangleNNHeisenberg) {
+TEST_F(SpinSystemSimpleUpdate, TriangleNNHeisenberg) {
   SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   size_t sz_int = 0;
@@ -331,7 +330,6 @@ struct TestSimpleUpdateSpinSystemSquareJ1J2 : public testing::Test {
   }
 };
 
-
 TEST_F(TestSimpleUpdateSpinSystemSquareJ1J2, J1J2Heisenberg) {
   SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
@@ -362,7 +360,7 @@ TEST_F(TestSimpleUpdateSpinSystemSquareJ1J2, J1J2Heisenberg) {
   delete su_exe;
 }
 
-//TEST_F(TestSimpleUpdateSpinSystem, NNHeisenbergD16) {
+//TEST_F(SpinSystemSimpleUpdate, NNHeisenbergD16) {
 //  SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
 //  peps0.Load("su_update_resultD8");
 //

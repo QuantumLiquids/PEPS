@@ -83,7 +83,6 @@ class PottsModel {
       for (size_t j = 0; j < q_; ++j) {
         spins_[i] = j;
         weights[j] = std::exp(-GetLocalE_(i) / temperature_);
-//        weights[j] = std::exp(-CalculateEnergy_() / temperature_);
       }
 
       spins_[i] = NonDBMCMCStateUpdate(spin, weights, dis(gen));
@@ -93,10 +92,10 @@ class PottsModel {
     energy_samples_.push_back(CalculateEnergy_());
   }
 
-  double GetEnergy() const {
+  [[nodiscard]] double GetEnergy() const {
     return Mean(energy_samples_);
   }
-  double GetEnergyErr(size_t bin_num) const {
+  [[nodiscard]] double GetEnergyErr(size_t bin_num) const {
     size_t data_size = energy_samples_.size();
     size_t bin_size = data_size / bin_num;
 

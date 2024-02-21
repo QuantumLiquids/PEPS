@@ -74,7 +74,7 @@ struct VMCUpdateParams : public CaseParamsParserBasic {
 };
 
 // Test spin systems
-struct TestSpinSystemVMCPEPS : public testing::Test {
+struct SpinSystemVMCPEPS : public testing::Test {
   VMCUpdateParams params = VMCUpdateParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
@@ -138,7 +138,7 @@ struct TestSpinSystemVMCPEPS : public testing::Test {
   }
 };
 
-TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
+TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
 
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
@@ -162,7 +162,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
+TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
   optimize_para.bmps_trunc_para.compress_scheme = CompressMPSScheme::VARIATION1Site;
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
@@ -186,7 +186,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
+TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
   optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
@@ -211,7 +211,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
+TEST_F(SpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
   VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
@@ -235,7 +235,7 @@ TEST_F(TestSpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
+TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
   VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
@@ -259,7 +259,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, SquareJ1J2D4) {
+TEST_F(SpinSystemVMCPEPS, SquareJ1J2D4) {
   using Model = SpinOneHalfJ1J2HeisenbergSquare<QLTEN_Double, U1QN>;
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
   VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
@@ -283,7 +283,7 @@ TEST_F(TestSpinSystemVMCPEPS, SquareJ1J2D4) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
+TEST_F(SpinSystemVMCPEPS, TriHeisenbergD4) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS<QLTEN_Double, U1QN>;
   VMCPEPSExecutor<QLTEN_Double, U1QN, SquareTPSSample3SiteExchangeT, Model> *executor(nullptr);
   Model triangle_hei_solver;
@@ -310,7 +310,7 @@ TEST_F(TestSpinSystemVMCPEPS, TriHeisenbergD4) {
   delete executor;
 }
 
-TEST_F(TestSpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
+TEST_F(SpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<QLTEN_Double, U1QN>;
   VMCPEPSExecutor<QLTEN_Double, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);

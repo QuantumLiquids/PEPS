@@ -134,7 +134,9 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
   }
-  if (has_unreasonable_bond_energy) {
+  double estimate_wavefunction_bias = (std::max(psi_gather) - std::min(psi_gather)) / std::abs(std::max(psi_gather));
+  const double critical_bias = 0.1;
+  if (has_unreasonable_bond_energy || estimate_wavefunction_bias > critical_bias) {
     std::cout << "wave function amplitude estimation :" << std::endl;
     for (const auto &element : psi_gather) {
       std::cout << element << " ";
