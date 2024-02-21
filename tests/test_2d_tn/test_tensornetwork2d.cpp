@@ -93,7 +93,7 @@ class SquareIsingModel {
   }
 
   template<size_t N>
-  double CalHalfEnergyChain_(const std::bitset<N> &config) const {
+  [[nodiscard]] double CalHalfEnergyChain_(const std::bitset<N> &config) const {
     std::bitset<N> shift_config = (config >> 1);
     size_t different_bond_num = (config ^ shift_config).count() - config[ly_ - 1];
     size_t bond_num = ly_ - 1;
@@ -101,7 +101,7 @@ class SquareIsingModel {
   }
 
   template<size_t N>
-  double CalLadderEnergy_(const std::bitset<N> &config, const std::bitset<N> &next_config) const {
+  [[nodiscard]] double CalLadderEnergy_(const std::bitset<N> &config, const std::bitset<N> &next_config) const {
     size_t different_bond_num = (config ^ next_config).count();
     size_t bond_num = ly_;
     return 2.0 * different_bond_num - (double) bond_num; //FM
@@ -121,7 +121,7 @@ class SquareIsingModel {
   std::vector<double> boundary_vec_;
 };
 
-struct TwoDimensionalIsingOBCTensorNetworkWithoutQN : public testing::Test {
+struct OBCIsing2DTenNetWithoutZ2 : public testing::Test {
   using QNT = U1QN;
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<QNT>;
@@ -143,12 +143,12 @@ struct TwoDimensionalIsingOBCTensorNetworkWithoutQN : public testing::Test {
   TensorNetwork2D<QLTEN_Double, QNT> dtn2d = TensorNetwork2D<QLTEN_Double, QNT>(Ly, Lx);
   TensorNetwork2D<QLTEN_Complex, QNT> ztn2d = TensorNetwork2D<QLTEN_Complex, QNT>(Ly, Lx);
 
-  double F_ex; //-2.0709079359461788;
+  double F_ex;
 //  double F_ex = -std::log(2.0) / beta; //high temperature approx
 //  double F_ex = -(2.0 - (Lx+Ly)/(Lx*Ly)); //low temperature approx
   double Z_ex; //partition function, exact value
   double tn_free_en_norm_factor = 0.0;
-  void SetUp(void) {
+  void SetUp() {
     DQLTensor boltzmann_weight = DQLTensor({vb_in, vb_out});
     double e = -1.0; // FM Ising
     boltzmann_weight({0, 0}) = std::exp(-1.0 * beta * e);
@@ -266,7 +266,7 @@ struct TwoDimensionalIsingOBCTensorNetworkWithoutQN : public testing::Test {
   }//SetUp
 };
 
-TEST_F(TwoDimensionalIsingOBCTensorNetworkWithoutQN, Test2DIsingOBCTensorNetworkRealNumber) {
+TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
   double psi[22];
   auto dtn2d_copy = dtn2d;
   BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
@@ -373,7 +373,10 @@ TEST_F(TwoDimensionalIsingOBCTensorNetworkWithoutQN, Test2DIsingOBCTensorNetwork
   }
 }
 
-struct Test2DIsingTensorNetwork : public testing::Test {
+/**
+ * Open Boundary Condition two-dimensional Ising model's Tensor network, with imposing Z2 symmetry.
+ */
+struct OBCIsing2DZ2TenNet : public testing::Test {
   using QNT = U1U1ZnQN<2>;
   using IndexT = Index<U1U1ZnQN<2>>;
   using QNSctT = QNSector<U1U1ZnQN<2>>;
@@ -400,7 +403,7 @@ struct Test2DIsingTensorNetwork : public testing::Test {
   double F_ex;
   double Z_ex; //partition function, exact value
   double tn_free_en_norm_factor = 0.0;
-  void SetUp(void) {
+  void SetUp() {
     DQLTensor boltzmann_weight = DQLTensor({vb_in, vb_out});
     double e = -1.0; // FM Ising
     boltzmann_weight({0, 0}) = std::exp(-1.0 * beta * e) + std::exp(1.0 * beta * e);
@@ -426,7 +429,6 @@ struct Test2DIsingTensorNetwork : public testing::Test {
       Contract(&boltzmann_weight_sqrt, {1}, temp + 2, {3}, &t_m);
     }
 
-//    t_m.Show();
     for (size_t row = 1; row < Ly - 1; row++) {
       for (size_t col = 1; col < Lx - 1; col++) {
         dtn2d({row, col}) = t_m;
@@ -520,7 +522,7 @@ struct Test2DIsingTensorNetwork : public testing::Test {
   }//SetUp
 };
 
-TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
+TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetRealNumContraction) {
   double psi[22];
   BMPSTruncatePara trunc_para = BMPSTruncatePara(1, 10, 1e-15, CompressMPSScheme::SVD_COMPRESS);
   dtn2d.GrowBMPSForRow(2, trunc_para);
@@ -620,7 +622,7 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkRealNumber) {
   dtn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
 }
 
-TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
+TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetComplexNumContraction) {
   QLTEN_Complex psi[24];
   BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
   ztn2d.GrowBMPSForRow(2, trunc_para);
@@ -693,8 +695,6 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
                                                ztn2d({1, 1}), ztn2d({2, 3})); // trace original tn
 
 
-
-
   /***** VERTICAL MPS *****/
   ztn2d.GrowBMPSForCol(1, trunc_para);
   ztn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
@@ -728,12 +728,26 @@ TEST_F(Test2DIsingTensorNetwork, Test2DIsingOBCTensorNetworkComplexNumber) {
   ztn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
 }
 
-struct TestSpin2DTensorNetwork : public testing::Test {
+TEST_F(OBCIsing2DZ2TenNet, TestCopy) {
+  auto ztn2d_cp = ztn2d;
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
+  ztn2d.GrowBMPSForRow(2, trunc_para);
+  ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
+  ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
+  ztn2d.GrowBMPSForCol(5, trunc_para);
+  assert(ztn2d.DirectionCheck());
+  ztn2d_cp.GrowBMPSForCol(3, trunc_para);
+  ztn2d_cp.GrowBMPSForRow(1, trunc_para);
+  assert(ztn2d_cp.DirectionCheck());
+  ztn2d_cp = ztn2d;
+}
+
+/**
+ * @note Tests based on this class should be run after simple update.
+ */
+struct ProjectedSpinTenNet : public testing::Test {
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<U1QN>;
-  using QNSctVecT = QNSectorVec<U1QN>;
-  using DQLTensor = QLTensor<QLTEN_Double, U1QN>;
-  using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
 
   const size_t Lx = 4;  // cols
   const size_t Ly = 4;  // rows
@@ -759,10 +773,8 @@ struct TestSpin2DTensorNetwork : public testing::Test {
 
   BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, CompressMPSScheme::VARIATION2Site);
 
-  void SetUp(void) {
+  void SetUp() {
     TPS<QLTEN_Double, U1QN> tps(Ly, Lx);
-//    qlten::hp_numeric::SetTensorManipulationThreads(1);
-//    qlten::hp_numeric::SetTensorTransposeNumThreads(1);
     tps.Load("tps_heisenberg_D4");
 
     SplitIndexTPS<QLTEN_Double, U1QN> split_index_tps(tps);
@@ -775,7 +787,7 @@ struct TestSpin2DTensorNetwork : public testing::Test {
   }
 };
 
-TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPS2SiteVariationUpdate) {
+TEST_F(ProjectedSpinTenNet, HeisenbergD4NNTraceBMPS2SiteVariationUpdate) {
   tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -796,7 +808,7 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPS2SiteVariationUpdate) {
   EXPECT_NEAR(psi_c, psi_d, 1e-14);
 }
 
-TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPSSingleSiteVariationUpdate) {
+TEST_F(ProjectedSpinTenNet, HeisenbergD4NNTraceBMPSSingleSiteVariationUpdate) {
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
   tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
@@ -818,7 +830,7 @@ TEST_F(TestSpin2DTensorNetwork, HeisenbergD4NNTraceBMPSSingleSiteVariationUpdate
   EXPECT_NEAR(psi_c, psi_d, 1e-15);
 }
 
-TEST_F(TestSpin2DTensorNetwork, HeisenbergD4BTen2Trace) {
+TEST_F(ProjectedSpinTenNet, HeisenbergD4BTen2Trace) {
   /***** HORIZONTAL MPS *****/
   tn2d.GrowBMPSForRow(1, trunc_para);
   tn2d.InitBTen2(BTenPOSITION::LEFT, 1);

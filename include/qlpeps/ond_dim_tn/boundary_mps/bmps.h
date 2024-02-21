@@ -91,6 +91,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   // get function
   const Tensor *operator()(const size_t idx) const;
 
+  BMPSPOSITION Direction() const { return position_; }
   // MPS global operations
   void Centralize(const int);
 

@@ -636,7 +636,8 @@ void VMCPEPSExecutor<TenElemT,
     split_index_tps_.NormalizeAllSite();
   }
   BroadCast(split_index_tps_, world_);
-  tps_sample_ = WaveFunctionComponentType(split_index_tps_, tps_sample_.config);
+  Configuration config = tps_sample_.config;
+  tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>

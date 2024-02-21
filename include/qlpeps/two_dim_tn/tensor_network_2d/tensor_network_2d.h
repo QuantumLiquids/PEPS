@@ -7,8 +7,8 @@
 * Description: QuantumLiquids/PEPS project. The 2-dimensional tensor network class.
 */
 
-#ifndef VMC_PEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H
-#define VMC_PEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H
+#ifndef QLPEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H
+#define QLPEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/framework/ten_matrix.h"
@@ -165,6 +165,8 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
 
   Tensor PunchHole(const SiteIdx &site, const BondOrientation mps_orient) const;
 
+  ///< Debug function
+  bool DirectionCheck() const;
  private:
   /**
  * grow one step for the boundary MPS
@@ -200,4 +202,4 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
 
 #include "tensor_network_2d_impl.h"
 
-#endif //VMC_PEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H
+#endif //QLPEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H

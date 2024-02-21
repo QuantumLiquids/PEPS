@@ -43,7 +43,11 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QN
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT> &TensorNetwork2D<TenElemT, QNT>::operator=(const TensorNetwork2D<TenElemT, QNT> &tn) {
   TenMatrix<Tensor>::operator=(tn);
-  bmps_set_ = tn.bmps_set_;
+  //Question : directly set bmps_set_ = tn.bmps_set_ induce bug, the position in map is inconsistent with the position
+  // inside the bmps. Why?
+  for (BMPSPOSITION post : {LEFT, DOWN, RIGHT, UP}) {
+    bmps_set_[post] = tn.bmps_set_.at(post);
+  }
   bten_set_ = tn.bten_set_;
   return *this;
 }
@@ -1267,6 +1271,20 @@ void TensorNetwork2D<TenElemT, QNT>::UpdateSiteConfig(const qlpeps::SiteIdx &sit
   }
 }
 
+template<typename TenElemT, typename QNT>
+bool TensorNetwork2D<TenElemT, QNT>::DirectionCheck() const {
+  for (const auto &[direction, bmps_vec] : bmps_set_) {
+    for (const BMPS<TenElemT, QNT> &bmps : bmps_vec) {
+      if (bmps.Direction() != direction) {
+        std::cout << "direction : " << direction << std::endl;
+        std::cout << "bmps.Direction() : " << bmps.Direction() << std::endl;
+        return false;
+      }
+      assert(bmps.Direction() == direction);
+    }
+  }
+  return true;
+}
 }///qlpeps
 
 #endif //QLPEPS_VMC_PEPS_TENSOR_NETWORK_2D_IMPL_H
