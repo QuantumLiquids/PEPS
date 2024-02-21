@@ -14,6 +14,10 @@
 #include <numeric>    //reduce
 #include <cassert>
 
+#if defined(__GNUC__) && !defined(__llvm__) && !defined(__INTEL_COMPILER)
+#define REAL_GCC   __GNUC__ // probably
+#endif
+
 namespace qlpeps {
 
 size_t NonDBMCMCStateUpdate(size_t init_state,
@@ -53,7 +57,11 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
       p[j] = v[j] / weights[init_state];
   }
 #ifndef NDEBUG
+#if defined(REAL_GCC) && (__GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ < 1))
+  double sum_p = std::accumulate(p.begin(), p.end(), 0.0);
+#else
   double sum_p = std::reduce(p.begin(), p.end());
+#endif
   assert(std::abs(sum_p - 1.0) < 1e-13);
 #endif
   double p_accumulate = 0.0;
