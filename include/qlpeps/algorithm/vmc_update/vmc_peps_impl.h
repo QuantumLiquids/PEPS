@@ -21,14 +21,11 @@ using namespace qlten;
 
 //help
 template<typename TenElemT, typename QNT>
-QLTensor<TenElemT, QNT> Mean(const std::vector<QLTensor<TenElemT, QNT> *
-> &tensor_list,
-                             const size_t length
-) {
+QLTensor<TenElemT, QNT> Mean(const std::vector<QLTensor<TenElemT, QNT> *> &tensor_list,
+                             const size_t length) {
   std::vector<TenElemT> coefs(tensor_list.size(), TenElemT(1.0));
   QLTensor<TenElemT, QNT> sum;
-  LinearCombine(coefs, tensor_list, TenElemT(0.0), &sum
-  );
+  LinearCombine(coefs, tensor_list, TenElemT(0.0), &sum);
   return sum * (1.0 / double(length));
 }
 

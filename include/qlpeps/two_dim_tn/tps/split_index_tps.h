@@ -37,15 +37,14 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   SplitIndexTPS(const size_t rows, const size_t cols) : TenMatrix<std::vector<Tensor>>(rows, cols) {}
 
   SplitIndexTPS(const size_t rows, const size_t cols, const size_t phy_dim) : SplitIndexTPS(rows, cols) {
-    for (size_t row = 0; row < rows; row++) {
-      for (size_t col = 0; col < cols; col++) {
-        (*this)({row, col}) = std::vector<Tensor>(phy_dim);
-      }
+    for (auto &split_ten : *this) {
+      split_ten = std::vector<Tensor>(phy_dim);
     }
   }
 
-  SplitIndexTPS(const SplitIndexTPS &brotps) : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(brotps) {}
+  SplitIndexTPS(const SplitIndexTPS &rhs) : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(rhs) {}
 
+  //Constructor from TPS
   SplitIndexTPS(const TPST &tps) : TenMatrix<std::vector<Tensor>>(tps.rows(), tps.cols()) {
     const size_t phy_idx = 4;
     for (size_t row = 0; row < tps.rows(); row++) {
@@ -71,10 +70,10 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   }
 
   // TODO
-  operator TPST() {
-    TPST tps(this->rows(), this->cols());
-
-  }
+//  operator TPST() {
+//    TPST tps(this->rows(), this->cols());
+//
+//  }
 
   size_t PhysicalDim(const SiteIdx &site = {0, 0}) const {
     return (*this)(site).size();
@@ -112,12 +111,10 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
 
   SplitIndexTPS operator*=(const TenElemT scalar) {
     size_t phy_dim = PhysicalDim();
-    for (size_t row = 0; row < this->rows(); ++row) {
-      for (size_t col = 0; col < this->cols(); ++col) {
-        for (size_t i = 0; i < phy_dim; i++) {
-          if (!(*this)({row, col})[i].IsDefault())
-            (*this)({row, col})[i] *= scalar;
-        }
+    for (auto &split_ten : *this) {
+      for (auto &ten_comp : split_ten) {
+        if (!ten_comp.IsDefault())
+          ten_comp *= scalar;
       }
     }
     return *this;

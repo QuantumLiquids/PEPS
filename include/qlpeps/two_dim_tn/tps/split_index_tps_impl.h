@@ -234,7 +234,7 @@ void CGSolverBroadCastVector(
   if (world.rank() != kMasterProc) {
     v = SplitIndexTPS<TenElemT, QNT>(rows, cols);
   } else {
-    phy_dim = v({0, 0}).size();
+    phy_dim = v.PhysicalDim();
   }
   broadcast(world, phy_dim, kMasterProc);
   if (world.rank() == kMasterProc) {

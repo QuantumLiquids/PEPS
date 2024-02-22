@@ -200,6 +200,10 @@ add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+add_unittest(test_split_index_tps
+        "test_2d_tn/test_split_index_tps.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
