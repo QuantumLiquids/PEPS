@@ -199,7 +199,7 @@ struct SpinSystemVMCPEPS : public testing::Test {
     N = Lx * Ly;
     optimize_para =
         VMCOptimizePara(BMPSTruncatePara(8, 16, 1e-15, CompressMPSScheme::VARIATION2Site),
-                        100, 10, 2,
+                        10, 10, 2,
                         std::vector<size_t>(2, N / 2),
                         Ly, Lx,
                         std::vector<double>(5, 0.1),
@@ -223,6 +223,43 @@ struct SpinSystemVMCPEPS : public testing::Test {
   }
 };
 
+
+// Check if the TPS doesn't change by setting step length = 0
+TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
+  SpinSystemVMCPEPS::SetUp(L);
+  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(6);
+  optimize_para.step_lens = {0.0, 0.0};
+  using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
+  using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
+  VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model> *executor(nullptr);
+  TPS<QLTEN_Double, U1QN> tps = TPS<QLTEN_Double, U1QN>(Ly, Lx);
+  if (!tps.Load("tps_heisenberg_D" + std::to_string(6))) {
+    std::cout << "Loading simple updated TPS files is broken." << std::endl;
+    exit(-2);
+  };
+  for (auto &tensor: tps) {
+    tensor.Normalize();
+  }
+  SplitIndexTPS<QLTEN_Double, U1QN> init_sitps(tps);
+  double init_norm = init_sitps.NormSquare();
+  EXPECT_DOUBLE_EQ(init_norm, Lx * Ly);
+  executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para, tps,
+                                                                           world);
+  executor->Execute();
+  SplitIndexTPS<QLTEN_Double, U1QN> result_sitps = executor->GetState();
+  for (size_t row = 0; row < L; row++) {
+    for (size_t col = 0; col < L; col++) {
+      for (size_t i = 0; i < 2; i++) {
+        auto init_ten = init_sitps({row, col})[i];
+        auto res_ten = result_sitps({row, col})[i];
+        DQLTensor diff_ten = init_ten + (-res_ten);
+        EXPECT_NEAR(diff_ten.Get2Norm(), 0.0, 1e-13);
+      }
+    }
+  }
+  delete executor;
+}
+
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
   SpinSystemVMCPEPS::SetUp(L);
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(6);
@@ -240,7 +277,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
-    for (auto tensor : tps) {
+    for (auto &tensor: tps) {
       tensor.Normalize();
     }
     executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para, tps,

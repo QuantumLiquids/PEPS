@@ -37,7 +37,7 @@ struct SplitIdxTPSData : public testing::Test {
   size_t Ly = 4;
   size_t N = Lx * Ly;
 
-  std::string tps_path = "tps_heisenberg_D8";
+  std::string tps_path = "tps_heisenberg_D6";
   DTPS dtps = DTPS(Ly, Lx);
   DSITPS dsitps = DSITPS(Ly, Lx);
 
@@ -51,21 +51,45 @@ struct SplitIdxTPSData : public testing::Test {
 //
 //}
 
+TEST_F(SplitIdxTPSData, TestBasicOperation) {
+  DSITPS zeros_sitps = 0.0 * dsitps;
+  EXPECT_EQ(zeros_sitps.rows(), Ly);
+  EXPECT_EQ(zeros_sitps.cols(), Lx);
+  EXPECT_EQ(zeros_sitps.PhysicalDim(), dsitps.PhysicalDim());
+  for (std::vector<DTensor> &zero_tens: zeros_sitps) {
+    for (DTensor &zero_ten: zero_tens) {
+      EXPECT_DOUBLE_EQ(zero_ten.Get2Norm(), 0.0);
+    }
+  }
+  auto dsitps2 = dsitps;
+  for (size_t row = 0; row < Ly; row++) {
+    for (size_t col = 0; col < Lx; col++) {
+      for (size_t i = 0; i < 2; i++) {
+        auto init_ten = dsitps({row, col})[i];
+        auto res_ten = dsitps2({row, col})[i];
+        auto diff_ten = init_ten + (-res_ten);
+        EXPECT_NEAR(diff_ten.Get2Norm(), 0.0, 1e-13);
+      }
+    }
+  }
+}
+
 TEST_F(SplitIdxTPSData, TestNormalization) {
   dsitps.NormalizeAllSite();
-  for (std::vector<DTensor> &split_ten : dsitps) {
+  for (std::vector<DTensor> &split_ten: dsitps) {
     double norm = split_ten[0].Get2Norm() * split_ten[0].Get2Norm();
     norm += split_ten[1].Get2Norm() * split_ten[1].Get2Norm();
     EXPECT_DOUBLE_EQ(norm, 1.0);
   }
 
-  for (auto &ten : dtps) {
+  for (auto &ten: dtps) {
     ten.Normalize();
   }
   DSITPS dsitps2(dtps);
-  for (std::vector<DTensor> &split_ten : dsitps2) {
+  for (std::vector<DTensor> &split_ten: dsitps2) {
     double norm = split_ten[0].Get2Norm() * split_ten[0].Get2Norm();
     norm += split_ten[1].Get2Norm() * split_ten[1].Get2Norm();
     EXPECT_NEAR(norm, 1.0, 1e-13);
   }
+  EXPECT_DOUBLE_EQ(dsitps2.NormSquare(), (double) Lx * Ly);
 }

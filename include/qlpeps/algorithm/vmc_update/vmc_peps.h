@@ -54,6 +54,7 @@ class VMCPEPSExecutor : public Executor {
 
   void Execute(void) override;
 
+  const SITPST &GetState(void) const { return split_index_tps_; }
   void LoadTenData(void);
 
   void LoadTenData(const std::string &tps_path);
