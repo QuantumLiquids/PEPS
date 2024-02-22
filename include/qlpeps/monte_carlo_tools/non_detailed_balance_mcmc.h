@@ -29,6 +29,9 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
   // Swap the first weight with the maximum weight
   auto max_weight_iter = std::max_element(weights.cbegin(), weights.cend());
   size_t max_weight_id = max_weight_iter - weights.cbegin();
+#ifndef NDEBUG
+  assert(weights[max_weight_id] > 0);
+#endif
   if (max_weight_id != 0) {
     std::swap(weights[0], weights[max_weight_id]);
   }

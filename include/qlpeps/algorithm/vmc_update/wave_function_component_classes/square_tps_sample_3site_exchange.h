@@ -106,7 +106,9 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
                                            sitps(site1)[this->config(site3)],
                                            sitps(site2)[this->config(site1)],
                                            sitps(site3)[this->config(site2)]);
-    std::vector<double> weights = {std::norm(psi0), std::norm(psi1), std::norm(psi2)};
+    double psi_abs_max = std::max({std::abs(psi0), std::abs(psi1), std::abs(psi2)});
+    std::vector<double>
+        weights = {std::norm(psi0 / psi_abs_max), std::norm(psi1 / psi_abs_max), std::norm(psi2 / psi_abs_max)};
 
     size_t final_state = NonDBMCMCStateUpdate(0, weights, u_double(random_engine));
     if (final_state == 0) {
