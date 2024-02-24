@@ -100,6 +100,7 @@ VMCPEPSExecutor<TenElemT,
   } else {
     stochastic_reconfiguration_update_class_ = false;
   }
+  NormalizeTPS_();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -135,6 +136,7 @@ VMCPEPSExecutor<TenElemT,
     stochastic_reconfiguration_update_class_ = false;
   }
   LoadTenData();
+  NormalizeTPS_();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -630,7 +632,7 @@ void VMCPEPSExecutor<TenElemT,
                                                                   double step_len) {
   if (world_.rank() == kMasterProc) {
     split_index_tps_ += (-step_len) * grad;
-    split_index_tps_.NormalizeAllSite();
+    NormalizeTPS_();
   }
   BroadCast(split_index_tps_, world_);
   Configuration config = tps_sample_.config;
@@ -651,11 +653,9 @@ void VMCPEPSExecutor<TenElemT, QNT,
           Tensor &grad_ten = grad({row, col})[compt];
           grad_ten.ElementWiseBoundTo(step_len);
           split_index_tps_({row, col})[compt] += (-step_len) * grad_ten;
-          norm += split_index_tps_({row, col})[compt].Get2Norm();
         }
-        double inv_norm = 1.0 / norm;
+        NormalizeTPS_();
         for (size_t compt = 0; compt < phy_dim; compt++) {
-          split_index_tps_({row, col})[compt] *= inv_norm;
           SendBroadCastQLTensor(world_, split_index_tps_({row, col})[compt], kMasterProc);
         }
       }
@@ -687,6 +687,14 @@ std::pair<size_t, double> VMCPEPSExecutor<TenElemT,
   return std::make_pair(cgsolver_iter, natural_grad_norm);
 }
 
+///< Normalize split index tps according to the max abs of tensors in each site
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT,
+                     QNT,
+                     WaveFunctionComponentType,
+                     EnergySolver>::NormalizeTPS_() {
+  split_index_tps_.ScaleMaxAbsForAllSite(1.0);
+}
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::CalcNaturalGradient_(
     const VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::SITPST &grad,

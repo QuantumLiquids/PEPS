@@ -198,14 +198,18 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   double NormSquare() const;
 
   /**
-   * Normalize the site tensors by treating all tensors in one site as one tps tensor.
+   * Normalize the site tensors
+   * to make the sum of 2-norm square of tensors in the site equal to 1.
+   *
    * @param site
    * @return
    */
   double NormalizeSite(const SiteIdx &site);
+  double ScaleMaxAbsForSite(const SiteIdx &site, double aiming_max_abs);
 
   ///< normalize all site by function NormalizeSite.
   void NormalizeAllSite();
+  void ScaleMaxAbsForAllSite(double aiming_max_abs);
 
   bool DumpTen(const size_t row, const size_t col, const size_t compt, const std::string &file) const;
 

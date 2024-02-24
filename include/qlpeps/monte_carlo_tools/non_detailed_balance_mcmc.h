@@ -25,7 +25,11 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
                             const double rand_num) {
   const size_t n = weights.size();
   std::vector<double> p(n, 0.0); //transition probabilities
-
+#ifndef NDEBUG
+  for (auto w : weights) {
+    assert(w >= 0);
+  }
+#endif
   // Swap the first weight with the maximum weight
   auto max_weight_iter = std::max_element(weights.cbegin(), weights.cend());
   size_t max_weight_id = max_weight_iter - weights.cbegin();

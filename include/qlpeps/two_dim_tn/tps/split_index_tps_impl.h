@@ -110,6 +110,25 @@ double SplitIndexTPS<TenElemT, QNT>::NormalizeSite(const SiteIdx &site) {
 }
 
 template<typename TenElemT, typename QNT>
+double SplitIndexTPS<TenElemT, QNT>::ScaleMaxAbsForSite(const qlpeps::SiteIdx &site, double aiming_max_abs) {
+  const size_t phy_dim = PhysicalDim(site);
+  double max_abs = 0;
+  for (size_t dim = 0; dim < phy_dim; dim++) {
+    const Tensor &ten = (*this)(site)[dim];
+    if (!ten.IsDefault()) {
+      max_abs = std::max(max_abs, ten.GetMaxAbs());
+    }
+  }
+  double scale_factor = aiming_max_abs / max_abs;
+  for (size_t dim = 0; dim < phy_dim; dim++) {
+    if (!(*this)(site)[dim].IsDefault()) {
+      (*this)(site)[dim] *= scale_factor;
+    }
+  }
+  return 1.0 / scale_factor;
+}
+
+template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::NormalizeAllSite() {
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
@@ -118,6 +137,14 @@ void SplitIndexTPS<TenElemT, QNT>::NormalizeAllSite() {
   }
 }
 
+template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ScaleMaxAbsForAllSite(double aiming_max_abs) {
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      ScaleMaxAbsForSite({row, col}, aiming_max_abs);
+    }
+  }
+}
 template<typename TenElemT, typename QNT>
 bool SplitIndexTPS<TenElemT, QNT>::DumpTen(const size_t row,
                                            const size_t col,
