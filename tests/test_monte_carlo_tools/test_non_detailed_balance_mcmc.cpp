@@ -20,7 +20,8 @@ using namespace qlpeps;
 
 void TestSingleModeNonDBMarkovChainDistribution(
     const std::vector<double> &weights,
-    const size_t num_iterations
+    const size_t num_iterations,
+    const size_t init_state = 0
 ) {
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -30,7 +31,7 @@ void TestSingleModeNonDBMarkovChainDistribution(
   std::vector<size_t> state_counts(weights.size(), 0);
 
   // Generate the Markov chain and count the occurrences of each state
-  size_t state = 0;
+  size_t state = init_state;
   for (int i = 0; i < num_iterations; ++i) {
     state = qlpeps::NonDBMCMCStateUpdate(state, weights, dis(gen));
     state_counts[state]++;
@@ -43,8 +44,12 @@ void TestSingleModeNonDBMarkovChainDistribution(
   }
 
   // Verify if the generated distribution matches the initial weights
+  double weight_sum = 0.0;
+  for (auto w : weights) {
+    weight_sum += w;
+  }
   for (size_t i = 0; i < weights.size(); ++i) {
-    EXPECT_NEAR(state_distribution[i], weights[i], 1e-3);
+    EXPECT_NEAR(state_distribution[i], weights[i] / weight_sum, 1e-3);
   }
 }
 
@@ -53,6 +58,9 @@ TEST(NonDBMCMCTest, SingleModeMarkovChainDistribution) {
   TestSingleModeNonDBMarkovChainDistribution({0.01, 0.1, 0.6, 0.29}, 1000000);
 }
 
+TEST(NonDBMCMCTest, SingleModeMarkovChainDistributionExtremelyCases) {
+  TestSingleModeNonDBMarkovChainDistribution({1, 0.3, 1e-30}, 1000000, 2);
+}
 ///< Potts Model Monte Carlo Simulation Class
 ///< E = \sum_{<i,j>} [1 - \delta_{sigma_i, sigma_j}]
 class PottsModel {

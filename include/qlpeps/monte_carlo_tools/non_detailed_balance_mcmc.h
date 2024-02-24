@@ -59,7 +59,7 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
 
   for (size_t j = 0; j < n; j++) {
     v[j] = std::max(0.0,
-                    std::min({delta[j], weights[init_state] + weights[j] - delta[j], weights[init_state], weights[j]}));
+                    std::min({delta[j], weights[j] - delta[j] + weights[init_state], weights[init_state], weights[j]}));
     if (weights[j] != 0.0)
       p[j] = v[j] / weights[init_state];
   }
