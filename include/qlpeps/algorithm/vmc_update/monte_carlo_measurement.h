@@ -43,11 +43,11 @@ std::vector<bool> KagomeConfig2Sz(
 
 ///< sum (config1 * config2)
 template<typename ElemT>
-size_t SpinConfigurationOverlap(
+double SpinConfigurationOverlap(
     const std::vector<ElemT> &sz1,
     const std::vector<ElemT> &sz2
 ) {
-  size_t overlap(0);
+  double overlap(0);
   for (size_t i = 0; i < sz1.size(); i++) {
     overlap += sz1[i] * sz2[i];
   }

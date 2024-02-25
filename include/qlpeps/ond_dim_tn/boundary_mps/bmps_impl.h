@@ -425,7 +425,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
       );
 #ifndef NDEBUG
 //      if (actual_trunc_err > trunc_err) {
-      std::cout << "actual_trunc_err in BMPS : " << actual_trunc_err << std::endl;
+//      std::cout << "actual_trunc_err in BMPS : " << actual_trunc_err << std::endl;
 //      }
 #endif
 
