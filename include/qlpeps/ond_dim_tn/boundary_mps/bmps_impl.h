@@ -392,17 +392,16 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
           lenvs.pop_back();
           delete pu;
         }
-        if (iter == 0 || s.GetActualDataSize() != s12bond_last.GetActualDataSize()) {
+        if (iter == 0 || s.GetShape().front() != s12bond_last.GetShape().front()) {
           s12bond_last = s;
           continue;
         }
+        decltype(s) diff_ten = s + (-s12bond_last);
         double diff = 0.0;
-        const double *s_data = s.GetRawDataPtr();
-        const double *s_last_data = s12bond_last.GetRawDataPtr();
-        for (size_t k = 0; k < s.GetActualDataSize(); k++) {
-          diff += std::fabs(*(s_data + k) - *(s_last_data + k));
+        for (size_t k = 0; k < diff_ten.GetShape().front(); k++) {
+          diff += std::fabs(diff_ten({k, k}));
         }
-        if (diff / (*s_data) < variational_converge_tol.value()) {
+        if (diff / s({0, 0}) < variational_converge_tol.value()) {
           break;
         } else {
           s12bond_last = s;
@@ -424,6 +423,11 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
           2, res_dag[0].Div(), trunc_err, Dmin, Dmax,
           &u, &s, pvt, &actual_trunc_err, &D
       );
+#ifndef NDEBUG
+//      if (actual_trunc_err > trunc_err) {
+      std::cout << "actual_trunc_err in BMPS : " << actual_trunc_err << std::endl;
+//      }
+#endif
 
       delete res_dag(0);
       res_dag(0) = new Tensor();

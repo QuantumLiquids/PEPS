@@ -150,8 +150,15 @@ TEST_F(SpinSystemSimpleUpdate, SquareHeisenberg) {
   su_exe->Execute();
 
   auto tps = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("Hei_PEPS_D6", true);
-  tps.Dump("tps_heisenberg_D6");
+  std::string peps_path = "Hei_PEPS" + std::to_string(Ly) + "x"
+      + std::to_string(Lx) + "D" + std::to_string(su_exe->update_para.Dmax);
+  su_exe->DumpResult(peps_path, true);
+  std::string tps_path = "Hei_TPS" + std::to_string(Ly) + "x"
+      + std::to_string(Lx) + "D" + std::to_string(su_exe->update_para.Dmax);
+  for (auto &ten : tps) {
+    ten *= (1.0 / ten.GetMaxAbs());
+  }
+  tps.Dump(tps_path);
   delete su_exe;
 }
 
@@ -227,13 +234,16 @@ struct SpinSystemVMCPEPS : public testing::Test {
 // Check if the TPS doesn't change by setting step length = 0
 TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
   SpinSystemVMCPEPS::SetUp(L);
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(6);
+  size_t Dpeps = 6;
+  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(Dpeps);
   optimize_para.step_lens = {0.0};
   using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
   VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model> *executor(nullptr);
   TPS<QLTEN_Double, U1QN> tps = TPS<QLTEN_Double, U1QN>(Ly, Lx);
-  if (!tps.Load("tps_heisenberg_D" + std::to_string(6))) {
+  std::string tps_path = "Hei_TPS" + std::to_string(Ly) + "x"
+      + std::to_string(Lx) + "D" + std::to_string(Dpeps);
+  if (!tps.Load(tps_path)) {
     std::cout << "Loading simple updated TPS files is broken." << std::endl;
     exit(-2);
   };
@@ -260,7 +270,8 @@ TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
 
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
   SpinSystemVMCPEPS::SetUp(L);
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(6);
+  size_t Dpeps = 6;
+  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(Dpeps);
   using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
   VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model> *executor(nullptr);
@@ -271,7 +282,9 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
                                                                              world);
   } else {
     TPS<QLTEN_Double, U1QN> tps = TPS<QLTEN_Double, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(6))) {
+    std::string tps_path = "Hei_TPS" + std::to_string(Ly) + "x"
+        + std::to_string(Lx) + "D" + std::to_string(Dpeps);
+    if (!tps.Load(tps_path)) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };

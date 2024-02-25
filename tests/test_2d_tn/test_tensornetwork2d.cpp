@@ -266,110 +266,119 @@ struct OBCIsing2DTenNetWithoutZ2 : public testing::Test {
   }//SetUp
 };
 
-TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
-  double psi[22];
-  auto dtn2d_copy = dtn2d;
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
-  dtn2d.GrowBMPSForRow(2, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  psi[0] = dtn2d.Trace({2, 0}, HORIZONTAL);
+template<typename TenElemT, typename QNT>
+std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
+    TensorNetwork2D<TenElemT, QNT> tn2d,
+    BMPSTruncatePara trunc_para
+) {
+  std::vector<TenElemT> amplitudes(22);
+  tn2d.GrowBMPSForRow(2, trunc_para);
+  tn2d.InitBTen(BTenPOSITION::LEFT, 2);
+  tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
+  amplitudes[0] = tn2d.Trace({2, 0}, HORIZONTAL);
 
-  dtn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  psi[1] = dtn2d.Trace({2, 1}, HORIZONTAL);
+  tn2d.BTenMoveStep(BTenPOSITION::RIGHT);
+  amplitudes[1] = tn2d.Trace({2, 1}, HORIZONTAL);
+  tn2d.GrowBMPSForCol(1, trunc_para);
+  tn2d.InitBTen(BTenPOSITION::DOWN, 1);
+  tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
+  amplitudes[2] = tn2d.Trace({tn2d.rows() - 2, 1}, VERTICAL);
+  tn2d.BTenMoveStep(BTenPOSITION::UP);
+  amplitudes[3] = tn2d.Trace({tn2d.rows() - 3, 1}, VERTICAL);
 
-  dtn2d.GrowBMPSForCol(1, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  dtn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[2] = dtn2d.Trace({Ly - 2, 1}, VERTICAL);
-  dtn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[3] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
+  tn2d.GrowBMPSForRow(2, trunc_para);
+  tn2d.InitBTen(BTenPOSITION::LEFT, 2);
+  tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
+  amplitudes[4] = tn2d.Trace({2, 0}, HORIZONTAL);
+  tn2d.BTenMoveStep(BTenPOSITION::RIGHT);
+  amplitudes[5] = tn2d.Trace({2, 1}, HORIZONTAL);
 
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
-  dtn2d.GrowBMPSForRow(2, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  psi[4] = dtn2d.Trace({2, 0}, HORIZONTAL);
-
-  dtn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  psi[5] = dtn2d.Trace({2, 1}, HORIZONTAL);
-
-  dtn2d.GrowBMPSForCol(1, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  dtn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[6] = dtn2d.Trace({Ly - 2, 1}, VERTICAL);
-  dtn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[7] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
+  tn2d.GrowBMPSForCol(1, trunc_para);
+  tn2d.InitBTen(BTenPOSITION::DOWN, 1);
+  tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
+  amplitudes[6] = tn2d.Trace({tn2d.rows() - 2, 1}, VERTICAL);
+  tn2d.BTenMoveStep(BTenPOSITION::UP);
+  amplitudes[7] = tn2d.Trace({tn2d.rows() - 3, 1}, VERTICAL);
 
   /***** HORIZONTAL MPS *****/
-  dtn2d.GrowBMPSForRow(1, trunc_para);
-  dtn2d.InitBTen2(BTenPOSITION::LEFT, 1);
-  dtn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
+  tn2d.GrowBMPSForRow(1, trunc_para);
+  tn2d.InitBTen2(BTenPOSITION::LEFT, 1);
+  tn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
 
-  psi[8] = dtn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                     HORIZONTAL,
-                                     dtn2d({2, 0}), dtn2d({1, 1})); // trace original tn
-  psi[9] = dtn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                     HORIZONTAL,
-                                     dtn2d({1, 0}), dtn2d({2, 1})); // trace original tn
+  amplitudes[8] = tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
+                                           HORIZONTAL,
+                                           tn2d({2, 0}), tn2d({1, 1})); // trace original tn
+  amplitudes[9] = tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
+                                           HORIZONTAL,
+                                           tn2d({1, 0}), tn2d({2, 1})); // trace original tn
 
-  dtn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
-  psi[10] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      HORIZONTAL,
-                                      dtn2d({2, 1}), dtn2d({1, 2})); // trace original tn
+  tn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
+  amplitudes[10] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                            HORIZONTAL,
+                                            tn2d({2, 1}), tn2d({1, 2})); // trace original tn
 
-  psi[11] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      HORIZONTAL,
-                                      dtn2d({1, 1}), dtn2d({2, 2})); // trace original tn
-  psi[12] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                               HORIZONTAL,
-                                               dtn2d({2, 0}), dtn2d({1, 2})); // trace original tn
-  psi[13] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                               HORIZONTAL,
-                                               dtn2d({2, 1}), dtn2d({1, 3})); // trace original tn
-  psi[14] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                               HORIZONTAL,
-                                               dtn2d({1, 0}), dtn2d({2, 2})); // trace original tn
-  psi[15] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                               HORIZONTAL,
-                                               dtn2d({1, 1}), dtn2d({2, 3})); // trace original tn
+  amplitudes[11] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                            HORIZONTAL,
+                                            tn2d({1, 1}), tn2d({2, 2})); // trace original tn
+  amplitudes[12] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
+                                                     HORIZONTAL,
+                                                     tn2d({2, 0}), tn2d({1, 2})); // trace original tn
+  amplitudes[13] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                     HORIZONTAL,
+                                                     tn2d({2, 1}), tn2d({1, 3})); // trace original tn
+  amplitudes[14] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
+                                                     HORIZONTAL,
+                                                     tn2d({1, 0}), tn2d({2, 2})); // trace original tn
+  amplitudes[15] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                     HORIZONTAL,
+                                                     tn2d({1, 1}), tn2d({2, 3})); // trace original tn
 
 
   /***** VERTICAL MPS *****/
-  dtn2d.GrowBMPSForCol(1, trunc_para);
-  dtn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
-  dtn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
-  psi[16] = dtn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      VERTICAL,
-                                      dtn2d({3, 1}), dtn2d({2, 2})); // trace original tn
-  psi[17] = dtn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      VERTICAL,
-                                      dtn2d({2, 1}), dtn2d({3, 2})); // trace original tn
+  tn2d.GrowBMPSForCol(1, trunc_para);
+  tn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
+  tn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
+  amplitudes[16] = tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
+                                            VERTICAL,
+                                            tn2d({3, 1}), tn2d({2, 2})); // trace original tn
+  amplitudes[17] = tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
+                                            VERTICAL,
+                                            tn2d({2, 1}), tn2d({3, 2})); // trace original tn
 
-  dtn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
-  psi[18] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      VERTICAL,
-                                      dtn2d({2, 1}), dtn2d({1, 2})); // trace original tn
+  tn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
+  amplitudes[18] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                            VERTICAL,
+                                            tn2d({2, 1}), tn2d({1, 2})); // trace original tn
 
-  psi[19] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      VERTICAL,
-                                      dtn2d({1, 1}), dtn2d({2, 2})); // trace original tn
-  psi[20] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                               VERTICAL,
-                                               dtn2d({3, 1}), dtn2d({1, 2})); // trace original tn
-  psi[21] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                               VERTICAL,
-                                               dtn2d({1, 1}), dtn2d({3, 2})); // trace original tn
+  amplitudes[19] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                            VERTICAL,
+                                            tn2d({1, 1}), tn2d({2, 2})); // trace original tn
+  amplitudes[20] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                     VERTICAL,
+                                                     tn2d({3, 1}), tn2d({1, 2})); // trace original tn
+  amplitudes[21] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                     VERTICAL,
+                                                     tn2d({1, 1}), tn2d({3, 2})); // trace original tn
+  return amplitudes;
+}
 
-  for (size_t i = 1; i < 22; i++) {
-    EXPECT_NEAR(-(std::log(psi[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
+  auto Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < Z_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
-  dtn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
-  for (size_t i = 0; i < dtn2d_copy.rows(); i++) {
-    for (size_t j = 0; j < dtn2d_copy.cols(); j++) {
-      EXPECT_NE(dtn2d_copy(i, j), dtn2d(i, j));
-      EXPECT_EQ(dtn2d_copy({i, j}), dtn2d({i, j}));
-    }
+
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
+  Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < Z_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+  }
+
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
+  Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < Z_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
 }
 
@@ -522,210 +531,39 @@ struct OBCIsing2DZ2TenNet : public testing::Test {
   }//SetUp
 };
 
-TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetRealNumContraction) {
-  double psi[22];
+TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
   BMPSTruncatePara trunc_para = BMPSTruncatePara(1, 10, 1e-15, CompressMPSScheme::SVD_COMPRESS);
-  dtn2d.GrowBMPSForRow(2, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  psi[0] = dtn2d.Trace({2, 0}, HORIZONTAL);
-
-  dtn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  psi[1] = dtn2d.Trace({2, 1}, HORIZONTAL);
-
-  dtn2d.GrowBMPSForCol(1, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  dtn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[2] = dtn2d.Trace({Ly - 2, 1}, VERTICAL);
-  dtn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[3] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
+  auto dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < dZ_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+  }
+  auto zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  for (size_t i = 1; i < zZ_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+    EXPECT_DOUBLE_EQ(zZ_set[i].imag(), 0.0);
+  }
 
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
-  dtn2d.GrowBMPSForRow(2, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  dtn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  psi[4] = dtn2d.Trace({2, 0}, HORIZONTAL);
-
-  dtn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  psi[5] = dtn2d.Trace({2, 1}, HORIZONTAL);
-
-  dtn2d.GrowBMPSForCol(1, trunc_para);
-  dtn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  dtn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[6] = dtn2d.Trace({Ly - 2, 1}, VERTICAL);
-  dtn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[7] = dtn2d.Trace({Ly - 3, 1}, VERTICAL);
-
-  /***** HORIZONTAL MPS *****/
-  dtn2d.GrowBMPSForRow(1, trunc_para);
-  dtn2d.InitBTen2(BTenPOSITION::LEFT, 1);
-  dtn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
-
-  psi[8] = dtn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                     HORIZONTAL,
-                                     dtn2d({2, 0}), dtn2d({1, 1})); // trace original tn
-  psi[9] = dtn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                     HORIZONTAL,
-                                     dtn2d({1, 0}), dtn2d({2, 1})); // trace original tn
-
-  dtn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
-  psi[10] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      HORIZONTAL,
-                                      dtn2d({2, 1}), dtn2d({1, 2})); // trace original tn
-
-  psi[11] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      HORIZONTAL,
-                                      dtn2d({1, 1}), dtn2d({2, 2})); // trace original tn
-  psi[12] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                               HORIZONTAL,
-                                               dtn2d({2, 0}), dtn2d({1, 2})); // trace original tn
-  psi[13] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                               HORIZONTAL,
-                                               dtn2d({2, 1}), dtn2d({1, 3})); // trace original tn
-  psi[14] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                               HORIZONTAL,
-                                               dtn2d({1, 0}), dtn2d({2, 2})); // trace original tn
-  psi[15] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                               HORIZONTAL,
-                                               dtn2d({1, 1}), dtn2d({2, 3})); // trace original tn
-
-
-  /***** VERTICAL MPS *****/
-  dtn2d.GrowBMPSForCol(1, trunc_para);
-  dtn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
-  dtn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
-  psi[16] = dtn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      VERTICAL,
-                                      dtn2d({3, 1}), dtn2d({2, 2})); // trace original tn
-  psi[17] = dtn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      VERTICAL,
-                                      dtn2d({2, 1}), dtn2d({3, 2})); // trace original tn
-
-  dtn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
-  psi[18] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      VERTICAL,
-                                      dtn2d({2, 1}), dtn2d({1, 2})); // trace original tn
-
-  psi[19] = dtn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      VERTICAL,
-                                      dtn2d({1, 1}), dtn2d({2, 2})); // trace original tn
-  psi[20] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                               VERTICAL,
-                                               dtn2d({3, 1}), dtn2d({1, 2})); // trace original tn
-  psi[21] = dtn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                               VERTICAL,
-                                               dtn2d({1, 1}), dtn2d({3, 2})); // trace original tn
-
-  for (size_t i = 1; i < 22; i++) {
-    EXPECT_NEAR(-(std::log(psi[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-10);
+  dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < dZ_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
-  dtn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
-}
-
-TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetComplexNumContraction) {
-  QLTEN_Complex psi[24];
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
-  ztn2d.GrowBMPSForRow(2, trunc_para);
-  ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  psi[0] = ztn2d.Trace({2, 0}, HORIZONTAL);
-
-  ztn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  psi[1] = ztn2d.Trace({2, 1}, HORIZONTAL);
-
-  ztn2d.GrowBMPSForCol(1, trunc_para);
-  ztn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  ztn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[2] = ztn2d.Trace({Ly - 2, 1}, VERTICAL);
-  ztn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[3] = ztn2d.Trace({Ly - 3, 1}, VERTICAL);
-
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
-  ztn2d.GrowBMPSForRow(2, trunc_para);
-  ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  psi[4] = ztn2d.Trace({2, 0}, HORIZONTAL);
-
-  ztn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  psi[5] = ztn2d.Trace({2, 1}, HORIZONTAL);
-
-  psi[6] = ztn2d.ReplaceTNNSiteTrace({2, 1}, HORIZONTAL,
-                                     ztn2d({2, 1}), ztn2d({2, 2}), ztn2d({2, 3}));
-
-  ztn2d.GrowBMPSForCol(1, trunc_para);
-  ztn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  ztn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  psi[7] = ztn2d.Trace({Ly - 2, 1}, VERTICAL);
-  ztn2d.BTenMoveStep(BTenPOSITION::UP);
-  psi[8] = ztn2d.Trace({Ly - 3, 1}, VERTICAL);
-  psi[9] = ztn2d.ReplaceTNNSiteTrace({Ly - 3, 1}, VERTICAL,
-                                     ztn2d({Ly - 3, 1}), ztn2d({Ly - 2, 1}), ztn2d({Ly - 1, 1}));
-
-  /***** HORIZONTAL MPS *****/
-  ztn2d.GrowBMPSForRow(1, trunc_para);
-  ztn2d.InitBTen2(BTenPOSITION::LEFT, 1);
-  ztn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
-
-  psi[10] = ztn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                      HORIZONTAL,
-                                      ztn2d({2, 0}), ztn2d({1, 1})); // trace original tn
-  psi[11] = ztn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                      HORIZONTAL,
-                                      ztn2d({1, 0}), ztn2d({2, 1})); // trace original tn
-
-  ztn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
-  psi[12] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      HORIZONTAL,
-                                      ztn2d({2, 1}), ztn2d({1, 2})); // trace original tn
-
-  psi[13] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      HORIZONTAL,
-                                      ztn2d({1, 1}), ztn2d({2, 2})); // trace original tn
-  psi[14] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                               HORIZONTAL,
-                                               ztn2d({2, 0}), ztn2d({1, 2})); // trace original tn
-  psi[15] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                               HORIZONTAL,
-                                               ztn2d({2, 1}), ztn2d({1, 3})); // trace original tn
-  psi[16] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                               HORIZONTAL,
-                                               ztn2d({1, 0}), ztn2d({2, 2})); // trace original tn
-  psi[17] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                               HORIZONTAL,
-                                               ztn2d({1, 1}), ztn2d({2, 3})); // trace original tn
-
-
-  /***** VERTICAL MPS *****/
-  ztn2d.GrowBMPSForCol(1, trunc_para);
-  ztn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
-  ztn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
-  psi[18] = ztn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      VERTICAL,
-                                      ztn2d({3, 1}), ztn2d({2, 2})); // trace original tn
-  psi[19] = ztn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      VERTICAL,
-                                      ztn2d({2, 1}), ztn2d({3, 2})); // trace original tn
-
-  ztn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
-  psi[20] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                      VERTICAL,
-                                      ztn2d({2, 1}), ztn2d({1, 2})); // trace original tn
-
-  psi[21] = ztn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                      VERTICAL,
-                                      ztn2d({1, 1}), ztn2d({2, 2})); // trace original tn
-  psi[22] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                               VERTICAL,
-                                               ztn2d({3, 1}), ztn2d({1, 2})); // trace original tn
-  psi[23] = ztn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                               VERTICAL,
-                                               ztn2d({1, 1}), ztn2d({3, 2})); // trace original tn
-
-  for (size_t i = 1; i < 24; i++) {
-    EXPECT_NEAR(-(std::log(psi[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
-    EXPECT_DOUBLE_EQ(psi[i].imag(), 0.0);
+  zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  for (size_t i = 1; i < zZ_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+    EXPECT_DOUBLE_EQ(zZ_set[i].imag(), 0.0);
   }
-  ztn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
+
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
+  dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < dZ_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+  }
+  zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  for (size_t i = 1; i < zZ_set.size(); i++) {
+    EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
+    EXPECT_DOUBLE_EQ(zZ_set[i].imag(), 0.0);
+  }
 }
 
 TEST_F(OBCIsing2DZ2TenNet, TestCopy) {
@@ -787,117 +625,85 @@ struct ProjectedSpinTenNet : public testing::Test {
   }
 };
 
-TEST_F(ProjectedSpinTenNet, HeisenbergD4NNTraceBMPS2SiteVariationUpdate) {
-  tn2d.GrowBMPSForRow(2, trunc_para);
-  tn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  double psi_a = tn2d.Trace({2, 0}, HORIZONTAL);
-  std::cout << "Amplitude by horizontal BMPS = " << psi_a << std::endl;
-
-  tn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  double psi_b = tn2d.Trace({2, 1}, HORIZONTAL);
-  EXPECT_NEAR(psi_a, psi_b, 1e-14);
-
-  tn2d.GrowBMPSForCol(1, trunc_para);
-  tn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  double psi_c = tn2d.Trace({Ly - 2, 1}, VERTICAL);
-  std::cout << "Amplitude by vertical BMPS = " << psi_c << std::endl;
-  tn2d.BTenMoveStep(BTenPOSITION::UP);
-  double psi_d = tn2d.Trace({Ly - 3, 1}, VERTICAL);
-  EXPECT_NEAR(psi_c, psi_d, 1e-14);
-}
-
-TEST_F(ProjectedSpinTenNet, HeisenbergD4NNTraceBMPSSingleSiteVariationUpdate) {
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
-  tn2d.GrowBMPSForRow(2, trunc_para);
-  tn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  double psi_a = tn2d.Trace({2, 0}, HORIZONTAL);
-  std::cout << "Amplitude by horizontal BMPS = " << psi_a << std::endl;
-
-  tn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  double psi_b = tn2d.Trace({2, 1}, HORIZONTAL);
-  EXPECT_NEAR(psi_a, psi_b, 1e-15);
-
-  tn2d.GrowBMPSForCol(1, trunc_para);
-  tn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  double psi_c = tn2d.Trace({Ly - 2, 1}, VERTICAL);
-  std::cout << "Amplitude by vertical BMPS = " << psi_c << std::endl;
-  tn2d.BTenMoveStep(BTenPOSITION::UP);
-  double psi_d = tn2d.Trace({Ly - 3, 1}, VERTICAL);
-  EXPECT_NEAR(psi_c, psi_d, 1e-15);
-}
-
-TEST_F(ProjectedSpinTenNet, HeisenbergD4BTen2Trace) {
-  /***** HORIZONTAL MPS *****/
-  tn2d.GrowBMPSForRow(1, trunc_para);
-  tn2d.InitBTen2(BTenPOSITION::LEFT, 1);
-  tn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
-  double psi[8];
-  psi[0] = tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                    HORIZONTAL,
-                                    tn2d({2, 0}), tn2d({1, 1})); // trace original tn
-  psi[1] = tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                    HORIZONTAL,
-                                    tn2d({1, 0}), tn2d({2, 1})); // trace original tn
-  std::cout << "Amplitude by horizontal BMPS = " << psi[0] << std::endl;
-
-  tn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
-  psi[2] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                    HORIZONTAL,
-                                    tn2d({2, 1}), tn2d({1, 2})); // trace original tn
-
-  psi[3] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                    HORIZONTAL,
-                                    tn2d({1, 1}), tn2d({2, 2})); // trace original tn
-  psi[4] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                             HORIZONTAL,
-                                             tn2d({2, 0}), tn2d({1, 2})); // trace original tn
-  psi[5] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                             HORIZONTAL,
-                                             tn2d({2, 1}), tn2d({1, 3})); // trace original tn
-  psi[6] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                             HORIZONTAL,
-                                             tn2d({1, 0}), tn2d({2, 2})); // trace original tn
-  psi[7] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                             HORIZONTAL,
-                                             tn2d({1, 1}), tn2d({2, 3})); // trace original tn
-
-  for (size_t i = 1; i < 8; i++) {
-    EXPECT_NEAR(psi[0], psi[i], 1e-15);
+TEST_F(ProjectedSpinTenNet, HeisenbergD4WaveFunctionComponnet) {
+  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
+  for (size_t i = 1; i < psi.size(); i++) {
+    EXPECT_NEAR(1, psi[i] / psi[0], 1e-10);
   }
-
-
-  /***** VERTICAL MPS *****/
-  tn2d.GrowBMPSForCol(1, trunc_para);
-  tn2d.InitBTen2(BTenPOSITION::DOWN, 1);
-  tn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
-  psi[0] = tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
-                                    VERTICAL,
-                                    tn2d({3, 1}), tn2d({2, 2})); // trace original tn
-  psi[1] = tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
-                                    VERTICAL,
-                                    tn2d({2, 1}), tn2d({3, 2})); // trace original tn
-  std::cout << "Amplitude by horizontal BMPS = " << psi[0] << std::endl;
-
-  tn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
-  psi[2] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                    VERTICAL,
-                                    tn2d({2, 1}), tn2d({1, 2})); // trace original tn
-
-  psi[3] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                    VERTICAL,
-                                    tn2d({1, 1}), tn2d({2, 2})); // trace original tn
-  psi[5] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                             VERTICAL,
-                                             tn2d({3, 1}), tn2d({1, 2})); // trace original tn
-  psi[7] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                             VERTICAL,
-                                             tn2d({1, 1}), tn2d({3, 2})); // trace original tn
-  for (size_t i = 1; i < 8; i++) {
-    EXPECT_NEAR(psi[0], psi[i], 1e-15);
-  }
-  tn2d.BTen2MoveStep(BTenPOSITION::DOWN, 1);
 }
+
+struct ExtremelyProjectedSpinTenNet : public testing::Test {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+
+  const size_t Lx = 16;  // cols
+  const size_t Ly = 16;  // rows
+
+#ifdef U1SYM
+  IndexT pb_out = IndexT({
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
+                         TenIndexDirType::OUT
+  );
+#else
+  IndexT pb_out = IndexT({
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         TenIndexDirType::OUT
+  );
+#endif
+
+  IndexT pb_in = InverseIndex(pb_out);
+
+  Configuration config = Configuration(Ly, Lx);
+
+  TensorNetwork2D<QLTEN_Double, U1QN> tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(Ly, Lx);
+
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(6, 50, 1e-15, CompressMPSScheme::VARIATION2Site);
+
+  void SetUp() {
+    TPS<QLTEN_Double, U1QN> tps(Ly, Lx);
+    size_t Dpeps = 6;
+    std::string tps_path = "Hei_TPS" + std::to_string(Ly) + "x"
+        + std::to_string(Lx) + "D" + std::to_string(Dpeps);
+    tps.Load(tps_path);
+    SplitIndexTPS<QLTEN_Double, U1QN> split_index_tps(tps);
+    std::vector<size_t> config_data = {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
+                                       0, 1, 1, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                                       0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 0,
+                                       1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1,
+                                       0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1,
+                                       1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0,
+                                       0, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1,
+                                       0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                       1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0,
+                                       0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0,
+                                       0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0,
+                                       1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1,
+                                       1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1,
+                                       1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0,
+                                       0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0,
+                                       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1};
+    for (size_t i = 0; i < Lx; i++) { //col index
+      for (size_t j = 0; j < Ly; j++) { //row index
+        config({j, i}) = config_data[j * Ly + i];
+      }
+    }
+    tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(split_index_tps, config);
+  }
+};
+
+// Feb 25, this extremely test case cannot pass.
+//TEST_F(ExtremelyProjectedSpinTenNet, HeisenbergD6WaveFunctionComponnet) {
+//  for (auto &ten : tn2d) {
+//    ten *= 2.0;
+//  }
+//  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
+//  for (size_t i = 1; i < psi.size(); i++) {
+//    EXPECT_NEAR(psi[0], psi[i], 1e-10);
+//  }
+//  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
+//  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
+//  for (size_t i = 1; i < psi.size(); i++) {
+//    EXPECT_NEAR(psi[0], psi[i], 1e-10);
+//  }
+//}

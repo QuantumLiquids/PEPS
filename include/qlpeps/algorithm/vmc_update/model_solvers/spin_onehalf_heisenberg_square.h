@@ -47,7 +47,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   std::vector<TenElemT> psi_gather;
-  psi_gather.reserve(tn.rows() + tn.cols() - 2);
+  psi_gather.reserve(tn.rows() + tn.cols());
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
@@ -144,7 +144,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
 
   double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
 
-  const double critical_bias = 0.1;
+  const double critical_bias = 0.01;
   if (has_unreasonable_bond_energy || estimate_wavefunction_bias > critical_bias) {
     std::cout << "wave function amplitude estimation :" << std::endl;
     for (const auto &element : psi_gather) {

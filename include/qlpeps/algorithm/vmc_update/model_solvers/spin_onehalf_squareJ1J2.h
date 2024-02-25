@@ -100,10 +100,10 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
         SiteIdx site2 = {row, lx / 4 + i};
         //sm(i) * sp(j)
         if (config(site2) == config(site1)) {
-          diag_corr[i-1] = 0.0;
+          diag_corr[i - 1] = 0.0;
         } else {
           TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
-          diag_corr[i-1]=psi_ex * inv_psi;
+          diag_corr[i - 1] = psi_ex * inv_psi;
         }
         tn.BTenMoveStep(RIGHT);
       }
@@ -215,11 +215,14 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
+  std::vector<TenElemT> psi_gather;
+  psi_gather.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -285,6 +288,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     tn.GrowFullBTen(DOWN, col, 2, true);
     tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
@@ -303,6 +307,24 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     if (col < tn.cols() - 1) {
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
+  }
+
+  std::vector<double> abs_psi(psi_gather.size());
+  std::transform(psi_gather.begin(), psi_gather.end(), abs_psi.begin(), [](const TenElemT &value) {
+    return std::abs(value);
+  });
+  double max_abs = *std::max_element(abs_psi.begin(), abs_psi.end());
+  double min_abs = *std::min_element(abs_psi.begin(), abs_psi.end());
+
+  double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
+
+  const double critical_bias = 0.01;
+  if (estimate_wavefunction_bias > critical_bias) {
+    std::cout << "wave function amplitude estimation :" << std::endl;
+    for (const auto &element : psi_gather) {
+      std::cout << element << " ";
+    }
+    std::cout << std::endl;
   }
   return e1 + j2_ * e2;
 }
