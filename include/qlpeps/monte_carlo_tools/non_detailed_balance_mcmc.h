@@ -29,6 +29,7 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
   for (auto w : weights) {
     assert(w >= 0);
   }
+  assert(weights[init_state] > 0);
 #endif
   // Swap the first weight with the maximum weight
   auto max_weight_iter = std::max_element(weights.cbegin(), weights.cend());

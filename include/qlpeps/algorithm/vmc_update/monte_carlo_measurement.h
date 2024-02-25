@@ -71,7 +71,8 @@ std::vector<T> CalAutoCorrelation(
     const std::vector<T> &data,
     const T mean
 ) {
-  const size_t res_len = 20; // I think enough long
+  const size_t sample_num = data.size();
+  const size_t res_len = 20 > sample_num / 2 ? sample_num / 2 : 20;
   std::vector<T> res(res_len, T(0));
   for (size_t t = 0; t < res_len; t++) {
     T sum(0);
@@ -98,7 +99,8 @@ template<typename ElemT>
 std::vector<ElemT> CalSpinAutoCorrelation(
     const std::vector<std::vector<ElemT>> &local_sz_samples
 ) {
-  const size_t res_len = 20;
+  const size_t sample_num = local_sz_samples.size();
+  const size_t res_len = 20 > sample_num / 2 ? sample_num / 2 : 20;
   const size_t N = local_sz_samples[0].size();// lattice size
   std::vector<double> res(res_len, 0.0);
   for (size_t t = 0; t < res_len; t++) {
@@ -111,17 +113,17 @@ std::vector<ElemT> CalSpinAutoCorrelation(
   return res;
 }
 
-void PrintProgressBar(int progress, int total) {
-  int bar_width = 70; // width of the progress bar
+void PrintProgressBar(size_t progress, size_t total) {
+  size_t bar_width = 70; // width of the progress bar
 
   std::cout << "[";
-  int pos = bar_width * progress / total;
-  for (int i = 0; i < bar_width; ++i) {
+  size_t pos = bar_width * progress / total;
+  for (size_t i = 0; i < bar_width; ++i) {
     if (i < pos) std::cout << "=";
     else if (i == pos) std::cout << ">";
     else std::cout << " ";
   }
-  std::cout << "] " << int(progress * 100.0 / total) << " %" << std::endl;
+  std::cout << "] " << int((double) progress * 100.0 / (double) total) << " %" << std::endl;
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
@@ -547,6 +549,7 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::Measure_(void) {
   std::vector<double> accept_rates_accum;
+  const size_t print_bar_length = (optimize_para.mc_samples / 10) > 0 ? (optimize_para.mc_samples / 10) : 1;
   for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
     std::vector<double> accept_rates = MCSweep_();
     if (sweep == 0) {
@@ -557,7 +560,7 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
       }
     }
     MeasureSample_();
-    if (world_.rank() == kMasterProc && (sweep + 1) % (optimize_para.mc_samples / 10) == 0) {
+    if (world_.rank() == kMasterProc && (sweep + 1) % print_bar_length == 0) {
       PrintProgressBar((sweep + 1), optimize_para.mc_samples);
     }
   }
