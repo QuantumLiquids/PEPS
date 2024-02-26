@@ -55,11 +55,14 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
+  std::vector<TenElemT> psi_gather;
+  psi_gather.reserve(lx + tn.rows());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       if (col < tn.cols() - 1) {
@@ -172,6 +175,7 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
     tn.GrowFullBTen(DOWN, col, 2, true);
     tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
@@ -199,7 +203,7 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
   for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }
-
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return res;
 }
 

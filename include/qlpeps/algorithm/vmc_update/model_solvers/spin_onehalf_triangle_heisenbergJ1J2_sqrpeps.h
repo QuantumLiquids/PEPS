@@ -49,11 +49,14 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
+  std::vector<TenElemT> psi_gather;
+  psi_gather.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -132,6 +135,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     tn.GrowFullBTen(DOWN, col, 2, true);
     tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     //Calculate vertical bond energy contribution
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
@@ -172,6 +176,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
   }
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return e1 + j2_ * e2;
 }
 
@@ -228,7 +233,6 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
         res.two_point_functions_loc.push_back(sz1 * sz2);
       }
 
-
       std::vector<TenElemT> diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
       tn(site1) = (*split_index_tps)(site1)[1 - config(site1)]; //temporally change
       tn.TruncateBTen(LEFT, lx / 4 + 1); // may be above two lines should be summarized as an API
@@ -238,10 +242,10 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
         SiteIdx site2 = {row, lx / 4 + i};
         //sm(i) * sp(j)
         if (config(site2) == config(site1)) {
-          diag_corr[i-1] = 0.0;
+          diag_corr[i - 1] = 0.0;
         } else {
           TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
-          diag_corr[i-1] = (psi_ex * inv_psi);
+          diag_corr[i - 1] = (psi_ex * inv_psi);
         }
         tn.BTenMoveStep(RIGHT);
       }

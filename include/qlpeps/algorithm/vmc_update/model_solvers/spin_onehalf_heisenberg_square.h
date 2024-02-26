@@ -134,24 +134,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
   }
-  std::vector<double> abs_psi(psi_gather.size());
-  std::transform(psi_gather.begin(), psi_gather.end(), abs_psi.begin(), [](const TenElemT &value) {
-    return std::abs(value);
-  });
-
-  double max_abs = *std::max_element(abs_psi.begin(), abs_psi.end());
-  double min_abs = *std::min_element(abs_psi.begin(), abs_psi.end());
-
-  double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
-
-  const double critical_bias = 0.01;
-  if (has_unreasonable_bond_energy || estimate_wavefunction_bias > critical_bias) {
-    std::cout << "wave function amplitude estimation :" << std::endl;
-    for (const auto &element : psi_gather) {
-      std::cout << element << " ";
-    }
-    std::cout << std::endl;
-  }
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return energy;
 }
 
@@ -172,12 +155,15 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
   const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
+  std::vector<TenElemT> psi_gather;
+  psi_gather.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < ly; row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
     tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t col = 0; col < lx; col++) {
       const SiteIdx site1 = {row, col};
       if (col < tn.cols() - 1) {
@@ -262,6 +248,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
     tn.GrowFullBTen(DOWN, col, 2, true);
     tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
     inv_psi = 1.0 / tps_sample->amplitude;
+    psi_gather.push_back(tps_sample->amplitude);
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
@@ -304,6 +291,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
   for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return res;
 }
 

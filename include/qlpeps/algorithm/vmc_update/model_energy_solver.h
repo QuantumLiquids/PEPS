@@ -32,6 +32,32 @@ class ModelEnergySolver {
  protected:
 };
 
+//helper
+template<typename ElemT>
+bool WaveFunctionAmplitudeConsistencyCheck(
+    const std::vector<ElemT> &psi_list,
+    const double critical_bias
+) {
+  std::vector<double> abs_psi(psi_list.size());
+  std::transform(psi_list.begin(), psi_list.end(), abs_psi.begin(), [](const ElemT &value) {
+    return std::abs(value);
+  });
+  double max_abs = *std::max_element(abs_psi.begin(), abs_psi.end());
+  double min_abs = *std::min_element(abs_psi.begin(), abs_psi.end());
+
+  double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
+
+  if (estimate_wavefunction_bias > critical_bias) {
+    std::cout << "inconsistent wave function amplitudes :" << std::endl;
+    for (const auto &element : psi_list) {
+      std::cout << element << " ";
+    }
+    std::cout << std::endl;
+    return false;
+  }
+  return true;
+}
+
 }//qlpeps
 
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
