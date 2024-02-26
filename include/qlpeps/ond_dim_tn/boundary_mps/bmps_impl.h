@@ -392,7 +392,7 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
           lenvs.pop_back();
           delete pu;
         }
-        if (iter == 0 || s.GetShape().front() != s12bond_last.GetShape().front()) {
+        if (iter == 0 || s.GetIndex(0) != s12bond_last.GetIndex(0)) {
           s12bond_last = s;
           continue;
         }

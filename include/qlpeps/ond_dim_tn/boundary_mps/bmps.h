@@ -31,12 +31,17 @@ struct BMPSTruncatePara {
   size_t D_max;
   double trunc_err;
   CompressMPSScheme compress_scheme;
+  std::optional<double> convergence_tol;
+  std::optional<size_t> iter_max;
 
   BMPSTruncatePara(void) = default;
 
   BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
-                   CompressMPSScheme compress_scheme)
-      : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme) {}
+                   CompressMPSScheme compress_scheme,
+                   std::optional<double> convergence_tol,
+                   std::optional<size_t> iter_max)
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme),
+        convergence_tol(convergence_tol), iter_max(iter_max) {}
 };
 
 /**

@@ -205,7 +205,10 @@ struct SpinSystemVMCPEPS : public testing::Test {
     Ly = L;
     N = Lx * Ly;
     optimize_para =
-        VMCOptimizePara(BMPSTruncatePara(8, 16, 1e-15, CompressMPSScheme::VARIATION2Site),
+        VMCOptimizePara(BMPSTruncatePara(8, 16, 1e-15,
+                                         CompressMPSScheme::VARIATION2Site,
+                                         std::make_optional<double>(1e-14),
+                                         std::make_optional<size_t>(10)),
                         10, 10, 2,
                         std::vector<size_t>(2, N / 2),
                         Ly, Lx,

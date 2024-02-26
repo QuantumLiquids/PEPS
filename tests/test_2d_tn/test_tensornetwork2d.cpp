@@ -363,7 +363,9 @@ std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
 }
 
 TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
   auto Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
   for (size_t i = 1; i < Z_set.size(); i++) {
     EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
@@ -532,7 +534,9 @@ struct OBCIsing2DZ2TenNet : public testing::Test {
 };
 
 TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(1, 10, 1e-15, CompressMPSScheme::SVD_COMPRESS);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(1, 10, 1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
   auto dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
   for (size_t i = 1; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
@@ -568,7 +572,9 @@ TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
 
 TEST_F(OBCIsing2DZ2TenNet, TestCopy) {
   auto ztn2d_cp = ztn2d;
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(10, 30, 1e-15, CompressMPSScheme::VARIATION2Site,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
   ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -609,7 +615,9 @@ struct ProjectedSpinTenNet : public testing::Test {
 
   TensorNetwork2D<QLTEN_Double, U1QN> tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(Ly, Lx);
 
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, CompressMPSScheme::VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(4, 8, 1e-12, CompressMPSScheme::VARIATION2Site,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
 
   void SetUp() {
     TPS<QLTEN_Double, U1QN> tps(Ly, Lx);
@@ -658,7 +666,9 @@ struct ExtremelyProjectedSpinTenNet : public testing::Test {
 
   TensorNetwork2D<QLTEN_Double, U1QN> tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(Ly, Lx);
 
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(6, 50, 1e-15, CompressMPSScheme::VARIATION2Site);
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(6, 50, 1e-15, CompressMPSScheme::VARIATION2Site,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
 
   void SetUp() {
     TPS<QLTEN_Double, U1QN> tps(Ly, Lx);
@@ -693,17 +703,17 @@ struct ExtremelyProjectedSpinTenNet : public testing::Test {
 };
 
 // Feb 25, this extremely test case cannot pass.
-//TEST_F(ExtremelyProjectedSpinTenNet, HeisenbergD6WaveFunctionComponnet) {
-//  for (auto &ten : tn2d) {
-//    ten *= 2.0;
-//  }
-//  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
-//  for (size_t i = 1; i < psi.size(); i++) {
-//    EXPECT_NEAR(psi[0], psi[i], 1e-10);
-//  }
-//  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
-//  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
-//  for (size_t i = 1; i < psi.size(); i++) {
-//    EXPECT_NEAR(psi[0], psi[i], 1e-10);
-//  }
-//}
+TEST_F(ExtremelyProjectedSpinTenNet, HeisenbergD6WaveFunctionComponnet) {
+  for (auto &ten : tn2d) {
+    ten *= 2.0;
+  }
+  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
+  for (size_t i = 1; i < psi.size(); i++) {
+    EXPECT_NEAR(psi[0], psi[i], 1e-10);
+  }
+  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
+  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
+  for (size_t i = 1; i < psi.size(); i++) {
+    EXPECT_NEAR(psi[0], psi[i], 1e-10);
+  }
+}

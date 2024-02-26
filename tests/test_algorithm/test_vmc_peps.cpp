@@ -94,7 +94,10 @@ struct SpinSystemVMCPEPS : public testing::Test {
   IndexT pb_in = InverseIndex(pb_out);
 
   VMCOptimizePara optimize_para =
-      VMCOptimizePara(BMPSTruncatePara(params.Db_min, params.Db_max, 1e-15, CompressMPSScheme::VARIATION2Site),
+      VMCOptimizePara(BMPSTruncatePara(params.Db_min, params.Db_max,
+                                       1e-15, CompressMPSScheme::VARIATION2Site,
+                                       std::make_optional<double>(1e-14),
+                                       std::make_optional<size_t>(10)),
                       params.MC_samples, params.WarmUp, 1,
                       std::vector<size_t>(2, N / 2),
                       Ly, Lx,
@@ -146,8 +149,8 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
 
   if (params.Continue_from_VMC) {
     executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(optimize_para,
-                                                                                Ly, Lx,
-                                                                                world);
+                                                                                               Ly, Lx,
+                                                                                               world);
   } else {
     TPS<QLTEN_Double, U1QN> tps = TPS<QLTEN_Double, U1QN>(Ly, Lx);
     if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
@@ -155,7 +158,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
       exit(-2);
     };
     executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(optimize_para, tps,
-                                                                                world);
+                                                                                               world);
   }
 
   executor->Execute();
