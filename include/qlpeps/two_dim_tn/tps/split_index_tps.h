@@ -69,11 +69,30 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     return *this;
   }
 
-  // TODO
-//  operator TPST() {
-//    TPST tps(this->rows(), this->cols());
-//
-//  }
+  TPST GroupIndices(const Index<QNT> &phy_idx) const {
+    TPST tps(this->rows(), this->cols());
+    for (size_t row = 0; row < this->rows(); row++) {
+      for (size_t col = 0; col < this->cols(); col++) {
+        const std::vector<Tensor> &split_tens = (*this)({row, col});
+        Tensor combined_ten;
+        for (size_t i = 0; i < split_tens.size(); i++) {
+          Tensor leg_ten({phy_idx});
+          leg_ten({i}) = TenElemT(1.0);
+          std::vector<std::vector<size_t>> empty_vv = {{}, {}};
+          const Tensor &split_ten_comp = split_tens[i];
+          Tensor split_ten_with_phy_leg;
+          Contract(&split_ten_comp, &leg_ten, empty_vv, &split_ten_with_phy_leg);
+          if (i == 0) {
+            combined_ten = split_ten_with_phy_leg;
+          } else {
+            combined_ten += split_ten_with_phy_leg;
+          }
+        }
+        tps({row, col}) = combined_ten;
+      }
+    }
+    return tps;
+  }
 
   size_t PhysicalDim(const SiteIdx &site = {0, 0}) const {
     return (*this)(site).size();
