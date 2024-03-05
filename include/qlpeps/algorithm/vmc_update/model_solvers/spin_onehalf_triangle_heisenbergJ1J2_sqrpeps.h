@@ -34,6 +34,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<TenElemT, Q
       WaveFunctionComponentType *tps_sample
   );
  private:
+  std::vector<TenElemT> CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const;
   double j2_;
 };
 
@@ -381,6 +382,28 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
   res.one_point_functions_loc.reserve(tn.rows() * lx);
   for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
+  }
+
+  std::vector<TenElemT> all2all_sz_corr = CalculateSzAll2AllCorrelation_(config);
+  res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), all2all_sz_corr.begin(), all2all_sz_corr.end());
+
+  return res;
+}
+
+template<typename TenElemT, typename QNT>
+std::vector<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT,
+                                                          QNT>::CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const {
+  std::vector<TenElemT> res;
+  size_t N = config.size();
+  res.reserve(N * N);
+  for (auto &c1 : config) {
+    for (auto &c2 : config) {
+      if (c1 == c2) {
+        res.push_back(0.25);
+      } else {
+        res.push_back(-0.25);
+      }
+    }
   }
   return res;
 }
