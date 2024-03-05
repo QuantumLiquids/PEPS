@@ -48,11 +48,9 @@ bool WaveFunctionAmplitudeConsistencyCheck(
   double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
 
   if (estimate_wavefunction_bias > critical_bias) {
-    std::cout << "inconsistent wave function amplitudes :" << std::endl;
-    for (const auto &element : psi_list) {
-      std::cout << element << " ";
-    }
-    std::cout << std::endl;
+    std::cout << "inconsistent wave function amplitudes : "
+              << "(" << min_abs  << ", " << max_abs << ")"
+              << std::endl;
     return false;
   }
   return true;

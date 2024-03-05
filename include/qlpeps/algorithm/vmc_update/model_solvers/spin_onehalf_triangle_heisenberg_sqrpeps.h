@@ -130,7 +130,7 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::CalEnergyAndHoles(const
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
   }
-  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.03);
   return e;
 }
 
