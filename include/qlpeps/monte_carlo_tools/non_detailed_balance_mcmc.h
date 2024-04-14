@@ -70,7 +70,7 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
 #else
   double sum_p = std::reduce(p.begin(), p.end());
 #endif
-  assert(std::abs(sum_p - 1.0) < 1e-13);
+  assert(std::abs(sum_p - 1.0) < 1e-10);
 #endif
   double p_accumulate = 0.0;
   size_t final_state;

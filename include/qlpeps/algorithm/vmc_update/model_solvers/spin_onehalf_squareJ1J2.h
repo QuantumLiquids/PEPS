@@ -313,23 +313,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     }
   }
 
-  std::vector<double> abs_psi(psi_gather.size());
-  std::transform(psi_gather.begin(), psi_gather.end(), abs_psi.begin(), [](const TenElemT &value) {
-    return std::abs(value);
-  });
-  double max_abs = *std::max_element(abs_psi.begin(), abs_psi.end());
-  double min_abs = *std::min_element(abs_psi.begin(), abs_psi.end());
-
-  double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
-
-  const double critical_bias = 0.01;
-  if (estimate_wavefunction_bias > critical_bias) {
-    std::cout << "wave function amplitude estimation :" << std::endl;
-    for (const auto &element : psi_gather) {
-      std::cout << element << " ";
-    }
-    std::cout << std::endl;
-  }
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return e1 + j2_ * e2;
 }
 }//qlpeps

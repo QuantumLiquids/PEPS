@@ -7,6 +7,8 @@
 * Description: QuantumLiquids/PEPS project. Unittests for Square Heisenberg model.
 */
 
+#define QLTEN_COUNT_FLOPS 1
+
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
@@ -240,6 +242,7 @@ TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
   size_t Dpeps = 6;
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(Dpeps);
   optimize_para.step_lens = {0.0};
+  optimize_para.update_scheme = StochasticReconfiguration;
   using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
   VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model> *executor(nullptr);
@@ -254,9 +257,16 @@ TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
     tensor *= (1.0 / tensor.GetMaxAbs());
   }
   SplitIndexTPS<QLTEN_Double, U1QN> init_sitps(tps);
+  size_t start_flop = flop;
+  Timer vmc_timer("vmc");
   executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para, tps,
                                                                            world);
   executor->Execute();
+  size_t end_flop = flop;
+  double elapsed_time = vmc_timer.Elapsed();
+  double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
+  std::cout << "flop = " << end_flop - start_flop << std::endl;
+  std::cout << "Gflops = " << Gflops << std::endl;
   SplitIndexTPS<QLTEN_Double, U1QN> result_sitps = executor->GetState();
   for (size_t row = 0; row < L; row++) {
     for (size_t col = 0; col < L; col++) {
@@ -302,5 +312,6 @@ int main(int argc, char *argv[]) {
   boost::mpi::environment env;
   testing::InitGoogleTest(&argc, argv);
   L = atoi(argv[1]);
+  hp_numeric::SetTensorManipulationThreads(1);
   return RUN_ALL_TESTS();
 }

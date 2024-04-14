@@ -250,12 +250,17 @@ struct OBCIsing2DTenNetWithoutZ2 : public testing::Test {
     dtn2d({Ly - 1, Lx - 1}) = core_ten_right_lower;
     dtn2d({0, Lx - 1}) = core_ten_right_upper;
 
+    random_engine.seed(std::random_device{}());
+    double rand_phase_sum(0.0);
     for (size_t row = 0; row < Ly; row++) {
       for (size_t col = 0; col < Lx; col++) {
         tn_free_en_norm_factor += std::log(dtn2d({row, col}).Normalize());
-        ztn2d({row, col}) = ToComplex(dtn2d({row, col}));
+        double rand_phase = unit_even_distribution(random_engine); // 0<= rand_phase< 1
+        ztn2d({row, col}) = ToComplex(dtn2d({row, col})) * exp(std::complex<double>(0, 2 * M_PI * rand_phase));
+        rand_phase_sum += rand_phase;
       }
     }
+    ztn2d({0, 0}) *= exp(std::complex<double>(0, -2 * M_PI * rand_phase_sum));
     dtn2d.InitBMPS();
     ztn2d.InitBMPS();
 
@@ -517,12 +522,17 @@ struct OBCIsing2DZ2TenNet : public testing::Test {
     dtn2d({Ly - 1, Lx - 1}) = core_ten_right_lower;
     dtn2d({0, Lx - 1}) = core_ten_right_upper;
 
+    random_engine.seed(std::random_device{}());
+    double rand_phase_sum(0.0);
     for (size_t row = 0; row < Ly; row++) {
       for (size_t col = 0; col < Lx; col++) {
         tn_free_en_norm_factor += std::log(dtn2d({row, col}).Normalize());
-        ztn2d({row, col}) = ToComplex(dtn2d({row, col}));
+        double rand_phase = unit_even_distribution(random_engine); // 0<= rand_phase< 1
+        ztn2d({row, col}) = ToComplex(dtn2d({row, col})) * exp(std::complex<double>(0, 2 * M_PI * rand_phase));
+        rand_phase_sum += rand_phase;
       }
     }
+    ztn2d({0, 0}) *= exp(std::complex<double>(0, -2 * M_PI * rand_phase_sum));
     dtn2d.InitBMPS();
     ztn2d.InitBMPS();
 
@@ -544,7 +554,7 @@ TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
   auto zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
   for (size_t i = 1; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
-    EXPECT_DOUBLE_EQ(zZ_set[i].imag(), 0.0);
+    EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
@@ -555,7 +565,7 @@ TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
   zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
   for (size_t i = 1; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
-    EXPECT_DOUBLE_EQ(zZ_set[i].imag(), 0.0);
+    EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
@@ -566,7 +576,7 @@ TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
   zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
   for (size_t i = 1; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
-    EXPECT_DOUBLE_EQ(zZ_set[i].imag(), 0.0);
+    EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 }
 
@@ -712,7 +722,7 @@ TEST_F(ExtremelyProjectedSpinTenNet, HeisenbergD6WaveFunctionComponnet) {
     EXPECT_NEAR(psi[0], psi[i], 1e-10);
   }
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
-  auto psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
+  psi = Contract2DTNFromDifferentPositionAndMethods(tn2d, trunc_para);
   for (size_t i = 1; i < psi.size(); i++) {
     EXPECT_NEAR(psi[0], psi[i], 1e-10);
   }

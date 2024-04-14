@@ -110,7 +110,8 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
 
   QLTensor<QLTEN_Double, QNT> RightCanonicalizeTen(const size_t);
 
-  double RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);
+  //return (D, trunc_err)
+  std::pair<size_t, double> RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);
 
   int GetCenter(void) const { return center_; }
 
@@ -151,7 +152,8 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
    * @note mpo will be reversed if the position is RIGHT or UP.
    */
   BMPS MultipleMPOSVDCompress_(TransferMPO &,
-                               const size_t, const size_t, const double) const;
+                               const size_t, const size_t, const double,
+                               size_t &actual_Dmax, double &actual_trunc_err_max) const;
 
   BMPS InitGuessForVariationalMPOMultiplication_(TransferMPO &, const size_t, const size_t, const double) const;
 

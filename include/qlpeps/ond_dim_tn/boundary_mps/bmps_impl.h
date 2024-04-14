@@ -131,7 +131,7 @@ QLTensor<QLTEN_Double, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size
 }
 
 template<typename TenElemT, typename QNT>
-double
+std::pair<size_t, double>
 BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t Dmin,
                                                const size_t Dmax, const double trunc_err) {
 
@@ -154,16 +154,14 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t D
   (*this)(site) = pvt;
 
   Tensor temp_ten;
-  Contract(&u, &s, {{1},
-                    {0}}, &temp_ten);
+  Contract(&u, &s, {{1}, {0}}, &temp_ten);
   auto pnext_ten = new Tensor;
-  Contract((*this)(site - 1), &temp_ten, {{2},
-                                          {0}}, pnext_ten);
+  Contract((*this)(site - 1), &temp_ten, {{2}, {0}}, pnext_ten);
   delete (*this)(site - 1);
   (*this)(site - 1) = pnext_ten;
 
   //set ten canonical type
-  return actual_trunc_err;
+  return std::make_pair(D, actual_trunc_err);
 }
 
 template<typename TenElemT, typename QNT>
@@ -291,7 +289,9 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
 ) const {
   const size_t N = this->size();
   if (N == 2 || scheme == CompressMPSScheme::SVD_COMPRESS) {
-    return MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
+    double actual_trunc_err_max;
+    size_t actual_D_max;
+    return MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err, actual_D_max, actual_trunc_err_max);
   }
   assert(mpo.size() == N);
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
@@ -424,9 +424,9 @@ BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
           &u, &s, pvt, &actual_trunc_err, &D
       );
 #ifndef NDEBUG
-//      if (actual_trunc_err > trunc_err) {
-//      std::cout << "actual_trunc_err in BMPS : " << actual_trunc_err << std::endl;
-//      }
+      //      if (actual_trunc_err > trunc_err) {
+      //      std::cout << "actual_trunc_err in BMPS : " << actual_trunc_err << std::endl;
+      //      }
 #endif
 
       delete res_dag(0);
@@ -903,10 +903,12 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
   }
 }
 
+// order of tensors in transfer mpo was possibly reversed after running this function
 template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(TransferMPO &mpo,
-                                             const size_t Dmin, const size_t Dmax, const double trunc_err) const {
+                                             const size_t Dmin, const size_t Dmax, const double trunc_err,
+                                             size_t &actual_Dmax, double &actual_trunc_err_max) const {
   const size_t N = this->size();
 #ifndef NDEBUG
   assert(mpo.size() == N);
@@ -941,8 +943,12 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(TransferMPO &mpo,
       res(i)->Transpose({0, 2, 1});
     }
   }
+  actual_Dmax = 1;
+  actual_trunc_err_max = 0.0;
   for (size_t i = N - 1; i > 0; --i) {
-    res.RightCanonicalizeTruncate(i, Dmin, Dmax, trunc_err);
+    auto [D, actual_trunc_err] = res.RightCanonicalizeTruncate(i, Dmin, Dmax, trunc_err);
+    actual_Dmax = std::max(actual_Dmax, D);
+    actual_trunc_err_max = std::max(actual_trunc_err, actual_trunc_err_max);
   }
 #ifndef NDEBUG
   MultipleMPOResCheck_(mpo_original, *this, res, position_);
@@ -978,7 +984,9 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(BMPS::TransferMPO
   for (size_t i = mps_copy.size() - 1; i > 0; --i) {
     mps_copy.RightCanonicalizeTruncate(i, 1, 2, 0.0);
   }
-  auto multip_init = mps_copy.MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err);
+  double actual_trunc_err_max;
+  size_t actual_D_max;
+  auto multip_init = mps_copy.MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err, actual_D_max, actual_trunc_err_max);
 
 #ifndef NDEBUG
   for (size_t i = 0; i < multip_init.size(); i++) {

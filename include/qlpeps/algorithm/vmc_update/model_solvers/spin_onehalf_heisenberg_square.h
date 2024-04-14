@@ -60,7 +60,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
       const SiteIdx site1 = {row, col};
       //Calculate the holes
       if constexpr (calchols) {
-        hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL));
+        hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL)); // natural match to complex number wave-function case.
       }
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
@@ -261,15 +261,12 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
                                                 (*split_index_tps)(site2)[config(site1)]);
         TenElemT ratio = psi_ex * inv_psi;
         if (std::abs(ratio) > bond_energy_extremly_large) {
-          std::cout << "Warning for possible numeric floating point err: \n"
+          std::cout << "Warning [Unreasonable bond energy]: "
                     << "Site : (" << row << ", " << col << ") "
-                    << "Bond Orientation :" << "Vertical"
-                    << "psi_exchange : " << std::scientific << psi_ex
+                    << "Bond Orient :" << " V, "
+                    << "psi_ex : " << std::scientific << psi_ex
                     << ", psi_0 : " << std::scientific << tps_sample->amplitude
                     << ", ratio : " << std::scientific << ratio
-                    << "original tensor norms : (" << tn(site1).Get2Norm() << ", " << tn(site2).Get2Norm() << ") "
-                    << "exchange tensor norms : (" << (*split_index_tps)(site1)[config(site2)].Get2Norm()
-                    << ", " << (*split_index_tps)(site2)[config(site1)].Get2Norm() << ") "
                     << std::endl;
           vertical_bond_energy = 0.0;
         } else {

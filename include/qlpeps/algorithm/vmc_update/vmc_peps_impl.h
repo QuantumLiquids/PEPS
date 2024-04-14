@@ -20,6 +20,9 @@ namespace qlpeps {
 using namespace qlten;
 
 //help
+double ComplexConjugate(const double &x) { return x; }
+std::complex<double> ComplexConjugate(const std::complex<double> &z) { return std::conj(z); }
+
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> Mean(const std::vector<QLTensor<TenElemT, QNT> *> &tensor_list,
                              const size_t length) {
@@ -529,7 +532,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Sa
   TenElemT energy_loc = energy_solver_.template CalEnergyAndHoles<WaveFunctionComponentType, true>(&split_index_tps_,
                                                                                                    &tps_sample_,
                                                                                                    holes);
-  TenElemT inv_psi = 1.0 / tps_sample_.amplitude;
+  TenElemT inv_psi = ComplexConjugate(1.0 / tps_sample_.amplitude); //using dividing the holes.
   energy_samples_.push_back(energy_loc);
   SITPST gten_sample(ly_, lx_, split_index_tps_.PhysicalDim());// only useful for Stochastic Reconfiguration
   for (size_t row = 0; row < ly_; row++) {

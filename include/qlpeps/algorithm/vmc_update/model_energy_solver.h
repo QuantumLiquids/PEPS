@@ -49,12 +49,13 @@ bool WaveFunctionAmplitudeConsistencyCheck(
 
   if (estimate_wavefunction_bias > critical_bias) {
     std::cout << "inconsistent wave function amplitudes : "
-              << "(" << min_abs  << ", " << max_abs << ")"
+              << "(" << min_abs << ", " << max_abs << ")"
               << std::endl;
     return false;
   }
   return true;
 }
+
 
 }//qlpeps
 
