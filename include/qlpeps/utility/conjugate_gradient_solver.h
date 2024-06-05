@@ -196,6 +196,15 @@ SlaveReceiveBroadcastInstruction(const boost::mpi::communicator world) {
   return instruction;
 }
 
+bool pap_check(const double& pap) {
+  return pap > 0;
+}
+
+
+bool pap_check(const std::complex<double>& pap) {
+  return pap.real() > 0 && std::abs(pap.imag()) < 1e-10; // Adjust tolerance as needed
+}
+
 template<typename MatrixType, typename VectorType>
 VectorType ConjugateGradientSolverMaster(
     const MatrixType &matrix_a,
@@ -228,8 +237,8 @@ VectorType ConjugateGradientSolverMaster(
     auto pap = (p * ap);
     auto alpha = rk_2norm / pap; //auto is double or complex
 #ifndef NDEBUG
-    assert(pap > 0);
-    if (!std::isnormal(alpha)) {
+    assert(pap_check(pap));
+    if (!std::isnormal(alpha.real())) {
       std::cout << "k : " << k << "\t pap : " << std::scientific << pap
                 << "\t rk_2norm : " << std::scientific << rk_2norm
                 << "\t alpha : " << std::scientific << alpha << std::endl;

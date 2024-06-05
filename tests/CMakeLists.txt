@@ -224,19 +224,29 @@ add_unittest(test_non_detailed_balance_mcmc
 )
 ## Test algorithms
 # Test simple update
-add_unittest(test_simple_update
-        "test_algorithm/test_simple_update.cpp"
+add_unittest(test_simple_update_double
+        "test_algorithm/test_simple_update_double.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
+add_unittest(test_simple_update_complex
+        "test_algorithm/test_simple_update_complex.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 # Test vmc-peps
-add_unittest(test_vmc_peps
-        "test_algorithm/test_vmc_peps.cpp"
+add_unittest(test_vmc_peps_double
+        "test_algorithm/test_vmc_peps_double.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
+add_unittest(test_vmc_peps_complex
+        "test_algorithm/test_vmc_peps_complex.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 add_mpi_unittest(test_vmc_peps_mpi
-        "test_algorithm/test_vmc_peps.cpp"
+        "test_algorithm/test_vmc_peps_double.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "2"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )

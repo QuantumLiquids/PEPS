@@ -14,6 +14,13 @@
 namespace qlpeps {
 using namespace qlten;
 
+/*
+ * For the complex number case,
+ *
+ * gten_samples, gten_ave_ \sim \partial_\theta^* \Psi
+ * SRSMatrix \sim gten_samples /\ gten_samples^* \sim  \partial_\theta^* \Psi  \partial_\theta \Psi
+ *
+ */
 template<typename TenElemT, typename QNT>
 class SRSMatrix {
   using SITPS = SplitIndexTPS<TenElemT, QNT>;

@@ -108,10 +108,10 @@ class SquareTPSSampleNNExchange : public WaveFunctionComponent<TenElemT, QNT> {
                                            sitps(site2)[this->config(site1)]);
     bool exchange;
     TenElemT &psi_a = this->amplitude;
-    if (std::fabs(psi_b) >= std::fabs(psi_a)) {
+    if (std::abs(psi_b) >= std::abs(psi_a)) {
       exchange = true;
     } else {
-      double div = std::fabs(psi_b) / std::fabs(psi_a);
+      double div = std::abs(psi_b) / std::abs(psi_a);
       double P = div * div;
       if (u_double(random_engine) < P) {
         exchange = true;

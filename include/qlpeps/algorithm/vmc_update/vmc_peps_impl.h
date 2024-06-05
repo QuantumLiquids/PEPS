@@ -325,7 +325,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
                                                                                           const std::vector<double> &strides) {
 
   if (world_.rank() == kMasterProc) {
-    en_min_ = energy_trajectory_[0];
+    en_min_ = Real(energy_trajectory_[0]);
   }
   tps_lowest_ = split_index_tps_;
   double stride = 0.0;
@@ -356,8 +356,8 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
       for (double &rates : accept_rates_avg) {
         rates /= double(optimize_para.mc_samples);
       }
-      if (energy < en_min_) {
-        en_min_ = energy;
+      if (Real(energy) < en_min_) {
+        en_min_ = Real(energy);
         tps_lowest_ = split_index_tps_;
       }
 
@@ -417,8 +417,8 @@ void VMCPEPSExecutor<TenElemT, QNT,
   TenElemT en_step;
   std::tie(en_step, std::ignore) = GatherStatisticEnergyAndGrad_();
 
-  if (world_.rank() == kMasterProc && en_min_ > en_step) {
-    en_min_ = en_step;
+  if (world_.rank() == kMasterProc && en_min_ > Real(en_step)) {
+    en_min_ = Real(en_step);
     tps_lowest_ = split_index_tps_;
   }
 

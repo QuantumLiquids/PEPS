@@ -25,7 +25,7 @@ void DumpVecData(
     const std::vector<DataType> &data
 ) {
   std::ofstream ofs(filename, std::ofstream::binary);
-  for (auto datum : data) {
+  for (auto datum: data) {
     ofs << datum << '\n';
   }
   ofs << std::endl;
@@ -50,7 +50,7 @@ double Variance(const std::vector<T> data,
   std::transform(data.begin(), data.end(), diff.begin(), [mean](T x) { return x - mean; });
 #if __cplusplus < 202002L
   double sq_sum = 0.0;
-  for (const auto &num : diff) {
+  for (const auto &num: diff) {
     sq_sum += std::norm(num);
   }
 #else
@@ -137,13 +137,13 @@ std::pair<ElemT, double> GatherStatisticSingleData(
     for (size_t i = 0; i < comm_size; i++) {
       sum += *(gather_data + i);
     }
-    mean = sum / comm_size;
+    mean = sum / (double) comm_size;
     if (comm_size > 1) {
       double sum_square = 0.0;
       for (size_t i = 0; i < comm_size; i++) {
         sum_square += std::norm(gather_data[i]);
       }
-      double variance = sum_square / comm_size - std::norm(mean);
+      double variance = sum_square / (double) comm_size - std::norm(mean);
       standard_err = std::sqrt(variance / (comm_size - 1));
     }
     delete gather_data;

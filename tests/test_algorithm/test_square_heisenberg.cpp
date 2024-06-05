@@ -60,8 +60,8 @@ struct SpinSystemSimpleUpdate : public testing::Test {
   ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
   ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
 
-  DQLTensor ham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
-  DQLTensor ham_hei_tri;  // three-site hamiltonian in triangle lattice
+  DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
+  DQLTensor dham_hei_tri;  // three-site hamiltonian in triangle lattice
 
   void SetUp(size_t L) {
     Lx = L;
@@ -74,12 +74,12 @@ struct SpinSystemSimpleUpdate : public testing::Test {
     dsp({0, 1}) = 1;
     dsm({1, 0}) = 1;
 
-    ham_hei_nn({0, 0, 0, 0}) = 0.25;
-    ham_hei_nn({1, 1, 1, 1}) = 0.25;
-    ham_hei_nn({1, 1, 0, 0}) = -0.25;
-    ham_hei_nn({0, 0, 1, 1}) = -0.25;
-    ham_hei_nn({0, 1, 1, 0}) = 0.5;
-    ham_hei_nn({1, 0, 0, 1}) = 0.5;
+    dham_hei_nn({0, 0, 0, 0}) = 0.25;
+    dham_hei_nn({1, 1, 1, 1}) = 0.25;
+    dham_hei_nn({1, 1, 0, 0}) = -0.25;
+    dham_hei_nn({0, 0, 1, 1}) = -0.25;
+    dham_hei_nn({0, 1, 1, 0}) = 0.5;
+    dham_hei_nn({1, 0, 0, 1}) = 0.5;
 
     DQLTensor ham_hei_tri_terms[3];
     for (size_t i = 0; i < 3; i++) {
@@ -112,7 +112,7 @@ struct SpinSystemSimpleUpdate : public testing::Test {
       ham_hei_tri_terms[2]({i, i, 0, 1, 1, 0}) = 0.5;
       ham_hei_tri_terms[2]({i, i, 1, 0, 0, 1}) = 0.5;
     }
-    ham_hei_tri = ham_hei_tri_terms[0] + ham_hei_tri_terms[1] + ham_hei_tri_terms[2];
+    dham_hei_tri = ham_hei_tri_terms[0] + ham_hei_tri_terms[1] + ham_hei_tri_terms[2];
 
     zid({0, 0}) = 1;
     zid({1, 1}) = 1;
@@ -138,7 +138,7 @@ TEST_F(SpinSystemSimpleUpdate, SquareHeisenberg) {
   SimpleUpdatePara update_para(100, 0.2, 1, 4, 1e-15);
   SimpleUpdateExecutor<QLTEN_Double, U1QN>
       *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,
-                                                                            ham_hei_nn);
+                                                                            dham_hei_nn);
   su_exe->Execute();
 
   su_exe->update_para.Dmax = 6;

@@ -173,7 +173,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     return *this;
   }
 
-  ///< Inner product
+  ///< Inner product, return Dag(*this) * right
   TenElemT operator*(const SplitIndexTPS &right) const {
     TenElemT res(0);
     size_t phy_dim = PhysicalDim();
@@ -186,7 +186,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
           Tensor ten_dag = Dag((*this)({row, col})[i]);
           Tensor scalar;
           Contract(&ten_dag, {0, 1, 2, 3}, &right({row, col})[i], {0, 1, 2, 3}, &scalar);
-          res += scalar();
+          res += TenElemT(scalar());
         }
       }
     }

@@ -40,16 +40,16 @@ SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces):
   for (size_t row = 0; row < lambda_vert.rows(); row++) {
     for (size_t col = 0; col < lambda_vert.cols(); col++) {
       DTensor &the_lambda = lambda_vert({row, col});
-      the_lambda = TenT({index0_in, index0_out});
-      the_lambda({0, 0}) = TenElemT(1.0);
+      the_lambda = DTensor({index0_in, index0_out});
+      the_lambda({0, 0}) = (1.0);
     }
   }
 
   for (size_t row = 0; row < lambda_horiz.rows(); row++) {
     for (size_t col = 0; col < lambda_horiz.cols(); col++) {
       DTensor &the_lambda = lambda_horiz({row, col});
-      the_lambda = TenT({index0_in, index0_out});
-      the_lambda({0, 0}) = TenElemT(1.0);
+      the_lambda = DTensor({index0_in, index0_out});
+      the_lambda({0, 0}) = (1.0);
     }
   }
 
@@ -85,7 +85,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
     for (size_t col = 0; col < lambda_vert.cols(); col++) {
       auto &the_lambda = lambda_vert({row, col});
       if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
-        the_lambda({0, 0}) = TenElemT(1.0);
+        the_lambda({0, 0}) = 1.0;
       }
     }
   }
@@ -94,7 +94,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
     for (size_t col = 0; col < lambda_horiz.cols(); col++) {
       auto &the_lambda = lambda_horiz({row, col});
       if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
-        the_lambda({0, 0}) = TenElemT(1.0);
+        the_lambda({0, 0}) = 1.0;
       }
     }
   }
@@ -309,10 +309,10 @@ SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
   for (size_t row = 0; row < rows_; row++) {
     for (size_t col = 0; col < cols_; col++) {
       tps.alloc(row, col);
-      const TenT lam_left_sqrt = ElementWiseSqrt(lambda_horiz({row, col}));
-      const TenT lam_right_sqrt = ElementWiseSqrt(lambda_horiz({row, col + 1}));
-      const TenT lam_up_sqrt = ElementWiseSqrt(lambda_vert({row, col}));
-      const TenT lam_down_sqrt = ElementWiseSqrt(lambda_vert({row + 1, col}));
+      const DTensor lam_left_sqrt = ElementWiseSqrt(lambda_horiz({row, col}));
+      const DTensor lam_right_sqrt = ElementWiseSqrt(lambda_horiz({row, col + 1}));
+      const DTensor lam_up_sqrt = ElementWiseSqrt(lambda_vert({row, col}));
+      const DTensor lam_down_sqrt = ElementWiseSqrt(lambda_vert({row + 1, col}));
 
       TenT tmp[3];
       Contract<TenElemT, QNT, true, true>(lam_up_sqrt, Gamma({row, col}), 1, 3, 1, tmp[0]);
@@ -361,6 +361,14 @@ double SquareLatticePEPS<TenElemT, QNT>::SingleSiteProject(const SquareLatticePE
 //  }
 
   return 1;
+}
+
+bool is_nan(const double &value) {
+  return std::isnan(value);
+}
+
+bool is_nan(const std::complex<double> &value) {
+  return std::isnan(value.real()) || std::isnan(value.imag());
 }
 
 template<typename TenElemT, typename QNT>
@@ -414,7 +422,7 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
       Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
 
       tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_horiz({row, rcol}) = TenT();
+      lambda_horiz({row, rcol}) = DTensor();
       SVD(tmp_ten + 4, 2, qn0_,
           trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
           &u, lambda_horiz(row, rcol), &vt,
@@ -473,7 +481,7 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
       Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
 
       tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_vert({row + 1, col}) = TenT();
+      lambda_vert({row + 1, col}) = DTensor();
       SVD(tmp_ten + 4, 2, qn0_,
           trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
           &u, lambda_vert(row + 1, col), &vt,
@@ -501,7 +509,7 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
   assert(physical_index == Gamma(row, col)->GetIndex(4));
   assert(Gamma(row, col)->GetIndex(1) == lambda_vert(row + 1, col)->GetIndex(1));
   for (size_t i = 0; i < 7; i++) {
-    assert(!std::isnan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
+    assert(!is_nan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
   }
 #endif
   return norm;
@@ -961,7 +969,8 @@ QLTensor<TenElemT, QNT>
 SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, QNT> &q, const SiteIdx &site,
                                                        const BTenPOSITION remaining_idx,
                                                        double inv_tolerance) const {
-  TenT tmp_ten[2], res, inv_lambda;
+  TenT tmp_ten[2], res;
+  DTensor inv_lambda;
   const size_t row = site[0], col = site[1];
   switch (remaining_idx) {
     case RIGHT: {
