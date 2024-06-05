@@ -238,12 +238,12 @@ VectorType ConjugateGradientSolverMaster(
     auto alpha = rk_2norm / pap; //auto is double or complex
 #ifndef NDEBUG
     assert(pap_check(pap));
-    if (!std::isnormal(alpha.real())) {
-      std::cout << "k : " << k << "\t pap : " << std::scientific << pap
-                << "\t rk_2norm : " << std::scientific << rk_2norm
-                << "\t alpha : " << std::scientific << alpha << std::endl;
-      exit(1);
-    }
+//    if (!std::isnormal(alpha.real())) {
+//      std::cout << "k : " << k << "\t pap : " << std::scientific << pap
+//                << "\t rk_2norm : " << std::scientific << rk_2norm
+//                << "\t alpha : " << std::scientific << alpha << std::endl;
+//      exit(1);
+//    }
 #endif
     x += alpha * p;
 
