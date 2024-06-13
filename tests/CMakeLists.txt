@@ -256,8 +256,14 @@ add_unittest(test_square_heisenberg
         "4"
 )
 
-add_unittest(test_measure
-        "test_algorithm/test_mc_peps_measure.cpp"
+add_unittest(test_measure_double
+        "test_algorithm/test_mc_peps_measure_double.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
+
+add_unittest(test_measure_complex
+        "test_algorithm/test_mc_peps_measure_complex.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )

@@ -13,7 +13,7 @@
 #include <algorithm>
 
 #include "boost/mpi.hpp"
-
+#include "boost/serialization/complex.hpp"
 #include "qlpeps/consts.h"      //kMasterProc
 
 namespace qlpeps {
@@ -96,7 +96,7 @@ std::vector<T> AveListOfData(
     }
   }
   for (size_t i = 0; i < N; i++) {
-    ave[i] = sum[i] / sample_size;
+    ave[i] = sum[i] / (double) sample_size;
   }
   return ave;
 }

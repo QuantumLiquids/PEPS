@@ -138,7 +138,7 @@ class VMCPEPSExecutor : public Executor {
   //Output/Dump Data Region
   SITPST tps_lowest_; //lowest energy tps
   std::vector<TenElemT> energy_trajectory_;
-  std::vector<TenElemT> energy_error_traj_;
+  std::vector<double> energy_error_traj_;
 };
 
 }//qlpeps;
