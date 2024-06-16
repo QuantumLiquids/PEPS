@@ -536,7 +536,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Sa
                                                                                                    &tps_sample_,
                                                                                                    holes);
   TenElemT energy_loc_conj = ComplexConjugate(energy_loc);
-  TenElemT inv_psi = ComplexConjugate(1.0 / tps_sample_.amplitude); //using dividing the holes.
+  TenElemT inv_psi = ComplexConjugate(1.0 / tps_sample_.amplitude); //to divide the holes.
   energy_samples_.push_back(energy_loc);
   SITPST gten_sample(ly_, lx_, split_index_tps_.PhysicalDim());// only useful for Stochastic Reconfiguration
   for (size_t row = 0; row < ly_; row++) {
@@ -597,7 +597,7 @@ VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GatherS
 //              (-energy) * Mean(gten_samples_({row, col})[compt], sample_num);
 //        }
         grad_({row, col})[compt] = g_times_energy_sum_({row, col})[compt] * (1.0 / sample_num)
-                                   + (-energy) * gten_ave_({row, col})[compt];
+                                   + ComplexConjugate(-energy) * gten_ave_({row, col})[compt];
       }
     }
   }

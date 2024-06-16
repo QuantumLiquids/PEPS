@@ -71,7 +71,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
-          TenElemT ratio = psi_ex * inv_psi;
+          TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
           if (std::abs(ratio) > bond_energy_extremly_large) {
             std::cout << "Warning [Unreasonable bond energy]: "
                       << "Site : (" << row << ", " << col << ") "
@@ -111,7 +111,7 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
-        TenElemT ratio = psi_ex * inv_psi;
+        TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
         if (std::abs(ratio) > bond_energy_extremly_large) {
           std::cout << "Warning [Unreasonable bond energy]: "
                     << "Site : (" << row << ", " << col << ") "
@@ -176,7 +176,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
-          TenElemT ratio = psi_ex * inv_psi;
+          TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
           if (std::abs(ratio) > bond_energy_extremly_large) {
             std::cout << "Warning [Unreasonable bond energy]: "
                       << "Site : (" << row << ", " << col << ") "
@@ -218,7 +218,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
           diag_corr[i - 1] = 0.0;
         } else {
           TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
-          diag_corr[i - 1] = (psi_ex * inv_psi);
+          diag_corr[i - 1] = (ComplexConjugate(psi_ex * inv_psi));
         }
         tn.BTenMoveStep(RIGHT);
       }
@@ -259,7 +259,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
-        TenElemT ratio = psi_ex * inv_psi;
+        TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
         if (std::abs(ratio) > bond_energy_extremly_large) {
           std::cout << "Warning [Unreasonable bond energy]: "
                     << "Site : (" << row << ", " << col << ") "

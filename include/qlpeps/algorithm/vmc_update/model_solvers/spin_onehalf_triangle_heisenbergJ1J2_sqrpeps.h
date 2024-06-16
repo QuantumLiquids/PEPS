@@ -246,7 +246,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
           diag_corr[i - 1] = 0.0;
         } else {
           TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
-          diag_corr[i - 1] = (psi_ex * inv_psi);
+          diag_corr[i - 1] = ComplexConjugate(psi_ex * inv_psi);
         }
         tn.BTenMoveStep(RIGHT);
       }
