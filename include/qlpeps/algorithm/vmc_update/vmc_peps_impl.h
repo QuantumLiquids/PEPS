@@ -13,6 +13,7 @@
 #include <iomanip>
 #include "qlpeps/algorithm/vmc_update/stochastic_reconfiguration_smatrix.h" //SRSMatrix
 #include "qlpeps/utility/conjugate_gradient_solver.h"
+#include "qlpeps/utility/helpers.h"                                         //ComplexConjugate
 #include "qlpeps/algorithm/vmc_update/axis_update.h"
 #include "qlpeps/monte_carlo_tools/statistics.h"
 
@@ -20,8 +21,6 @@ namespace qlpeps {
 using namespace qlten;
 
 //help
-double ComplexConjugate(const double &x) { return x; }
-std::complex<double> ComplexConjugate(const std::complex<double> &z) { return std::conj(z); }
 
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> Mean(const std::vector<QLTensor<TenElemT, QNT> *> &tensor_list,

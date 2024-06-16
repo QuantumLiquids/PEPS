@@ -9,7 +9,7 @@
 #define QLPEPS_QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVERS_SPIN_ONEHALF_TRIANGLE_HEISENBERGJ1J2_SQRPEPS_H
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"    //ModelEnergySolver
-
+#include "qlpeps/utility/helpers.h"                             //ComplexConjugate
 namespace qlpeps {
 using namespace qlten;
 
@@ -73,7 +73,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
-          e1 += (-0.25 + psi_ex * inv_psi * 0.5);
+          e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         tn.BTenMoveStep(RIGHT);
       }
@@ -94,7 +94,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
                                                    HORIZONTAL,
                                                    (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                    (*split_index_tps)(site2)[config(site1)]);
-          e1 += (-0.25 + psi_ex * inv_psi * 0.5);
+          e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         //Calculate J2 contribution
         site1 = {row, col}; //left-top
@@ -107,7 +107,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
                                                    HORIZONTAL,
                                                    (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                    (*split_index_tps)(site2)[config(site1)]);
-          e2 += (-0.25 + psi_ex * inv_psi * 0.5);
+          e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
 
         if (col < tn.cols() - 2) {
@@ -121,7 +121,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
                                                               HORIZONTAL,
                                                               (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                               (*split_index_tps)(site2)[config(site1)]);
-            e2 += (-0.25 + psi_ex * inv_psi * 0.5);
+            e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
         }
         tn.BTen2MoveStep(RIGHT, row);
@@ -147,7 +147,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
-        e1 += (-0.25 + psi_ex * inv_psi * 0.5);
+        e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
       }
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
@@ -168,7 +168,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
                                                             VERTICAL,
                                                             (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                             (*split_index_tps)(site2)[config(site1)]);
-          e2 += (-0.25 + psi_ex * inv_psi * 0.5);
+          e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         if ((int) row < (int) tn.rows() - 3) {
           tn.BTen2MoveStep(DOWN, col);
@@ -215,7 +215,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
           TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
-          horizontal_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
+          horizontal_bond_energy = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         e1 += horizontal_bond_energy;
         res.bond_energys_loc.push_back(horizontal_bond_energy);
@@ -282,7 +282,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
                                                    HORIZONTAL,
                                                    (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                    (*split_index_tps)(site2)[config(site1)]);
-          diagonal_nn_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
+          diagonal_nn_bond_energy = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         e1 += diagonal_nn_bond_energy;
         res.bond_energys_loc.push_back(diagonal_nn_bond_energy);
@@ -298,7 +298,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
                                                    HORIZONTAL,
                                                    (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                    (*split_index_tps)(site2)[config(site1)]);
-          nnn_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
+          nnn_bond_energy = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         e2 += nnn_bond_energy;
         res.bond_energys_loc.push_back(nnn_bond_energy * j2_);
@@ -315,7 +315,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
                                                               HORIZONTAL,
                                                               (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                               (*split_index_tps)(site2)[config(site1)]);
-            nnn_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
+            nnn_bond_energy = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
           e2 += nnn_bond_energy;
           res.bond_energys_loc.push_back(nnn_bond_energy * j2_);
@@ -343,7 +343,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
         TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
-        vertical_nn_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
+        vertical_nn_bond_energy = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
       }
       e1 += vertical_nn_bond_energy;
       res.bond_energys_loc.push_back(vertical_nn_bond_energy);
@@ -367,7 +367,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
                                                             VERTICAL,
                                                             (*split_index_tps)(site1)[config(site2)],  //the tensor at left
                                                             (*split_index_tps)(site2)[config(site1)]);
-          nnn_bond_energy = (-0.25 + psi_ex * inv_psi * 0.5);
+          nnn_bond_energy = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         e2 += nnn_bond_energy;
         res.bond_energys_loc.push_back(nnn_bond_energy * j2_);
