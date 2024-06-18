@@ -298,7 +298,8 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
   if (world_.rank() == kMasterProc) {
     double gradient_calculation_time = grad_calculation_timer.Elapsed();
     std::cout << "Initial Search Direction Calculation :\n"
-              << "E0 = " << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision)
+              << "E0 = " << std::setw(14 * sizeof(TenElemT) / sizeof(double)) << std::fixed
+              << std::setprecision(kEnergyOutputPrecision)
               << energy_trajectory_.back()
               << pm_sign << " " << std::setw(10) << std::scientific << std::setprecision(2)
               << energy_error_traj_.back()

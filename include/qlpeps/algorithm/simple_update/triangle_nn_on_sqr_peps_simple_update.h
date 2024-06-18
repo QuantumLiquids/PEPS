@@ -23,7 +23,7 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
  public:
   /**
-   * @param ham_nn     nearest-neighbor interaction, only consider top and left edge on the lattice
+   * @param ham_nn     nearest-neighbor interaction, involving bonds on upper and left edges of the lattice
    * @param ham_tri    three-site triangle interaction term
    */
   TriangleNNModelSquarePEPSSimpleUpdateExecutor(const SimpleUpdatePara &update_para,

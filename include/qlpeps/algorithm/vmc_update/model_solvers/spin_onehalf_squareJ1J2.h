@@ -8,9 +8,9 @@
 #ifndef QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
 #define QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
 
-#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"    //ModelEnergySolver
+#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      //ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
-
+#include "qlpeps/utility/helpers.h"                               //ComplexConjugate
 namespace qlpeps {
 using namespace qlten;
 
