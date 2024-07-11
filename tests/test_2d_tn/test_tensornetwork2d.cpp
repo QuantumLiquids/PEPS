@@ -17,7 +17,7 @@ using namespace qlten;
 using namespace qlpeps;
 
 using qlten::special_qn::U1QN;
-using qlten::special_qn::U1U1ZnQN;
+using qlten::special_qn::ZnQN;
 
 ///< Exact solution for Finite-size OBC Square Ising model
 class SquareIsingModel {
@@ -393,22 +393,22 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
  * Open Boundary Condition two-dimensional Ising model's Tensor network, with imposing Z2 symmetry.
  */
 struct OBCIsing2DZ2TenNet : public testing::Test {
-  using QNT = U1U1ZnQN<2>;
-  using IndexT = Index<U1U1ZnQN<2>>;
-  using QNSctT = QNSector<U1U1ZnQN<2>>;
-  using QNSctVecT = QNSectorVec<U1U1ZnQN<2>>;
-  using DQLTensor = QLTensor<QLTEN_Double, U1U1ZnQN<2>>;
-  using ZQLTensor = QLTensor<QLTEN_Complex, U1U1ZnQN<2>>;
+  using QNT = ZnQN<2>;
+  using IndexT = Index<ZnQN<2>>;
+  using QNSctT = QNSector<ZnQN<2>>;
+  using QNSctVecT = QNSectorVec<ZnQN<2>>;
+  using DQLTensor = QLTensor<QLTEN_Double, ZnQN<2>>;
+  using ZQLTensor = QLTensor<QLTEN_Complex, ZnQN<2>>;
 
   const size_t Lx = 10;
   const size_t Ly = 24;
   const double beta = std::log(1 + std::sqrt(2.0)) / 2.0; // critical point
-  IndexT vb_out = IndexT({QNSctT(U1U1ZnQN<2>(0, 0, 0), 1),
-                          QNSctT(U1U1ZnQN<2>(0, 0, 1), 1)},
+  IndexT vb_out = IndexT({QNSctT(ZnQN<2>( 0), 1),
+                          QNSctT(ZnQN<2>( 1), 1)},
                          TenIndexDirType::OUT
   );
   IndexT vb_in = InverseIndex(vb_out);
-  IndexT trivial_out = IndexT({QNSctT(U1U1ZnQN<2>(0, 0, 0), 1)},
+  IndexT trivial_out = IndexT({QNSctT(ZnQN<2>( 0), 1)},
                               TenIndexDirType::OUT
   );
   IndexT trivial_in = InverseIndex(trivial_out);

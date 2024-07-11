@@ -64,7 +64,7 @@ class SquareLatticePEPS {
 //  // Constructor with size
 //  SquareLatticePEPS(size_t rows, size_t cols) : rows_(rows), cols_(cols), Gamma(rows, cols), lambda_vert(rows + 1, cols),
 //                                   lambda_horiz(rows, cols + 1) {}
-
+  //Constructors
   SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces);
 
   SquareLatticePEPS(const Index<QNT> &local_hilbert_space, size_t rows, size_t cols);
@@ -111,15 +111,12 @@ class SquareLatticePEPS {
 
   void Initial(std::vector<std::vector<size_t>> &activates);
 
+  //Getters
   // Function to get the number of rows in the SquareLatticePEPS
-  size_t Rows(void) const {
-    return rows_;
-  }
+  size_t Rows(void) const { return rows_; }
 
   // Function to get the number of columns in the SquareLatticePEPS
-  size_t Cols(void) const {
-    return cols_;
-  }
+  size_t Cols(void) const { return cols_; }
 
   std::pair<size_t, size_t> GetMinMaxBondDim(void) const;
 
@@ -128,6 +125,7 @@ class SquareLatticePEPS {
   // if the bond dimensions of each lambda are the same, except boundary lambdas
   bool IsBondDimensionEven(void) const;
 
+  // Projecting Gate Functions
   double SingleSiteProject(
       const TenT &gate_ten,
       const SiteIdx &site
@@ -165,6 +163,11 @@ class SquareLatticePEPS {
       const SiteIdx &upper_left_site,
       const SimpleUpdateTruncatePara &trunc_para
   );
+  using LocalSquareLoopGateT = std::array<TenT, 4>;
+  double LocalSquareLoopProject(
+      const LocalSquareLoopGateT &gate_tens,
+      const SiteIdx &upper_left_site
+      )
 
   bool Dump(const std::string path = kPepsPath) const;
 
@@ -179,7 +182,7 @@ class SquareLatticePEPS {
   TenMatrix<DTensor> lambda_horiz; // horizontal singular value tensors;
 
  private:
-
+  //Helper For Projecting Gate
   TenT EatSurroundLambdas_(const SiteIdx &site) const;
 
   TenT Eat3SurroundLambdas_(const SiteIdx &site, const BTenPOSITION leaving_post) const;
@@ -198,6 +201,7 @@ const QNT SquareLatticePEPS<TenElemT, QNT>::qn0_ = QNT::Zero();
 
 }
 
-#include "qlpeps/two_dim_tn/peps/square_lattice_peps_impl.h"
+#include "qlpeps/two_dim_tn/peps/square_lattice_peps_basic_impl.h"
+#include "qlpeps/two_dim_tn/peps/square_lattice_peps_projection_impl.h"
 
 #endif //QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_H
