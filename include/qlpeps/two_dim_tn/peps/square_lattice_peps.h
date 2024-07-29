@@ -12,12 +12,15 @@
 #define QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_H
 
 #include "qlten/qlten.h"
+#include "qlmps/utilities.h"                          //CreatPath
+#include "qlmps/algorithm/lanczos_params.h"           //LanczosParams
 #include "qlpeps/two_dim_tn/framework/ten_matrix.h"
 #include "qlpeps/two_dim_tn/framework/site_idx.h"
-#include "qlmps/utilities.h"             //CreatPath
-#include "qlpeps/consts.h"              //kPepsPath
-#include "qlpeps/two_dim_tn/tps/tps.h"  //ToTPS()
-#include "qlpeps/basic.h"               //BondOrientation
+#include "qlpeps/consts.h"                            //kPepsPath
+#include "qlpeps/two_dim_tn/tps/tps.h"                //ToTPS()
+#include "qlpeps/basic.h"                             //BondOrientation
+#include "qlpeps/utility/conjugate_gradient_solver.h"
+#include "qlpeps/algorithm/vmc_update/vmc_optimize_para.h"  //ConjugateGradientParams
 
 namespace qlpeps {
 using namespace qlten;
@@ -34,6 +37,20 @@ struct SimpleUpdateTruncatePara {
 
   SimpleUpdateTruncatePara(size_t d_min, size_t d_max, double trunc_error)
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
+};
+
+using qlmps::LanczosParams;
+struct LoopUpdateTruncatePara {
+  //gauge fixing
+  LanczosParams lanczos_params;
+
+  //full environment truncation
+  size_t D_min;
+  size_t D_max;
+  double trunc_err;
+  double fet_tol;
+  size_t fet_max_iter;
+  ConjugateGradientParams cg_params; //for FET
 };
 
 /**
@@ -166,8 +183,9 @@ class SquareLatticePEPS {
   using LocalSquareLoopGateT = std::array<TenT, 4>;
   double LocalSquareLoopProject(
       const LocalSquareLoopGateT &gate_tens,
-      const SiteIdx &upper_left_site
-      )
+      const SiteIdx &upper_left_site,
+      const LoopUpdateTruncatePara &params
+  );
 
   bool Dump(const std::string path = kPepsPath) const;
 
@@ -190,6 +208,24 @@ class SquareLatticePEPS {
   TenT QTenSplitOutLambdas_(const TenT &q, const SiteIdx &site,
                             const BTenPOSITION leaving_post, double inv_tolerance) const;
 
+  void PatSquareLocalLoopProjector_(
+      const LocalSquareLoopGateT &gate_tens,
+      const SiteIdx &upper_left_site
+  );
+
+  void WeightedTraceGaugeFixingInSquareLocalLoop_(
+      const qlpeps::LoopUpdateTruncatePara &params,
+      std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
+      std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
+      std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
+  );
+
+  void FullEnvironmentTruncateInSquareLocalLoop_(
+      const qlpeps::LoopUpdateTruncatePara &params,
+      std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
+      std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
+      std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
+  );
   static const QNT qn0_;
 
   size_t rows_; // Number of rows in the SquareLatticePEPS
@@ -203,5 +239,6 @@ const QNT SquareLatticePEPS<TenElemT, QNT>::qn0_ = QNT::Zero();
 
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps_basic_impl.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps_projection_impl.h"
+#include "qlpeps/two_dim_tn/peps/square_lattice_peps_projection4_impl.h"
 
 #endif //QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_H
