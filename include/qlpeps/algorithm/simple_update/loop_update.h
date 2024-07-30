@@ -23,10 +23,16 @@ class LoopUpdate : public SimpleUpdateExecutor<TenElemT, QNT> {
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
   using LoopGateT = std::array<Tensor, 4>;
  public:
-  LoopUpdate(const SimpleUpdatePara &update_para,
+  LoopUpdate(const SimpleUpdatePara &simple_update_para,
+             const LanczosParams &lanczos_params, // for gauge fixing
+             const double fet_tol,                //for FET truncation
+             const size_t fet_max_iter,           //for FET truncation
+             const ConjugateGradientParams cg_params, //for FET truncation
              const PEPST &peps_initial,
              const DuoMatrix<LoopGateT> &evolve_gates) :
-      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), evolve_gates_(evolve_gates) {}
+      SimpleUpdateExecutor<TenElemT, QNT>(simple_update_para, peps_initial), evolve_gates_(evolve_gates),
+      lanczos_params_(lanczos_params), fet_tol_(fet_tol), fet_max_iter_(fet_max_iter),
+      cg_params_(cg_params) {}
 
  private:
   void SetEvolveGate_(void) override {
@@ -40,7 +46,7 @@ class LoopUpdate : public SimpleUpdateExecutor<TenElemT, QNT> {
    * @param site: the coordinate of the left-upper site in the loop
    * @return
    */
-  double UpdateOneLoop(const SiteIdx &site, const SimpleUpdateTruncatePara &para);
+  double UpdateOneLoop(const SiteIdx &site, const LoopUpdateTruncatePara &para);
 
   /** The set of the evolve gates
    *  where each gate form a loop and includes 4 tensors, and
@@ -65,20 +71,27 @@ class LoopUpdate : public SimpleUpdateExecutor<TenElemT, QNT> {
    *
    */
   DuoMatrix<LoopGateT> evolve_gates_;
+  //addtional parameters
+  LanczosParams lanczos_params_;
+  double fet_tol_;
+  size_t fet_max_iter_;
+  ConjugateGradientParams cg_params_;
 };
 
 template<typename TenElemT, typename QNT>
 double LoopUpdate<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &site,
-                                                const qlpeps::SimpleUpdateTruncatePara &para) {
-  const LoopGateT &evolve_gates_(site);
-
+                                                const qlpeps::LoopUpdateTruncatePara &para) {
+  const LoopGateT &gate = evolve_gates_(site);
+  return this->peps_.LocalSquareLoopProject(gate, site, para);
 }
 
 template<typename TenElemT, typename QNT>
 double LoopUpdate<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("loop_update_sweep");
-  SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  double norm = 1.0;
+  LoopUpdateTruncatePara para(lanczos_params_,
+                              this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err,
+                              fet_tol_, fet_max_iter_, cg_params_);
+  double norm;
   double e0 = 0.0;
 
   for (size_t col = 0; col < this->lx_ - 1; col++) {
@@ -94,7 +107,7 @@ double LoopUpdate<TenElemT, QNT>::SimpleUpdateSweep_(void) {
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  return norm;
+  return 0.0;
 }
 
 }//qlpeps

@@ -30,8 +30,8 @@ using qlmps::CaseParamsParserBasic;
 
 char *params_file;
 
-struct SimpleUpdateParams : public CaseParamsParserBasic {
-  SimpleUpdateParams(const char *f) : CaseParamsParserBasic(f) {
+struct SystemSizeParams : public CaseParamsParserBasic {
+  SystemSizeParams(const char *f) : CaseParamsParserBasic(f) {
     Lx = ParseInt("Lx");
     Ly = ParseInt("Ly");
   }
@@ -76,7 +76,7 @@ struct SpinSystemSimpleUpdate : public testing::Test {
   ZQLTensor zham_hei_nn = ZQLTensor({pb_in, pb_out, pb_in, pb_out});
   ZQLTensor zham_hei_tri;
   void SetUp(void) {
-    SimpleUpdateParams params = SimpleUpdateParams(params_file);
+    SystemSizeParams params = SystemSizeParams(params_file);
     Lx = params.Lx;
     Ly = params.Ly;
 
@@ -280,7 +280,7 @@ struct TestSimpleUpdateSpinSystemSquareJ1J2 : public testing::Test {
   ZQLTensor zham_hei_tri;
 
   void SetUp(void) {
-    SimpleUpdateParams params = SimpleUpdateParams(params_file);
+    SystemSizeParams params = SystemSizeParams(params_file);
     Lx = params.Lx;
     Ly = params.Ly;
     double j1 = 1.0;

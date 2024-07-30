@@ -41,6 +41,12 @@ struct SimpleUpdateTruncatePara {
 
 using qlmps::LanczosParams;
 struct LoopUpdateTruncatePara {
+  LoopUpdateTruncatePara(const LanczosParams &lanczos_params,
+                         const size_t Dmin, const size_t Dmax, const double trunc_err,
+                         const double fet_tolerance, const size_t fet_max_iter,
+                         const ConjugateGradientParams &conjugate_gradient_params) :
+      lanczos_params(lanczos_params), D_min(Dmin), D_max(Dmax), trunc_err(trunc_err),
+      fet_tol(fet_tolerance), fet_max_iter(fet_max_iter), cg_params(conjugate_gradient_params) {}
   //gauge fixing
   LanczosParams lanczos_params;
 

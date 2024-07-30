@@ -14,6 +14,62 @@
 namespace qlpeps {
 using namespace qlten;
 using qlmps::mock_qlten::SVD;
+
+
+//helper
+
+/**
+ * MPS order :
+ *     2    3(PEPS virtual leg but part of physical leg in MPS context)
+ *      \  /
+ *  0---Gamma---4(one of PEPS virtual leg, also virtual leg in MPS context)
+ *        |
+ *        1 (PEPS physical leg, physical leg also in MPS context)
+ *
+ *  See Ref[1] Figure 2 (c)
+ */
+template<typename TenElemT, typename QNT>
+void TransposeGammaTensorIndicesIntoMPSOrder(std::array<QLTensor<TenElemT, QNT>, 4> &gammas) {
+  gammas[0].Transpose({1, 4, 0, 3, 2});
+  gammas[1].Transpose({0, 4, 2, 3, 1});
+  gammas[2].Transpose({3, 4, 1, 2, 0});
+  gammas[3].Transpose({2, 4, 0, 1, 3});
+}
+
+///< indices order of gamma are not changed
+template<typename TenElemT, typename QNT>
+void Eat2EnvLambdasInMPSOrderGamma(QLTensor<TenElemT, QNT> &gamma,
+                                   const QLTensor<TenElemT, QNT> &env_lambda_l,
+                                   const QLTensor<TenElemT, QNT> &env_lambda_r) {
+  QLTensor<TenElemT, QNT> tmp, res;
+  Contract(&gamma, {2}, &env_lambda_l, {1}, &tmp);
+  Contract(&gamma, {2}, &env_lambda_r, {1}, &res);
+  res.Transpose({0, 1, 3, 4, 2});
+  gamma = res;
+}
+
+template<typename TenElemT, typename QNT>
+void TransposeBackGammaTensorIndicesFromMPSOrder(std::array<QLTensor<TenElemT, QNT>, 4> &gammas) {
+  gammas[0].Transpose({2, 0, 4, 3, 1});
+  gammas[1].Transpose({0, 4, 2, 3, 1});
+  gammas[2].Transpose({4, 2, 3, 0, 1});
+  gammas[3].Transpose({2, 3, 0, 4, 1});
+}
+
+template<typename TenElemT, typename QNT>
+void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
+                                         const QLTensor<TenElemT, QNT> &env_lambda_l,
+                                         const QLTensor<TenElemT, QNT> &env_lambda_r
+) {
+  QLTensor<TenElemT, QNT> tmp, res, inv_lambda_l, inv_lambda_r;
+  inv_lambda_l = ElementWiseInv(env_lambda_l, 1e-15);
+  inv_lambda_r = ElementWiseInv(env_lambda_r, 1e-15);
+  Contract(&gamma, {2}, &inv_lambda_l, {1}, &tmp);
+  Contract(&gamma, {2}, &inv_lambda_r, {1}, &res);
+  res.Transpose({0, 1, 3, 4, 2});
+  gamma = res;
+}
+
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
     const qlpeps::SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopGateT &gate_tens,
@@ -24,7 +80,7 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
 
   PatSquareLocalLoopProjector_(gate_tens, upper_left_site);
 
-  std::array<QLTensor<TenElemT, QNT>, 4> gammas, lambdas, Upsilons;
+  std::array<QLTensor<TenElemT, QNT>, 4> gammas, lambdas, Upsilons, env_lambda_ls, env_lambda_rs;
   gammas[0] = Gamma(upper_left_site);
   gammas[1] = Gamma({row, col + 1});
   gammas[2] = Gamma({row + 1, col + 1});
@@ -35,13 +91,34 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
   lambdas[3] = lambda_vert({row + 1, col});
   lambdas[2].Transpose({1, 0});
   lambdas[3].Transpose({1, 0});
-  //TODO：eat lambdas of envs
+
   TransposeGammaTensorIndicesIntoMPSOrder(gammas);
+
+  // eat lambdas of envs
+  env_lambda_ls[0] = lambda_horiz({row, col});
+  env_lambda_rs[0] = lambda_vert({row, col});
+  env_lambda_ls[1] = lambda_horiz({row, col + 2});
+  env_lambda_ls[1].Transpose({1, 0});
+  env_lambda_rs[1] = lambda_vert({row, col + 1});
+  env_lambda_ls[2] = lambda_vert({row + 2, col + 1});
+  env_lambda_ls[2].Transpose({1, 0});
+  env_lambda_rs[2] = lambda_horiz({row + 1, col + 2});
+  env_lambda_rs[2].Transpose({1, 0});
+  env_lambda_ls[3] = lambda_horiz({row + 1, col});
+  env_lambda_rs[3] = lambda_vert({row + 2, col});
+  env_lambda_rs[3].Transpose({1, 0});
+  for (size_t i = 0; i < 4; i++) {
+    Eat2EnvLambdasInMPSOrderGamma(gammas[i], env_lambda_ls[i], env_lambda_rs[i]);
+  }
 
   WeightedTraceGaugeFixingInSquareLocalLoop_(params, gammas, lambdas, Upsilons);
   FullEnvironmentTruncateInSquareLocalLoop_(params, gammas, lambdas, Upsilons);
 
-  //TODO: spit out the lambdas of envs
+  //split out the lambdas of envs
+  for (size_t i = 0; i < 4; i++) {
+    SplitOut2EnvLambdasInMPSOrderGammas(gammas[i], env_lambda_ls[i], env_lambda_rs[i]);
+  }
+
   TransposeBackGammaTensorIndicesFromMPSOrder(gammas);
   // normalize Lambda and return the normalization factor
   double norm = 1.0;
@@ -95,7 +172,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   Contract(&Gamma1, {4}, &gate_tens[1], {1}, &tmp);
   tmp.FuseIndex(0, 4);
   tmp.FuseIndex(1, 5);
-  tmp.Transepose({1, 0, 2, 3, 4});
+  tmp.Transpose({1, 0, 2, 3, 4});
   Gamma({row, col + 1}) = tmp;
 
   const TenT &Gamma2 = Gamma({row + 1, col + 1});
@@ -139,33 +216,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   }
 }
 
-//helper
 
-/**
- * MPS order :
- *     2    3(PEPS virtual leg but part of physical leg in MPS context)
- *      \  /
- *  0---Gamma---4(one of PEPS virtual leg, also virtual leg in MPS context)
- *        |
- *        1 (PEPS physical leg, physical leg also in MPS context)
- *
- *  See Ref[1] Figure 2 (c)
- */
-template<typename TenElemT, typename QNT>
-void TransposeGammaTensorIndicesIntoMPSOrder(std::array<QLTensor<TenElemT, QNT>, 4> &gammas) {
-  gammas[0].Transpose({1, 4, 0, 3, 2});
-  gammas[1].Transpose({0, 4, 2, 3, 1});
-  gammas[2].Transpose({3, 4, 1, 2, 0});
-  gammas[3].Transpose({2, 4, 0, 1, 3});
-}
-
-template<typename TenElemT, typename QNT>
-void TransposeBackGammaTensorIndicesFromMPSOrder(std::array<QLTensor<TenElemT, QNT>, 4> &gammas) {
-  gammas[0].Transpose({2, 0, 4, 3, 1});
-  gammas[1].Transpose({0, 4, 2, 3, 1});
-  gammas[2].Transpose({4, 2, 3, 0, 1});
-  gammas[3].Transpose({2, 3, 0, 4, 1});
-}
 
 //helper
 /**
@@ -362,12 +413,12 @@ struct PtenVec {
   using TenT = QLTensor<ElemT, QNT>;
   PtenVec(const TenT &p_ten) : p_ten(p_ten) {}
 
-  PtenVec operator=(const TenT &rhs) {
+  PtenVec operator=(const PtenVec &rhs) {
     p_ten = rhs.p_ten;
-    return *p_ten;
+    return *this;
   }
 
-  PtenVec operator+=(const TenT &rhs) {
+  PtenVec operator+=(const PtenVec &rhs) {
     p_ten += rhs;
     return *this;
   }
@@ -376,11 +427,11 @@ struct PtenVec {
     return PtenVec(-p_ten);
   }
 
-  PtenVec operator+(const TenT &rhs) const {
+  PtenVec operator+(const PtenVec &rhs) const {
     return PtenVec(p_ten + rhs.p_ten);
   }
 
-  PtenVec operator-(const TenT &rhs) const {
+  PtenVec operator-(const PtenVec &rhs) const {
     return PtenVec(p_ten + (-rhs.p_ten));
   }
 
@@ -388,6 +439,12 @@ struct PtenVec {
     return PtenVec(p_ten * scalar);
   }
 
+  ///< Inner product, return Dag(*this) * rhs
+  ElemT operator*(const PtenVec &rhs) const {
+    TenT scalar, p_ten_dag = Dag(this->p_ten);
+    Contract(&p_ten_dag, {0, 1}, &rhs.p_ten, {0, 1}, &scalar);
+    return scalar();
+  }
   double NormSquare(void) const {
     double norm = p_ten.Get2Norm();
     return norm * norm;
@@ -412,7 +469,7 @@ struct BtenMat {
   PtenVec<ElemT, QNT> operator*(const PtenVec<ElemT, QNT> &p_ten_vec) const {
     TenT res_ten;
     Contract(&p_ten_vec.p_ten, {0, 1}, &(this->b_ten), {0, 1}, &res_ten);
-    return BtenMat(res_ten);
+    return PtenVec<ElemT, QNT>(res_ten);
   }
   TenT b_ten;
 };
@@ -505,7 +562,7 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
     TenT v = Dag(vdag);
     P_ten = TenT();
     B_ten = TenT();
-    Contract(&sigma_Upsilon_tmp, {1}, &v, {0}, P_ten);
+    Contract(&sigma_Upsilon_tmp, {1}, &v, {0}, &P_ten);
     p_ten_vec = PtenVecT(P_ten);
     Contract(&Upsilon, {2}, &vdag, {0}, tmp + 2);
     Contract(tmp + 2, {2}, &v, {0}, &B_ten);
@@ -519,7 +576,7 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
         ConjugateGradientSolver(b_ten_mat, p_ten_vec, l_init,
                                 trunc_para.cg_params.max_iter,
                                 trunc_para.cg_params.tolerance, cg_iter);
-    Contract(&vdag, {1}, update_l_vec.p_ten, {1}, tmp + 3);
+    Contract(&vdag, {1}, &update_l_vec.p_ten, {1}, tmp + 3);
 
     u = TenT();
     vdag = TenT();

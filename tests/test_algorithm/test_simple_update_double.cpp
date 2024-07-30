@@ -30,8 +30,8 @@ using qlmps::CaseParamsParserBasic;
 
 char *params_file;
 
-struct SimpleUpdateParams : public CaseParamsParserBasic {
-  SimpleUpdateParams(const char *f) : CaseParamsParserBasic(f) {
+struct SystemSizeParams : public CaseParamsParserBasic {
+  SystemSizeParams(const char *f) : CaseParamsParserBasic(f) {
     Lx = ParseInt("Lx");
     Ly = ParseInt("Ly");
   }
@@ -74,7 +74,7 @@ struct SpinSystemSimpleUpdate : public testing::Test {
   DQLTensor dham_hei_tri;  // three-site hamiltonian in triangle lattice
 
   void SetUp(void) {
-    SimpleUpdateParams params = SimpleUpdateParams(params_file);
+    SystemSizeParams params = SystemSizeParams(params_file);
     Lx = params.Lx;
     Ly = params.Ly;
 
@@ -266,7 +266,7 @@ struct TestSimpleUpdateSpinSystemSquareJ1J2 : public testing::Test {
   DQLTensor ham_hei_tri;  // three-site hamiltonian in triangle lattice
 
   void SetUp(void) {
-    SimpleUpdateParams params = SimpleUpdateParams(params_file);
+    SystemSizeParams params = SystemSizeParams(params_file);
     Lx = params.Lx;
     Ly = params.Ly;
     double j1 = 1.0;

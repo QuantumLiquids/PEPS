@@ -234,6 +234,11 @@ add_unittest(test_simple_update_complex
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
+add_unittest(test_loop_update
+        "test_algorithm/test_loop_update.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
 # Test vmc-peps
 add_unittest(test_vmc_peps_double
         "test_algorithm/test_vmc_peps_double.cpp"
