@@ -23,6 +23,7 @@ using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
 
 using qlmps::CaseParamsParserBasic;
 
+using LoopGateT = std::array<DQLTensor, 4>;
 char *params_file;
 
 struct SystemSizeParams : public CaseParamsParserBasic {
@@ -36,22 +37,15 @@ struct SystemSizeParams : public CaseParamsParserBasic {
 };
 
 struct TransverseIsingLoopUpdate : public testing::Test {
-  size_t Lx; //cols
-  size_t Ly;
+  SystemSizeParams params = SystemSizeParams(params_file);
+  size_t Lx = params.Lx; //cols
+  size_t Ly = params.Ly;
 
   U1QN qn0 = U1QN({QNCard("Sz", U1QNVal(0))});
-#ifdef U1SYM
-  IndexT pb_out = IndexT({
-                             QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
-                             QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
-                         TenIndexDirType::OUT
-  );
-#else
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
                          TenIndexDirType::OUT
   );
-#endif
   IndexT pb_in = InverseIndex(pb_out);
 
   DQLTensor did = DQLTensor({pb_in, pb_out});
@@ -64,11 +58,11 @@ struct TransverseIsingLoopUpdate : public testing::Test {
   ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
   ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
 
-  void SetUp(void) {
-    SystemSizeParams params = SystemSizeParams(params_file);
-    Lx = params.Lx;
-    Ly = params.Ly;
+  double tau = 0.1;
+  double h = 2.0; //h_c \simeq 3.04
+  DuoMatrix<LoopGateT> evolve_gates = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
+  void SetUp(void) {
     did({0, 0}) = 1;
     did({1, 1}) = 1;
     dsz({0, 0}) = 0.5;
@@ -82,6 +76,82 @@ struct TransverseIsingLoopUpdate : public testing::Test {
     zsz({1, 1}) = -0.5;
     zsp({0, 1}) = 1;
     zsm({1, 0}) = 1;
+
+    //corner
+    evolve_gates({0, 0}) = GenerateLoopGates(tau, h,
+                                             2, 3, 4, 3,
+                                             1, 2, 2, 1);
+    evolve_gates({0, Lx - 2}) = GenerateLoopGates(tau, h,
+                                                  3, 2, 3, 4,
+                                                  1, 1, 2, 2);
+    evolve_gates({Ly - 2, 0}) = GenerateLoopGates(tau, h,
+                                                  3, 4, 3, 2,
+                                                  2, 2, 1, 1);
+    evolve_gates({Ly - 2, Lx - 2}) = GenerateLoopGates(tau, h,
+                                                       4, 3, 2, 3,
+                                                       2, 1, 1, 2);
+
+    auto gates_upper = GenerateLoopGates(tau, h,
+                                         3, 3, 4, 4,
+                                         1, 2, 2, 2);
+    auto gates_lower = GenerateLoopGates(tau, h,
+                                         4, 4, 3, 3,
+                                         2, 2, 1, 2);
+    for (size_t col = 1; col < Lx - 2; col++) {
+      evolve_gates({0, col}) = gates_upper;
+      evolve_gates({Ly - 2, col}) = gates_lower;
+    }
+
+    auto gates_left = GenerateLoopGates(tau, h,
+                                        3, 4, 4, 3,
+                                        2, 2, 2, 1);
+    auto gates_middle = GenerateLoopGates(tau, h,
+                                          4, 4, 4, 4,
+                                          2, 2, 2, 2);
+    auto gates_right = GenerateLoopGates(tau, h,
+                                         4, 3, 3, 4,
+                                         2, 1, 2, 2);
+    for (size_t row = 1; row < Ly - 2; row++) {
+      evolve_gates({row, 0}) = gates_left;
+      evolve_gates({row, Lx - 2}) = gates_right;
+    }
+    for (size_t col = 1; col < Lx - 2; col++) {
+      for (size_t row = 1; row < Ly - 2; row++) {
+        evolve_gates({row, col}) = gates_middle;
+      }
+    }
+  }
+
+  LoopGateT GenerateLoopGates(
+      const double tau, // imaginary time
+      const double h, //magnetic field,
+      const size_t z0, const size_t z1, const size_t z2, const size_t z3, //coordination number
+      const size_t n0, const size_t n1, const size_t n2, const size_t n3  //bond share number
+      //n0 bond is between z0 an z1 points
+  ) {
+    const std::vector<size_t> zs = {z0, z1, z2, z3};
+    const std::vector<size_t> ns = {n0, n1, n2, n3};
+    LoopGateT gates;
+    gates[0] = DQLTensor({pb_out, pb_in, pb_out, pb_out});
+    gates[1] = DQLTensor({pb_in, pb_in, pb_out, pb_out});
+    gates[2] = DQLTensor({pb_in, pb_in, pb_out, pb_in});
+    gates[3] = DQLTensor({pb_out, pb_in, pb_out, pb_in});
+    for (size_t i = 0; i < 4; i++) {
+      DQLTensor &gate = gates[i];
+      //Id
+      gate({0, 0, 0, 0}) = 1.0;
+      gate({0, 1, 1, 0}) = 1.0;
+      //h * tau * sigma_x
+      gate({0, 0, 1, 0}) = h * tau / double(zs[i]);
+      gate({0, 1, 0, 0}) = h * tau / double(zs[i]);
+      //sigma_z * tau
+      gate({0, 0, 0, 1}) = 1.0 * tau / double(ns[i]);
+      gate({0, 1, 1, 1}) = -1.0 * tau / double(ns[i]);
+      //sigma_z
+      gate({1, 0, 0, 0}) = 1.0;
+      gate({1, 1, 1, 0}) = -1.0;
+    }
+    return gates;
   }
 };
 
@@ -98,15 +168,12 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
     }
   }
   peps0.Initial(activates);
-  double tau = 0.1;
-  SimpleUpdatePara simple_update_para(5, tau, 1, 4, 1e-5);
+
+  SimpleUpdatePara simple_update_para(100, tau, 1, 4, 1e-5);
   LanczosParams lanczos_params(1e-10, 30);
   double fet_tol = 1e-12;
   double fet_max_iter = 30;
   ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
-  using LoopGateT = std::array<DQLTensor, 4>;
-  DuoMatrix<LoopGateT> evolve_gates(Ly - 1, Lx - 1);
-  //define the evolve gates
 
   SimpleUpdateExecutor<QLTEN_Double, U1QN>
       *su_exe = new LoopUpdate<QLTEN_Double, U1QN>(simple_update_para,
