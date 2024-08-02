@@ -87,7 +87,7 @@ double LoopUpdate<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &site,
 
 template<typename TenElemT, typename QNT>
 double LoopUpdate<TenElemT, QNT>::SimpleUpdateSweep_(void) {
-  Timer simple_update_sweep_timer("loop_update_sweep");
+  Timer loop_update_sweep_timer("loop_update_sweep");
   LoopUpdateTruncatePara para(lanczos_params_,
                               this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err,
                               fet_tol_, fet_max_iter_, cg_params_);
@@ -100,7 +100,7 @@ double LoopUpdate<TenElemT, QNT>::SimpleUpdateSweep_(void) {
       e0 += -std::log(norm) / this->update_para.tau;
     }
   }
-  double sweep_time = simple_update_sweep_timer.Elapsed();
+  double sweep_time = loop_update_sweep_timer.Elapsed();
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0

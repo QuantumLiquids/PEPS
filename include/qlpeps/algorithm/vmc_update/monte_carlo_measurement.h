@@ -141,7 +141,7 @@ class MonteCarloMeasurementExecutor : public Executor {
                                 const MeasurementSolver &solver = MeasurementSolver());
 
   MonteCarloMeasurementExecutor(const VMCOptimizePara &optimize_para,
-                                const SITPST &sitpst,
+                                const SITPST &sitps,
                                 const boost::mpi::communicator &world,
                                 const MeasurementSolver &solver = MeasurementSolver());
 
@@ -159,6 +159,16 @@ class MonteCarloMeasurementExecutor : public Executor {
 
   VMCOptimizePara optimize_para;
 
+  void OutputEnergy() const {
+    if (this->GetStatus() == ExecutorStatus::FINISH) {
+      std::cout << "Measured energy : " << res.energy
+                << pm_sign << " "
+                << res.en_err
+                << std::endl;
+    } else {
+      std::cout << "The program didn't complete the measurements. " << std::endl;
+    }
+  }
  private:
   void ReserveSamplesDataSpace_();
 
@@ -284,9 +294,9 @@ class MonteCarloMeasurementExecutor : public Executor {
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::MonteCarloMeasurementExecutor(
+                              QNT,
+                              WaveFunctionComponentType,
+                              MeasurementSolver>::MonteCarloMeasurementExecutor(
     const VMCOptimizePara &optimize_para,
     const size_t ly, const size_t lx,
     const boost::mpi::communicator &world,
@@ -305,9 +315,9 @@ MonteCarloMeasurementExecutor<TenElemT,
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::MonteCarloMeasurementExecutor(
+                              QNT,
+                              WaveFunctionComponentType,
+                              MeasurementSolver>::MonteCarloMeasurementExecutor(
     const VMCOptimizePara &optimize_para,
     const SITPST &sitpst,
     const boost::mpi::communicator &world,
@@ -358,11 +368,11 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
       PrintProgressBar((sweep + 1), optimize_para.mc_samples);
 
       auto accept_rates_avg = accept_rates_accum;
-      for (double &rates: accept_rates_avg) {
+      for (double &rates : accept_rates_avg) {
         rates /= double(sweep + 1);
       }
       std::cout << "Accept rate = [";
-      for (double &rate: accept_rates_avg) {
+      for (double &rate : accept_rates_avg) {
         std::cout << std::setw(5) << std::fixed << std::setprecision(2) << rate;
       }
       std::cout << "]";
@@ -390,9 +400,9 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::ReserveSamplesDataSpace_(
+                                   QNT,
+                                   WaveFunctionComponentType,
+                                   MeasurementSolver>::ReserveSamplesDataSpace_(
     void) {
   sample_data_.Reserve(optimize_para.mc_samples);
 }
@@ -437,9 +447,9 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void
 MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::DumpData(const std::string &tps_path) {
+                              QNT,
+                              WaveFunctionComponentType,
+                              MeasurementSolver>::DumpData(const std::string &tps_path) {
 
   tps_sample_.config.Dump(tps_path, world_.rank());
 
@@ -460,9 +470,9 @@ MonteCarloMeasurementExecutor<TenElemT,
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::PrintExecutorInfo_(void) {
+                                   QNT,
+                                   WaveFunctionComponentType,
+                                   MeasurementSolver>::PrintExecutorInfo_(void) {
   if (world_.rank() == kMasterProc) {
     const size_t indent = 40;
     std::cout << std::left;  // Set left alignment for the output
@@ -502,9 +512,9 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::SynchronizeConfiguration_(
+                                   QNT,
+                                   WaveFunctionComponentType,
+                                   MeasurementSolver>::SynchronizeConfiguration_(
     const size_t root) {
   Configuration config(tps_sample_.config);
   MPI_BCast(config, root, MPI_Comm(world_));
@@ -520,9 +530,9 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::LoadTenData(const std::string &tps_path) {
+                                   QNT,
+                                   WaveFunctionComponentType,
+                                   MeasurementSolver>::LoadTenData(const std::string &tps_path) {
   if (!split_index_tps_.Load(tps_path)) {
     std::cout << "Loading TPS files fails." << std::endl;
     exit(-1);
@@ -565,11 +575,11 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
     }
   }
   std::vector<double> accept_rates_avg = accept_rates_accum;
-  for (double &rates: accept_rates_avg) {
+  for (double &rates : accept_rates_avg) {
     rates /= double(optimize_para.mc_samples);
   }
   std::cout << "Accept rate = [";
-  for (double &rate: accept_rates_avg) {
+  for (double &rate : accept_rates_avg) {
     std::cout << std::setw(5) << std::fixed << std::setprecision(2) << rate;
   }
   std::cout << "]";
@@ -578,9 +588,9 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 std::vector<double> MonteCarloMeasurementExecutor<TenElemT,
-    QNT,
-    WaveFunctionComponentType,
-    MeasurementSolver>::MCSweep_(void) {
+                                                  QNT,
+                                                  WaveFunctionComponentType,
+                                                  MeasurementSolver>::MCSweep_(void) {
   std::vector<double> accept_rates;
   for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
     tps_sample_.MonteCarloSweepUpdate(split_index_tps_, unit_even_distribution, accept_rates);

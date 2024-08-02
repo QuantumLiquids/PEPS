@@ -156,6 +156,22 @@ bool SquareLatticePEPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
 }
 
 template<typename TenElemT, typename QNT>
+double SquareLatticePEPS<TenElemT, QNT>::NormalizeAllTensor() {
+  double norm(1.0);
+  for (auto &gamma : Gamma) {
+    norm *= gamma.Normalize();
+  }
+
+  for (auto &lambda : lambda_vert) {
+    norm *= lambda.Normalize();
+  }
+  for (auto &lambda : lambda_vert) {
+    norm *= lambda.Normalize();
+  }
+  return norm;
+}
+
+template<typename TenElemT, typename QNT>
 bool SquareLatticePEPS<TenElemT, QNT>::operator==(const SquareLatticePEPS<TenElemT, QNT> &rhs) const {
   // Check if the number of rows and columns are the same
   if (rows_ != rhs.rows_ || cols_ != rhs.cols_) {

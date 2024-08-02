@@ -148,6 +148,8 @@ class SquareLatticePEPS {
   // if the bond dimensions of each lambda are the same, except boundary lambdas
   bool IsBondDimensionEven(void) const;
 
+  double NormalizeAllTensor(void);
+
   // Projecting Gate Functions
   double SingleSiteProject(
       const TenT &gate_ten,
@@ -224,14 +226,14 @@ class SquareLatticePEPS {
       std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
       std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
       std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
-  );
+  ) const;
 
   void FullEnvironmentTruncateInSquareLocalLoop_(
       const qlpeps::LoopUpdateTruncatePara &params,
       std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
       std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
-      std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
-  );
+      const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
+  ) const;
   static const QNT qn0_;
 
   size_t rows_; // Number of rows in the SquareLatticePEPS

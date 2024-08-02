@@ -204,6 +204,9 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
   for (auto &lambda : lambdas) {
     norm *= lambda.Normalize();
   }
+  for (auto &gamma : gammas) {
+    norm *= gamma.Normalize();
+  }
 #ifndef NDEBUG
   auto phy_idx = Gamma({0, 0}).GetIndex(4);
 #endif
@@ -393,8 +396,8 @@ WeightedTraceGaugeFixingInSquareLocalLoop_(
     const qlpeps::LoopUpdateTruncatePara &params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &lambdas, //input & output
-    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //input & output
-) {
+    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
+) const {
   // Contruct the Upsilon_i tensor
   std::array<QLTensor<TenElemT, QNT>, 4> gamma_gamma_dags;//transfer matrix, tmp data
   for (size_t i = 0; i < 4; i++) {
@@ -726,8 +729,8 @@ FullEnvironmentTruncateInSquareLocalLoop_(
     const qlpeps::LoopUpdateTruncatePara &params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &lambdas, //input & output
-    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //input & output
-) {
+    const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //input & output
+) const {
   for (size_t i = 0; i < 4; i++) {
     auto [u, vdag] = FullEnvironmentTruncate(Upsilons[i], lambdas[(i + 3) % 4], params);
     // truncate Gamma tensors accordingly
