@@ -5,7 +5,8 @@
 * Creation Date: 2023-09-28
 *
 * Description: QuantumLiquids/VMC-SquareLatticePEPS project.
-*              Simple Update for nearest-neighbor interaction models in square lattice
+*              Simple update implementation for
+ *             uniform nearest-neighbor interaction models in square lattice
 */
 
 #ifndef QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H

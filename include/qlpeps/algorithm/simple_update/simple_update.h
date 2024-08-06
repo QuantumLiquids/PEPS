@@ -4,11 +4,11 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-07-20
 *
-* Description: QuantumLiquids/PEPS project. Simple Update.
+* Description: QuantumLiquids/PEPS project. Abstract class for simple update.
 */
 
-#ifndef VMC_PEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
-#define VMC_PEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
+#ifndef QLPEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
+#define QLPEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"    //SquareLatticePEPS
@@ -79,4 +79,4 @@ class SimpleUpdateExecutor : public Executor {
 
 #include "qlpeps/algorithm/simple_update/simple_update_impl.h"
 
-#endif //VMC_PEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
+#endif //QLPEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H

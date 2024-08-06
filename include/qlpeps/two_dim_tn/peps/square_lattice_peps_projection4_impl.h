@@ -173,25 +173,8 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
     Eat2EnvLambdasInMPSOrderGamma(gammas[i], env_lambda_ls[i], env_lambda_rs[i]);
   }
 
-  WeightedTraceGaugeFixingInSquareLocalLoop_(params, gammas, lambdas, Upsilons);
-#ifndef NDEBUG
-  auto index_of_gamma0 = gammas[0].GetIndexes();
-  std::vector<TenIndexDirType> idx_dirs0(5);
-  for (size_t i = 0; i < 5; i++) {
-    idx_dirs0[i] = index_of_gamma0[i].GetDir();
-  }
-  std::vector<TenIndexDirType> expect_dirs = {OUT, OUT, IN, IN, OUT};
-  assert(idx_dirs0 == expect_dirs);
-
-  auto index_of_gamma1 = gammas[1].GetIndexes();
-  std::vector<TenIndexDirType> idx_dirs1(5);
-  for (size_t i = 0; i < 5; i++) {
-    idx_dirs1[i] = index_of_gamma1[i].GetDir();
-  }
-  expect_dirs = {IN, OUT, OUT, IN, OUT};
-  assert(idx_dirs1 == expect_dirs);
-#endif
-  FullEnvironmentTruncateInSquareLocalLoop_(params, gammas, lambdas, Upsilons);
+  WeightedTraceGaugeFixingInSquareLocalLoop_(params.arnoldi_params, gammas, lambdas, Upsilons);
+  FullEnvironmentTruncateInSquareLocalLoop_(params.fet_params, gammas, lambdas, Upsilons);
 
   //split out the lambdas of envs
   for (size_t i = 0; i < 4; i++) {
@@ -224,10 +207,6 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
   for (const auto &gamma : {Gamma(upper_left_site), Gamma({row, col + 1}),
                             Gamma({row + 1, col + 1}), Gamma({row + 1, col})}) {
     assert(phy_idx == gamma.GetIndex(4));
-    assert(gamma.GetIndex(0).GetDir() == IN);
-    assert(gamma.GetIndex(1).GetDir() == OUT);
-    assert(gamma.GetIndex(2).GetDir() == OUT);
-    assert(gamma.GetIndex(3).GetDir() == IN);
   }
 #endif
   return norm;
@@ -260,65 +239,94 @@ template<typename TenElemT, typename QNT>
 void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
     const qlpeps::SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopGateT &gate_tens,
     const qlpeps::SiteIdx &upper_left_site) {
+  using DTenT = QLTensor<QLTEN_Double, QNT>;
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
-
-  //Update Gamma Tensors
-  const TenT &Gamma0 = Gamma(upper_left_site);
-  TenT tmp;
-  Contract(&Gamma0, {4}, &gate_tens[0], {1}, &tmp);
-  tmp.FuseIndex(1, 4);
-  tmp.FuseIndex(2, 5);
-  tmp.Transpose({2, 1, 0, 3, 4});
-  Gamma(upper_left_site) = tmp;
-
-  const TenT &Gamma1 = Gamma({row, col + 1});
-  tmp = TenT();
-  Contract(&Gamma1, {4}, &gate_tens[1], {1}, &tmp);
-  tmp.FuseIndex(0, 4);
-  tmp.FuseIndex(1, 5);
-  tmp.Transpose({1, 0, 2, 3, 4});
-  Gamma({row, col + 1}) = tmp;
-
-  const TenT &Gamma2 = Gamma({row + 1, col + 1});
-  tmp = TenT();
-  Contract(&Gamma2, {4}, &gate_tens[2], {1}, &tmp);
-  tmp.FuseIndex(0, 6);
-  tmp.FuseIndex(3, 4);
-  tmp.Transpose({1, 2, 3, 0, 4});
-  Gamma({row + 1, col + 1}) = tmp;
-
-  const TenT &Gamma3 = Gamma({row + 1, col});
-  tmp = TenT();
-  Contract(&Gamma3, {4}, &gate_tens[3], {1}, &tmp);
-  tmp.FuseIndex(2, 4);
-  tmp.FuseIndex(3, 5);
-  tmp.Transpose({2, 3, 1, 0, 4});
-  Gamma({row + 1, col}) = tmp;
-
-  //Update Lambda Tensors
+#ifndef NDEBUG
+  auto phy_idx = Gamma({0, 0}).GetIndex(4);
+#endif
   std::vector<TenT *> lambdas(4, nullptr);
   lambdas[0] = lambda_horiz(row, col + 1);
   lambdas[1] = lambda_vert(row + 1, col + 1);
   lambdas[2] = lambda_horiz(row + 1, col + 1);
   lambdas[3] = lambda_vert(row + 1, col);
+  lambdas[2]->Transpose({1, 0});
+  lambdas[3]->Transpose({1, 0});
 
-  for (size_t i = 0; i < 4; i++) {
-    Index<QNT> idx0 = gate_tens.at((i + 1) % 4).GetIndex(0);
-    Index<QNT> idx1 = gate_tens.at(i).GetIndex(3);
-    if (i > 1) {
-      std::swap(idx0, idx1);
-    }
-    TenT eye = TenT({idx0, idx1});
-    for (size_t i = 0; i < idx0.dim(); i++) {
-      eye({i, i}) = 1.0;
-    }
-    tmp = TenT();
-    Contract(lambdas[i], {}, &eye, {}, &tmp);
-    tmp.FuseIndex(1, 3);
-    tmp.FuseIndex(1, 2);
-    *lambdas[i] = tmp;
+  //Update Gamma Tensors
+  TenT &Gamma0 = Gamma(upper_left_site);
+  TenT tmp[12], q, r, u, vt;
+  DTenT s;
+  Contract(&Gamma0, {4}, &gate_tens[0], {1}, tmp);
+  tmp->Transpose({1, 4, 0, 3, 5, 2, 6});
+  QR(tmp, 5, qn0_, &q, &r);
+  Contract(&r, {1}, lambdas[0], {0}, tmp + 1);
+  mock_qlten::SVD(tmp + 1, 1, qn0_, &u, &s, &vt);
+  Contract(&q, {5}, &u, {0}, tmp + 2);  // tmp + 2 is gamma0
+  *lambdas[0] = std::move(s);
+
+  TenT &Gamma1 = Gamma({row, col + 1});
+  Contract(&Gamma1, {4}, &gate_tens[1], {1}, tmp + 3);
+  Contract(&vt, {1, 2}, tmp + 3, {4, 0}, tmp + 4);
+  tmp[4].Transpose({0, 2, 3, 4, 1, 5});
+  q = TenT();
+  r = TenT();
+  QR(tmp + 4, 4, qn0_, &q, &r);
+  Contract(&r, {1}, lambdas[1], {0}, tmp + 5);
+  u = TenT();
+  vt = TenT();
+  s = DTenT();
+  mock_qlten::SVD(tmp + 5, 1, qn0_, &u, &s, &vt);
+  Gamma1 = TenT();
+  Contract(&q, {4}, &u, {0}, &Gamma1);
+  Gamma1.Transpose({0, 4, 1, 2, 3});
+  *lambdas[1] = std::move(s);
+
+  TenT &Gamma2 = Gamma({row + 1, col + 1});
+  Contract(&Gamma2, {4}, &gate_tens[2], {1}, tmp + 6);
+  Contract(&vt, {1, 2}, tmp + 6, {4, 3}, tmp + 7);
+  tmp[7].Transpose({0, 2, 3, 4, 1, 5});
+  q = TenT();
+  r = TenT();
+  s = DTenT();
+  QR(tmp + 7, 4, qn0_, &q, &r);
+  Contract(&r, {1}, lambdas[2], {0}, tmp + 8);
+  u = TenT();
+  vt = TenT();
+  mock_qlten::SVD(tmp + 8, 1, qn0_, &u, &s, &vt);
+  Gamma2 = TenT();
+  Contract(&q, {4}, &u, {0}, &Gamma2);
+  Gamma2.Transpose({4, 1, 2, 0, 3});
+  s.Transpose({1, 0});
+  *lambdas[2] = std::move(s);
+
+  TenT &Gamma3 = Gamma({row + 1, col});
+  Contract(&Gamma3, {4}, &gate_tens[3], {1}, tmp + 9);
+  Contract(&vt, {1, 2}, tmp + 9, {4, 2}, tmp + 10);
+  tmp[10].Transpose({0, 1, 2, 4, 3, 5});
+  q = TenT();
+  r = TenT();
+  QR(tmp + 10, 4, qn0_, &q, &r);
+  Contract(&r, {1}, lambdas[3], {0}, tmp + 11);
+  u = TenT();
+  vt = TenT();
+  s = DTenT();
+  mock_qlten::SVD(tmp + 11, 1, qn0_, &u, &s, &vt);
+  Gamma3 = TenT();
+  Contract(&q, {4}, &u, {0}, &Gamma3);
+  Gamma3.Transpose({1, 2, 0, 4, 3});
+  s.Transpose({1, 0});
+  *lambdas[3] = std::move(s);
+
+  Gamma0 = TenT();
+  Contract(&vt, {2, 1}, tmp + 2, {0, 1}, &Gamma0);
+  Gamma0.Transpose({1, 0, 4, 2, 3});
+#ifndef NDEBUG
+  for (const auto &gamma : {Gamma(upper_left_site), Gamma({row, col + 1}),
+                            Gamma({row + 1, col + 1}), Gamma({row + 1, col})}) {
+    assert(phy_idx == gamma.GetIndex(4));
   }
+#endif
 }
 
 
@@ -372,7 +380,8 @@ QLTensor<TenElemT, QNT> right_vec_multiple_transfer_tens(
 /// < induced from the numeric errors.
 template<typename QNT>
 QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
-    const QLTensor<QLTEN_Double, QNT> &qusi_positive_mat
+    const QLTensor<QLTEN_Double, QNT> &qusi_positive_mat,
+    const double tolerance = 1e-15
 ) {
   QLTensor<QLTEN_Double, QNT> sqrt = qusi_positive_mat;
   for (size_t i = 0; i < sqrt.GetShape()[0]; i++) {
@@ -380,7 +389,8 @@ QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
     if (elem >= 0) {
       sqrt({i, i}) = std::sqrt(elem);
     } else {
-      std::cout << "warning: trying to find square root of " << std::scientific << elem << std::endl;
+      if (elem < -tolerance)
+        std::cout << "warning: trying to find square root of " << std::scientific << elem << std::endl;
       sqrt({i, i}) = 0.0;
     }
   }
@@ -393,7 +403,7 @@ QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
 template<typename TenElemT, typename QNT>
 void SquareLatticePEPS<TenElemT, QNT>::
 WeightedTraceGaugeFixingInSquareLocalLoop_(
-    const qlpeps::LoopUpdateTruncatePara &params,
+    const ArnoldiParams &arnoldi_params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
@@ -452,12 +462,12 @@ WeightedTraceGaugeFixingInSquareLocalLoop_(
     }
     left_vec.Normalize();
     right_vec.Normalize();
-    //Naive Realization: power method. TODO:Lanczos
+    //Naive Realization: power method. TODO:Arnoldi
     double norm = 0;
     for (size_t iter = 0; iter < 100; iter++) {
       left_vec = left_vec_multiple_transfer_tens(left_vec, sigma, sigma_dag, Upsilon);
       double update_norm = left_vec.Normalize();
-      if (std::abs((update_norm - norm) / update_norm) < 1e-10) {
+      if (std::abs((update_norm - norm) / update_norm) < 1e-15) {
         break;
       } else {
         norm = update_norm;
@@ -467,7 +477,7 @@ WeightedTraceGaugeFixingInSquareLocalLoop_(
     for (size_t iter = 0; iter < 100; iter++) {
       right_vec = right_vec_multiple_transfer_tens(right_vec, sigma, sigma_dag, Upsilon);
       double update_norm = right_vec.Normalize();
-      if (std::abs((update_norm - norm) / update_norm) < 1e-10) {
+      if (std::abs((update_norm - norm) / update_norm) < 1e-15) {
         break;
       } else {
         norm = update_norm;
@@ -529,12 +539,9 @@ WeightedTraceGaugeFixingInSquareLocalLoop_(
     gamma_tail = std::move(tmp0);
     Contract(&y_inv, {1}, &gamma_head, {0}, &tmp1);
     gamma_head = std::move(tmp1);
-#ifndef NDEBUG
-    assert(gammas[0].GetIndex(0).GetDir() == OUT);
-#endif
   }
 #ifndef NDEBUG
-  assert(gammas[0].GetIndex(0).GetDir() == OUT);
+  assert(gammas[0].GetIndex(4).GetDir() == OUT);
 #endif
 }
 
@@ -640,7 +647,7 @@ template<typename TenElemT, typename QNT>
 std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTruncate(
     const QLTensor<TenElemT, QNT> &Upsilon,
     QLTensor<QLTEN_Double, QNT> &sigma, //input & output
-    const LoopUpdateTruncatePara &trunc_para
+    const FullEnvironmentTruncateParams &trunc_params
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
   using DTenT = QLTensor<QLTEN_Double, QNT>;
@@ -656,11 +663,11 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
   //initialize u, vdag, and sigma_tilde
   double actual_trunc_err;
   size_t actual_D;
-  MatSVD(sigma_orig, qn0, trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+  MatSVD(sigma_orig, qn0, trunc_params.trunc_err, trunc_params.Dmin, trunc_params.Dmax,
          vdag, sigma, u, &actual_trunc_err, &actual_D);
 
   DTenT sigma_old = sigma;
-  for (size_t iter = 0; iter < trunc_para.fet_max_iter; iter++) {
+  for (size_t iter = 0; iter < trunc_params.max_iter; iter++) {
     //fix u, solve sigma, vdag
     TenT u_dag = Dag(u);
     TenT P_ten, B_ten, R_ten_init, L_ten_init;
@@ -679,15 +686,15 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
 
     PtenVecT update_r_vec =
         ConjugateGradientSolver(b_ten_mat, p_ten_vec, r_init,
-                                trunc_para.cg_params.max_iter,
-                                trunc_para.cg_params.tolerance, cg_iter);
+                                trunc_params.cg_params.max_iter,
+                                trunc_params.cg_params.tolerance, cg_iter);
 
     Contract(&update_r_vec.p_ten, {0}, &u, {0}, tmp + 1);
     u = TenT();
     vdag = TenT();
     sigma = DTenT();
     // update v, and sigma according to u*R = u'*sigma*v
-    MatSVD(tmp[1], qn0, trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+    MatSVD(tmp[1], qn0, trunc_params.trunc_err, trunc_params.Dmin, trunc_params.Dmax,
            vdag, sigma, u, &actual_trunc_err, &actual_D);
     //fix v, solve u, sigma
     TenT v = Dag(vdag);
@@ -705,16 +712,16 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
     PtenVecT l_init(L_ten_init);
     PtenVecT update_l_vec =
         ConjugateGradientSolver(b_ten_mat, p_ten_vec, l_init,
-                                trunc_para.cg_params.max_iter,
-                                trunc_para.cg_params.tolerance, cg_iter);
+                                trunc_params.cg_params.max_iter,
+                                trunc_params.cg_params.tolerance, cg_iter);
     Contract(&vdag, {1}, &update_l_vec.p_ten, {1}, tmp + 3);
 
     u = TenT();
     vdag = TenT();
     sigma = DTenT();
-    MatSVD(tmp[3], qn0, trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
+    MatSVD(tmp[3], qn0, trunc_params.trunc_err, trunc_params.Dmin, trunc_params.Dmax,
            vdag, sigma, u, &actual_trunc_err, &actual_D);
-    if (diag_mat_diff(sigma, sigma_old) < trunc_para.fet_tol) {
+    if (diag_mat_diff(sigma, sigma_old) < trunc_params.tolerance) {
       break;
     } else {
       sigma_old = sigma;
@@ -726,13 +733,13 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
 template<typename TenElemT, typename QNT>
 void SquareLatticePEPS<TenElemT, QNT>::
 FullEnvironmentTruncateInSquareLocalLoop_(
-    const qlpeps::LoopUpdateTruncatePara &params,
+    const FullEnvironmentTruncateParams &trunc_params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &lambdas, //input & output
     const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //input & output
 ) const {
   for (size_t i = 0; i < 4; i++) {
-    auto [u, vdag] = FullEnvironmentTruncate(Upsilons[i], lambdas[(i + 3) % 4], params);
+    auto [u, vdag] = FullEnvironmentTruncate(Upsilons[i], lambdas[(i + 3) % 4], trunc_params);
     // truncate Gamma tensors accordingly
     TenT &gamma_tail = gammas[(i + 3) % 4];
     TenT &gamma_head = gammas[i];

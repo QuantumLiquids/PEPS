@@ -39,24 +39,31 @@ struct SimpleUpdateTruncatePara {
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
 };
 
-using qlmps::LanczosParams;
+using ArnoldiParams = qlmps::LanczosParams;
+struct FullEnvironmentTruncateParams {
+  FullEnvironmentTruncateParams(
+      const size_t Dmin, const size_t Dmax, const double trunc_err,
+      const double fet_tolerance, const size_t fet_max_iter,
+      const ConjugateGradientParams &conjugate_gradient_params
+  ) : Dmin(Dmin), Dmax(Dmax), trunc_err(trunc_err),
+      tolerance(fet_tolerance), max_iter(fet_max_iter), cg_params(conjugate_gradient_params) {}
+  size_t Dmin;
+  size_t Dmax;
+  double trunc_err;
+
+  double tolerance;
+  size_t max_iter;
+  ConjugateGradientParams cg_params;
+};
 struct LoopUpdateTruncatePara {
-  LoopUpdateTruncatePara(const LanczosParams &lanczos_params,
-                         const size_t Dmin, const size_t Dmax, const double trunc_err,
-                         const double fet_tolerance, const size_t fet_max_iter,
-                         const ConjugateGradientParams &conjugate_gradient_params) :
-      lanczos_params(lanczos_params), D_min(Dmin), D_max(Dmax), trunc_err(trunc_err),
-      fet_tol(fet_tolerance), fet_max_iter(fet_max_iter), cg_params(conjugate_gradient_params) {}
+  LoopUpdateTruncatePara(const ArnoldiParams &arnoldi_params,
+                         const FullEnvironmentTruncateParams &fet_params) :
+      arnoldi_params(arnoldi_params), fet_params(fet_params) {}
   //gauge fixing
-  LanczosParams lanczos_params;
+  ArnoldiParams arnoldi_params;
 
   //full environment truncation
-  size_t D_min;
-  size_t D_max;
-  double trunc_err;
-  double fet_tol;
-  size_t fet_max_iter;
-  ConjugateGradientParams cg_params; //for FET
+  FullEnvironmentTruncateParams fet_params;
 };
 
 /**
@@ -222,14 +229,14 @@ class SquareLatticePEPS {
   );
 
   void WeightedTraceGaugeFixingInSquareLocalLoop_(
-      const qlpeps::LoopUpdateTruncatePara &params,
+      const ArnoldiParams &arnoldi_params,
       std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
       std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
       std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
   ) const;
 
   void FullEnvironmentTruncateInSquareLocalLoop_(
-      const qlpeps::LoopUpdateTruncatePara &params,
+      const FullEnvironmentTruncateParams &trunc_params,
       std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
       std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
       const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons

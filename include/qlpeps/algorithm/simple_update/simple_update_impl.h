@@ -4,7 +4,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-09-25
 *
-* Description: QuantumLiquids/VMC-SquareLatticePEPS project. Simple Update Implementation.
+* Description: QuantumLiquids/VMC-SquareLatticePEPS project. Implementation for abstract class of simple update.
 */
 
 #ifndef QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
@@ -122,7 +122,7 @@ SimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateExecutor(const SimpleUpdatePara
     : Executor(), lx_(peps_initial.Cols()), ly_(peps_initial.Rows()),
       update_para(update_para), peps_(peps_initial) {
   std::cout << "\n";
-  std::cout << "=====> SIMPLE UPDATE PROGRAM FOR SquareLatticePEPS <=====" << "\n";
+  std::cout << "=====> SIMPLE UPDATE PROGRAM FOR Square-Lattice PEPS <=====" << "\n";
   std::cout << std::setw(40) << "System size (lx, ly) : " << "(" << lx_ << ", " << ly_ << ")\n";
   std::cout << std::setw(40) << "SquareLatticePEPS bond dimension : " << update_para.Dmin << "/" << update_para.Dmax
             << "\n";
