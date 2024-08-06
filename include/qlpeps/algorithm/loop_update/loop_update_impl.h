@@ -47,7 +47,7 @@ template<typename TenElemT, typename QNT>
 void LoopUpdateExecutor<TenElemT, QNT>::Execute(void) {
   SetStatus(qlten::EXEING);
   for (size_t step = 0; step < steps_; step++) {
-    std::cout << "step = " << step << "\t";
+    std::cout << "step = " << step << "\n";
     LoopUpdateSweep_();
   }
   SetStatus(qlten::FINISH);
@@ -55,9 +55,10 @@ void LoopUpdateExecutor<TenElemT, QNT>::Execute(void) {
 
 template<typename TenElemT, typename QNT>
 double LoopUpdateExecutor<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &site,
-                                                        const qlpeps::LoopUpdateTruncatePara &para) {
+                                                        const qlpeps::LoopUpdateTruncatePara &para,
+                                                        const bool print_time) {
   const LoopGatesT &gate = evolve_gates_(site);
-  return this->peps_.LocalSquareLoopProject(gate, site, para);
+  return this->peps_.LocalSquareLoopProject(gate, site, para, print_time);
 }
 
 template<typename TenElemT, typename QNT>
@@ -68,7 +69,11 @@ double LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateSweep_(void) {
 
   for (size_t col = 0; col < this->lx_ - 1; col++) {
     for (size_t row = 0; row < this->ly_ - 1; row++) {
-      norm = UpdateOneLoop({row, col}, truncate_para_);
+      if (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1)) {
+        norm = UpdateOneLoop({row, col}, truncate_para_, true);
+      } else {
+        norm = UpdateOneLoop({row, col}, truncate_para_, false);
+      }
       e0 += -std::log(norm) / tau_;
     }
   }
@@ -78,8 +83,12 @@ double LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateSweep_(void) {
             << std::right << e0
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " SweepTime = " << std::setw(8) << sweep_time
-            << std::endl;
+            << "\n";
+  std::cout << "lambda tensors in middle : " << std::endl;
+  PrintLambda(this->peps_.lambda_vert({this->ly_ / 2, this->lx_ / 2}));
+  PrintLambda(this->peps_.lambda_horiz({this->ly_ / 2, this->lx_ / 2}));
   return 0.0;
+
 }
 
 }

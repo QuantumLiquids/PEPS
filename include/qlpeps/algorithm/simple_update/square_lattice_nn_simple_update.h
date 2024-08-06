@@ -39,7 +39,6 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
   Tensor evolve_gate_nn_;
 };
 
-
 template<typename TenElemT, typename QNT>
 double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
@@ -56,6 +55,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
     }
   }
 #ifdef QLPEPS_TIMING_MODE
+  std::cout << "\n";
   vertical_nn_projection_timer.PrintElapsed();
   Timer horizontal_nn_projection_timer("horizontal_nn_projection");
 #endif
@@ -69,6 +69,9 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
   horizontal_nn_projection_timer.PrintElapsed();
 #endif
   double sweep_time = simple_update_sweep_timer.Elapsed();
+  std::cout << "lambda tensors in middle : " << std::endl;
+  PrintLambda(this->peps_.lambda_vert({this->ly_ / 2, this->lx_ / 2}));
+  PrintLambda(this->peps_.lambda_horiz({this->ly_ / 2, this->lx_ / 2}));
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0
@@ -79,6 +82,5 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
   return norm;
 }
 }
-
 
 #endif //QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H

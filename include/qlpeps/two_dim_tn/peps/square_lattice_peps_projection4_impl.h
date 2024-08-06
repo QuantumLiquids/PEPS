@@ -18,10 +18,9 @@ using qlmps::mock_qlten::SVD;
 //helper
 
 /**
- * input tensor t should have 2-leg,
- * one of the indices has direction in and the other go out.
+ * SVD for 2-leg tensors with one index pointing in and the other pointing out.
  *
- * The output tensor will keep the same index directions will input tensor.
+ * The output tensor will keep the same index direction forms with the input tensor.
  */
 template<typename TenElemT, typename QNT>
 void MatSVD(
@@ -124,16 +123,29 @@ void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
   gamma = res;
 }
 
+//forward declaration
+template<typename TenElemT, typename QNT>
+void WeightedTraceGaugeFixingInSquareLocalLoop(
+    const ArnoldiParams &arnoldi_params,
+    std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
+    std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
+    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
+);
+
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
     const qlpeps::SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopGateT &gate_tens,
     const qlpeps::SiteIdx &upper_left_site,
-    const qlpeps::LoopUpdateTruncatePara &params) {
+    const qlpeps::LoopUpdateTruncatePara &params,
+    const bool print_time) {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
-
+  Timer pat_loop_projector_timer("pat_loop_projector");
   PatSquareLocalLoopProjector_(gate_tens, upper_left_site);
-
+  if (print_time) {
+    pat_loop_projector_timer.PrintElapsed();
+  }
+  Timer loop_projection_pre_procedure_timer("loop_projection_pre_procedure");
   std::array<QLTensor<TenElemT, QNT>, 4> gammas, lambdas, Upsilons, env_lambda_ls, env_lambda_rs;
   gammas[0] = Gamma(upper_left_site);
   gammas[1] = Gamma({row, col + 1});
@@ -172,10 +184,20 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
   for (size_t i = 0; i < 4; i++) {
     Eat2EnvLambdasInMPSOrderGamma(gammas[i], env_lambda_ls[i], env_lambda_rs[i]);
   }
-
-  WeightedTraceGaugeFixingInSquareLocalLoop_(params.arnoldi_params, gammas, lambdas, Upsilons);
+  if (print_time) {
+    loop_projection_pre_procedure_timer.PrintElapsed();
+  }
+  Timer weighted_trace_gauge_fixing_timer("weighted_trace_gauge_fixing");
+  WeightedTraceGaugeFixingInSquareLocalLoop(params.arnoldi_params, gammas, lambdas, Upsilons);
+  if(print_time){
+    weighted_trace_gauge_fixing_timer.PrintElapsed();
+  }
+  Timer full_env_truncate_timer("full_env_truncate");
   FullEnvironmentTruncateInSquareLocalLoop_(params.fet_params, gammas, lambdas, Upsilons);
-
+  if(print_time){
+    full_env_truncate_timer.PrintElapsed();
+  }
+  Timer loop_projection_post_procedure_timer("loop_projection_post_procedure");
   //split out the lambdas of envs
   for (size_t i = 0; i < 4; i++) {
     SplitOut2EnvLambdasInMPSOrderGammas(gammas[i], env_lambda_ls[i], env_lambda_rs[i]);
@@ -209,6 +231,9 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
     assert(phy_idx == gamma.GetIndex(4));
   }
 #endif
+  if (print_time) {
+    loop_projection_post_procedure_timer.PrintElapsed();
+  }
   return norm;
 }
 
@@ -396,19 +421,158 @@ QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
   }
   return sqrt;
 }
-/**
- * Fix weighted trace gauge for the loop tensors
+
+template<typename TenElemT, typename QNT>
+void WeightedTraceGaugeFixing(
+    const ArnoldiParams &arnoldi_params,
+    QLTensor<TenElemT, QNT> &Upsilon,
+    QLTensor<QLTEN_Double, QNT> &sigma,
+    QLTensor<TenElemT, QNT> &gamma_head,
+    QLTensor<TenElemT, QNT> &gamma_tail
+) {
+  const auto qn0 = sigma.Div();
+  using TenT = QLTensor<TenElemT, QNT>;
+  using DTenT = QLTensor<QLTEN_Double, QNT>;
+
+  DTenT sigma_dag = Dag(sigma);
+  //calculate the left/right eigen vectors
+  /**
+   *
+   * |-1-0-sigma^dag-1--1---------3
+   * |                      |
+   * L                   Upsilon
+   * |                      |
+   * |-0-0-sigma-1-----0----------2
+   *
+   * 1----------3----0-sigma^dag-1---1---
+   *       |                            |
+   *    Upsilon                         R
+   *       |                            |
+   * 0----------2----0-sigma-1-------0--|
+   */
+  const Index<QNT> index0 = InverseIndex(sigma.GetIndex(0));
+  const Index<QNT> index1 = sigma.GetIndex(0);
+  TenT left_vec = TenT({index0, index1});
+  TenT right_vec = TenT({index1, index0});
+  for (size_t j = 0; j < index0.dim(); j++) {
+    left_vec({j, j}) = 1.0;
+    right_vec({j, j}) = 1.0;
+  }
+  left_vec.Normalize();
+  right_vec.Normalize();
+  //Naive Realization: power method. TODO:Arnoldi
+  const size_t iter_max = 100;
+  const double iter_tol = 1e-15;
+  double norm = 0;
+  size_t iter;
+  auto left_vec_last_dag = Dag(left_vec);
+  for (iter = 0; iter < iter_max; iter++) {
+    left_vec = left_vec_multiple_transfer_tens(left_vec, sigma, sigma_dag, Upsilon);
+    double update_norm = left_vec.Normalize();
+    if (std::abs((update_norm - norm) / update_norm) < iter_tol) {
+      TenT overlap_ten;
+      Contract(&left_vec_last_dag, {0, 1}, &left_vec, {0, 1}, &overlap_ten);
+      if (std::abs(overlap_ten() - 1.0) < iter_tol)
+        break;
+    }
+    norm = update_norm;
+    left_vec_last_dag = Dag(left_vec);
+  }
+  if (iter == iter_max) {
+    std::cout << "Left dominant eigenvector solver doesn't converge" << std::endl;
+  }
+  norm = 0;
+  auto right_vec_last_dag = Dag(right_vec);
+  for (iter = 0; iter < iter_max; iter++) {
+    right_vec = right_vec_multiple_transfer_tens(right_vec, sigma, sigma_dag, Upsilon);
+    double update_norm = right_vec.Normalize();
+    if (std::abs((update_norm - norm) / update_norm) < iter_tol) {
+      TenT overlap_ten;
+      Contract(&right_vec_last_dag, {0, 1}, &right_vec, {0, 1}, &overlap_ten);
+      if (std::abs(overlap_ten() - 1.0) < iter_tol)
+        break;
+    }
+    norm = update_norm;
+    right_vec_last_dag = Dag(right_vec);
+  }
+  if (iter == iter_max) {
+    std::cout << "Right dominant eigenvector solver doesn't converge" << std::endl;
+  }
+
+  //EVD for eigenvectors, and update the Upsilon_i, Gammas, and Lambdas
+  TenT u_l, d_l, u_r, d_r;
+  DTenT sqrt_dl, sqrt_dr, inv_sqrt_dl, inv_sqrt_dr;
+  SymMatEVD(&left_vec, &u_l, &d_l);
+  SymMatEVD(&right_vec, &u_r, &d_r);
+  sqrt_dl = QuasiSquareRootDiagMat(d_l);
+  sqrt_dr = QuasiSquareRootDiagMat(d_r);
+
+  inv_sqrt_dl = ElementWiseInv(sqrt_dl, 1e-200);
+  inv_sqrt_dr = ElementWiseInv(sqrt_dr, 1e-200);
+  TenT ul_dag = Dag(u_l);
+  TenT ur_dag = Dag(u_r);
+
+
+  //calculate sigma_prime
+  DTenT sigma_prime;
+  TenT tmp0, tmp1, tmp2;
+  Contract(&sqrt_dl, {0}, &u_l, {1}, &tmp0);
+  Contract(&tmp0, {1}, &sigma, {0}, &tmp1);
+  Contract(&tmp1, {1}, &u_r, {0}, &tmp2);
+  Contract(&tmp2, {1}, &sqrt_dr, {0}, &sigma_prime);
+
+  sigma = DTenT();
+  TenT v_l, v_r_dag;
+  MatSVD(sigma_prime, qn0, v_l, sigma, v_r_dag);
+  //Update Upsilon, and corresponding 2 gammas
+  //The original data of lambdas and Gammas in PEPS are not changed.
+
+  TenT x_inv;
+  tmp0 = TenT();
+  tmp1 = TenT();
+  tmp2 = TenT();
+  Contract(&ul_dag, {1}, &inv_sqrt_dl, {1}, &tmp0);
+  Contract(&tmp0, {1}, &v_l, {0}, &x_inv);
+  TenT x_inv_dag = Dag(x_inv);
+  Contract(&Upsilon, {2}, &x_inv, {0}, &tmp1);
+  Contract(&tmp1, {2}, &x_inv_dag, {0}, &tmp2);
+
+  TenT y_inv, tmp3;
+  tmp0 = TenT();
+  tmp1 = TenT();
+  Contract(&v_r_dag, {1}, &inv_sqrt_dr, {0}, &tmp0);
+  Contract(&tmp0, {1}, &ur_dag, {1}, &y_inv);
+  TenT y_inv_dag = Dag(y_inv);
+  Contract(&y_inv, {1}, &tmp2, {0}, &tmp3);
+  Upsilon = TenT();
+  Contract(&y_inv_dag, {1}, &tmp3, {1}, &Upsilon);
+  Upsilon.Transpose({1, 0, 2, 3});
+
+  tmp0 = TenT();
+  tmp1 = TenT();
+  Contract(&gamma_tail, {4}, &x_inv, {0}, &tmp0);
+  gamma_tail = std::move(tmp0);
+  Contract(&y_inv, {1}, &gamma_head, {0}, &tmp1);
+  gamma_head = std::move(tmp1);
+}
+
+/**  Fix weighted trace gauge for the loop tensors
+ *
+ *  Input: the gammas should contain the environment lambdas, and be in the MPS indices orders.
+ *         The lambdas should be in the MPS indices orders.
  *
  */
 template<typename TenElemT, typename QNT>
-void SquareLatticePEPS<TenElemT, QNT>::
-WeightedTraceGaugeFixingInSquareLocalLoop_(
+void WeightedTraceGaugeFixingInSquareLocalLoop(
     const ArnoldiParams &arnoldi_params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
-    std::array<QLTensor<TenElemT, QNT>, 4> &lambdas, //input & output
+    std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
-) const {
-  // Contruct the Upsilon_i tensor
+) {
+  using TenT = QLTensor<TenElemT, QNT>;
+  using DTenT = QLTensor<QLTEN_Double, QNT>;
+
+  // Construct the Upsilon_i tensor
   std::array<QLTensor<TenElemT, QNT>, 4> gamma_gamma_dags;//transfer matrix, tmp data
   for (size_t i = 0; i < 4; i++) {
     TenT gamma_dag = Dag(gammas[i]);
@@ -434,112 +598,9 @@ WeightedTraceGaugeFixingInSquareLocalLoop_(
   }
 
   for (size_t i = 0; i < 4; i++) {
-    TenT &Upsilon = Upsilons[i];
-    TenT &sigma = lambdas[(i + 3) % 4];
-    TenT sigma_dag = Dag(sigma);
-    //calculate the left/right eigen vectors
-    /**
-     *
-     * |-1-0-sigma^dag-1--1---------3
-     * |                      |
-     * L                   Upsilon
-     * |                      |
-     * |-0-0-sigma-1-----0----------2
-     *
-     * 1----------3----0-sigma^dag-1---1---
-     *       |                            |
-     *    Upsilon                         R
-     *       |                            |
-     * 0----------2----0-sigma-1-------0--|
-     */
-    const Index<QNT> index0 = InverseIndex(sigma.GetIndex(0));
-    const Index<QNT> index1 = sigma.GetIndex(0);
-    TenT left_vec = TenT({index0, index1});
-    TenT right_vec = TenT({index1, index0});
-    for (size_t j = 0; j < index0.dim(); j++) {
-      left_vec({j, j}) = 1.0;
-      right_vec({j, j}) = 1.0;
-    }
-    left_vec.Normalize();
-    right_vec.Normalize();
-    //Naive Realization: power method. TODO:Arnoldi
-    double norm = 0;
-    for (size_t iter = 0; iter < 100; iter++) {
-      left_vec = left_vec_multiple_transfer_tens(left_vec, sigma, sigma_dag, Upsilon);
-      double update_norm = left_vec.Normalize();
-      if (std::abs((update_norm - norm) / update_norm) < 1e-15) {
-        break;
-      } else {
-        norm = update_norm;
-      }
-    }
-    norm = 0;
-    for (size_t iter = 0; iter < 100; iter++) {
-      right_vec = right_vec_multiple_transfer_tens(right_vec, sigma, sigma_dag, Upsilon);
-      double update_norm = right_vec.Normalize();
-      if (std::abs((update_norm - norm) / update_norm) < 1e-15) {
-        break;
-      } else {
-        norm = update_norm;
-      }
-    }
-
-    //EVD for eigenvectors, and update the Upsilon_i, Gammas, and Lambdas
-    TenT u_l, d_l, u_r, d_r, sqrt_dl, sqrt_dr, inv_sqrt_dl, inv_sqrt_dr;
-    SymMatEVD(&left_vec, &u_l, &d_l);
-    SymMatEVD(&right_vec, &u_r, &d_r);
-    sqrt_dl = QuasiSquareRootDiagMat(d_l);
-    sqrt_dr = QuasiSquareRootDiagMat(d_r);
-
-    inv_sqrt_dl = ElementWiseInv(sqrt_dl, 1e-200);
-    inv_sqrt_dr = ElementWiseInv(sqrt_dr, 1e-200);
-    TenT ul_dag = Dag(u_l);
-    TenT ur_dag = Dag(u_r);
-
-
-    //calculate sigma_prime
-    TenT sigma_prime, tmp0, tmp1, tmp2;
-    Contract(&sqrt_dl, {0}, &u_l, {1}, &tmp0);
-    Contract(&tmp0, {1}, &sigma, {0}, &tmp1);
-    Contract(&tmp1, {1}, &u_r, {0}, &tmp2);
-    Contract(&tmp2, {1}, &sqrt_dr, {0}, &sigma_prime);
-
-    sigma = TenT();
-    TenT v_l, v_r_dag;
-    MatSVD(sigma_prime, qn0_, v_l, sigma, v_r_dag);
-    //Update Upsilon, and corresponding 2 gammas
-    //The original data of lambdas and Gammas in PEPS are not changed.
-
-    TenT x_inv;
-    tmp0 = TenT();
-    tmp1 = TenT();
-    tmp2 = TenT();
-    Contract(&ul_dag, {1}, &inv_sqrt_dl, {1}, &tmp0);
-    Contract(&tmp0, {1}, &v_l, {0}, &x_inv);
-    TenT x_inv_dag = Dag(x_inv);
-    Contract(&Upsilon, {2}, &x_inv, {0}, &tmp1);
-    Contract(&tmp1, {2}, &x_inv_dag, {0}, &tmp2);
-
-    TenT y_inv, tmp3;
-    tmp0 = TenT();
-    tmp1 = TenT();
-    Contract(&v_r_dag, {1}, &inv_sqrt_dr, {0}, &tmp0);
-    Contract(&tmp0, {1}, &ur_dag, {1}, &y_inv);
-    TenT y_inv_dag = Dag(y_inv);
-    Contract(&y_inv, {1}, &tmp2, {0}, &tmp3);
-    Upsilon = TenT();
-    Contract(&y_inv_dag, {1}, &tmp3, {1}, &Upsilon);
-    Upsilon.Transpose({1, 0, 2, 3});
-
-    TenT &gamma_tail = gammas[(i + 3) % 4];
-    TenT &gamma_head = gammas[i];
-    tmp0 = TenT();
-    tmp1 = TenT();
-    Contract(&gamma_tail, {4}, &x_inv, {0}, &tmp0);
-    gamma_tail = std::move(tmp0);
-    Contract(&y_inv, {1}, &gamma_head, {0}, &tmp1);
-    gamma_head = std::move(tmp1);
+    WeightedTraceGaugeFixing(arnoldi_params, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
   }
+
 #ifndef NDEBUG
   assert(gammas[0].GetIndex(4).GetDir() == OUT);
 #endif

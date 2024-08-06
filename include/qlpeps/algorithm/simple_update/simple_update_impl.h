@@ -145,5 +145,14 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
   SetStatus(qlten::FINISH);
 }
 
+//helper
+template<typename TenElemT, typename QNT>
+void PrintLambda(const QLTensor<TenElemT, QNT> &lambda) {
+  std::cout << "[";
+  for (size_t i = 0; i < lambda.GetShape()[0]; i++) {
+    std::cout << " " << lambda({i, i});
+  }
+  std::cout << "]" << std::endl;
+}
 }//qlpeps;
 #endif //QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H

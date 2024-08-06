@@ -199,7 +199,8 @@ class SquareLatticePEPS {
   double LocalSquareLoopProject(
       const LocalSquareLoopGateT &gate_tens,
       const SiteIdx &upper_left_site,
-      const LoopUpdateTruncatePara &params
+      const LoopUpdateTruncatePara &params,
+      const bool print_time = false
   );
 
   bool Dump(const std::string path = kPepsPath) const;
@@ -228,12 +229,12 @@ class SquareLatticePEPS {
       const SiteIdx &upper_left_site
   );
 
-  void WeightedTraceGaugeFixingInSquareLocalLoop_(
-      const ArnoldiParams &arnoldi_params,
-      std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
-      std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
-      std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
-  ) const;
+//  void WeightedTraceGaugeFixingInSquareLocalLoop_(
+//      const ArnoldiParams &arnoldi_params,
+//      std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
+//      std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
+//      std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
+//  ) const;
 
   void FullEnvironmentTruncateInSquareLocalLoop_(
       const FullEnvironmentTruncateParams &trunc_params,
