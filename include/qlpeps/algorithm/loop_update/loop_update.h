@@ -18,16 +18,19 @@ namespace qlpeps {
 
 using namespace qlten;
 
+template<typename TenT>
+using LoopGates = std::array<TenT, 4>;
+
 template<typename TenElemT, typename QNT>
 class LoopUpdateExecutor : public Executor {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
-  using LoopGateT = std::array<Tensor, 4>;
+  using LoopGatesT = LoopGates<Tensor>;
  public:
   LoopUpdateExecutor(const LoopUpdateTruncatePara &truncate_para,
                      const size_t steps,
                      const double tau,
-                     const DuoMatrix<LoopGateT> &evolve_gates,
+                     const DuoMatrix<LoopGatesT> &evolve_gates,
                      const PEPST &peps_initial);
 
   void Execute(void) override;
@@ -78,7 +81,7 @@ class LoopUpdateExecutor : public Executor {
   *  (The diagrams here are upside down from the Fig. in the Ref. [1].)
   *
   */
-  DuoMatrix<LoopGateT> evolve_gates_;
+  DuoMatrix<LoopGatesT> evolve_gates_;
 
   LoopUpdateTruncatePara truncate_para_;
 

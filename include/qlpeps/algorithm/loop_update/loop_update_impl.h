@@ -18,7 +18,7 @@ LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateExecutor(const LoopUpdateTruncatePa
                                                       const size_t steps,
                                                       const double tau,
                                                       const DuoMatrix<LoopUpdateExecutor<TenElemT,
-                                                                                         QNT>::LoopGateT> &evolve_gates,
+                                                                                         QNT>::LoopGatesT> &evolve_gates,
                                                       const LoopUpdateExecutor<TenElemT, QNT>::PEPST &peps_initial) :
     Executor(),
     lx_(peps_initial.Cols()),
@@ -56,7 +56,7 @@ void LoopUpdateExecutor<TenElemT, QNT>::Execute(void) {
 template<typename TenElemT, typename QNT>
 double LoopUpdateExecutor<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &site,
                                                         const qlpeps::LoopUpdateTruncatePara &para) {
-  const LoopGateT &gate = evolve_gates_(site);
+  const LoopGatesT &gate = evolve_gates_(site);
   return this->peps_.LocalSquareLoopProject(gate, site, para);
 }
 

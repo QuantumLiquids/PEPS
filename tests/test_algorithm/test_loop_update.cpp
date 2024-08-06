@@ -288,23 +288,29 @@ struct HeisenbergLoopUpdate : public testing::Test {
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
 
-//#ifdef U1SYM
-//  IndexT pb_out = IndexT({
-//                             QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1),
-//                             QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)},
-//                         TenIndexDirType::OUT
-//  );
-//#else
+#ifdef U1SYM
+  IndexT pb_out = IndexT({
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 1),
+                             QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1)},
+                         TenIndexDirType::OUT
+  );
+  IndexT vb_out = IndexT({QNSctT(U1QN(0), 2),
+                          QNSctT(U1QN(-1), 1),
+                          QNSctT(U1QN(1), 1)},
+                         TenIndexDirType::OUT
+  );
+#else
   IndexT pb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
                          TenIndexDirType::OUT
   );
-//#endif
-  IndexT pb_in = InverseIndex(pb_out);
-  IndexT vb_out = IndexT({
+   IndexT vb_out = IndexT({
                              QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 4)},
                          TenIndexDirType::OUT
   );
+#endif
+  IndexT pb_in = InverseIndex(pb_out);
+
   IndexT vb_in = InverseIndex(vb_out);
 
   DQLTensor did = DQLTensor({pb_in, pb_out});
@@ -370,11 +376,8 @@ struct HeisenbergLoopUpdate : public testing::Test {
   ) {
     const std::vector<size_t> ns = {n0, n1, n2, n3};
     LoopGateT gates;
-    gates[0] = DQLTensor({vb_out, pb_in, pb_out, vb_out});
-    gates[1] = DQLTensor({vb_in, pb_in, pb_out, vb_out});
-    gates[2] = DQLTensor({vb_in, pb_in, pb_out, vb_in});
-    gates[3] = DQLTensor({vb_out, pb_in, pb_out, vb_in});
     for (size_t i = 0; i < 4; i++) {
+      gates[i] = DQLTensor({vb_in, pb_in, pb_out, vb_out});
       DQLTensor &gate = gates[i];
       //Id
       gate({0, 0, 0, 0}) = 1.0;
@@ -451,7 +454,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   //loop update
   SimpleUpdatePara simple_update_para(100, tau0, 1, 4, 1e-10);
   ArnoldiParams arnoldi_params(1e-10, 30);
-  double fet_tol = 1e-12;
+  double fet_tol = 1e-13;
   double fet_max_iter = 30;
   ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
 
@@ -462,7 +465,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   auto *loop_exe = new LoopUpdateExecutor<QLTEN_Double, U1QN>(LoopUpdateTruncatePara(
                                                                   arnoldi_params,
                                                                   fet_params),
-                                                              100,
+                                                              150,
                                                               tau0,
                                                               evolve_gates0,
                                                               peps1);
@@ -754,7 +757,6 @@ TEST_F(TriangleHeisenbergLoopUpdate, Heisenberg) {
   delete su_exe1;
   peps1.NormalizeAllTensor();
   //loop update
-  SimpleUpdatePara simple_update_para(100, tau0, 1, 4, 1e-10);
   ArnoldiParams arnoldi_params(1e-10, 30);
   double fet_tol = 1e-12;
   double fet_max_iter = 30;
