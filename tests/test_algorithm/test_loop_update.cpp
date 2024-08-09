@@ -208,7 +208,7 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   delete su_exe1;
   peps1.NormalizeAllTensor();
   //loop update
-  ArnoldiParams arnoldi_params(1e-10, 30);
+  ArnoldiParams arnoldi_params(1e-13, 30);
   double fet_tol = 1e-12;
   double fet_max_iter = 30;
   ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
@@ -453,7 +453,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   peps1.NormalizeAllTensor();
   //loop update
   SimpleUpdatePara simple_update_para(100, tau0, 1, 4, 1e-10);
-  ArnoldiParams arnoldi_params(1e-10, 30);
+  ArnoldiParams arnoldi_params(1e-10, 100);
   double fet_tol = 1e-13;
   double fet_max_iter = 30;
   ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
@@ -575,7 +575,7 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
   DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
   DQLTensor dham_hei_tri;
 
-  double tau0 = 0.1;
+  double tau0 = 0.3;
   double tau1 = 0.01;
   double tau2 = 0.001;
   // ED ground state energy = -7.709643309360509
@@ -757,7 +757,7 @@ TEST_F(TriangleHeisenbergLoopUpdate, Heisenberg) {
   delete su_exe1;
   peps1.NormalizeAllTensor();
   //loop update
-  ArnoldiParams arnoldi_params(1e-10, 30);
+  ArnoldiParams arnoldi_params(1e-7, 100);
   double fet_tol = 1e-12;
   double fet_max_iter = 30;
   ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);

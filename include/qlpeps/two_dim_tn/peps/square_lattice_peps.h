@@ -13,7 +13,6 @@
 
 #include "qlten/qlten.h"
 #include "qlmps/utilities.h"                          //CreatPath
-#include "qlmps/algorithm/lanczos_params.h"           //LanczosParams
 #include "qlpeps/two_dim_tn/framework/ten_matrix.h"
 #include "qlpeps/two_dim_tn/framework/site_idx.h"
 #include "qlpeps/consts.h"                            //kPepsPath
@@ -21,7 +20,7 @@
 #include "qlpeps/basic.h"                             //BondOrientation
 #include "qlpeps/utility/conjugate_gradient_solver.h"
 #include "qlpeps/algorithm/vmc_update/vmc_optimize_para.h"  //ConjugateGradientParams
-
+#include "arnoldi_solver.h"
 namespace qlpeps {
 using namespace qlten;
 
@@ -39,7 +38,6 @@ struct SimpleUpdateTruncatePara {
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
 };
 
-using ArnoldiParams = qlmps::LanczosParams;
 struct FullEnvironmentTruncateParams {
   FullEnvironmentTruncateParams(
       const size_t Dmin, const size_t Dmax, const double trunc_err,

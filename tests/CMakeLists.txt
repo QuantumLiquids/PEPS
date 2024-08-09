@@ -208,6 +208,10 @@ add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+add_unittest(test_arnoldi
+        "test_2d_tn/test_arnoldi.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 
 ## Test monte carlo tools
 add_unittest(test_statistics

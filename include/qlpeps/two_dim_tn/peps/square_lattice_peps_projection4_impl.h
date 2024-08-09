@@ -11,6 +11,8 @@
 #ifndef VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION4_IMPL_H
 #define VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION4_IMPL_H
 
+#include "arnoldi_solver.h"
+
 namespace qlpeps {
 using namespace qlten;
 using qlmps::mock_qlten::SVD;
@@ -189,12 +191,12 @@ double SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
   }
   Timer weighted_trace_gauge_fixing_timer("weighted_trace_gauge_fixing");
   WeightedTraceGaugeFixingInSquareLocalLoop(params.arnoldi_params, gammas, lambdas, Upsilons);
-  if(print_time){
+  if (print_time) {
     weighted_trace_gauge_fixing_timer.PrintElapsed();
   }
   Timer full_env_truncate_timer("full_env_truncate");
   FullEnvironmentTruncateInSquareLocalLoop_(params.fet_params, gammas, lambdas, Upsilons);
-  if(print_time){
+  if (print_time) {
     full_env_truncate_timer.PrintElapsed();
   }
   Timer loop_projection_post_procedure_timer("loop_projection_post_procedure");
@@ -354,61 +356,14 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
 #endif
 }
 
-
-
-//helper
-/**
- *   * |-1-0-sigma^dag-1--1---------3
-     * |                      |
-     * L                   Upsilon
-     * |                      |
-     * |-0-0-sigma-1-----0----------2
- */
-template<typename TenElemT, typename QNT>
-QLTensor<TenElemT, QNT> left_vec_multiple_transfer_tens(
-    const QLTensor<TenElemT, QNT> &left_vec,
-    const QLTensor<TenElemT, QNT> &sigma,
-    const QLTensor<TenElemT, QNT> &sigma_dag,
-    const QLTensor<TenElemT, QNT> &Upsilon
-) {
-  using TenT = QLTensor<TenElemT, QNT>;
-  TenT tmp, tmp1, res;
-  Contract(&left_vec, {1}, &sigma_dag, {0}, &tmp);
-  Contract(&sigma, {0}, &tmp, {0}, &tmp1);
-  Contract(&tmp1, {0, 1}, &Upsilon, {0, 1}, &res);
-  return res;
-}
-
-/**
-     * 1----------3----0-sigma^dag-1---1---
-     *       |                            |
-     *    Upsilon                         R
-     *       |                            |
-     * 0----------2----0-sigma-1-------0--|
- */
-template<typename TenElemT, typename QNT>
-QLTensor<TenElemT, QNT> right_vec_multiple_transfer_tens(
-    const QLTensor<TenElemT, QNT> &right_vec,
-    const QLTensor<TenElemT, QNT> &sigma,
-    const QLTensor<TenElemT, QNT> &sigma_dag,
-    const QLTensor<TenElemT, QNT> &Upsilon
-) {
-  using TenT = QLTensor<TenElemT, QNT>;
-  TenT tmp, tmp1, res;
-  Contract(&sigma, {1}, &right_vec, {0}, &tmp);
-  Contract(&tmp, {1}, &sigma_dag, {1}, &tmp1);
-  Contract(&Upsilon, {2, 3}, &tmp1, {0, 1}, &res);
-  return res;
-}
-
 /// < qusi-positive means some diagonal elements may be negative but with very small abosultly value
 /// < induced from the numeric errors.
 template<typename QNT>
 QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
-    const QLTensor<QLTEN_Double, QNT> &qusi_positive_mat,
+    const QLTensor<QLTEN_Double, QNT> &quasi_positive_mat,
     const double tolerance = 1e-15
 ) {
-  QLTensor<QLTEN_Double, QNT> sqrt = qusi_positive_mat;
+  QLTensor<QLTEN_Double, QNT> sqrt = quasi_positive_mat;
   for (size_t i = 0; i < sqrt.GetShape()[0]; i++) {
     double elem = sqrt({i, i});
     if (elem >= 0) {
@@ -420,6 +375,19 @@ QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
     }
   }
   return sqrt;
+}
+
+template<typename QNT>
+void FixSignForDiagMat(
+    QLTensor<QLTEN_Double, QNT> &diag_mat
+) {
+  double diag_sum = 0.0;
+  for (size_t i = 0; i < diag_mat.GetShape()[0]; i++) {
+    diag_sum += diag_mat({i, i});
+  }
+  if (diag_sum < 0) {
+    diag_mat *= -1;
+  }
 }
 
 template<typename TenElemT, typename QNT>
@@ -452,58 +420,34 @@ void WeightedTraceGaugeFixing(
    */
   const Index<QNT> index0 = InverseIndex(sigma.GetIndex(0));
   const Index<QNT> index1 = sigma.GetIndex(0);
-  TenT left_vec = TenT({index0, index1});
-  TenT right_vec = TenT({index1, index0});
+  TenT left_vec0 = TenT({index0, index1});
+  TenT right_vec0 = TenT({index1, index0});
   for (size_t j = 0; j < index0.dim(); j++) {
-    left_vec({j, j}) = 1.0;
-    right_vec({j, j}) = 1.0;
+    left_vec0({j, j}) = 1.0;
+    right_vec0({j, j}) = 1.0;
   }
-  left_vec.Normalize();
-  right_vec.Normalize();
-  //Naive Realization: power method. TODO:Arnoldi
-  const size_t iter_max = 100;
-  const double iter_tol = 1e-15;
-  double norm = 0;
-  size_t iter;
-  auto left_vec_last_dag = Dag(left_vec);
-  for (iter = 0; iter < iter_max; iter++) {
-    left_vec = left_vec_multiple_transfer_tens(left_vec, sigma, sigma_dag, Upsilon);
-    double update_norm = left_vec.Normalize();
-    if (std::abs((update_norm - norm) / update_norm) < iter_tol) {
-      TenT overlap_ten;
-      Contract(&left_vec_last_dag, {0, 1}, &left_vec, {0, 1}, &overlap_ten);
-      if (std::abs(overlap_ten() - 1.0) < iter_tol)
-        break;
-    }
-    norm = update_norm;
-    left_vec_last_dag = Dag(left_vec);
-  }
-  if (iter == iter_max) {
-    std::cout << "Left dominant eigenvector solver doesn't converge" << std::endl;
-  }
-  norm = 0;
-  auto right_vec_last_dag = Dag(right_vec);
-  for (iter = 0; iter < iter_max; iter++) {
-    right_vec = right_vec_multiple_transfer_tens(right_vec, sigma, sigma_dag, Upsilon);
-    double update_norm = right_vec.Normalize();
-    if (std::abs((update_norm - norm) / update_norm) < iter_tol) {
-      TenT overlap_ten;
-      Contract(&right_vec_last_dag, {0, 1}, &right_vec, {0, 1}, &overlap_ten);
-      if (std::abs(overlap_ten() - 1.0) < iter_tol)
-        break;
-    }
-    norm = update_norm;
-    right_vec_last_dag = Dag(right_vec);
-  }
-  if (iter == iter_max) {
-    std::cout << "Right dominant eigenvector solver doesn't converge" << std::endl;
-  }
-
+  double upsilon_norm = Upsilon.Normalize();
+  auto left_eigen_sys = ArnoldiSolver(Upsilon,
+                                      sigma,
+                                      sigma_dag,
+                                      left_vec0,
+                                      arnoldi_params,
+                                      left_vec_multiple_transfer_tens<TenElemT, QNT>);
+  auto righ_eigen_sys = ArnoldiSolver(Upsilon,
+                                      sigma,
+                                      sigma_dag,
+                                      right_vec0,
+                                      arnoldi_params,
+                                      right_vec_multiple_transfer_tens<TenElemT, QNT>);
   //EVD for eigenvectors, and update the Upsilon_i, Gammas, and Lambdas
   TenT u_l, d_l, u_r, d_r;
   DTenT sqrt_dl, sqrt_dr, inv_sqrt_dl, inv_sqrt_dr;
-  SymMatEVD(&left_vec, &u_l, &d_l);
-  SymMatEVD(&right_vec, &u_r, &d_r);
+  SymMatEVD(&left_eigen_sys.right_eig_vec, &u_l, &d_l);
+  SymMatEVD(&righ_eigen_sys.right_eig_vec, &u_r, &d_r);
+  FixSignForDiagMat(d_l);
+  FixSignForDiagMat(d_r);
+  d_l.Normalize();
+  d_r.Normalize();
   sqrt_dl = QuasiSquareRootDiagMat(d_l);
   sqrt_dr = QuasiSquareRootDiagMat(d_r);
 
