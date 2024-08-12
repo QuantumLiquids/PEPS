@@ -490,7 +490,8 @@ void WeightedTraceGaugeFixing(
     left_vec0({j, j}) = 1.0;
     right_vec0({j, j}) = 1.0;
   }
-  double upsilon_norm = Upsilon.Normalize();
+//  double upsilon_norm = Upsilon.Normalize();
+// Normalizing Upsilon induce incorrect result. I don't know why.
   auto left_eigen_sys = ArnoldiSolver(Upsilon,
                                       sigma,
                                       sigma_dag,
