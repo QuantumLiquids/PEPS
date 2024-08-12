@@ -36,8 +36,8 @@ void RunTestArnoldiSolver(
                                params,
                                left_vec_multiple_transfer_tens<TenElemT, QNT>);
 
-  auto multipled_left_vec = left_vec_multiple_transfer_tens(eig_res.right_eig_vec, sigma, sigma_dag, Upsilon);
-  auto multipled_left_vec2 = eig_res.eigenvalue * eig_res.right_eig_vec;
+  auto multipled_left_vec = left_vec_multiple_transfer_tens(eig_res.eig_vec, sigma, sigma_dag, Upsilon);
+  auto multipled_left_vec2 = eig_res.eigenvalue * eig_res.eig_vec;
   TenT diff = multipled_left_vec + (-multipled_left_vec2);
   EXPECT_TRUE(diff.Get2Norm() / multipled_left_vec.Get2Norm() < 1e-10);
 
@@ -48,8 +48,8 @@ void RunTestArnoldiSolver(
                           params,
                           right_vec_multiple_transfer_tens<TenElemT, QNT>);
 
-  auto multipled_right_vec = right_vec_multiple_transfer_tens(eig_res.right_eig_vec, sigma, sigma_dag, Upsilon);
-  auto multipled_right_vec2 = eig_res.eigenvalue * eig_res.right_eig_vec;
+  auto multipled_right_vec = right_vec_multiple_transfer_tens(eig_res.eig_vec, sigma, sigma_dag, Upsilon);
+  auto multipled_right_vec2 = eig_res.eigenvalue * eig_res.eig_vec;
   diff = multipled_right_vec + (-multipled_right_vec2);
   EXPECT_TRUE(diff.Get2Norm() / multipled_right_vec.Get2Norm() < 1e-10);
 }

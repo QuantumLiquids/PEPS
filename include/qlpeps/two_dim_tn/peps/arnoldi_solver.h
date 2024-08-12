@@ -25,8 +25,7 @@ using ArnoldiParams = qlmps::LanczosParams;
 template<typename TenElemT, typename QNT>
 struct ArnoldiRes {
   TenElemT eigenvalue;
-  QLTensor<TenElemT, QNT> right_eig_vec;
-  QLTensor<TenElemT, QNT> left_eig_vec;
+  QLTensor<TenElemT, QNT> eig_vec;
 };
 
 template<typename TenElemT, typename QNT>
@@ -46,7 +45,7 @@ using TransfTenMultiVec = std::function<QLTensor<TenElemT, QNT>(
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> left_vec_multiple_transfer_tens(
     const QLTensor<TenElemT, QNT> &left_vec,
-    const QLTensor<QLTEN_Double , QNT> &sigma,
+    const QLTensor<QLTEN_Double, QNT> &sigma,
     const QLTensor<QLTEN_Double, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &Upsilon
 ) {
@@ -186,7 +185,7 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
 template<typename TenElemT, typename QNT>
 ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
     const QLTensor<TenElemT, QNT> &Upsilon,
-    const QLTensor<QLTEN_Double , QNT> &sigma,
+    const QLTensor<QLTEN_Double, QNT> &sigma,
     const QLTensor<QLTEN_Double, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &vec0,
     const ArnoldiParams &params,
@@ -227,11 +226,10 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
 //    &&(eigenvalue_last.has_value() &&
 //            std::abs((eigen_solution.eigen_value - eigenvalue_last.value()) / eigenvalue_last.value()) < params.error
 //            || k == max_iter - 1)
-            ) {
+        ) {
       ArnoldiRes<TenElemT, QNT> res;
       res.eigenvalue = eigen_solution.eigen_value;
-      LinearCombine(k, eigen_solution.right_eigen_vec.data(), bases, TenElemT(0.0), &res.right_eig_vec);
-      LinearCombine(k, eigen_solution.left_eigen_vec.data(), bases_dag, TenElemT(0.0), &res.left_eig_vec);
+      LinearCombine(k, eigen_solution.right_eigen_vec.data(), bases, TenElemT(0.0), &res.eig_vec);
       for (size_t i = 0; i < k + 1; i++) {
         delete bases[i];
         delete bases_dag[i];

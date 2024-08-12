@@ -391,33 +391,97 @@ void FixSignForDiagMat(
 }
 
 template<typename TenElemT, typename QNT>
+bool CheckHermiticity(
+    const QLTensor<TenElemT, QNT> &mat,
+    const double tolerance,
+    const std::vector<size_t> trans_axes = {1, 0}
+) {
+  auto mat_dag = Dag(mat);
+  mat_dag.Transpose(trans_axes);
+  auto diff_ten = mat_dag + (-mat);
+  double diff = diff_ten.Get2Norm();
+  assert((diff / mat.Get2Norm() < tolerance));
+  return (diff / mat.Get2Norm() < tolerance);
+}
+
+template<typename TenElemT, typename QNT>
+void SymmetrizeMat(
+    QLTensor<TenElemT, QNT> &mat,
+    const std::vector<size_t> trans_axes = {1, 0}
+) {
+  auto mat_dag = Dag(mat);
+  mat_dag.Transpose(trans_axes);
+  mat_dag = (mat_dag + mat) * 0.5;
+}
+
+template<typename TenElemT, typename QNT>
+ArnoldiRes<TenElemT, QNT> PowerMethod(
+    const QLTensor<TenElemT, QNT> &Upsilon,
+    const QLTensor<QLTEN_Double, QNT> &sigma,
+    const QLTensor<QLTEN_Double, QNT> &sigma_dag,
+    const QLTensor<TenElemT, QNT> &vec0,
+    TransfTenMultiVec<TenElemT, QNT> transfer_tens_multiple_vec
+) {
+  const size_t iter_max = 100;
+  const double iter_tol = 1e-15;
+  double eigen_value_last = 0;
+  size_t iter;
+  QLTensor<TenElemT, QNT> vec = vec0;
+  vec.Normalize();
+  auto vec_last_dag = Dag(vec);
+  for (iter = 0; iter < iter_max; iter++) {
+    vec = transfer_tens_multiple_vec(vec, sigma, sigma_dag, Upsilon);
+    double eigen_value = vec.Normalize();
+    if (iter > 5 && std::abs((eigen_value - eigen_value_last) / eigen_value) < iter_tol) {
+      QLTensor<TenElemT, QNT> overlap_ten;
+      Contract(&vec_last_dag, {0, 1}, &vec, {0, 1}, &overlap_ten);
+      if (std::abs(overlap_ten() - 1.0) < iter_tol)
+        return {eigen_value, vec};
+    }
+    eigen_value_last = eigen_value;
+    vec_last_dag = Dag(vec);
+  }
+  std::cout << "Left dominant eigenvector solver doesn't converge" << std::endl;
+  return {eigen_value_last, vec};
+}
+
+/**
+ * Gauge fixing in weighted trace gauge
+ *
+ * The order of the tensor indices and connection way :
+ *
+ * |-1-0-sigma^dag-1--1---------3
+ * |                      |
+ * L                   Upsilon
+ * |                      |
+ * |-0-0-sigma-1-----0----------2
+ *
+ * 1----------3----0-sigma^dag-1---1---
+ *       |                            |
+ *    Upsilon                         R
+ *       |                            |
+ * 0----------2----0-sigma-1-------0--|
+ *
+ */
+template<typename TenElemT, typename QNT>
 void WeightedTraceGaugeFixing(
     const ArnoldiParams &arnoldi_params,
+    const double inv_tol,
     QLTensor<TenElemT, QNT> &Upsilon,
     QLTensor<QLTEN_Double, QNT> &sigma,
     QLTensor<TenElemT, QNT> &gamma_head,
     QLTensor<TenElemT, QNT> &gamma_tail
 ) {
+//#ifndef NDEBUG
+//  assert(CheckHermiticity(Upsilon, kDoubleEpsilon, {1, 0, 3, 2}));
+//#endif
+
   const auto qn0 = sigma.Div();
   using TenT = QLTensor<TenElemT, QNT>;
   using DTenT = QLTensor<QLTEN_Double, QNT>;
 
   DTenT sigma_dag = Dag(sigma);
   //calculate the left/right eigen vectors
-  /**
-   *
-   * |-1-0-sigma^dag-1--1---------3
-   * |                      |
-   * L                   Upsilon
-   * |                      |
-   * |-0-0-sigma-1-----0----------2
-   *
-   * 1----------3----0-sigma^dag-1---1---
-   *       |                            |
-   *    Upsilon                         R
-   *       |                            |
-   * 0----------2----0-sigma-1-------0--|
-   */
   const Index<QNT> index0 = InverseIndex(sigma.GetIndex(0));
   const Index<QNT> index1 = sigma.GetIndex(0);
   TenT left_vec0 = TenT({index0, index1});
@@ -433,17 +497,33 @@ void WeightedTraceGaugeFixing(
                                       left_vec0,
                                       arnoldi_params,
                                       left_vec_multiple_transfer_tens<TenElemT, QNT>);
-  auto righ_eigen_sys = ArnoldiSolver(Upsilon,
-                                      sigma,
-                                      sigma_dag,
-                                      right_vec0,
-                                      arnoldi_params,
-                                      right_vec_multiple_transfer_tens<TenElemT, QNT>);
+
+  SymmetrizeMat(left_eigen_sys.eig_vec);
+  left_eigen_sys = PowerMethod(Upsilon,
+                               sigma,
+                               sigma_dag,
+                               left_eigen_sys.eig_vec,
+                               left_vec_multiple_transfer_tens<TenElemT, QNT>);
+
+  auto right_eigen_sys = ArnoldiSolver(Upsilon,
+                                       sigma,
+                                       sigma_dag,
+                                       right_vec0,
+                                       arnoldi_params,
+                                       right_vec_multiple_transfer_tens<TenElemT, QNT>);
+
+  SymmetrizeMat(right_eigen_sys.eig_vec);
+  right_eigen_sys = PowerMethod(Upsilon,
+                                sigma,
+                                sigma_dag,
+                                right_eigen_sys.eig_vec,
+                                right_vec_multiple_transfer_tens<TenElemT, QNT>);
+
   //EVD for eigenvectors, and update the Upsilon_i, Gammas, and Lambdas
   TenT u_l, d_l, u_r, d_r;
   DTenT sqrt_dl, sqrt_dr, inv_sqrt_dl, inv_sqrt_dr;
-  SymMatEVD(&left_eigen_sys.right_eig_vec, &u_l, &d_l);
-  SymMatEVD(&righ_eigen_sys.right_eig_vec, &u_r, &d_r);
+  SymMatEVD(&left_eigen_sys.eig_vec, &u_l, &d_l);
+  SymMatEVD(&right_eigen_sys.eig_vec, &u_r, &d_r);
   FixSignForDiagMat(d_l);
   FixSignForDiagMat(d_r);
   d_l.Normalize();
@@ -451,8 +531,8 @@ void WeightedTraceGaugeFixing(
   sqrt_dl = QuasiSquareRootDiagMat(d_l);
   sqrt_dr = QuasiSquareRootDiagMat(d_r);
 
-  inv_sqrt_dl = ElementWiseInv(sqrt_dl, 1e-200);
-  inv_sqrt_dr = ElementWiseInv(sqrt_dr, 1e-200);
+  inv_sqrt_dl = ElementWiseInv(sqrt_dl, inv_tol);
+  inv_sqrt_dr = ElementWiseInv(sqrt_dr, inv_tol);
   TenT ul_dag = Dag(u_l);
   TenT ur_dag = Dag(u_r);
 
@@ -480,7 +560,9 @@ void WeightedTraceGaugeFixing(
   TenT x_inv_dag = Dag(x_inv);
   Contract(&Upsilon, {2}, &x_inv, {0}, &tmp1);
   Contract(&tmp1, {2}, &x_inv_dag, {0}, &tmp2);
-
+//#ifndef NDEBUG
+//  CheckHermiticity(tmp2, 1e-9, {1, 0, 3, 2});
+//#endif
   TenT y_inv, tmp3;
   tmp0 = TenT();
   tmp1 = TenT();
@@ -491,7 +573,9 @@ void WeightedTraceGaugeFixing(
   Upsilon = TenT();
   Contract(&y_inv_dag, {1}, &tmp3, {1}, &Upsilon);
   Upsilon.Transpose({1, 0, 2, 3});
-
+//#ifndef NDEBUG
+//  assert(CheckHermiticity(Upsilon, 1e-8, {1, 0, 3, 2}));
+//#endif
   tmp0 = TenT();
   tmp1 = TenT();
   Contract(&gamma_tail, {4}, &x_inv, {0}, &tmp0);
@@ -542,7 +626,8 @@ void WeightedTraceGaugeFixingInSquareLocalLoop(
   }
 
   for (size_t i = 0; i < 4; i++) {
-    WeightedTraceGaugeFixing(arnoldi_params, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
+    WeightedTraceGaugeFixing(arnoldi_params,
+                             1e-7, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
   }
 
 #ifndef NDEBUG
@@ -649,7 +734,8 @@ double diag_mat_diff(const QLTensor<QLTEN_Double, QNT> &sigma1,
  *  @return u, v^dag, and sigma
  */
 template<typename TenElemT, typename QNT>
-std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTruncate(
+std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>>
+FullEnvironmentTruncate(
     const QLTensor<TenElemT, QNT> &Upsilon,
     QLTensor<QLTEN_Double, QNT> &sigma, //input & output
     const FullEnvironmentTruncateParams &trunc_params
@@ -711,6 +797,21 @@ std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>> FullEnvironmentTrunc
     Contract(tmp + 2, {2}, &v, {0}, &B_ten);
     B_ten.Transpose({0, 2, 1, 3});
     b_ten_mat = BtenMatT(B_ten);
+#ifndef NDEBUG
+//    auto Upsilon_dag = Dag(Upsilon);
+//    auto Upsilon_trans = Upsilon;
+//    Upsilon_trans.Transpose({1, 0, 3, 2});
+//    auto diff_ten = Upsilon_dag + (-Upsilon_trans);
+//    double diff_norm = diff_ten.Get2Norm();
+//    assert(diff_norm < 1e-8);
+//
+//    auto B_ten_dag = Dag(B_ten);
+//    auto B_ten_trans = B_ten;
+//    B_ten_trans.Transpose({2, 3, 0, 1});
+//    diff_ten = B_ten_dag + (-B_ten_trans);
+//    diff_norm = diff_ten.Get2Norm();
+//    assert(diff_norm < 1e-10);
+#endif
 
     Contract(&sigma, {1}, &u, {0}, &L_ten_init);
     L_ten_init.Transpose({1, 0});

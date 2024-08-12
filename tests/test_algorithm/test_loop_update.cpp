@@ -575,7 +575,7 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
   DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
   DQLTensor dham_hei_tri;
 
-  double tau0 = 0.3;
+  double tau0 = 0.1;
   double tau1 = 0.01;
   double tau2 = 0.001;
   // ED ground state energy = -7.709643309360509
@@ -748,7 +748,7 @@ TEST_F(TriangleHeisenbergLoopUpdate, Heisenberg) {
   //simple update, in boundary the setting of hamiltonian has edge errors
   SimpleUpdateExecutor<QLTEN_Double, U1QN>
       *su_exe1 =
-      new TriangleNNModelSquarePEPSSimpleUpdateExecutor<QLTEN_Double, U1QN>(SimpleUpdatePara(200, 0.1, 1, 4, 1e-10),
+      new TriangleNNModelSquarePEPSSimpleUpdateExecutor<QLTEN_Double, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-10),
                                                                             peps0,
                                                                             dham_hei_nn,
                                                                             dham_hei_tri);
@@ -757,10 +757,10 @@ TEST_F(TriangleHeisenbergLoopUpdate, Heisenberg) {
   delete su_exe1;
   peps1.NormalizeAllTensor();
   //loop update
-  ArnoldiParams arnoldi_params(1e-7, 100);
+  ArnoldiParams arnoldi_params(1e-9 * tau0, 300);
   double fet_tol = 1e-12;
   double fet_max_iter = 30;
-  ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
+  ConjugateGradientParams cg_params(100, 1e-8, 20, 0.0);
 
   FullEnvironmentTruncateParams fet_params(1, 4, 1e-10,
                                            fet_tol, fet_max_iter,
@@ -769,7 +769,7 @@ TEST_F(TriangleHeisenbergLoopUpdate, Heisenberg) {
   auto *loop_exe = new LoopUpdateExecutor<QLTEN_Double, U1QN>(LoopUpdateTruncatePara(
                                                                   arnoldi_params,
                                                                   fet_params),
-                                                              200,
+                                                              100,
                                                               tau0,
                                                               evolve_gates0,
                                                               peps1);
