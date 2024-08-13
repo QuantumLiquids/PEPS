@@ -52,8 +52,8 @@ QLTensor<TenElemT, QNT> left_vec_multiple_transfer_tens(
   using TenT = QLTensor<TenElemT, QNT>;
   TenT tmp, tmp1, res;
   Contract(&left_vec, {1}, &sigma_dag, {0}, &tmp);
-  Contract(&sigma, {0}, &tmp, {0}, &tmp1);
-  Contract(&tmp1, {0, 1}, &Upsilon, {0, 1}, &res);
+  Contract<TenElemT, QNT, false, true>(sigma, tmp, 0, 0, 1, tmp1);
+  Contract<TenElemT, QNT, true, false>(tmp1, Upsilon, 0, 0, 2, res);
   return res;
 }
 
@@ -74,7 +74,7 @@ QLTensor<TenElemT, QNT> right_vec_multiple_transfer_tens(
   using TenT = QLTensor<TenElemT, QNT>;
   TenT tmp, tmp1, res;
   Contract(&sigma, {1}, &right_vec, {0}, &tmp);
-  Contract(&tmp, {1}, &sigma_dag, {1}, &tmp1);
+  Contract<TenElemT, QNT, true, false>(tmp, sigma_dag, 1, 1, 1, tmp1);
   Contract(&Upsilon, {2, 3}, &tmp1, {0, 1}, &res);
   return res;
 }

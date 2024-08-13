@@ -64,19 +64,40 @@ double LoopUpdateExecutor<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &s
 template<typename TenElemT, typename QNT>
 double LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateSweep_(void) {
   Timer loop_update_sweep_timer("loop_update_sweep");
-  double norm;
+
   double e0 = 0.0;
 
-  for (size_t col = 0; col < this->lx_ - 1; col++) {
-    for (size_t row = 0; row < this->ly_ - 1; row++) {
-      if (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1)) {
-        norm = UpdateOneLoop({row, col}, truncate_para_, true);
-      } else {
-        norm = UpdateOneLoop({row, col}, truncate_para_, false);
+  if (omp_get_thread_num() == 1) {
+    for (size_t col = 0; col < this->lx_ - 1; col++) {
+      for (size_t row = 0; row < this->ly_ - 1; row++) {
+        double norm;
+        if (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1)) {
+          norm = UpdateOneLoop({row, col}, truncate_para_, true);
+        } else {
+          norm = UpdateOneLoop({row, col}, truncate_para_, false);
+        }
+        e0 += -std::log(norm) / tau_;
       }
-      e0 += -std::log(norm) / tau_;
     }
+  } else {
+    for (size_t start_col : {0, 1})
+      for (size_t start_row : {0, 1}) {
+#pragma omp parallel for collapse(2) reduction(+:e0) shared(evolve_gates_, truncate_para_)
+        for (size_t col = start_col; col < this->lx_ - 1; col += 2) {
+          for (size_t row = start_row; row < this->ly_ - 1; row += 2) {
+            double norm;
+            const LoopGatesT &gate = evolve_gates_({row, col});
+            if (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1)) {
+              norm = this->peps_.LocalSquareLoopProject(gate, {row, col}, truncate_para_, true);
+            } else {
+              norm = this->peps_.LocalSquareLoopProject(gate, {row, col}, truncate_para_, false);
+            }
+            e0 += -std::log(norm) / tau_;
+          }
+        }
+      }
   }
+
   double sweep_time = loop_update_sweep_timer.Elapsed();
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed

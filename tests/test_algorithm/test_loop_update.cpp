@@ -5,6 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Unittests for Loop Update in PEPS optimization.
 */
 
+#define PLAIN_TRANSPOSE 1
+
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
@@ -731,8 +733,9 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
   }
 };
 
-TEST_F(TriangleHeisenbergLoopUpdate, Heisenberg) {
+TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
+  omp_set_num_threads(4);
   //initial peps as direct product state
   SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));

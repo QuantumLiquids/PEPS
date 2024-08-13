@@ -227,19 +227,6 @@ class SquareLatticePEPS {
       const SiteIdx &upper_left_site
   );
 
-//  void WeightedTraceGaugeFixingInSquareLocalLoop_(
-//      const ArnoldiParams &arnoldi_params,
-//      std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
-//      std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
-//      std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
-//  ) const;
-
-  void FullEnvironmentTruncateInSquareLocalLoop_(
-      const FullEnvironmentTruncateParams &trunc_params,
-      std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
-      std::array<QLTensor<TenElemT, QNT>, 4> &lambdas,
-      const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons
-  ) const;
   static const QNT qn0_;
 
   size_t rows_; // Number of rows in the SquareLatticePEPS
