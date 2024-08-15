@@ -38,7 +38,7 @@ LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateExecutor(const LoopUpdateTruncatePa
   std::cout << std::setw(40) << "Trotter step : " << tau << "\n";
 
   std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
-  std::cout << std::setw(40) << "The number of threads per processor : " << hp_numeric::GetTensorManipulationThreads()
+  std::cout << std::setw(40) << "The number of threads per processor : " << omp_get_thread_num()
             << "\n";
   SetStatus(qlten::INITED);
 }

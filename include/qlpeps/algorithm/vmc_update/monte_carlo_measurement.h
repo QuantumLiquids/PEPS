@@ -180,6 +180,8 @@ class MonteCarloMeasurementExecutor : public Executor {
 
   void WarmUp_(void);
 
+  void InitConfigs_(const std::string &path);
+
   void MeasureSample_(void);
 
   void GatherStatistic_(void);
@@ -307,7 +309,8 @@ MonteCarloMeasurementExecutor<TenElemT,
     measurement_solver_(solver) {
   WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
   random_engine.seed(std::random_device{}() + world.rank() * 10086);
-  LoadTenData();
+  LoadTenData(optimize_para.wavefunction_path);
+  InitConfigs_(optimize_para.wavefunction_path);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -331,7 +334,7 @@ MonteCarloMeasurementExecutor<TenElemT,
     measurement_solver_(solver) {
   WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
   random_engine.seed(std::random_device{}() + world.rank() * 10086);
-  tps_sample_ = WaveFunctionComponentType(sitpst, optimize_para.init_config);
+  InitConfigs_(optimize_para.wavefunction_path);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -537,8 +540,15 @@ void MonteCarloMeasurementExecutor<TenElemT,
     std::cout << "Loading TPS files fails." << std::endl;
     exit(-1);
   }
+}
+
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT,
+                                   QNT,
+                                   WaveFunctionComponentType,
+                                   MeasurementSolver>::InitConfigs_(const std::string &path) {
   Configuration config(ly_, lx_);
-  bool load_config = config.Load(tps_path, world_.rank());
+  bool load_config = config.Load(path, world_.rank());
   if (load_config) {
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
   } else {

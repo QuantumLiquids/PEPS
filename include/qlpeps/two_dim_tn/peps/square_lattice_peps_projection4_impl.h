@@ -433,7 +433,7 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
     eigen_value_last = eigen_value;
     vec_last_dag = Dag(vec);
   }
-  std::cout << "Left dominant eigenvector solver doesn't converge" << std::endl;
+  std::cout << "dominant eigenvector solver in power method doesn't converge" << std::endl;
   return {eigen_value_last, vec};
 }
 
