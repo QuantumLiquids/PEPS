@@ -128,7 +128,7 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
       Gamma(r_site) = TenT();
       Contract<TenElemT, QNT, false, false>(tmp_ten[6], vt, 0, 1, 1, Gamma(r_site));
       Gamma(r_site).Transpose({4, 0, 1, 2, 3});
-      norm = lambda_horiz(row, col + 1)->Normalize();
+      norm = lambda_horiz(row, col + 1)->QuasiNormalize();
       break;
     }
     case VERTICAL: {
@@ -187,7 +187,7 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
       Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({row + 1, col}));
       Gamma({row + 1, col}).Transpose({2, 1, 0, 4, 3});
 
-      norm = lambda_vert(row + 1, col)->Normalize();
+      norm = lambda_vert(row + 1, col)->QuasiNormalize();
       break;
     }
     default: {

@@ -84,13 +84,13 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
     Contract(&taylor_terms.back(), ctrct_axes1, &ham_scale, ctrct_axes2, &tmp);
     tmp *= 1.0 / double(n);
     taylor_terms.emplace_back(tmp);
-    if (tmp.Get2Norm() < kDoubleEpsilon) {
+    if (tmp.GetQuasi2Norm() < kDoubleEpsilon) {
       std::cout << "calculate the evolution gate taylor series order: " << n << std::endl;
       break;
     }
     if (n == kMaxTaylorExpansionOrder - 1) {
       std::cout << "warning: taylor expansions for evolution gate do not converge "
-                << "with precision: " << tmp.Get2Norm() << "." << std::endl;
+                << "with precision: " << tmp.GetQuasi2Norm() << "." << std::endl;
     }
   }
   Tensor expH = taylor_terms[0];

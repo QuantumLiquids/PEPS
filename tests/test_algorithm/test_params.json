@@ -3,6 +3,8 @@
     "Ly": 4,
     "Lx": 4,
     "D": 4,
+    "Tau0": 0.1,
+    "Steps": 100,
     "Dbmps_min": 4,
     "Dbmps_max": 4,
     "MC_samples": 100,

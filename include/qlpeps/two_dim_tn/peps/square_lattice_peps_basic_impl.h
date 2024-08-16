@@ -71,31 +71,135 @@ template<typename TenElemT, typename QNT>
 SquareLatticePEPS<TenElemT, QNT>::SquareLatticePEPS(const Index<QNT> &local_hilbert_space, size_t rows, size_t cols)
     : SquareLatticePEPS(GenerateHilbertSpace(rows, cols, local_hilbert_space)) {}
 
-///< activates has the same size with the SquareLatticePEPS
+/**
+ * Initial PEPS as a direct product state, according to activates configuration
+ *
+ * @param activates represent the direct product state; should has the same size with the PEPS
+ *
+ * @return
+ * The gamma tensors are all assumed have the following index directions:
+ *
+ *          3
+ *          |
+ *          ↑
+ *          |
+ *  0-->--Gamma-->--2
+ *          |
+ *          ↓
+ *          |
+ *          1
+ *
+ *  and physical index 4 points out.
+ *
+ *  Every gamma tensor has Div==0, except the most right-lower one.
+ *  All the external virtual indices of the PEPS, has dimension 1, and QN=0 (qn0)
+ *
+ */
 template<typename TenElemT, typename QNT>
 void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> &activates) {
+  Index<QNT> index0_in({QNSector(qn0_, 1)}, IN), index0_out({QNSector(qn0_, 1)}, OUT);
+  // The lambda tensors surrounding the PEPS
+  DTensor surrounding_lam = DTensor({index0_in, index0_out});
+  surrounding_lam({0, 0}) = 1.0;
+  // upper vertical lambda
+  for (size_t col = 0; col < cols_; col++) {
+    const size_t row = 0;
+    lambda_vert({row, col}) = surrounding_lam;
+  }
+
+  //lower vertical lambda
+  for (size_t col = 0; col < cols_; col++) {
+    const size_t row = this->rows_;
+    lambda_vert({row, col}) = surrounding_lam;
+  }
+
+  //left horizontal lambda
   for (size_t row = 0; row < rows_; row++) {
+    const size_t col = 0;
+    lambda_horiz({row, col}) = surrounding_lam;
+  }
+  //right horizontal lambda
+  for (size_t row = 0; row < rows_ - 1; row++) {
+    const size_t col = this->cols_;
+    lambda_horiz({row, col}) = surrounding_lam;
+  }
+
+  //horizontal lambda except the last row are also set as trivial
+  for (size_t row = 0; row < rows_ - 1; row++) {
     for (size_t col = 0; col < cols_; col++) {
-      TenT &the_gamma = Gamma({row, col});
-      the_gamma({0, 0, 0, 0, activates[row][col]}) = 1.0;
+      lambda_horiz({row, col}) = surrounding_lam;
     }
   }
 
-  for (size_t row = 0; row < lambda_vert.rows(); row++) {
-    for (size_t col = 0; col < lambda_vert.cols(); col++) {
-      auto &the_lambda = lambda_vert({row, col});
-      if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
-        the_lambda({0, 0}) = 1.0;
-      }
-    }
+  // row = 0
+  for (size_t col = 0; col < cols_; col++) {
+    const size_t row = 0;
+    Index<QNT> index0 = lambda_horiz({row, col}).GetIndex(0);
+    Index<QNT> index2 = index0_out;
+    Index<QNT> index3 = lambda_vert({row, col}).GetIndex(0);
+    Index<QNT> phy_idx = Gamma({row, col}).GetIndex(4);
+    QNT index1_qn = index0.GetQNSct(0).GetQn()  // in
+        + index3.GetQNSct(0).GetQn()        //in
+        - index2.GetQNSct(0).GetQn()      //out
+        - phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+    Index<QNT> index1({QNSector(index1_qn, 1)}, OUT);
+    Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
+    Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;
+    //lambda_horiz tensors in first row have been set.
   }
 
-  for (size_t row = 0; row < lambda_horiz.rows(); row++) {
-    for (size_t col = 0; col < lambda_horiz.cols(); col++) {
-      auto &the_lambda = lambda_horiz({row, col});
-      if (the_lambda.GetBlkSparDataTen().GetActualRawDataSize() == 0) {
-        the_lambda({0, 0}) = 1.0;
-      }
+  for (size_t row = 1; row < rows_ - 1; row++) {
+    // set a layer of lambda_vert
+    for (size_t col = 0; col < cols_; col++) {
+      lambda_vert({row, col}) = DTensor({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
+                                      Gamma({row - 1, col}).GetIndex(1)});
+      lambda_vert({row, col})({0, 0}) = 1.0;
+    }
+    //set a layer of gamma tensors
+    for (size_t col = 0; col < cols_; col++) {
+      Index<QNT> index0 = lambda_horiz({row, col}).GetIndex(0);
+      Index<QNT> index2 = index0_out;
+      Index<QNT> index3 = lambda_vert({row, col}).GetIndex(0);
+      Index<QNT> phy_idx = Gamma({row, col}).GetIndex(4);
+      QNT index1_qn = index0.GetQNSct(0).GetQn()  // in
+          + index3.GetQNSct(0).GetQn()        //in
+          - index2.GetQNSct(0).GetQn()      //out
+          - phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+      Index<QNT> index1({QNSector(index1_qn, 1)}, OUT);
+      Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
+      Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;
+    }
+    //use the default lambda_horiz tensors in these layers
+  }
+
+  for (size_t col = 0; col < cols_; col++) {
+    const size_t row = rows_ - 1;
+    lambda_vert({row, col}) = DTensor({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
+                                    Gamma({row - 1, col}).GetIndex(1)});
+    lambda_vert({row, col})({0, 0}) = 1.0;
+  }
+
+  //last layer of gamma and horizontal lambda
+  for (size_t col = 0; col < cols_; col++) {
+    const size_t row = rows_ - 1;
+    Index<QNT> index0 = lambda_horiz({row, col}).GetIndex(0);
+    Index<QNT> index1 = lambda_vert({row + 1, col}).GetIndex(1);
+    Index<QNT> index3 = lambda_vert({row, col}).GetIndex(0);
+    Index<QNT> phy_idx = Gamma({row, col}).GetIndex(4);
+    QNT index2_qn = index0.GetQNSct(0).GetQn()  // in
+        + index3.GetQNSct(0).GetQn()        //in
+        - index1.GetQNSct(0).GetQn()      //out
+        - phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+    Index<QNT> index2({QNSector(index2_qn, 1)}, OUT);
+    Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
+    Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;
+
+    lambda_horiz({row, col + 1}) = DTensor({InverseIndex(index2), index2});
+    lambda_horiz({row, col + 1})({0, 0}) = 1.0;
+  }
+  if constexpr (Index<QNT>::IsFermionic()) {
+    if (lambda_horiz({rows_ - 1, cols_}).GetIndex(0).GetQNSct(0).GetQn().IsFermionParityOdd()) {
+      std::cout << "warning : the direct product PEPS as odd fermion parity!" << std::endl;
     }
   }
 }
