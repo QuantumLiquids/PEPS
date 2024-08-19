@@ -53,6 +53,7 @@ struct FullEnvironmentTruncateParams {
   size_t max_iter;
   ConjugateGradientParams cg_params;
 };
+
 struct LoopUpdateTruncatePara {
   LoopUpdateTruncatePara(const ArnoldiParams &arnoldi_params,
                          const FullEnvironmentTruncateParams &fet_params) :
@@ -62,6 +63,12 @@ struct LoopUpdateTruncatePara {
 
   //full environment truncation
   FullEnvironmentTruncateParams fet_params;
+};
+
+struct ProjectionRes {
+  double norm;      // normalization factor
+  double trunc_err; // actual truncation error
+  size_t D;         // actual bond dimension
 };
 
 /**
@@ -162,11 +169,20 @@ class SquareLatticePEPS {
   );
 
   ///< first two indexes of gate_ten are connected to PEPS's physical indexes
-  double NearestNeighborSiteProject(
+  ProjectionRes NearestNeighborSiteProject(
       const TenT &gate_ten,
       const SiteIdx &site,
       const BondOrientation &orientation,
       const SimpleUpdateTruncatePara &trunc_para
+  );
+
+  ProjectionRes NearestNeighborSiteProject(
+      const TenT &gate_ten,
+      const TenT &ham_ten,
+      const SiteIdx &site,
+      const BondOrientation &orientation,
+      const SimpleUpdateTruncatePara &trunc_para,
+      TenElemT &e_loc     // return the local energy
   );
 
   double NextNearestNeighborSiteProject(
@@ -176,16 +192,16 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &trunc_para
   );
 
-  double UpperLeftTriangleProject(
-      const TenT &gate_ten,
-      const SiteIdx &upper_left_site,
-      const SimpleUpdateTruncatePara &trunc_para
+  ProjectionRes UpperLeftTriangleProject(
+      const TenT &,
+      const SiteIdx &,
+      const SimpleUpdateTruncatePara &
   );
 
-  double LowerRightTriangleProject(
-      const TenT &gate_ten,
-      const SiteIdx &upper_right_site,
-      const SimpleUpdateTruncatePara &trunc_para
+  ProjectionRes LowerRightTriangleProject(
+      const TenT &,
+      const SiteIdx &,
+      const SimpleUpdateTruncatePara &tunc_para
   );
 
   double LowerLeftTriangleProject(

@@ -61,9 +61,9 @@ bool is_nan(const std::complex<double> &value) {
 }
 
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten, const SiteIdx &site,
-                                                                    const BondOrientation &orientation,
-                                                                    const SimpleUpdateTruncatePara &trunc_para) {
+ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten, const SiteIdx &site,
+                                                                           const BondOrientation &orientation,
+                                                                           const SimpleUpdateTruncatePara &trunc_para) {
   double norm;
   const size_t row = site[0], col = site[1];
   TenT tmp_ten[7];
@@ -174,7 +174,7 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
       SVD(tmp_ten + 4, 2, qn0_,
           trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
           &u, lambda_vert(row + 1, col), &vt,
-          &actual_trunc_err, &actual_D);\
+          &actual_trunc_err, &actual_D);
 
       // hand over lambdas from q0, q1, contract u or vt, setting Gammas
       tmp_ten[5] = QTenSplitOutLambdas_(q0, site, DOWN, trunc_para.trunc_err);
@@ -201,9 +201,19 @@ double SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &
     assert(!is_nan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
   }
 #endif
-  return norm;
+  return {norm, actual_trunc_err, actual_D};
 }
 
+template<typename TenElemT, typename QNT>
+ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten,
+                                                                           const TenT &ham_ten,
+                                                                           const SiteIdx &site,
+                                                                           const BondOrientation &orientation,
+                                                                           const SimpleUpdateTruncatePara &trunc_para,
+                                                                           TenElemT &e_loc) {
+  auto proj_res = NearestNeighborSiteProject(gate_ten, site, orientation, trunc_para);
+
+}
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const TenT &gate_ten,
                                                                         const qlpeps::SiteIdx &first_site,
@@ -266,9 +276,9 @@ double SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const Te
  * @return
  */
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
-                                                                  const SiteIdx &left_upper_site,
-                                                                  const SimpleUpdateTruncatePara &trunc_para) {
+ProjectionRes SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
+                                                                         const SiteIdx &left_upper_site,
+                                                                         const SimpleUpdateTruncatePara &trunc_para) {
 #ifndef NDEBUG
   auto physical_index = Gamma(left_upper_site).GetIndex(4);
 #endif
@@ -297,11 +307,11 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
   tmp_ten[5].Transpose({0, 4, 5, 1, 2, 6, 3});
   TenT u1, vt1, u2, vt2;
   DTensor s1, s2;
-  double trunc_err;
-  size_t D;
+  double trunc_err1, trunc_err2;
+  size_t D1, D2;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-             &u1, &s1, &vt1, &trunc_err, &D);
+             &u1, &s1, &vt1, &trunc_err1, &D1);
   norm *= s1.Normalize();
   lambda_vert({lower_site}) = s1;
   tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_site, UP, trunc_para.trunc_err);
@@ -311,7 +321,7 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
   Gamma(lower_site).Transpose({4, 3, 2, 0, 1});
   Contract(&u1, {5}, &s1, {0}, &tmp_ten[7]);
   qlten::SVD(tmp_ten + 7, 2, qn0_, trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-             &u2, &s2, &vt2, &trunc_err, &D);
+             &u2, &s2, &vt2, &trunc_err2, &D2);
 
   /**
  *       2
@@ -341,7 +351,7 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
   assert(physical_index == Gamma(right_site).GetIndex(4));
   assert(physical_index == Gamma(lower_site).GetIndex(4));
 #endif
-  return norm;
+  return {norm, trunc_err1 + trunc_err2, std::max(D1, D2)};
 }
 
 /**
@@ -363,9 +373,9 @@ double SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLa
  * @return
  */
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
-                                                                   const SiteIdx &upper_site,
-                                                                   const SimpleUpdateTruncatePara &trunc_para) {
+ProjectionRes SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
+                                                                          const SiteIdx &upper_site,
+                                                                          const SimpleUpdateTruncatePara &trunc_para) {
 #ifndef NDEBUG
   auto physical_index = Gamma(upper_site).GetIndex(4);
 #endif
@@ -393,11 +403,11 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareL
   tmp_ten[5].Transpose({6, 3, 0, 1, 5, 4, 2});
   TenT u1, vt1, u2, vt2;
   DTensor s1, s2;
-  double trunc_err;
-  size_t D;
+  double trunc_err1, trunc_err2;
+  size_t D1, D2;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-             &u1, &s1, &vt1, &trunc_err, &D);
+             &u1, &s1, &vt1, &trunc_err1, &D1);
   norm *= s1.Normalize();
   lambda_vert({right_down_site}) = s1;
   lambda_vert({right_down_site}).Transpose({1, 0});
@@ -408,7 +418,7 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareL
   Gamma(upper_site).Transpose({2, 3, 0, 1, 4});
   Contract(&u1, {5}, &s1, {0}, &tmp_ten[7]);
   qlten::SVD(tmp_ten + 7, 2, qn0_, trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-             &u2, &s2, &vt2, &trunc_err, &D);
+             &u2, &s2, &vt2, &trunc_err2, &D2);
   /**
    *       4
    *       |
@@ -435,7 +445,7 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareL
   assert(physical_index == Gamma(left_site).GetIndex(4));
   assert(physical_index == Gamma(right_down_site).GetIndex(4));
 #endif
-  return norm;
+  return {norm, trunc_err1 + trunc_err2, std::max(D1, D2)};
 }
 
 /**

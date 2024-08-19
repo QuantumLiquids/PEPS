@@ -169,7 +169,7 @@ TEST_F(SpinSystemSimpleUpdate, NNHeisenberg) {
   }
   peps0.Initial(activates);
 
-  SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
+  SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
 
   SimpleUpdateExecutor<QLTEN_Double, U1QN>
       *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,

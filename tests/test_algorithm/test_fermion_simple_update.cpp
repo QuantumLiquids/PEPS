@@ -143,7 +143,17 @@ TEST_F(Z2tJModelTools, tJModelHalfFilling) {
       *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
                                                                              dham_tj_nn);
   su_exe->Execute();
+  auto peps = su_exe->GetPEPS();
   delete su_exe;
+  for (auto gamma : peps.Gamma) {
+    EXPECT_EQ(gamma.GetQNBlkNum(), 1);
+  }
+  for (auto lam : peps.lambda_horiz) {
+    EXPECT_EQ(lam.GetQNBlkNum(), 1);
+  }
+  for (auto lam : peps.lambda_vert) {
+    EXPECT_EQ(lam.GetQNBlkNum(), 1);
+  }
 }
 
 int main(int argc, char *argv[]) {
