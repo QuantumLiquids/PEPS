@@ -14,6 +14,19 @@ namespace qlpeps {
 
 using namespace qlten;
 
+//helper
+std::vector<size_t> DuplicateElements(const std::vector<size_t> &input) {
+  std::vector<size_t> output;
+  output.reserve(input.size() * 2); // Reserve space for efficiency
+
+  for (size_t element : input) {
+    output.push_back(element);
+    output.push_back(element);
+  }
+
+  return output;
+}
+
 /**
  * Calculate the exp(-tau*H) with tau a small number by Taylor expansion
  *
@@ -64,15 +77,14 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
   }
   ham_scale.Transpose(transpose_axes);
   //generate the Identity tensor
-  Tensor id = Tensor(ham_scale.GetIndexes());
+  Tensor id = Tensor(ham.GetIndexes());
   ShapeT shape = ham_scale.GetShape();
   shape.erase(shape.begin() + N, shape.end());
   std::vector<CoorsT> all_coors = GenAllCoors(shape);
-  for (auto coor : all_coors) {
-    auto coor_copy = coor;
-    coor.insert(coor.end(), coor_copy.begin(), coor_copy.end());
-    id(coor) = 1.0;
+  for (const auto &coor : all_coors) {
+    id(DuplicateElements(coor)) = 1.0;
   }
+  id.Transpose(transpose_axes);
 
   std::vector<Tensor> taylor_terms = {id, ham_scale};
   taylor_terms.reserve(kMaxTaylorExpansionOrder);

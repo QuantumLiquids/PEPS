@@ -50,6 +50,7 @@ struct Z2tJModelTools : public testing::Test {
   size_t Ly = params.Ly;
   double t = 1.0;
   double J = 0.3;
+  double doping = 0.125;
   fZ2QN qn0 = fZ2QN(0);
   IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
                           QNSctT(fZ2QN(0), 1)}, // |0> empty state
@@ -154,6 +155,37 @@ TEST_F(Z2tJModelTools, tJModelHalfFilling) {
   for (auto lam : peps.lambda_vert) {
     EXPECT_EQ(lam.GetQNBlkNum(), 1);
   }
+}
+
+TEST_F(Z2tJModelTools, tJModelDoping) {
+  // ED ground state energy in 4x4 -6.65535490684301
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
+
+  std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
+  //half-filling
+  size_t site_idx = 0, sz_int = 0;
+  size_t sites_per_hole = (size_t) (1.0 / doping);
+  for (size_t y = 0; y < Ly; y++) {
+    for (size_t x = 0; x < Lx; x++) {
+      if (site_idx % sites_per_hole == 1) {
+        activates[y][x] = 2;
+      } else {
+        activates[y][x] = sz_int % 2;
+        sz_int++;
+      }
+      site_idx++;
+    }
+  }
+  peps0.Initial(activates);
+
+  SimpleUpdatePara update_para(params.Steps, params.Tau0, 1, params.D, 1e-10);
+  SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
+                                                                             dham_tj_nn);
+  su_exe->Execute();
+  auto peps = su_exe->GetPEPS();
+  delete su_exe;
 }
 
 int main(int argc, char *argv[]) {
