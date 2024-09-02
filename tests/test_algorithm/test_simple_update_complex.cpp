@@ -12,8 +12,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
-#include "qlpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
-#include "qlpeps/algorithm/simple_update/triangle_nn_on_sqr_peps_simple_update.h"
+#include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 
 using namespace qlten;
 using namespace qlpeps;

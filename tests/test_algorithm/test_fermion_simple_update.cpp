@@ -7,11 +7,13 @@
 * Description: QuantumLiquids/PEPS project. Unittests for PEPS Simple Update in Fermionic model.
 */
 
+#define PLAIN_TRANSPOSE 1
+
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
-#include "qlpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
-#include "qlpeps/algorithm/simple_update/triangle_nn_on_sqr_peps_simple_update.h"
+#include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
+#include "qlpeps/algorithm/loop_update/loop_update.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -80,6 +82,17 @@ struct Z2tJModelTools : public testing::Test {
   DTensor dham_tj_nn = DTensor({pb_in, pb_out, pb_in, pb_out});
   ZTensor zham_tj_nn = ZTensor({pb_in, pb_out, pb_in, pb_out});
 
+  // loop update data
+  IndexT vb_out = IndexT({QNSctT(fZ2QN(0), 4),
+                          QNSctT(fZ2QN(1), 4)},
+                         TenIndexDirType::OUT
+  );
+  IndexT vb_in = InverseIndex(vb_out);
+
+  double loop_tau = 0.01;
+  using LoopGateT = LoopGates<DTensor>;
+  DuoMatrix<LoopGateT> evolve_gates = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
+
   void SetUp(void) {
     //set up basic operators
     df({0, 0}) = -1;
@@ -121,6 +134,96 @@ struct Z2tJModelTools : public testing::Test {
     dham_tj_nn({1, 0, 0, 1}) = 0.5 * J;
 
     zham_tj_nn = ToComplex(dham_tj_nn);
+
+    GenerateSquaretJAllEvolveGates(loop_tau, evolve_gates);
+  }
+
+  void GenerateSquaretJAllEvolveGates(
+      const double tau, // imaginary time
+      DuoMatrix<LoopGateT> &evolve_gates //output
+  ) {
+    //corner
+    evolve_gates({0, 0}) = GenerateSquaretJLoopGates(tau,
+                                                     1, 2, 2, 1);
+    evolve_gates({0, Lx - 2}) = GenerateSquaretJLoopGates(tau,
+                                                          1, 1, 2, 2);
+    evolve_gates({Ly - 2, 0}) = GenerateSquaretJLoopGates(tau,
+                                                          2, 2, 1, 1);
+    evolve_gates({Ly - 2, Lx - 2}) = GenerateSquaretJLoopGates(tau,
+                                                               2, 1, 1, 2);
+
+    auto gates_upper = GenerateSquaretJLoopGates(tau,
+                                                 1, 2, 2, 2);
+    auto gates_lower = GenerateSquaretJLoopGates(tau,
+                                                 2, 2, 1, 2);
+    for (size_t col = 1; col < Lx - 2; col++) {
+      evolve_gates({0, col}) = gates_upper;
+      evolve_gates({Ly - 2, col}) = gates_lower;
+    }
+
+    auto gates_left = GenerateSquaretJLoopGates(tau,
+                                                2, 2, 2, 1);
+    auto gates_middle = GenerateSquaretJLoopGates(tau,
+                                                  2, 2, 2, 2);
+    auto gates_right = GenerateSquaretJLoopGates(tau,
+                                                 2, 1, 2, 2);
+    for (size_t row = 1; row < Ly - 2; row++) {
+      evolve_gates({row, 0}) = gates_left;
+      evolve_gates({row, Lx - 2}) = gates_right;
+    }
+    for (size_t col = 1; col < Lx - 2; col++) {
+      for (size_t row = 1; row < Ly - 2; row++) {
+        evolve_gates({row, col}) = gates_middle;
+      }
+    }
+  }
+
+  LoopGateT GenerateSquaretJLoopGates(
+      const double tau, // imaginary time
+      const size_t n0, const size_t n1, const size_t n2, const size_t n3  //bond share number
+      //n0 bond is the upper horizontal bond in the loop
+  ) {
+    const std::vector<size_t> ns = {n0, n1, n2, n3};
+    LoopGateT gates;
+    for (size_t i = 0; i < 4; i++) {
+
+      gates[i] = DTensor({vb_in, pb_in, pb_out, vb_out});
+      DTensor &gate = gates[i];
+      //Id
+      gate({0, 0, 0, 0}) = 1.0;
+      gate({0, 1, 1, 0}) = 1.0;
+      //-s_z * tau
+      gate({0, 0, 0, 1}) = -0.5 * tau * J / double(ns[i]);
+      gate({0, 1, 1, 1}) = 0.5 * tau * J / double(ns[i]);
+      //s_z
+      gate({1, 0, 0, 0}) = 0.5;
+      gate({1, 1, 1, 0}) = -0.5;
+
+      //-s^+ * tau/2
+      gate({0, 0, 1, 2}) = -1.0 * tau * J / double(ns[i]) / 2.0;
+      //s^-
+      gate({2, 1, 0, 0}) = 1.0;
+
+      //-s^- * tau/2
+      gate({0, 1, 0, 3}) = -1.0 * tau * J / double(ns[i]) / 2.0;
+      //s^+
+      gate({3, 0, 1, 0}) = 1.0;
+
+      gate({0, 2, 0, 4}) = (-tau) * (-t) / double(ns[i]) * (-1);
+      gate({4, 0, 2, 0}) = 1.0;
+
+      gate({0, 2, 1, 5}) = (-tau) * (-t) / double(ns[i]) * (-1);
+      gate({5, 1, 2, 0}) = 1.0;
+
+      gate({0, 0, 2, 6}) = (-tau) * (-t) / double(ns[i]);
+      gate({6, 2, 0, 0}) = 1.0;
+
+      gate({0, 1, 2, 7}) = (-tau) * (-t) / double(ns[i]);
+      gate({7, 2, 1, 0}) = 1.0;
+      gate.Div();
+    }
+    return gates;
+
   }
 };
 
@@ -186,6 +289,37 @@ TEST_F(Z2tJModelTools, tJModelDoping) {
   su_exe->Execute();
   auto peps = su_exe->GetPEPS();
   delete su_exe;
+  peps.Dump("peps_tj_doping0.125");
+}
+
+TEST_F(Z2tJModelTools, tJModelDopingLoopUpdate) {
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+  omp_set_num_threads(1);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
+  peps0.Load("peps_tj_doping0.125");
+  peps0.NormalizeAllTensor();
+
+  ArnoldiParams arnoldi_params(1e-10, 100);
+  double fet_tol = 1e-13;
+  double fet_max_iter = 30;
+  ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
+
+  FullEnvironmentTruncateParams fet_params(1, 4, 1e-10,
+                                           fet_tol, fet_max_iter,
+                                           cg_params);
+
+  auto *loop_exe = new LoopUpdateExecutor<QLTEN_Double, fZ2QN>(LoopUpdateTruncatePara(
+                                                                   arnoldi_params,
+                                                                   fet_params),
+                                                               150,
+                                                               loop_tau,
+                                                               evolve_gates,
+                                                               peps0);
+
+  loop_exe->Execute();
+  auto peps = loop_exe->GetPEPS();
+  delete loop_exe;
+  peps.Dump("peps_tj_doping0.125");
 }
 
 int main(int argc, char *argv[]) {

@@ -61,15 +61,38 @@ void TensorNetwork2D<TenElemT, QNT>::InitBMPS(void) {
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::InitBMPS(const qlpeps::BMPSPOSITION post) {
-  SiteIdx refer_site;
-  if (post < 2) {
-    refer_site = {this->rows() - 1, 0}; // left,down
-  } else {
-    refer_site = {0, this->cols() - 1}; //right, up
-  }
-  IndexT idx = InverseIndex((*this)(refer_site).GetIndex(post));
+  assert(bmps_set_.at(post).empty());
   const size_t mps_size = this->length(Rotate(Orientation(post)));
-  BMPS<TenElemT, QNT> boundary_bmps(post, mps_size, idx);
+  std::vector<IndexT> boundary_indices;
+  boundary_indices.reserve(mps_size);
+
+  switch (post) {
+    case LEFT : {
+      for (size_t i = 0; i < mps_size; i++) {
+        boundary_indices.push_back(InverseIndex((*this)({i, 0}).GetIndex(post)));
+      }
+      break;
+    }
+    case DOWN: {
+      for (size_t i = 0; i < mps_size; i++) {
+        boundary_indices.push_back(InverseIndex((*this)({this->rows() - 1, i}).GetIndex(post)));
+      }
+      break;
+    }
+    case RIGHT: {
+      for (size_t i = 0; i < mps_size; i++) {
+        boundary_indices.push_back(InverseIndex((*this)({this->rows() - i - 1, this->cols() - 1}).GetIndex(post)));
+      }
+      break;
+    }
+    case UP: {
+      for (size_t i = 0; i < mps_size; i++) {
+        boundary_indices.push_back(InverseIndex((*this)({0, this->cols() - i - 1}).GetIndex(post)));
+      }
+      break;
+    }
+  }
+  BMPS<TenElemT, QNT> boundary_bmps(post, boundary_indices);
   bmps_set_[post].push_back(boundary_bmps);
 }
 

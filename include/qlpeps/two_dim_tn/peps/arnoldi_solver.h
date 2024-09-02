@@ -182,6 +182,11 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
   return {true, dominant_w, right_dominant_eigenvector, left_dominant_eigenvector};
 }
 
+/**
+ * For the fermionic case, note that one should define a positive norm by replace
+ * QLTensor.Norm() with QLTensor.QuasiNorm(), equivalent to apply additional identity operators when calculate overlap
+ *
+ */
 template<typename TenElemT, typename QNT>
 ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
     const QLTensor<TenElemT, QNT> &Upsilon,
@@ -199,8 +204,23 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
   std::vector<std::vector<TenElemT>>
       h(max_iter, std::vector<TenElemT>(max_iter, 0.0));
   bases[0] = new TenT(vec0);
-  bases[0]->Normalize();
+  bases[0]->QuasiNormalize();
   bases_dag[0] = new TenT(Dag(*bases[0]));
+  std::vector<TenT> fermion_sign_projectors(2);
+  if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
+    for (size_t i = 0; i < 2; i++) {
+      Index<QNT> idx = vec0.GetIndex(i);
+      fermion_sign_projectors[i] = TenT({InverseIndex(idx), idx});
+      for (size_t j = 0; j < idx.dim(); j++) {
+        fermion_sign_projectors[i]({j, j}) = 1.0;
+      }
+    }
+
+    TenT temp1, temp2;
+    Contract(&fermion_sign_projectors[1], {1}, bases_dag[0], {1}, &temp1);
+    Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+    *bases_dag[0] = temp2;
+  }
 //  std::optional<TenElemT> eigenvalue_last;
   double max_abs_h_elem(0.0);
   for (size_t k = 1; k < max_iter; k++) {
@@ -213,10 +233,16 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
       (*bases[k]) += (-h[j][k - 1]) * (*bases[j]);
       max_abs_h_elem = std::max(max_abs_h_elem, std::abs(h[j][k - 1]));
     }
-    h[k][k - 1] = bases[k]->Normalize();
+    h[k][k - 1] = bases[k]->QuasiNormalize();
     max_abs_h_elem = std::max(max_abs_h_elem, std::abs(h[k][k - 1]));
     bases_dag[k] = new TenT(Dag(*bases[k]));
-
+    if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
+      TenT temp1, temp2;
+      Contract(&fermion_sign_projectors[1], {1}, bases_dag[k], {1}, &temp1);
+      Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+      *bases_dag[k] = temp2;
+      //such definition can make sure the overlap between <base|base> >=0, so that it constitutes well-defined norm.
+    }
     if (std::abs(h[k][k - 1]) / max_abs_h_elem > params.error && k < max_iter - 1) {
       continue;
     }

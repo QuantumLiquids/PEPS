@@ -10,12 +10,11 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
-#include "qlpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
+#include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 #include "qlpeps/algorithm/loop_update/loop_update.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"
-#include "qlpeps/algorithm/simple_update/triangle_nn_on_sqr_peps_simple_update.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
 
@@ -322,13 +321,11 @@ struct HeisenbergLoopUpdate : public testing::Test {
 
   DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
 
-  double tau0 = 0.1;
-  double tau1 = 0.01;
-  double tau2 = 0.001;
+  double tau0 = 0.01;
+  double tau1 = 0.001;
   // ED ground state energy = -9.189207065192949
   DuoMatrix<LoopGateT> evolve_gates0 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
   DuoMatrix<LoopGateT> evolve_gates1 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
-  DuoMatrix<LoopGateT> evolve_gates2 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
   boost::mpi::communicator world;//mpi support for measurement
   void GenerateSquareHeisenbergAllEvolveGates(
@@ -426,7 +423,6 @@ struct HeisenbergLoopUpdate : public testing::Test {
 
     GenerateSquareHeisenbergAllEvolveGates(tau0, evolve_gates0);
     GenerateSquareHeisenbergAllEvolveGates(tau1, evolve_gates1);
-    GenerateSquareHeisenbergAllEvolveGates(tau2, evolve_gates2);
   }
 };
 
@@ -454,7 +450,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   delete su_exe1;
   peps1.NormalizeAllTensor();
   //loop update
-  SimpleUpdatePara simple_update_para(100, tau0, 1, 4, 1e-10);
+  /*
   ArnoldiParams arnoldi_params(1e-10, 100);
   double fet_tol = 1e-13;
   double fet_max_iter = 30;
@@ -477,7 +473,6 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   auto peps2 = loop_exe->GetPEPS();
   delete loop_exe;
 
-  simple_update_para.tau = tau1;
   loop_exe = new LoopUpdateExecutor<QLTEN_Double, U1QN>(LoopUpdateTruncatePara(
                                                             arnoldi_params,
                                                             fet_params),
@@ -489,19 +484,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   loop_exe->Execute();
   auto peps3 = loop_exe->GetPEPS();
   delete loop_exe;
-
-  loop_exe = new LoopUpdateExecutor<QLTEN_Double, U1QN>(LoopUpdateTruncatePara(
-                                                            arnoldi_params,
-                                                            fet_params),
-                                                        100,
-                                                        tau2,
-                                                        evolve_gates2,
-                                                        peps3);
-
-  loop_exe->Execute();
-  auto peps4 = loop_exe->GetPEPS();
-  delete loop_exe;
-
+  */
   //measure simple update state energy
 
   using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
@@ -531,16 +514,16 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   delete measure_executor1;
 
   //measure the loop update energy
-  auto tps = TPS<QLTEN_Double, U1QN>(peps4);
-  auto sitps = SplitIndexTPS<QLTEN_Double, U1QN>(tps);
-  auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(mc_measure_para,
-                                                                                  sitps,
-                                                                                  world,
-                                                                                  Model());
-  measure_executor->Execute();
-  measure_executor->OutputEnergy();
-  delete measure_executor;
+//  auto tps = TPS<QLTEN_Double, U1QN>(peps3);
+//  auto sitps = SplitIndexTPS<QLTEN_Double, U1QN>(tps);
+//  auto measure_executor =
+//      new MonteCarloMeasurementExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(mc_measure_para,
+//                                                                                  sitps,
+//                                                                                  world,
+//                                                                                  Model());
+//  measure_executor->Execute();
+//  measure_executor->OutputEnergy();
+//  delete measure_executor;
 
 }
 

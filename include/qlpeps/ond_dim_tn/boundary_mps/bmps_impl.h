@@ -29,6 +29,21 @@ BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position, const size_t size,
 }
 
 template<typename TenElemT, typename QNT>
+BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position,
+                          const std::vector<BMPS::IndexT> &hilbert_spaces) :
+    TenVec<Tensor>(hilbert_spaces.size()),
+    position_(position),
+    center_(0),
+    tens_cano_type_(hilbert_spaces.size(), MPSTenCanoType::RIGHT) {
+  for (size_t i = 0; i < hilbert_spaces.size(); i++) {
+    this->alloc(i);
+    (*this)[i] = Tensor({index0_in_, hilbert_spaces.at(i), index0_out_});
+    assert(hilbert_spaces.at(i).dim() == 1);
+    (*this)[i]({0, 0, 0}) = 1.0;
+  }
+}
+
+template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> &BMPS<TenElemT, QNT>::operator[](const size_t idx) {
   return DuoVector<Tensor>::operator[](idx);
 }
@@ -936,11 +951,10 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(TransferMPO &mpo,
       r = Tensor();
       QR(&tmp2, 2, mps_div, res(i), &r);
     } else {
-      auto trivial_idx = tmp2.GetIndex(0);
-      Tensor tmp3({InverseIndex(trivial_idx)});
-      tmp3({0}) = 1.0;
-      Contract(&tmp3, {0}, &tmp2, {0}, res(i));
-      res(i)->Transpose({0, 2, 1});
+      auto trivial_idx1 = InverseIndex(tmp2.GetIndex(0));
+      auto trivial_idx2 = InverseIndex(tmp2.GetIndex(2));
+      Tensor right_boundary = IndexCombine<TenElemT, QNT>(trivial_idx1, trivial_idx2, OUT);
+      Contract(&tmp2, {0, 2}, &right_boundary, {0, 1}, res(i));
     }
   }
   actual_Dmax = 1;

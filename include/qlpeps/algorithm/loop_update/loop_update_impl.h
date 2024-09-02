@@ -54,7 +54,7 @@ void LoopUpdateExecutor<TenElemT, QNT>::Execute(void) {
 }
 
 template<typename TenElemT, typename QNT>
-double LoopUpdateExecutor<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &site,
+std::pair<double, double> LoopUpdateExecutor<TenElemT, QNT>::UpdateOneLoop(const qlpeps::SiteIdx &site,
                                                         const qlpeps::LoopUpdateTruncatePara &para,
                                                         const bool print_time) {
   const LoopGatesT &gate = evolve_gates_(site);
@@ -70,13 +70,9 @@ double LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateSweep_(void) {
   if (omp_get_thread_num() == 1) {
     for (size_t col = 0; col < this->lx_ - 1; col++) {
       for (size_t row = 0; row < this->ly_ - 1; row++) {
-        double norm;
-        if (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1)) {
-          norm = UpdateOneLoop({row, col}, truncate_para_, true);
-        } else {
-          norm = UpdateOneLoop({row, col}, truncate_para_, false);
-        }
-        e0 += -std::log(norm) / tau_;
+        bool print_time = (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1));
+        auto project_res = UpdateOneLoop({row, col}, truncate_para_, print_time);
+        e0 += (1 - project_res.second) / tau_;
       }
     }
   } else {
@@ -85,14 +81,10 @@ double LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateSweep_(void) {
 #pragma omp parallel for collapse(2) reduction(+:e0) shared(evolve_gates_, truncate_para_)
         for (size_t col = start_col; col < this->lx_ - 1; col += 2) {
           for (size_t row = start_row; row < this->ly_ - 1; row += 2) {
-            double norm;
+            bool print_time = (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1));
             const LoopGatesT &gate = evolve_gates_({row, col});
-            if (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1)) {
-              norm = this->peps_.LocalSquareLoopProject(gate, {row, col}, truncate_para_, true);
-            } else {
-              norm = this->peps_.LocalSquareLoopProject(gate, {row, col}, truncate_para_, false);
-            }
-            e0 += -std::log(norm) / tau_;
+            auto proj_res = this->peps_.LocalSquareLoopProject(gate, {row, col}, truncate_para_, print_time);
+            e0 += (1 - proj_res.second) / tau_;
           }
         }
       }

@@ -61,10 +61,13 @@ bool is_nan(const std::complex<double> &value) {
 }
 
 template<typename TenElemT, typename QNT>
-ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten, const SiteIdx &site,
-                                                                           const BondOrientation &orientation,
-                                                                           const SimpleUpdateTruncatePara &trunc_para) {
+ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten,
+                                                                                     const SiteIdx &site,
+                                                                                     const BondOrientation &orientation,
+                                                                                     const SimpleUpdateTruncatePara &trunc_para,
+                                                                                     const TenT &ham) {
   double norm;
+  std::optional<TenElemT> e_loc;
   const size_t row = site[0], col = site[1];
   TenT tmp_ten[7];
   TenT q0, r0, q1, r1;
@@ -110,6 +113,39 @@ ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const
       Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
       Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
 
+      norm = tmp_ten[4].QuasiNormalize();
+      if (!ham.IsDefault()) { //estimate the local energy by local environment
+        const TenT *state = tmp_ten + 4;
+        if (TenT::IsFermionic()) {
+          std::vector<TenT> identitys(2);
+          for (size_t i = 0; i < 2; i++) {
+            auto index = state->GetIndex(i);
+            identitys[i] = TenT({InverseIndex(index), index});
+            for (size_t j = 0; j < index.dim(); j++) {
+              identitys[i]({j, j}) = 1.0;
+            }
+          }
+
+          TenT temp1, temp3, temp_scale;
+          temp1 = *state;
+          for (size_t i = 0; i < 2; i++) {
+            TenT temp2;
+            Contract(&identitys[1 - i], {0}, &temp1, {1}, &temp2);
+            temp1 = temp2;
+          }
+
+          auto state_dag = Dag(*state);
+          Contract(&temp1, {2, 3}, &ham, {0, 2}, &temp3);
+          Contract(&temp3, {0, 1, 2, 3}, &state_dag, {0, 1, 2, 3}, &temp_scale);
+          e_loc = temp_scale();
+        } else {// bosonic case
+          TenT temp, temp_scale;
+          Contract(state, {2, 3}, &ham, {0, 2}, &temp);
+          temp.Dag();
+          Contract(&temp, {0, 1, 2, 3}, state, {0, 1, 2, 3}, &temp_scale);
+          e_loc = temp_scale();
+        }
+      }
       tmp_ten[4].Transpose({0, 2, 1, 3});
       lambda_horiz({row, rcol}) = DTensor();
       SVD(tmp_ten + 4, 2, qn0_,
@@ -128,7 +164,6 @@ ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const
       Gamma(r_site) = TenT();
       Contract<TenElemT, QNT, false, false>(tmp_ten[6], vt, 0, 1, 1, Gamma(r_site));
       Gamma(r_site).Transpose({4, 0, 1, 2, 3});
-      norm = lambda_horiz(row, col + 1)->QuasiNormalize();
       break;
     }
     case VERTICAL: {
@@ -169,6 +204,39 @@ ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const
       Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
       Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
 
+      norm = tmp_ten[4].QuasiNormalize();
+      if (!ham.IsDefault()) { //estimate the local energy by local environment
+        const TenT *state = tmp_ten + 4;
+        if (TenT::IsFermionic()) {
+          std::vector<TenT> identitys(2);
+          for (size_t i = 0; i < 2; i++) {
+            auto index = state->GetIndex(i);
+            identitys[i] = TenT({InverseIndex(index), index});
+            for (size_t j = 0; j < index.dim(); j++) {
+              identitys[i]({j, j}) = 1.0;
+            }
+          }
+
+          TenT temp1, temp3, temp_scale;
+          temp1 = *state;
+          for (size_t i = 0; i < 2; i++) {
+            TenT temp2;
+            Contract(&identitys[1 - i], {0}, &temp1, {1}, &temp2);
+            temp1 = temp2;
+          }
+
+          auto state_dag = Dag(*state);
+          Contract(&temp1, {2, 3}, &ham, {0, 2}, &temp3);
+          Contract(&temp3, {0, 1, 2, 3}, &state_dag, {0, 1, 2, 3}, &temp_scale);
+          e_loc = temp_scale();
+        } else {// bosonic case
+          TenT temp, temp_scale;
+          Contract(state, {2, 3}, &ham, {0, 2}, &temp);
+          temp.Dag();
+          Contract(&temp, {0, 1, 2, 3}, tmp_ten + 4, {0, 1, 2, 3}, &temp_scale);
+          e_loc = temp_scale();
+        }
+      }
       tmp_ten[4].Transpose({0, 2, 1, 3});
       lambda_vert({row + 1, col}) = DTensor();
       SVD(tmp_ten + 4, 2, qn0_,
@@ -186,8 +254,6 @@ ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const
       Gamma({row + 1, col}) = TenT();
       Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({row + 1, col}));
       Gamma({row + 1, col}).Transpose({2, 1, 0, 4, 3});
-
-      norm = lambda_vert(row + 1, col)->QuasiNormalize();
       break;
     }
     default: {
@@ -201,19 +267,9 @@ ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const
     assert(!is_nan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
   }
 #endif
-  return {norm, actual_trunc_err, actual_D};
+  return {norm, actual_trunc_err, actual_D, e_loc};
 }
 
-template<typename TenElemT, typename QNT>
-ProjectionRes SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSiteProject(const TenT &gate_ten,
-                                                                           const TenT &ham_ten,
-                                                                           const SiteIdx &site,
-                                                                           const BondOrientation &orientation,
-                                                                           const SimpleUpdateTruncatePara &trunc_para,
-                                                                           TenElemT &e_loc) {
-  auto proj_res = NearestNeighborSiteProject(gate_ten, site, orientation, trunc_para);
-
-}
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const TenT &gate_ten,
                                                                         const qlpeps::SiteIdx &first_site,
@@ -276,7 +332,8 @@ double SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const Te
  * @return
  */
 template<typename TenElemT, typename QNT>
-ProjectionRes SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
+ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
+                                          QNT>::UpperLeftTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
                                                                          const SiteIdx &left_upper_site,
                                                                          const SimpleUpdateTruncatePara &trunc_para) {
 #ifndef NDEBUG
@@ -373,7 +430,8 @@ ProjectionRes SquareLatticePEPS<TenElemT, QNT>::UpperLeftTriangleProject(const S
  * @return
  */
 template<typename TenElemT, typename QNT>
-ProjectionRes SquareLatticePEPS<TenElemT, QNT>::LowerRightTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
+ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
+                                          QNT>::LowerRightTriangleProject(const SquareLatticePEPS::TenT &gate_ten,
                                                                           const SiteIdx &upper_site,
                                                                           const SimpleUpdateTruncatePara &trunc_para) {
 #ifndef NDEBUG

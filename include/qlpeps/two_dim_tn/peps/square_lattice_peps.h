@@ -65,10 +65,12 @@ struct LoopUpdateTruncatePara {
   FullEnvironmentTruncateParams fet_params;
 };
 
+template<typename ElemT>
 struct ProjectionRes {
   double norm;      // normalization factor
   double trunc_err; // actual truncation error
   size_t D;         // actual bond dimension
+  std::optional<ElemT> e_loc;    // local energy
 };
 
 /**
@@ -169,20 +171,12 @@ class SquareLatticePEPS {
   );
 
   ///< first two indexes of gate_ten are connected to PEPS's physical indexes
-  ProjectionRes NearestNeighborSiteProject(
+  ProjectionRes<TenElemT> NearestNeighborSiteProject(
       const TenT &gate_ten,
-      const SiteIdx &site,
-      const BondOrientation &orientation,
-      const SimpleUpdateTruncatePara &trunc_para
-  );
-
-  ProjectionRes NearestNeighborSiteProject(
-      const TenT &gate_ten,
-      const TenT &ham_ten,
       const SiteIdx &site,
       const BondOrientation &orientation,
       const SimpleUpdateTruncatePara &trunc_para,
-      TenElemT &e_loc     // return the local energy
+      const TenT &ham_ten = TenT()
   );
 
   double NextNearestNeighborSiteProject(
@@ -192,13 +186,13 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &trunc_para
   );
 
-  ProjectionRes UpperLeftTriangleProject(
+  ProjectionRes<TenElemT> UpperLeftTriangleProject(
       const TenT &,
       const SiteIdx &,
       const SimpleUpdateTruncatePara &
   );
 
-  ProjectionRes LowerRightTriangleProject(
+  ProjectionRes<TenElemT> LowerRightTriangleProject(
       const TenT &,
       const SiteIdx &,
       const SimpleUpdateTruncatePara &tunc_para
@@ -210,7 +204,7 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &trunc_para
   );
   using LocalSquareLoopGateT = std::array<TenT, 4>;
-  double LocalSquareLoopProject(
+  std::pair<double, double> LocalSquareLoopProject(
       const LocalSquareLoopGateT &gate_tens,
       const SiteIdx &upper_left_site,
       const LoopUpdateTruncatePara &params,
@@ -242,6 +236,11 @@ class SquareLatticePEPS {
       const LocalSquareLoopGateT &gate_tens,
       const SiteIdx &upper_left_site
   );
+
+  std::array<QLTensor<TenElemT, QNT>, 4> GetLoopGammas_(const SiteIdx upper_left_site) const;
+  std::array<QLTensor<QLTEN_Double, QNT>, 4> GetLoopInternalLambdas_(const SiteIdx upper_left_site) const;
+  std::pair<std::array<QLTensor<QLTEN_Double, QNT>, 4>, std::array<QLTensor<QLTEN_Double, QNT>, 4>>
+  GetLoopEnvLambdas_(const SiteIdx upper_left_site) const;
 
   static const QNT qn0_;
 

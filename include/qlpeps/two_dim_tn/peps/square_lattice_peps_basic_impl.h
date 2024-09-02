@@ -152,7 +152,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
     // set a layer of lambda_vert
     for (size_t col = 0; col < cols_; col++) {
       lambda_vert({row, col}) = DTensor({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
-                                      Gamma({row - 1, col}).GetIndex(1)});
+                                         Gamma({row - 1, col}).GetIndex(1)});
       lambda_vert({row, col})({0, 0}) = 1.0;
     }
     //set a layer of gamma tensors
@@ -175,7 +175,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
   for (size_t col = 0; col < cols_; col++) {
     const size_t row = rows_ - 1;
     lambda_vert({row, col}) = DTensor({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
-                                    Gamma({row - 1, col}).GetIndex(1)});
+                                       Gamma({row - 1, col}).GetIndex(1)});
     lambda_vert({row, col})({0, 0}) = 1.0;
   }
 
@@ -263,14 +263,14 @@ template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::NormalizeAllTensor() {
   double norm(1.0);
   for (auto &gamma : Gamma) {
-    norm *= gamma.Normalize();
+    norm *= gamma.QuasiNormalize();
   }
 
   for (auto &lambda : lambda_vert) {
-    norm *= lambda.Normalize();
+    norm *= lambda.QuasiNormalize();
   }
   for (auto &lambda : lambda_vert) {
-    norm *= lambda.Normalize();
+    norm *= lambda.QuasiNormalize();
   }
   return norm;
 }

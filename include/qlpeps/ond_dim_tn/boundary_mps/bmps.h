@@ -71,6 +71,8 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
    */
   BMPS(const BMPSPOSITION position, const size_t size, const IndexT &local_hilbert_space);
 
+  BMPS(const BMPSPOSITION position, const std::vector<IndexT> &hilbert_spaces);
+
   BMPS(const BMPS<TenElemT, QNT> &rhs) : TenVec<QLTensor<TenElemT, QNT>>(rhs),
                                          position_(rhs.position_),
                                          center_(rhs.center_),

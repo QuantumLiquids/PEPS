@@ -160,6 +160,7 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
 //helper
 template<typename TenElemT, typename QNT>
 void PrintLambda(const QLTensor<TenElemT, QNT> &lambda) {
+  std::cout << std::setprecision(4) << std::scientific << std::endl;
   std::cout << "[";
   for (size_t i = 0; i < lambda.GetShape()[0]; i++) {
     std::cout << " " << lambda({i, i});

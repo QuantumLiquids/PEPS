@@ -43,15 +43,15 @@ template<typename TenElemT, typename QNT>
 double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  double norm = 1.0;
+  double e0(0.0);
   double middle_bond_trunc_err;
 #ifdef QLPEPS_TIMING_MODE
   Timer vertical_nn_projection_timer("vertical_nn_projection");
 #endif
   for (size_t col = 0; col < this->lx_; col++) {
     for (size_t row = 0; row < this->ly_ - 1; row++) {
-      auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, VERTICAL, para);
-      norm *= proj_res.norm;
+      auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, VERTICAL, para, ham_nn_);
+      e0 += proj_res.e_loc.value();
       if (col == this->lx_ / 2 && row == this->ly_ / 2 - 1) {
         middle_bond_trunc_err = proj_res.trunc_err;
       }
@@ -64,11 +64,11 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
 #endif
   for (size_t col = 0; col < this->lx_ - 1; col++) {
     for (size_t row = 0; row < this->ly_; row++) {
-      auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, HORIZONTAL, para);
-      norm *= proj_res.norm;
+      auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, HORIZONTAL, para, ham_nn_);
+      e0 += proj_res.e_loc.value();
     }
   }
-  double e0 = -std::log(norm) / this->update_para.tau;
+
 #ifdef QLPEPS_TIMING_MODE
   horizontal_nn_projection_timer.PrintElapsed();
 #endif
@@ -83,8 +83,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
             << " TruncErr = " << std::setprecision(2) << std::scientific << middle_bond_trunc_err << std::fixed
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  std::cout << std::scientific << std::endl;
-  return norm;
+  return e0;
 }
 }
 

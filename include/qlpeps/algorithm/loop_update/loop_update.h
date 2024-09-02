@@ -52,7 +52,9 @@ class LoopUpdateExecutor : public Executor {
    * @param site: the coordinate of the left-upper site in the loop
    * @return
    */
-  double UpdateOneLoop(const SiteIdx &site, const LoopUpdateTruncatePara &para, const bool print_time);
+  std::pair<double, double> UpdateOneLoop(const SiteIdx &site,
+                                          const LoopUpdateTruncatePara &para,
+                                          const bool print_time);
 
   const size_t lx_;
   const size_t ly_;
