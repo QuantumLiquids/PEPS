@@ -56,11 +56,12 @@ struct FullEnvironmentTruncateParams {
 
 struct LoopUpdateTruncatePara {
   LoopUpdateTruncatePara(const ArnoldiParams &arnoldi_params,
+                         const double inv_tol,
                          const FullEnvironmentTruncateParams &fet_params) :
-      arnoldi_params(arnoldi_params), fet_params(fet_params) {}
+      arnoldi_params(arnoldi_params), inv_tol(inv_tol), fet_params(fet_params) {}
   //gauge fixing
   ArnoldiParams arnoldi_params;
-
+  double inv_tol;
   //full environment truncation
   FullEnvironmentTruncateParams fet_params;
 };

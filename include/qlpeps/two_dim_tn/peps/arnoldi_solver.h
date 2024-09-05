@@ -146,12 +146,12 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
                          'V', // left eigenvectors are computed
                          'V', // right eigenvectors are computed
                          lapack_int(n), // order of h matrix
-                         h_mat.data(),  // h matrix
+                         reinterpret_cast<lapack_complex_double *>(h_mat.data()),  // h matrix
                          lapack_int(n), // leading dimension of the h matrix (question : in lapack what's this parameter, what's the different with the size of h)
-                         w,
-                         vl.data(), // the output eigenvectors
+                         reinterpret_cast<lapack_complex_double *>(w),
+                         reinterpret_cast<lapack_complex_double *>(vl.data()), // the output eigenvectors
                          lapack_int(n),
-                         vr.data(), // the output eigenvectors.
+                         reinterpret_cast<lapack_complex_double *>(vr.data()), // the output eigenvectors.
                          lapack_int(n)
     );
     for (size_t i = 0; i < n; i++) {

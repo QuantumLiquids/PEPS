@@ -395,11 +395,11 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   Contract<TenElemT, QNT, false, true>(tmp_ten[8], u2, 0, 0, 1, Gamma(right_site));
   Gamma(right_site).Transpose({4, 0, 1, 2, 3});
 
-  auto inv_lam = ElementWiseInv(s1, trunc_para.trunc_err);
+  auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = ElementWiseInv(lambda_vert({row, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({row, col}), trunc_para.trunc_err);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 2, 1, 1, tmp_ten[10]);
-  inv_lam = ElementWiseInv(lambda_horiz({row, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({row, col}), trunc_para.trunc_err);
   Gamma({left_upper_site}) = TenT();
   Contract<TenElemT, QNT, false, true>(tmp_ten[10], inv_lam, 0, 1, 1, Gamma({left_upper_site}));
   Gamma({left_upper_site}).Transpose({4, 0, 1, 3, 2});
@@ -490,11 +490,11 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   Gamma(left_site) = TenT();
   Contract<TenElemT, QNT, false, false>(tmp_ten[8], u2, 0, 1, 1, Gamma(left_site));
   Gamma(left_site).Transpose({1, 2, 3, 0, 4});
-  auto inv_lam = ElementWiseInv(s1, trunc_para.trunc_err);
+  auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = ElementWiseInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 1, 0, 1, tmp_ten[10]);
-  inv_lam = ElementWiseInv(lambda_horiz({row + 1, col + 1}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({row + 1, col + 1}), trunc_para.trunc_err);
   Gamma({right_down_site}) = TenT();
   Contract<TenElemT, QNT, false, true>(tmp_ten[10], inv_lam, 0, 0, 1, Gamma({right_down_site}));
   Gamma({right_down_site}).Transpose({2, 3, 4, 1, 0});
@@ -611,11 +611,11 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
   Contract<TenElemT, QNT, true, true>(tmp_ten[8], u2, 3, 0, 1, Gamma(upper_left_site));
   Gamma(upper_left_site).Transpose({2, 4, 0, 1, 3});
 
-  auto inv_lam = ElementWiseInv(s1, trunc_para.trunc_err);
+  auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = ElementWiseInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 3, 0, 1, tmp_ten[10]);
-  inv_lam = ElementWiseInv(lambda_horiz({row + 1, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({row + 1, col}), trunc_para.trunc_err);
   Gamma({lower_left_site}) = TenT();
   Contract<TenElemT, QNT, false, false>(tmp_ten[10], inv_lam, 3, 1, 1, Gamma({lower_left_site}));
   Gamma({lower_left_site}).Transpose({4, 0, 1, 2, 3});

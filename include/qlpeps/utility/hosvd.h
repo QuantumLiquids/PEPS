@@ -90,7 +90,7 @@ HOSVDRes<TenElemT, QNT> HOSVD(
   //Split out lambdas
   const size_t rank_core = iterative_core_ten.Rank();
   for (int i = n - 1; i >= 0; i--) {
-    QLTensor<QLTEN_Double, QNT> inv_lambda = ElementWiseInv(res.lambda_tens[i], trunc_err);
+    QLTensor<QLTEN_Double, QNT> inv_lambda = DiagMatInv(res.lambda_tens[i], trunc_err);
     Tensor tmp;
     Contract<TenElemT, QNT, true, false>(inv_lambda, iterative_core_ten, 1, rank_core - 1, 1, tmp);
     iterative_core_ten = tmp;

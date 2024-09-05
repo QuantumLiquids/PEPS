@@ -192,6 +192,7 @@ struct Z2tJModelTools : public testing::Test {
       //Id
       gate({0, 0, 0, 0}) = 1.0;
       gate({0, 1, 1, 0}) = 1.0;
+      gate({0, 2, 2, 0}) = 1.0;
       //-s_z * tau
       gate({0, 0, 0, 1}) = -0.5 * tau * J / double(ns[i]);
       gate({0, 1, 1, 1}) = 0.5 * tau * J / double(ns[i]);
@@ -227,7 +228,7 @@ struct Z2tJModelTools : public testing::Test {
   }
 };
 
-TEST_F(Z2tJModelTools, tJModelHalfFilling) {
+TEST_F(Z2tJModelTools, tJModelHalfFillingSimpleUpdate) {
   // ED ground state energy in 4x4 = -9.189207065192949 * J
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
@@ -260,7 +261,7 @@ TEST_F(Z2tJModelTools, tJModelHalfFilling) {
   }
 }
 
-TEST_F(Z2tJModelTools, tJModelDoping) {
+TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   // ED ground state energy in 4x4 -6.65535490684301
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
@@ -302,7 +303,7 @@ TEST_F(Z2tJModelTools, tJModelDopingLoopUpdate) {
   ArnoldiParams arnoldi_params(1e-10, 100);
   double fet_tol = 1e-13;
   double fet_max_iter = 30;
-  ConjugateGradientParams cg_params(100, 1e-10, 20, 0.0);
+  ConjugateGradientParams cg_params(200, 1e-6, 20, 0.0);
 
   FullEnvironmentTruncateParams fet_params(1, 4, 1e-10,
                                            fet_tol, fet_max_iter,
@@ -310,6 +311,7 @@ TEST_F(Z2tJModelTools, tJModelDopingLoopUpdate) {
 
   auto *loop_exe = new LoopUpdateExecutor<QLTEN_Double, fZ2QN>(LoopUpdateTruncatePara(
                                                                    arnoldi_params,
+                                                                   1e-6,
                                                                    fet_params),
                                                                150,
                                                                loop_tau,

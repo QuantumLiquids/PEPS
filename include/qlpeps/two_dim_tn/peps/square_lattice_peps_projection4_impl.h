@@ -94,8 +94,8 @@ void TransposeGammaTensorIndicesIntoMPSOrder(std::array<QLTensor<TenElemT, QNT>,
 ///< indices order of gamma are not changed
 template<typename TenElemT, typename QNT>
 void Eat2EnvLambdasInMPSOrderGamma(QLTensor<TenElemT, QNT> &gamma,
-                                   const QLTensor<TenElemT, QNT> &env_lambda_l,
-                                   const QLTensor<TenElemT, QNT> &env_lambda_r) {
+                                   const QLTensor<QLTEN_Double, QNT> &env_lambda_l,
+                                   const QLTensor<QLTEN_Double, QNT> &env_lambda_r) {
   QLTensor<TenElemT, QNT> tmp, res;
   Contract(&gamma, {2}, &env_lambda_l, {1}, &tmp);
   Contract(&tmp, {2}, &env_lambda_r, {1}, &res);
@@ -113,12 +113,12 @@ void TransposeBackGammaTensorIndicesFromMPSOrder(std::array<QLTensor<TenElemT, Q
 
 template<typename TenElemT, typename QNT>
 void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
-                                         const QLTensor<TenElemT, QNT> &env_lambda_l,
-                                         const QLTensor<TenElemT, QNT> &env_lambda_r
+                                         const QLTensor<QLTEN_Double, QNT> &env_lambda_l,
+                                         const QLTensor<QLTEN_Double, QNT> &env_lambda_r
 ) {
-  QLTensor<TenElemT, QNT> tmp, res, inv_lambda_l, inv_lambda_r;
-  inv_lambda_l = ElementWiseInv(env_lambda_l, 1e-200);
-  inv_lambda_r = ElementWiseInv(env_lambda_r, 1e-200);
+  QLTensor<TenElemT, QNT> tmp, res;
+  auto inv_lambda_l = DiagMatInv(env_lambda_l, 1e-200);
+  auto inv_lambda_r = DiagMatInv(env_lambda_r, 1e-200);
   Contract(&gamma, {2}, &inv_lambda_l, {1}, &tmp);
   Contract(&tmp, {2}, &inv_lambda_r, {1}, &res);
   res.Transpose({0, 1, 3, 4, 2});
@@ -129,6 +129,7 @@ void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
 template<typename TenElemT, typename QNT>
 void WeightedTraceGaugeFixingInSquareLocalLoop(
     const ArnoldiParams &arnoldi_params,
+    const double,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
@@ -152,7 +153,7 @@ std::array<QLTensor<QLTEN_Double, QNT>, 4>
 SquareLatticePEPS<TenElemT, QNT>::GetLoopInternalLambdas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
-  std::array<QLTensor<TenElemT, QNT>, 4> lambdas;
+  std::array<QLTensor<QLTEN_Double, QNT>, 4> lambdas;
   lambdas[0] = lambda_horiz({row, col + 1});
   lambdas[1] = lambda_vert({row + 1, col + 1});
   lambdas[2] = lambda_horiz({row + 1, col + 1});
@@ -167,7 +168,7 @@ std::pair<std::array<QLTensor<QLTEN_Double, QNT>, 4>, std::array<QLTensor<QLTEN_
 SquareLatticePEPS<TenElemT, QNT>::GetLoopEnvLambdas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
-  std::array<QLTensor<TenElemT, QNT>, 4> env_lambda_ls, env_lambda_rs;
+  std::array<QLTensor<QLTEN_Double, QNT>, 4> env_lambda_ls, env_lambda_rs;
   env_lambda_ls[0] = lambda_horiz({row, col});
   env_lambda_rs[0] = lambda_vert({row, col});
   env_lambda_ls[1] = lambda_horiz({row, col + 2});
@@ -188,7 +189,8 @@ TenElemT LoopTrace(
     const QLTensor<TenElemT, QNT> &Upsilon,
     const QLTensor<QLTEN_Double, QNT> &lambda
 ) {
-  QLTensor<TenElemT, QNT> temp0, scale_ten, lambda_dag = Dag(lambda);
+  QLTensor<TenElemT, QNT> temp0, scale_ten;
+  auto lambda_dag = Dag(lambda);
   Contract(&Upsilon, {2, 0}, &lambda, {0, 1}, &temp0);
   Contract(&temp0, {1, 0}, &lambda_dag, {0, 1}, &scale_ten);
   return scale_ten();
@@ -286,11 +288,11 @@ TenElemT GammaLambdaMPSLoopOverlap(
       Index<QNT> idx3 = eaten_gammas0[i].GetIndex(3);
       TenT id2 = TenT({InverseIndex(idx2), idx2}),
           id3 = TenT({InverseIndex(idx3), idx3});
-      for (size_t i = 0; i < idx2.dim(); i++) {
-        id2({i, i}) = 1.0;
+      for (size_t j = 0; j < idx2.dim(); j++) {
+        id2({j, j}) = 1.0;
       }
-      for (size_t i = 0; i < idx3.dim(); i++) {
-        id3({i, i}) = 1.0;
+      for (size_t j = 0; j < idx3.dim(); j++) {
+        id3({j, j}) = 1.0;
       }
       TenT temp1, temp2;
       Contract(&eaten_gammas0[i], {2}, &id2, {0}, &temp1);
@@ -354,7 +356,7 @@ std::pair<double, double> SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProje
     loop_projection_pre_procedure_timer.PrintElapsed();
   }
   Timer weighted_trace_gauge_fixing_timer("weighted_trace_gauge_fixing");
-  WeightedTraceGaugeFixingInSquareLocalLoop(params.arnoldi_params, gammas, lambdas, Upsilons);
+  WeightedTraceGaugeFixingInSquareLocalLoop(params.arnoldi_params, params.inv_tol, gammas, lambdas, Upsilons);
   if (print_time) {
     weighted_trace_gauge_fixing_timer.PrintElapsed();
   }
@@ -399,7 +401,7 @@ std::pair<double, double> SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProje
   if (print_time) {
     loop_projection_post_procedure_timer.PrintElapsed();
   }
-  return {norm, overlap / wave_function_norm};
+  return {norm, Real(overlap / wave_function_norm)};
 }
 
 /** Each evolve  gate form a loop and includes 4 tensors, and
@@ -435,7 +437,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
 #ifndef NDEBUG
   auto phy_idx = Gamma({0, 0}).GetIndex(4);
 #endif
-  std::vector<TenT *> lambdas(4, nullptr);
+  std::vector<DTenT *> lambdas(4, nullptr);
   lambdas[0] = lambda_horiz(row, col + 1);
   lambdas[1] = lambda_vert(row + 1, col + 1);
   lambdas[2] = lambda_horiz(row + 1, col + 1);
@@ -552,6 +554,18 @@ void FixSignForDiagMat(
 }
 
 template<typename TenElemT, typename QNT>
+double EvaluateHermiticity(
+    const QLTensor<TenElemT, QNT> &mat,
+    const std::vector<size_t> trans_axes = {1, 0}
+) {
+  auto mat_dag = Dag(mat);
+  mat_dag.Transpose(trans_axes);
+  auto diff_ten = mat_dag + (-mat);
+  double diff = diff_ten.GetQuasi2Norm() / mat.GetQuasi2Norm();
+  return diff;
+}
+
+template<typename TenElemT, typename QNT>
 bool CheckHermiticity(
     const QLTensor<TenElemT, QNT> &mat,
     const double tolerance,
@@ -560,9 +574,9 @@ bool CheckHermiticity(
   auto mat_dag = Dag(mat);
   mat_dag.Transpose(trans_axes);
   auto diff_ten = mat_dag + (-mat);
-  double diff = diff_ten.Get2Norm();
-  assert((diff / mat.Get2Norm() < tolerance));
-  return (diff / mat.Get2Norm() < tolerance);
+  double diff = diff_ten.GetQuasi2Norm() / mat.GetQuasi2Norm();
+//  assert((diff < tolerance));
+  return (diff < tolerance);
 }
 
 template<typename TenElemT, typename QNT>
@@ -572,7 +586,7 @@ void SymmetrizeMat(
 ) {
   auto mat_dag = Dag(mat);
   mat_dag.Transpose(trans_axes);
-  mat_dag = (mat_dag + mat) * 0.5;
+  mat = (mat_dag + mat) * 0.5;
 }
 
 template<typename TenElemT, typename QNT>
@@ -612,7 +626,7 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
     if (iter > 5 && std::abs((eigen_value - eigen_value_last) / eigen_value) < iter_tol) {
       QLTensor<TenElemT, QNT> overlap_ten;
       Contract(&vec_last_dag, {0, 1}, &vec, {0, 1}, &overlap_ten);
-      if (std::abs(overlap_ten() - 1.0) < iter_tol)
+      if (std::abs(TenElemT(overlap_ten()) - 1.0) < iter_tol)
         return {eigen_value, vec};
     }
     eigen_value_last = eigen_value;
@@ -655,9 +669,10 @@ void WeightedTraceGaugeFixing(
     QLTensor<TenElemT, QNT> &gamma_head,
     QLTensor<TenElemT, QNT> &gamma_tail
 ) {
-//#ifndef NDEBUG
-//  assert(CheckHermiticity(Upsilon, kDoubleEpsilon, {1, 0, 3, 2}));
-//#endif
+#ifndef NDEBUG
+  auto diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
+  assert(diff < 1e-12);
+#endif
 
   const auto qn0 = sigma.Div();
   using TenT = QLTensor<TenElemT, QNT>;
@@ -675,12 +690,13 @@ void WeightedTraceGaugeFixing(
   }
 //  double upsilon_norm = Upsilon.Normalize();
 // Normalizing Upsilon induce incorrect result. I don't know why.
-  auto left_eigen_sys = ArnoldiSolver(Upsilon,
-                                      sigma,
-                                      sigma_dag,
-                                      left_vec0,
-                                      arnoldi_params,
-                                      TransfTenMultiVec<TenElemT, QNT>(left_vec_multiple_transfer_tens<TenElemT, QNT>));
+  ArnoldiRes<TenElemT, QNT> left_eigen_sys = ArnoldiSolver(Upsilon,
+                                                           sigma,
+                                                           sigma_dag,
+                                                           left_vec0,
+                                                           arnoldi_params,
+                                                           TransfTenMultiVec<TenElemT, QNT>(
+                                                               left_vec_multiple_transfer_tens<TenElemT, QNT>));
 
   SymmetrizeMat(left_eigen_sys.eig_vec);
   left_eigen_sys = PowerMethod(Upsilon,
@@ -689,13 +705,14 @@ void WeightedTraceGaugeFixing(
                                left_eigen_sys.eig_vec,
                                TransfTenMultiVec<TenElemT, QNT>(left_vec_multiple_transfer_tens<TenElemT, QNT>));
 
-  auto right_eigen_sys = ArnoldiSolver(Upsilon,
-                                       sigma,
-                                       sigma_dag,
-                                       right_vec0,
-                                       arnoldi_params,
-                                       TransfTenMultiVec<TenElemT, QNT>(right_vec_multiple_transfer_tens<TenElemT,
-                                                                                                         QNT>));
+  ArnoldiRes<TenElemT, QNT> right_eigen_sys = ArnoldiSolver(Upsilon,
+                                                            sigma,
+                                                            sigma_dag,
+                                                            right_vec0,
+                                                            arnoldi_params,
+                                                            TransfTenMultiVec<TenElemT, QNT>(
+                                                                right_vec_multiple_transfer_tens<TenElemT,
+                                                                                                 QNT>));
 
   SymmetrizeMat(right_eigen_sys.eig_vec);
   right_eigen_sys = PowerMethod(Upsilon,
@@ -705,8 +722,8 @@ void WeightedTraceGaugeFixing(
                                 TransfTenMultiVec<TenElemT, QNT>(right_vec_multiple_transfer_tens<TenElemT, QNT>));
 
   //EVD for eigenvectors, and update the Upsilon_i, Gammas, and Lambdas
-  TenT u_l, d_l, u_r, d_r;
-  DTenT sqrt_dl, sqrt_dr, inv_sqrt_dl, inv_sqrt_dr;
+  TenT u_l, u_r;
+  DTenT d_l, d_r, sqrt_dl, sqrt_dr, inv_sqrt_dl, inv_sqrt_dr;
   SymMatEVD(&left_eigen_sys.eig_vec, &u_l, &d_l);
   SymMatEVD(&right_eigen_sys.eig_vec, &u_r, &d_r);
   FixSignForDiagMat(d_l);
@@ -716,56 +733,66 @@ void WeightedTraceGaugeFixing(
   sqrt_dl = QuasiSquareRootDiagMat(d_l);
   sqrt_dr = QuasiSquareRootDiagMat(d_r);
 
-  inv_sqrt_dl = ElementWiseInv(sqrt_dl, inv_tol);
-  inv_sqrt_dr = ElementWiseInv(sqrt_dr, inv_tol);
+  inv_sqrt_dl = DiagMatInv(sqrt_dl, inv_tol);
+  inv_sqrt_dr = DiagMatInv(sqrt_dr, inv_tol);
   TenT ul_dag = Dag(u_l);
   TenT ur_dag = Dag(u_r);
 
 
   //calculate sigma_prime
-  DTenT sigma_prime;
-  TenT tmp0, tmp1, tmp2;
-  Contract<TenElemT, QNT, false, false>(sqrt_dl, u_l, 0, 1, 1, tmp0);
-  Contract(&tmp0, {1}, &sigma, {0}, &tmp1);
-  Contract(&tmp1, {1}, &u_r, {0}, &tmp2);
-  Contract(&tmp2, {1}, &sqrt_dr, {0}, &sigma_prime);
+  TenT temp[11];
+  Contract<TenElemT, QNT, false, false>(sqrt_dl, u_l, 0, 1, 1, temp[0]);
+  Contract(temp, {1}, &sigma, {0}, temp + 1);
+  Contract(temp + 1, {1}, &u_r, {0}, temp + 2);
+  Contract(temp + 2, {1}, &sqrt_dr, {0}, temp + 3);
 
   sigma = DTenT();
   TenT v_l, v_r_dag;
-  MatSVD(sigma_prime, qn0, v_l, sigma, v_r_dag);
+  MatSVD(temp[3], qn0, v_l, sigma, v_r_dag);
   //Update Upsilon, and corresponding 2 gammas
   //The original data of lambdas and Gammas in PEPS are not changed.
 
   TenT x_inv;
-  tmp0 = TenT();
-  tmp1 = TenT();
-  tmp2 = TenT();
-  Contract<TenElemT, QNT, true, false>(ul_dag, inv_sqrt_dl, 1, 1, 1, tmp0);
-  Contract(&tmp0, {1}, &v_l, {0}, &x_inv);
+  Contract<TenElemT, QNT, true, false>(ul_dag, inv_sqrt_dl, 1, 1, 1, temp[4]);
+  Contract(temp + 4, {1}, &v_l, {0}, &x_inv);
   TenT x_inv_dag = Dag(x_inv);
-  Contract(&Upsilon, {3}, &x_inv_dag, {0}, &tmp1);
-  Contract<TenElemT, QNT, false, true>(tmp1, x_inv, 2, 0, 1, tmp2);
-
-//#ifndef NDEBUG
-//  CheckHermiticity(tmp2, 1e-9, {1, 0, 3, 2});
-//#endif
-  TenT y_inv, tmp3;
-  tmp0 = TenT();
-  tmp1 = TenT();
-  Contract(&v_r_dag, {1}, &inv_sqrt_dr, {0}, &tmp0);
-  Contract(&tmp0, {1}, &ur_dag, {1}, &y_inv);
+  Contract(&Upsilon, {3}, &x_inv_dag, {0}, temp + 5);
+  Contract<TenElemT, QNT, false, true>(temp[5], x_inv, 2, 0, 1, temp[6]);
+  diff = EvaluateHermiticity(temp[6], {3, 2, 1, 0});
+  if (diff < 1e-4) {
+    SymmetrizeMat(temp[6], {3, 2, 1, 0});
+  } else {
+    std::cout << "temp[6] is extremely asymmetric. diff = " << diff << "consider truncate d_R more." << std::endl;
+    exit(-1);
+  }
+  TenT y_inv;
+  Contract(&v_r_dag, {1}, &inv_sqrt_dr, {0}, temp + 7);
+  Contract(temp + 7, {1}, &ur_dag, {1}, &y_inv);
   TenT y_inv_dag = Dag(y_inv);
-  Contract<TenElemT, QNT, true, false>(y_inv_dag, tmp2, 1, 2, 1, tmp3);
-  Contract<TenElemT, QNT, true, false>(y_inv, tmp3, 1, 3, 1, Upsilon);
-//#ifndef NDEBUG
-//  assert(CheckHermiticity(Upsilon, 1e-8, {1, 0, 3, 2}));
-//#endif
-  tmp0 = TenT();
-  tmp1 = TenT();
-  Contract(&gamma_tail, {4}, &x_inv, {0}, &tmp0);
-  gamma_tail = std::move(tmp0);
-  Contract(&y_inv, {1}, &gamma_head, {0}, &tmp1);
-  gamma_head = std::move(tmp1);
+  Upsilon = TenT();
+  Contract(&y_inv, {}, &y_inv_dag, {}, temp + 8);
+  diff = EvaluateHermiticity(temp[8], {2, 3, 0, 1});
+  assert(diff < 1e-6);
+  Contract(temp + 8, {1, 3}, temp + 6, {1, 2}, &Upsilon);
+//  Contract<TenElemT, QNT, true, false>(y_inv_dag, temp[6], 1, 2, 1, temp[8]);
+//  Contract<TenElemT, QNT, true, false>(y_inv, temp[8], 1, 3, 1, Upsilon);
+//  Contract(&y_inv_dag, {1}, temp + 6, {2}, temp + 8);
+//  Contract(&y_inv, {1}, temp + 8, {2}, &Upsilon);
+  Upsilon.Transpose({0, 1, 3, 2});
+  diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
+  if (diff > 1e-8) {
+    if (diff < 1e-4) {
+      std::cout << "Brute-force symmetrize the Upsilon tensor." << std::endl;
+      SymmetrizeMat(Upsilon, {1, 0, 3, 2});
+    } else {
+      std::cout << "Upsilon is extremely asymmetric. diff = " << diff << "consider truncate d_R more." << std::endl;
+      exit(-1);
+    }
+  }
+  Contract(&gamma_tail, {4}, &x_inv, {0}, temp + 9);
+  gamma_tail = std::move(temp[9]);
+  Contract(&y_inv, {1}, &gamma_head, {0}, temp + 10);
+  gamma_head = std::move(temp[10]);
 }
 
 /**  Fix weighted trace gauge for the loop tensors
@@ -777,6 +804,7 @@ void WeightedTraceGaugeFixing(
 template<typename TenElemT, typename QNT>
 void WeightedTraceGaugeFixingInSquareLocalLoop(
     const ArnoldiParams &arnoldi_params,
+    const double inv_tol,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
@@ -788,7 +816,7 @@ void WeightedTraceGaugeFixingInSquareLocalLoop(
   Upsilons = ConstructUpsilons(gammas, lambdas);
   for (size_t i = 0; i < 4; i++) {
     WeightedTraceGaugeFixing(arnoldi_params,
-                             1e-7, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
+                             inv_tol, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
   }
 
 #ifndef NDEBUG
@@ -850,6 +878,7 @@ struct PtenVec {
   }
   double NormSquare(void) const {
     double norm = p_ten.GetQuasi2Norm();
+    assert(std::abs(norm * norm - (*this) * (*this)) < 1e-14);
     return norm * norm;
   }
   TenT p_ten;
@@ -923,7 +952,13 @@ FullEnvironmentTruncate(
   QNT qn0 = sigma.Div();
   TenT sigma_Upsilon_tmp;
   Contract(&Upsilon, {0, 2}, &sigma, {1, 0}, &sigma_Upsilon_tmp);
-  DTenT sigma_orig = sigma;
+  TenT sigma_orig;
+  if constexpr (std::is_same<TenElemT, double>::value) {
+    sigma_orig = sigma;
+  } else {
+    sigma_orig = ToComplex(sigma);
+  }
+
   // then data of sigma can be thrown.
   sigma = DTenT();
   TenT u, vdag;
@@ -974,19 +1009,15 @@ FullEnvironmentTruncate(
     B_ten.Transpose({0, 2, 1, 3});
     b_ten_mat = BtenMatT(B_ten);
 #ifndef NDEBUG
-//    auto Upsilon_dag = Dag(Upsilon);
-//    auto Upsilon_trans = Upsilon;
-//    Upsilon_trans.Transpose({1, 0, 3, 2});
-//    auto diff_ten = Upsilon_dag + (-Upsilon_trans);
-//    double diff_norm = diff_ten.Get2Norm();
-//    assert(diff_norm < 1e-8);
-//
+    auto diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
+    assert(diff < 1e-8);
+
 //    auto B_ten_dag = Dag(B_ten);
 //    auto B_ten_trans = B_ten;
 //    B_ten_trans.Transpose({2, 3, 0, 1});
-//    diff_ten = B_ten_dag + (-B_ten_trans);
-//    diff_norm = diff_ten.Get2Norm();
-//    assert(diff_norm < 1e-10);
+//    auto diff_ten = B_ten_dag + (-B_ten_trans);
+//    auto diff_norm = diff_ten.GetQuasi2Norm();
+//    assert(diff_norm < 1e-3);
 #endif
 
     Contract(&sigma, {1}, &u, {0}, &L_ten_init);
@@ -1016,7 +1047,7 @@ template<typename TenElemT, typename QNT>
 void FullEnvironmentTruncateInSquareLocalLoop(
     const FullEnvironmentTruncateParams &trunc_params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
-    std::array<QLTensor<TenElemT, QNT>, 4> &lambdas, //input & output
+    std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
     const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //input & output
 ) {
   using TenT = QLTensor<TenElemT, QNT>;

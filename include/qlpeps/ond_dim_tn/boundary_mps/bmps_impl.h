@@ -944,6 +944,7 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(TransferMPO &mpo,
     Tensor tmp1, tmp2;
     Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
     Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], 3, pre_post, 2, tmp2);
+
     res.alloc(i);
     if (i < this->size() - 1) {
       tmp2.Transpose({1, 3, 2, 0});
@@ -955,6 +956,7 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(TransferMPO &mpo,
       auto trivial_idx2 = InverseIndex(tmp2.GetIndex(2));
       Tensor right_boundary = IndexCombine<TenElemT, QNT>(trivial_idx1, trivial_idx2, OUT);
       Contract(&tmp2, {0, 2}, &right_boundary, {0, 1}, res(i));
+      assert(res[i].GetRawDataPtr() != nullptr);
     }
   }
   actual_Dmax = 1;

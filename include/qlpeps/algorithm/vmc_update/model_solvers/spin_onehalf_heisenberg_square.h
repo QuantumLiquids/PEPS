@@ -169,7 +169,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
         const SiteIdx site2 = {row, col + 1};
-        double horizontal_bond_energy;
+        TenElemT horizontal_bond_energy;
         if (config(site1) == config(site2)) {
           horizontal_bond_energy = 0.25;
         } else {
@@ -252,7 +252,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      double vertical_bond_energy;
+      TenElemT vertical_bond_energy;
       if (config(site1) == config(site2)) {
         vertical_bond_energy = 0.25;
       } else {

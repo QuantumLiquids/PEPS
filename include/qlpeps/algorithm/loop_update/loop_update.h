@@ -84,7 +84,7 @@ class LoopUpdateExecutor : public Executor {
   *
   */
   DuoMatrix<LoopGatesT> evolve_gates_;
-
+  Tensor id_nn_;    // nearest-neighbor identity operator, used for simple update
   LoopUpdateTruncatePara truncate_para_;
 
   PEPST peps_;

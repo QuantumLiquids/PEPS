@@ -43,7 +43,7 @@ template<typename TenElemT, typename QNT>
 double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  double e0(0.0);
+  TenElemT e0(0.0);
   double middle_bond_trunc_err;
 #ifdef QLPEPS_TIMING_MODE
   Timer vertical_nn_projection_timer("vertical_nn_projection");
@@ -83,7 +83,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
             << " TruncErr = " << std::setprecision(2) << std::scientific << middle_bond_trunc_err << std::fixed
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  return e0;
+  return Real(e0);
 }
 }
 

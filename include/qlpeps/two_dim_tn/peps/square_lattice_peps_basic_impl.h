@@ -557,11 +557,11 @@ SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, 
        *      |
        *      2
        */
-      inv_lambda = ElementWiseInv(lambda_vert({row, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_vert({row, col}), inv_tolerance);
       Contract<TenElemT, QNT, false, false>(q, inv_lambda, 0, 1, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_horiz({row, col}), inv_tolerance);
       Contract<TenElemT, QNT, false, false>(tmp_ten[0], inv_lambda, 0, 1, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_vert({row + 1, col}), inv_tolerance);
       Contract<TenElemT, QNT, false, true>(tmp_ten[1], inv_lambda, 0, 0, 1, res);
       /*  output:
        *      1
@@ -580,11 +580,11 @@ SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, 
        *      |
        *      0
        */
-      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_vert({row + 1, col}), inv_tolerance);
       Contract<TenElemT, QNT, false, false>(q, inv_lambda, 0, 0, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_horiz({row, col + 1}), inv_tolerance);
       Contract<TenElemT, QNT, false, false>(tmp_ten[0], inv_lambda, 0, 0, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_vert({row, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_vert({row, col}), inv_tolerance);
       Contract<TenElemT, QNT, false, true>(tmp_ten[1], inv_lambda, 0, 1, 1, res);
       /*  output:
        *      3
@@ -602,11 +602,11 @@ SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, 
        *      |
        *      3
        */
-      inv_lambda = ElementWiseInv(lambda_vert(site), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_vert(site), inv_tolerance);
       Contract<TenElemT, QNT, true, true>(inv_lambda, q, 1, 1, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_horiz(site), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_horiz(site), inv_tolerance);
       Contract<TenElemT, QNT, true, true>(inv_lambda, tmp_ten[0], 1, 1, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_horiz({row, col + 1}), inv_tolerance);
       Contract<TenElemT, QNT, false, true>(inv_lambda, tmp_ten[1], 0, 2, 1, res);
       /*  output:
        *      1
@@ -624,11 +624,11 @@ SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, 
        *      |
        *      1
        */
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col + 1}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_horiz({row, col + 1}), inv_tolerance);
       Contract<TenElemT, QNT, false, true>(inv_lambda, q, 0, 0, 1, tmp_ten[0]);
-      inv_lambda = ElementWiseInv(lambda_vert({row + 1, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_vert({row + 1, col}), inv_tolerance);
       Contract<TenElemT, QNT, false, true>(inv_lambda, tmp_ten[0], 0, 1, 1, tmp_ten[1]);
-      inv_lambda = ElementWiseInv(lambda_horiz({row, col}), inv_tolerance);
+      inv_lambda = DiagMatInv(lambda_horiz({row, col}), inv_tolerance);
       Contract<TenElemT, QNT, true, true>(inv_lambda, tmp_ten[1], 1, 1, 1, res);
       /*  output:
        *      1

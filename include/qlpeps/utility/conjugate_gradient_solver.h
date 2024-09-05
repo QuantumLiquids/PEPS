@@ -75,6 +75,7 @@ VectorType ConjugateGradientSolver(
       return x;
     }
     double beta = rkp1_2norm / rk_2norm;
+    assert(beta <= 2);
     p = r + beta * p;
   }
   iter = max_iter;
@@ -196,12 +197,11 @@ SlaveReceiveBroadcastInstruction(const boost::mpi::communicator world) {
   return instruction;
 }
 
-bool pap_check(const double& pap) {
+bool pap_check(const double &pap) {
   return pap > 0;
 }
 
-
-bool pap_check(const std::complex<double>& pap) {
+bool pap_check(const std::complex<double> &pap) {
   return pap.real() > 0 && std::abs(pap.imag()) < 1e-10; // Adjust tolerance as needed
 }
 
