@@ -45,11 +45,45 @@ struct BMPSTruncatePara {
 };
 
 /**
+ * Boundary Matrix Product State class which is used in the contraction of single-layer 2D tensor network.
+ *
+ * For bosonic single-layer 2D tensor network, each tensor has four-leg,
+ * so that the corresponding bmps tensor has the following form with index order :
  *      1
  *      |
  *  0---T---2
- * @tparam TenElemT
- * @tparam QNT
+ *
+ *  For fermionic single-layer 2D tensor network, each tensor has 5 legs, with the last index a trivial index
+ *  to match the evenness of the tensors. The corresponding bmps tensor has 4 legs and the following index order :
+ *
+ *      1
+ *      |
+ *  0---T---2
+ *      |
+ *      4
+ *  where leg 4 the trivial index.
+ *
+ *
+ *  boundary-MPS tensor order :
+ *                          UP
+ *             7----6---5---4---3---2---1---0
+ *             |    |   |   |   |   |   |   |
+ *
+ *             |    |   |   |   |   |   |   |
+ *      0--- ----------------------------------- ---4
+ *      |      |    |   |   |   |   |   |   |       |
+ *      1--- ----------------------------------- ---3
+ *      |      |    |   |   |   |   |   |   |       |
+ * LEFT 2--- ----------------------------------- ---2 RIGHT
+ *      |      |    |   |   |   |   |   |   |       |
+ *      3--- ----------------------------------- ---1
+ *      |      |    |   |   |   |   |   |   |       |
+ *      4--- ----------------------------------- ---0
+ *             |    |   |   |   |   |   |   |
+ *
+ *             |    |   |   |   |   |   |   |
+ *             0----1---2---3---4---5---6---7
+ *                      DOWN
  */
 template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
@@ -150,19 +184,33 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
                              const CompressMPSScheme &) const;
 
  private:
+
   /**
-   * @note mpo will be reversed if the position is RIGHT or UP.
-   */
-  BMPS MultipleMPOSVDCompress_(TransferMPO &,
+ * reverse mpo tensor order if the position is RIGHT or UP, so that it is aligned with boundary-MPS tensor order.
+ */
+  void AlignTransferMPOTensorOrder_(TransferMPO &) const;
+
+  BMPS MultipleMPOSVDCompress_(const TransferMPO &,
                                const size_t, const size_t, const double,
                                size_t &actual_Dmax, double &actual_trunc_err_max) const;
 
-  BMPS InitGuessForVariationalMPOMultiplication_(TransferMPO &, const size_t, const size_t, const double) const;
+  BMPS MultipleMPO2SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const double,
+                                            const double variational_converge_tol, const size_t max_iter) const;
 
+  // strictly, 1-site variational compress method is only suitable for the cases those tensors have no symmetry constrain.
+  BMPS MultipleMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const double,
+                                            const double variational_converge_tol, const size_t max_iter) const;
+  BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const double) const;
+
+  // todo code.
   double RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const double);
 
+  // todo code.
   BMPS
-  InitGuessForVariationalMPOMultiplicationWithPhyIdx_(TransferMPO &, const size_t, const size_t, const double) const;
+  InitGuessForVariationalMPOMultiplicationWithPhyIdx_(const TransferMPO &,
+                                                      const size_t,
+                                                      const size_t,
+                                                      const double) const;
 
   const BMPSPOSITION
       position_; //possible to remove this member and replace it with function parameter if the function needs

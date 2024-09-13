@@ -206,19 +206,16 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
   bases[0] = new TenT(vec0);
   bases[0]->QuasiNormalize();
   bases_dag[0] = new TenT(Dag(*bases[0]));
-  std::vector<TenT> fermion_sign_projectors(2);
+  std::vector<TenT> fermion_parity_ops(2);
   if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
     for (size_t i = 0; i < 2; i++) {
       Index<QNT> idx = vec0.GetIndex(i);
-      fermion_sign_projectors[i] = TenT({InverseIndex(idx), idx});
-      for (size_t j = 0; j < idx.dim(); j++) {
-        fermion_sign_projectors[i]({j, j}) = 1.0;
-      }
+      fermion_parity_ops[i] = Eye<TenElemT, QNT>(InverseIndex(idx));
     }
 
     TenT temp1, temp2;
-    Contract(&fermion_sign_projectors[1], {1}, bases_dag[0], {1}, &temp1);
-    Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+    Contract(&fermion_parity_ops[1], {1}, bases_dag[0], {1}, &temp1);
+    Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
     *bases_dag[0] = temp2;
   }
 //  std::optional<TenElemT> eigenvalue_last;
@@ -238,8 +235,8 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
     bases_dag[k] = new TenT(Dag(*bases[k]));
     if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
       TenT temp1, temp2;
-      Contract(&fermion_sign_projectors[1], {1}, bases_dag[k], {1}, &temp1);
-      Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+      Contract(&fermion_parity_ops[1], {1}, bases_dag[k], {1}, &temp1);
+      Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
       *bases_dag[k] = temp2;
       //such definition can make sure the overlap between <base|base> >=0, so that it constitutes well-defined norm.
     }

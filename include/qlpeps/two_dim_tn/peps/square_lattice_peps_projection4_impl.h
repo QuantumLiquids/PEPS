@@ -605,19 +605,16 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
   TenT vec = vec0;
   vec.QuasiNormalize();
   auto vec_last_dag = Dag(vec);
-  std::vector<TenT> fermion_sign_projectors(2);
+  std::vector<TenT> fermion_parity_ops(2);
   if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
     for (size_t i = 0; i < 2; i++) {
       Index<QNT> idx = vec0.GetIndex(i);
-      fermion_sign_projectors[i] = TenT({InverseIndex(idx), idx});
-      for (size_t j = 0; j < idx.dim(); j++) {
-        fermion_sign_projectors[i]({j, j}) = 1.0;
-      }
+      fermion_parity_ops[i] = Eye<TenElemT, QNT>(InverseIndex(idx));
     }
 
     TenT temp1, temp2;
-    Contract(&fermion_sign_projectors[1], {1}, &vec_last_dag, {1}, &temp1);
-    Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+    Contract(&fermion_parity_ops[1], {1}, &vec_last_dag, {1}, &temp1);
+    Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
     vec_last_dag = temp2;
   }
   for (iter = 0; iter < iter_max; iter++) {
@@ -633,8 +630,8 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
     vec_last_dag = Dag(vec);
     if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
       TenT temp1, temp2;
-      Contract(&fermion_sign_projectors[1], {1}, &vec_last_dag, {1}, &temp1);
-      Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+      Contract(&fermion_parity_ops[1], {1}, &vec_last_dag, {1}, &temp1);
+      Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
       vec_last_dag = temp2;
     }
   }
@@ -859,17 +856,14 @@ struct PtenVec {
   ElemT operator*(const PtenVec &rhs) const {
     TenT scalar, p_ten_dag = Dag(this->p_ten);
     if constexpr (TenT::IsFermionic()) {
-      std::vector<TenT> fermion_sign_projectors(2);
+      std::vector<TenT> fermion_parity_ops(2);
       for (size_t i = 0; i < 2; i++) {
         Index<QNT> idx = p_ten.GetIndex(i);
-        fermion_sign_projectors[i] = TenT({InverseIndex(idx), idx});
-        for (size_t j = 0; j < idx.dim(); j++) {
-          fermion_sign_projectors[i]({j, j}) = 1.0;
-        }
+        fermion_parity_ops[i] = Eye<ElemT, QNT>(InverseIndex(idx));
       }
       TenT temp1, temp2;
-      Contract(&fermion_sign_projectors[1], {1}, &p_ten_dag, {1}, &temp1);
-      Contract(&fermion_sign_projectors[0], {1}, &temp1, {1}, &temp2);
+      Contract(&fermion_parity_ops[1], {1}, &p_ten_dag, {1}, &temp1);
+      Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
       Contract(&temp2, {0, 1}, &rhs.p_ten, {0, 1}, &scalar);
     } else {
       Contract(&p_ten_dag, {0, 1}, &rhs.p_ten, {0, 1}, &scalar);
