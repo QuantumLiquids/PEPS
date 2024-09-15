@@ -80,7 +80,7 @@ double SplitIndexTPS<TenElemT, QNT>::NormSquare() const {
     for (size_t col = 0; col < this->cols(); ++col) {
       for (size_t i = 0; i < phy_dim; i++) {
         if (!(*this)({row, col})[i].IsDefault()) {
-          double norm_local = (*this)({row, col})[i].Get2Norm();
+          double norm_local = (*this)({row, col})[i].GetQuasi2Norm();
           norm_square += norm_local * norm_local;
         }
       }
@@ -95,7 +95,7 @@ double SplitIndexTPS<TenElemT, QNT>::NormalizeSite(const SiteIdx &site) {
   double norm_square(0);
   for (size_t dim = 0; dim < phy_dim; dim++) {
     if (!(*this)(site)[dim].IsDefault()) {
-      double norm_local = (*this)(site)[dim].Get2Norm();
+      double norm_local = (*this)(site)[dim].GetQuasi2Norm();
       norm_square += norm_local * norm_local;
     }
   }

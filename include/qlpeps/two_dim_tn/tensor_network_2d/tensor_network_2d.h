@@ -27,11 +27,18 @@ class SplitIndexTPS;
 using BTenPOSITION = BMPSPOSITION;
 
 /**  2-dimensional finite-size tensor network and its environments (boundary MPS and so on)
+ *
+ *  For bosonic tensor network, the index order of the tensors is
+ *
  *         3
  *         |
  *      0--t--2
  *         |
  *         1
+ *
+ *  For fermionic tensor network, there is additional 1-dim index which are used to
+ *  match the even parities of the tensors, which is the last index.
+ *
  * @tparam TenElemT
  * @tparam QNT
  */

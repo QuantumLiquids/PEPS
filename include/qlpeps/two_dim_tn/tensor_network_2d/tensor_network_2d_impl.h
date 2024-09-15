@@ -263,8 +263,17 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen(const qlpeps::BTenPOSITION positio
       break;
     }
   }
-  Tensor ten({index0, index1, index2});
-  ten({0, 0, 0}) = TenElemT(1.0);
+  Tensor ten;
+  if constexpr (Tensor::IsFermionic()) {
+    auto qn = index0.GetQNSct(0).GetQn();
+    auto qn0 = qn + (-qn);
+    auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, OUT);
+    ten = Tensor({index0, index1, index2, trivial_index_out});
+    ten({0, 0, 0, 0}) = TenElemT(1.0);
+  } else {
+    ten = Tensor({index0, index1, index2});
+    ten({0, 0, 0}) = TenElemT(1.0);
+  }
   bten_set_[position].emplace_back(ten);
 }
 
@@ -319,8 +328,17 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen2(const BTenPOSITION position, cons
       break;
     }
   }
-  Tensor ten({index0, index1, index2, index3});
-  ten({0, 0, 0, 0}) = TenElemT(1.0);
+  Tensor ten;
+  if constexpr (Tensor::IsFermionic()) {
+    auto qn = index0.GetQNSct(0).GetQn();
+    auto qn0 = qn + (-qn);
+    auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, OUT);
+    ten = Tensor({index0, index1, index2, index3, trivial_index_out});
+    ten({0, 0, 0, 0, 0}) = TenElemT(1.0);
+  } else {
+    ten = Tensor({index0, index1, index2, index3});
+    ten({0, 0, 0, 0}) = TenElemT(1.0);
+  }
   bten_set2_[position].emplace_back(ten);
 }
 
@@ -348,9 +366,19 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const qlpeps::BTenPOSITION pos
         auto &right_mps_ten = right_bmps[i];
         auto &mpo_ten = *mpo[N - i - 1];
         Tensor tmp1, tmp2, tmp3;
-        Contract<TenElemT, QNT, true, true>(left_mps_ten, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 0, 2, tmp2);
-        Contract(&tmp2, {0, 2}, &right_mps_ten, {0, 1}, &tmp3);
+        if constexpr (Tensor::IsFermionic()) {
+          Contract<TenElemT, QNT, true, true>(left_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          tmp1.FuseIndex(0, 5);
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 2, 0, 2, tmp2);
+          tmp2.FuseIndex(1, 5);
+          Contract(&tmp2, {1, 3}, &right_mps_ten, {0, 1}, &tmp3);
+          tmp3.FuseIndex(0, 4);
+          tmp3.Transpose({1, 2, 3, 0});
+        } else {
+          Contract<TenElemT, QNT, true, true>(left_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 0, 2, tmp2);
+          Contract(&tmp2, {0, 2}, &right_mps_ten, {0, 1}, &tmp3);
+        }
         btens.emplace_back(tmp3);
       }
       break;
@@ -368,9 +396,19 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const qlpeps::BTenPOSITION pos
         auto &right_mps_ten = right_bmps[N - i - 1];
         auto &mpo_ten = *mpo[i];
         Tensor tmp1, tmp2, tmp3;
-        Contract<TenElemT, QNT, true, true>(right_mps_ten, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 2, 2, tmp2);
-        Contract(&tmp2, {0, 2}, &left_mps_ten, {0, 1}, &tmp3);
+        if constexpr (Tensor::IsFermionic()) {
+          Contract<TenElemT, QNT, true, true>(right_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          tmp1.FuseIndex(0, 5);
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 2, 2, 2, tmp2);
+          tmp2.FuseIndex(1, 3);
+          Contract(&tmp2, {1, 3}, &left_mps_ten, {0, 1}, &tmp3);
+          tmp3.FuseIndex(0, 4);
+          tmp3.Transpose({1, 2, 3, 0});
+        } else {
+          Contract<TenElemT, QNT, true, true>(right_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 2, 2, tmp2);
+          Contract(&tmp2, {0, 2}, &left_mps_ten, {0, 1}, &tmp3);
+        }
         btens.emplace_back(tmp3);
       }
       break;
@@ -386,11 +424,22 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const qlpeps::BTenPOSITION pos
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &up_mps_ten = up_bmps[N - i - 1];
         auto &down_mps_ten = down_bmps[i];
-        auto &mpo_ten = *mpo[i];
         Tensor tmp1, tmp2, tmp3;
-        Contract<TenElemT, QNT, true, true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 3, 2, tmp2);
-        Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &tmp3);
+        if constexpr (Tensor::IsFermionic()) {
+          Contract<TenElemT, QNT, true, true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          tmp1.FuseIndex(0, 5);
+          auto mpo_ten = *mpo[i];
+          mpo_ten.Transpose({3, 0, 1, 2, 4});
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 2, 0, 2, tmp2);
+          tmp2.FuseIndex(1, 5);
+          Contract(&tmp2, {1, 3}, &down_mps_ten, {0, 1}, &tmp3);
+          tmp3.FuseIndex(0, 4);
+          tmp3.Transpose({1, 2, 3, 0});
+        } else {
+          Contract<TenElemT, QNT, true, true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          Contract<TenElemT, QNT, false, false>(tmp1, *mpo[i], 1, 3, 2, tmp2);
+          Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &tmp3);
+        }
         btens.emplace_back(tmp3);
       }
       break;
@@ -408,9 +457,19 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen(const qlpeps::BTenPOSITION pos
         auto &down_mps_ten = down_bmps[N - i - 1];
         auto &mpo_ten = *mpo[N - i - 1];
         Tensor tmp1, tmp2, tmp3;
-        Contract<TenElemT, QNT, true, true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
-        Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &tmp3);
+        if constexpr (Tensor::IsFermionic()) {
+          Contract<TenElemT, QNT, true, true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          tmp1.FuseIndex(0, 5);
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 2, 1, 2, tmp2);
+          tmp2.FuseIndex(1, 4);
+          Contract(&tmp2, {1, 3}, &up_mps_ten, {0, 1}, &tmp3);
+          tmp3.FuseIndex(0, 4);
+          tmp3.Transpose({1, 2, 3, 0});
+        } else {
+          Contract<TenElemT, QNT, true, true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1);
+          Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
+          Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &tmp3);
+        }
         btens.emplace_back(tmp3);
       }
       break;
@@ -429,6 +488,10 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, cons
   BMPSPOSITION next_post = BMPSPOSITION((size_t(post) + 1) % 4);
   size_t start_idx = bten_set2_[post].size() - 1;
   std::vector<Tensor> &btens = bten_set2_[post];
+  TransferMPO mpo1, mpo2;
+  size_t N, end_idx;
+  BMPST *bmps_pre, *bmps_post;
+  std::vector<size_t> mpo_ten_transpose_axes;
   switch (post) {
     case DOWN: {
       /*
@@ -439,26 +502,36 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, cons
        */
       const size_t col1 = slice_num1;
       const size_t col2 = slice_num1 + 1;
-      const TransferMPO &mpo1 = this->get_col(col1);
-      const TransferMPO &mpo2 = this->get_col(col2);
-      const size_t N = mpo1.size(); // this->rows();
-      const size_t end_idx = N - remain_sites;
-      auto &left_bmps = bmps_set_[pre_post][col1];
-      auto &right_bmps = bmps_set_[next_post][this->cols() - 1 - col2];
-
-      for (size_t i = start_idx; i < end_idx; i++) {
-        auto &mps_ten1 = left_bmps[N - i - 1];
-        auto &mps_ten2 = right_bmps[i];
-        Tensor mpo_ten1 = *mpo1[N - i - 1];
-        mpo_ten1.Transpose({0, 1, 3, 2});
-        auto &mpo_ten2 = *mpo2[N - i - 1];
-
-        Tensor tmp1, tmp2, tmp3, next_bten;
-        Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
-        Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
-        Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
-        btens.emplace_back(next_bten);
+      mpo1 = this->get_col(col1);
+      mpo2 = this->get_col(col2);
+      std::reverse(mpo1.begin(), mpo1.end());
+      std::reverse(mpo2.begin(), mpo2.end());
+      N = mpo1.size(); // this->rows();
+      bmps_pre = &bmps_set_[pre_post][col1];
+      bmps_post = &bmps_set_[next_post][this->cols() - 1 - col2];
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_ten_transpose_axes = {0, 1, 3, 2, 4};
+      } else {
+        mpo_ten_transpose_axes = {0, 1, 3, 2};
+      }
+      break;
+    }
+    case RIGHT: {
+      const size_t row1 = slice_num1;
+      const size_t row2 = row1 + 1;
+      mpo1 = this->get_row(row2);
+      mpo2 = this->get_row(row1);
+      std::reverse(mpo1.begin(), mpo1.end());
+      std::reverse(mpo2.begin(), mpo2.end());
+      N = mpo1.size(); // this->cols()
+      const size_t mps1_num = this->rows() - 1 - row2;
+      const size_t mps2_num = row1;
+      bmps_pre = &bmps_set_[pre_post][mps1_num];
+      bmps_post = &bmps_set_[next_post][mps2_num];
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_ten_transpose_axes = {1, 2, 0, 3, 4};
+      } else {
+        mpo_ten_transpose_axes = {1, 2, 0, 3};
       }
       break;
     }
@@ -471,79 +544,80 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, cons
        */
       const size_t col1 = slice_num1;
       const size_t col2 = slice_num1 + 1;
-      const TransferMPO &mpo1 = this->get_col(col2);
-      const TransferMPO &mpo2 = this->get_col(col1);
-      const size_t N = mpo1.size(); // this->rows();
-      const size_t end_idx = N - remain_sites;
-      auto &right_bmps = bmps_set_[RIGHT][this->cols() - 1 - col2];
-      auto &left_bmps = bmps_set_[LEFT][col1];
-      for (size_t i = start_idx; i < end_idx; i++) {
-        auto &mps_ten1 = right_bmps[N - i - 1];
-        auto &mps_ten2 = left_bmps[i];
-
-        Tensor mpo_ten1 = *mpo1[i];
-        mpo_ten1.Transpose({2, 3, 1, 0});
-        auto &mpo_ten2 = *mpo2[i];
-        Tensor tmp1, tmp2, tmp3, next_bten;
-        Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
-        Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
-        Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
-        btens.emplace_back(next_bten);
+      mpo1 = this->get_col(col2);
+      mpo2 = this->get_col(col1);
+      N = mpo1.size(); // this->rows();
+      bmps_pre = &bmps_set_[RIGHT][this->cols() - 1 - col2];
+      bmps_post = &bmps_set_[LEFT][col1];
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_ten_transpose_axes = {2, 3, 1, 0, 4};
+      } else {
+        mpo_ten_transpose_axes = {2, 3, 1, 0};
       }
       break;
     }
     case LEFT: {
       const size_t row1 = slice_num1;
       const size_t row2 = row1 + 1;
-      const TransferMPO &mpo1 = this->get_row(row1);
-      const TransferMPO &mpo2 = this->get_row(row2);
-      const size_t N = mpo1.size(); // this->cols()
-      const size_t end_idx = N - remain_sites;
+      mpo1 = this->get_row(row1);
+      mpo2 = this->get_row(row2);
+      N = mpo1.size(); // this->cols()
       const size_t mps1_num = row1;
       const size_t mps2_num = this->rows() - 1 - row2;
-      auto &up_bmps = bmps_set_[pre_post][mps1_num];
-      auto &down_bmps = bmps_set_[next_post][mps2_num];
-      for (size_t i = start_idx; i < end_idx; i++) {
-        auto &mps_ten1 = up_bmps[N - i - 1];
-        auto &mps_ten2 = down_bmps[i];
-        Tensor mpo_ten1 = *mpo1[i];
-        mpo_ten1.Transpose({3, 0, 2, 1});
-        auto &mpo_ten2 = *mpo2[i];
-        Tensor tmp1, tmp2, tmp3, next_bten;
-        Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2); // O(D^7) complexity
-        Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
-        Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
-        btens.emplace_back(next_bten);
+      bmps_pre = &bmps_set_[pre_post][mps1_num];
+      bmps_post = &bmps_set_[next_post][mps2_num];
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_ten_transpose_axes = {3, 0, 2, 1, 4};
+      } else {
+        mpo_ten_transpose_axes = {3, 0, 2, 1};
       }
       break;
     }
-    case RIGHT: {
-      const size_t row1 = slice_num1;
-      const size_t row2 = row1 + 1;
-      const TransferMPO &mpo1 = this->get_row(row2);
-      const TransferMPO &mpo2 = this->get_row(row1);
-      const size_t N = mpo1.size(); // this->cols()
-      const size_t end_idx = N - remain_sites;
-      const size_t mps1_num = this->rows() - 1 - row2;
-      const size_t mps2_num = row1;
-      auto &down_bmps = bmps_set_[pre_post][mps1_num];
-      auto &up_bmps = bmps_set_[next_post][mps2_num];
-      for (size_t i = start_idx; i < end_idx; i++) {
-        auto &mps_ten1 = down_bmps[N - i - 1];
-        auto &mps_ten2 = up_bmps[i];
-        Tensor mpo_ten1 = *mpo1[N - i - 1];
-        mpo_ten1.Transpose({1, 2, 0, 3});
-        auto &mpo_ten2 = *mpo2[N - i - 1];
-        Tensor tmp1, tmp2, tmp3, next_bten;
-        Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
-        Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
-        Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
-        Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
-        btens.emplace_back(next_bten);
+  }
+  end_idx = N - remain_sites;
+  for (size_t i = start_idx; i < end_idx; i++) {
+    auto &mps_ten1 = (*bmps_pre)[N - i - 1];
+    auto &mps_ten2 = (*bmps_post)[i];
+    Tensor mpo_ten1 = *mpo1[i];
+    mpo_ten1.Transpose(mpo_ten_transpose_axes);
+    Tensor tmp1, tmp2, tmp3, next_bten;
+
+    if constexpr (Tensor::IsFermionic()) {
+      auto mpo_ten2 = *mpo2[i];
+      switch (post) {
+        case LEFT : {
+          mpo_ten2.Transpose({3, 0, 1, 2, 4});
+          break;
+        }
+        case DOWN : {
+          break;
+        }
+        case RIGHT : {
+          mpo_ten2.Transpose({1, 2, 3, 0, 4});
+          break;
+        }
+        case UP : {
+          mpo_ten2.Transpose({2, 3, 0, 1, 4});
+          break;
+        }
       }
-      break;
+      Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
+      tmp1.FuseIndex(0, 6);
+      Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 2, 0, 2, tmp2);
+      tmp2.FuseIndex(2, 6);
+      tmp2.Transpose({1, 0, 2, 3, 4, 5});
+      Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 5, 0, 2, tmp3);
+      tmp3.FuseIndex(0, 6);
+      Contract(&tmp3, {1, 4}, mps_ten2, {0, 1}, &next_bten);
+      tmp3.FuseIndex(0, 5);
+      tmp3.Transpose({1, 2, 3, 4, 0});
+    } else {
+      auto &mpo_ten2 = *mpo2[i];
+      Contract<TenElemT, QNT, true, true>(mps_ten1, btens.back(), 2, 0, 1, tmp1);
+      Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
+      Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 4, ctrct_mpo_start_idx, 2, tmp3);
+      Contract(&tmp3, {0, 3}, &mps_ten2, {0, 1}, &next_bten);
+      btens.emplace_back(next_bten);
     }
   }
 }
@@ -586,37 +660,60 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep(const BTenPOSITION post) {
     case DOWN: {
       const size_t col = bmps_set_[LEFT].size() - 1;
       N = this->rows();
-      grown_site[0] = N - bten_size;
-      grown_site[1] = col;
+      grown_site = {N - bten_size, col};
       break;
     }
     case UP: {
       const size_t col = bmps_set_[LEFT].size() - 1;
       N = this->rows();
-      grown_site[0] = bten_size - 1;
-      grown_site[1] = col;
+      grown_site = {bten_size - 1, col};
       break;
     }
     case LEFT: {
       const size_t row = bmps_set_[UP].size() - 1;
       N = this->cols();
-      grown_site[0] = row;
-      grown_site[1] = bten_size - 1;
+      grown_site = {row, bten_size - 1};
       break;
     }
     case RIGHT: {
       const size_t row = bmps_set_[UP].size() - 1;
       N = this->cols();
-      grown_site[0] = row;
-      grown_site[1] = N - bten_size;
+      grown_site = {row, N - bten_size};
       break;
     }
   }
   mps_ten1 = &bmps_set_[pre_post].back()[N - bten_size];
   mps_ten2 = &bmps_set_[next_post].back()[bten_size - 1];
-  Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set_.at(post).back(), 2, 0, 1, tmp1);
-  Contract<TenElemT, QNT, false, false>(tmp1, (*this)(grown_site), 1, ctrct_mpo_start_idx, 2, tmp2);
-  Contract(&tmp2, {0, 2}, mps_ten2, {0, 1}, &next_bten);
+  if constexpr (Tensor::IsFermionic()) {
+    Tensor mpo_ten = (*this)(grown_site);
+    switch (post) {
+      case LEFT : {
+        break;
+      }
+      case DOWN : {
+        mpo_ten.Transpose({1, 2, 3, 0, 4});
+        break;
+      }
+      case RIGHT : {
+        mpo_ten.Transpose({2, 3, 0, 1, 4});
+        break;
+      }
+      case UP : {
+        mpo_ten.Transpose({3, 0, 1, 2, 4});
+      }
+    }
+    Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set_.at(post).back(), 2, 0, 1, tmp1);
+    tmp1.FuseIndex(0, 5);
+    Contract<TenElemT, QNT, false, false>(tmp1, (*this)(grown_site), 2, 0, 2, tmp2);
+    tmp2.FuseIndex(1, 5);
+    Contract(&tmp2, {1, 3}, mps_ten2, {0, 1}, &next_bten);
+    next_bten.FuseIndex(0, 4);
+    next_bten.Transpose({1, 2, 3, 0});
+  } else {
+    Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set_.at(post).back(), 2, 0, 1, tmp1);
+    Contract<TenElemT, QNT, false, false>(tmp1, (*this)(grown_site), 1, ctrct_mpo_start_idx, 2, tmp2);
+    Contract(&tmp2, {0, 2}, mps_ten2, {0, 1}, &next_bten);
+  }
   bten_set_[post].emplace_back(next_bten);
 }
 
@@ -631,12 +728,13 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTen2Step_(const BTenPOSITION post, con
       bten_set2_.at(post).size() <= bmps_set_.at(pre_post).back().size()); // has been initialled
 #endif
   Tensor tmp1, tmp2, tmp3, next_bten;
-  Tensor *mps_ten1, *mpo_ten2, *mps_ten2;
+  Tensor *mps_ten1, *mps_ten2;
   Tensor mpo_ten1;
   SiteIdx grown_site1, grown_site2;
   size_t N; //mps length
   const size_t bten_size = bten_set2_.at(post).size();
   size_t mps1_num, mps2_num;
+  std::vector<size_t> mpo_transpose_axes;
   switch (post) {
     case DOWN: {
       /*
@@ -647,14 +745,18 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTen2Step_(const BTenPOSITION post, con
       */
       const size_t col = slice_num1;
       N = this->rows();
-      grown_site1[0] = N - bten_size;
-      grown_site1[1] = col;
-      grown_site2[0] = N - bten_size;
-      grown_site2[1] = col + 1;
+      grown_site1 = {N - bten_size, col};
+      grown_site2 = {N - bten_size, col + 1};
       mps1_num = col;
       mps2_num = this->cols() - 1 - (col + 1);
       mpo_ten1 = (*this)(grown_site1);
-      mpo_ten1.Transpose({0, 1, 3, 2});
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_transpose_axes = {0, 1, 3, 2, 4};
+        mpo_ten1.Transpose({0, 1, 3, 2, 4});
+      } else {
+        mpo_transpose_axes = {0, 1, 3, 2};
+        mpo_ten1.Transpose({0, 1, 3, 2});
+      }
       break;
     }
     case UP: {
@@ -674,42 +776,83 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTen2Step_(const BTenPOSITION post, con
       mps1_num = this->cols() - 1 - (col + 1);
       mps2_num = col;
       mpo_ten1 = (*this)({bten_size - 1, col + 1});
-      mpo_ten1.Transpose({2, 3, 1, 0});
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_transpose_axes = {2, 3, 1, 0, 4};
+      } else {
+        mpo_transpose_axes = {2, 3, 1, 0};
+      }
       break;
     }
     case LEFT: {
       const size_t row = slice_num1;
       N = this->cols();
-      grown_site1[0] = row;
-      grown_site1[1] = bten_size - 1;
-      grown_site2[0] = row + 1;
-      grown_site2[1] = bten_size - 1;
+      grown_site1 = {row, bten_size - 1};
+      grown_site2 = {row + 1, bten_size - 1};
       mps1_num = row;
       mps2_num = this->rows() - 1 - (row + 1);
       mpo_ten1 = (*this)(grown_site1);
-      mpo_ten1.Transpose({3, 0, 2, 1});
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_transpose_axes = {3, 0, 2, 1, 4};
+      } else {
+        mpo_transpose_axes = {3, 0, 2, 1};
+      }
       break;
     }
     case RIGHT: {
       const size_t row = slice_num1;
       N = this->cols();
-      grown_site1[0] = row;
-      grown_site1[1] = N - bten_size;
-      grown_site2[0] = row + 1;
-      grown_site2[1] = N - bten_size;
+      grown_site1 = {row, N - bten_size};
+      grown_site2 = {row + 1, N - bten_size};
       mps1_num = this->rows() - 1 - (row + 1);
       mps2_num = row;
       mpo_ten1 = (*this)(grown_site1);
-      mpo_ten1.Transpose({1, 2, 0, 3});
+      if constexpr (Tensor::IsFermionic()) {
+        mpo_transpose_axes = {1, 2, 0, 3, 4};
+      } else {
+        mpo_transpose_axes = {1, 2, 0, 3};
+      }
       break;
     }
   }
+  mpo_ten1.Transpose(mpo_transpose_axes);
   mps_ten1 = &bmps_set_.at(pre_post)[mps1_num][N - bten_size];
   mps_ten2 = &bmps_set_.at(next_post)[mps2_num][bten_size - 1];
-  Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
-  Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
-  Contract<TenElemT, QNT, false, false>(tmp2, (*this)(grown_site2), 4, ctrct_mpo_start_idx, 2, tmp3);
-  Contract(&tmp3, {0, 3}, mps_ten2, {0, 1}, &next_bten);
+  if constexpr (Tensor::IsFermionic()) {
+    Tensor mpo_ten2 = (*this)(grown_site2);
+    switch (post) {
+      case LEFT : {
+        mpo_ten2.Transpose({3, 0, 1, 2, 4});
+        break;
+      }
+      case DOWN : {
+        break;
+      }
+      case RIGHT : {
+        mpo_ten2.Transpose({1, 2, 3, 0, 4});
+        break;
+      }
+      case UP : {
+        mpo_ten2.Transpose({2, 3, 0, 1, 4});
+        break;
+      }
+    }
+
+    Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
+    tmp1.FuseIndex(0, 6);
+    Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 2, 0, 2, tmp2);
+    tmp2.FuseIndex(2, 6);
+    tmp2.Transpose({1, 0, 2, 3, 4, 5});
+    Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 5, 0, 2, tmp3);
+    tmp3.FuseIndex(0, 6);
+    Contract(&tmp3, {1, 4}, mps_ten2, {0, 1}, &next_bten);
+    tmp3.FuseIndex(0, 5);
+    tmp3.Transpose({1, 2, 3, 4, 0});
+  } else {
+    Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
+    Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 1, 0, 2, tmp2);
+    Contract<TenElemT, QNT, false, false>(tmp2, (*this)(grown_site2), 4, ctrct_mpo_start_idx, 2, tmp3);
+    Contract(&tmp3, {0, 3}, mps_ten2, {0, 1}, &next_bten);
+  }
   bten_set2_[post].emplace_back(next_bten);
 }
 
@@ -717,9 +860,9 @@ template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::Trace(const SiteIdx &site_a, const BondOrientation bond_dir) const {
   SiteIdx site_b(site_a);
   if (bond_dir == HORIZONTAL) {
-    site_b[1] += 1;
+    site_b.col() += 1;
   } else {
-    site_b[0] += 1;
+    site_b.row() += 1;
   }
   return Trace(site_a, site_b, bond_dir);
 }

@@ -20,6 +20,8 @@ class SiteIdx : public std::array<size_t, 2> {
  public:
   size_t row(void) const { return (*this)[0]; }
   size_t col(void) const { return (*this)[1]; }
+  size_t &row(void) { return (*this)[0]; }
+  size_t &col(void) { return (*this)[1]; }
 };
 
 }//qlpeps

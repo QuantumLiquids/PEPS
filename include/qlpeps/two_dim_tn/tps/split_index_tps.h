@@ -54,9 +54,17 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
         const size_t dim = local_hilbert.dim();
         (*this)({row, col}) = std::vector<Tensor>(dim);
         for (size_t i = 0; i < dim; i++) {
-          Tensor project_ten = Tensor({local_hilbert_inv});
-          project_ten({i}) = TenElemT(1.0);
-          Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &(*this)({row, col})[i]);
+          if constexpr (Tensor::IsFermionic()) {
+            QNT qn = local_hilbert.GetQNSctFromActualCoor(i).GetQn();
+            Index<QNT> match_idx = Index<QNT>({QNSector<QNT>(qn, 1)}, OUT);
+            Tensor project_ten = Tensor({local_hilbert_inv, match_idx});
+            project_ten({i, 0}) = TenElemT(1.0);
+            Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &(*this)({row, col})[i]);
+          } else {
+            Tensor project_ten = Tensor({local_hilbert_inv});
+            project_ten({i}) = TenElemT(1.0);
+            Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &(*this)({row, col})[i]);
+          }
         }
       }
     }
@@ -75,17 +83,26 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
       for (size_t col = 0; col < this->cols(); col++) {
         const std::vector<Tensor> &split_tens = (*this)({row, col});
         Tensor combined_ten;
-        for (size_t i = 0; i < split_tens.size(); i++) {
-          Tensor leg_ten({phy_idx});
-          leg_ten({i}) = TenElemT(1.0);
-          std::vector<std::vector<size_t>> empty_vv = {{}, {}};
-          const Tensor &split_ten_comp = split_tens[i];
-          Tensor split_ten_with_phy_leg;
-          Contract(&split_ten_comp, &leg_ten, empty_vv, &split_ten_with_phy_leg);
-          if (i == 0) {
-            combined_ten = split_ten_with_phy_leg;
-          } else {
-            combined_ten += split_ten_with_phy_leg;
+        if constexpr (Tensor::IsFermionic()) {
+          combined_ten = split_tens.front();
+          for (size_t i = 1; i < split_tens.size(); i++) {
+            Tensor tmp;
+            Expand(&combined_ten, &split_tens[i], {4}, &tmp);
+            combined_ten = tmp;
+          }
+        } else {
+          for (size_t i = 0; i < split_tens.size(); i++) {
+            Tensor leg_ten({phy_idx});
+            leg_ten({i}) = TenElemT(1.0);
+            std::vector<std::vector<size_t>> empty_vv = {{}, {}};
+            const Tensor &split_ten_comp = split_tens[i];
+            Tensor split_ten_with_phy_leg;
+            Contract(&split_ten_comp, &leg_ten, empty_vv, &split_ten_with_phy_leg);
+            if (i == 0) {
+              combined_ten = split_ten_with_phy_leg;
+            } else {
+              combined_ten += split_ten_with_phy_leg;
+            }
           }
         }
         tps({row, col}) = combined_ten;
@@ -179,13 +196,31 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     size_t phy_dim = PhysicalDim();
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
+        std::vector<Tensor> fermion_parity_ops(4);
+        if constexpr (Tensor::IsFermionic()) {
+          for (size_t j = 0; j < 4; j++) {
+            Index<QNT> idx = right({row, col})[0].GetIndex(j);
+            fermion_parity_ops[j] = Eye<TenElemT, QNT>(InverseIndex(idx));
+          }
+        }
         for (size_t i = 0; i < phy_dim; i++) {
           if ((*this)({row, col})[i].IsDefault() || right({row, col})[i].IsDefault()) {
             continue;
           }
           Tensor ten_dag = Dag((*this)({row, col})[i]);
           Tensor scalar;
-          Contract(&ten_dag, {0, 1, 2, 3}, &right({row, col})[i], {0, 1, 2, 3}, &scalar);
+          if constexpr (Tensor::IsFermionic()) {
+            // insert the fermion parity operators
+            Tensor temp = right({row, col})[i];
+            for (size_t j = 0; j < 4; j++) {
+              Tensor temp2;
+              Contract(&fermion_parity_ops[4 - j - 1], {0}, &temp, {3}, &temp2);
+              temp = temp2;
+            }
+            Contract(&ten_dag, {0, 1, 2, 3, 4}, &temp, {0, 1, 2, 3, 4}, &scalar);
+          } else {
+            Contract(&ten_dag, {0, 1, 2, 3}, &right({row, col})[i], {0, 1, 2, 3}, &scalar);
+          }
           res += TenElemT(scalar());
         }
       }
