@@ -4,6 +4,7 @@
 *
 * Description: QuantumLiquids/PEPS project. Explicit class of wave function component in square lattice.
 *              Monte Carlo sweep realized by NN bond flip with the constraint of U1 quantum number conservation.
+ *             Suitable for, e.g. Heisenberg model/t-J model
 */
 
 #ifndef QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_NN_EXCHANGE_H
@@ -19,7 +20,8 @@ class SquareTPSSampleNNExchange : public WaveFunctionComponent<TenElemT, QNT> {
  public:
   TensorNetwork2D<TenElemT, QNT> tn;
 
-  SquareTPSSampleNNExchange(const size_t rows, const size_t cols) : WaveFunctionComponentT(rows, cols), tn(rows, cols) {}
+  SquareTPSSampleNNExchange(const size_t rows, const size_t cols) : WaveFunctionComponentT(rows, cols),
+                                                                    tn(rows, cols) {}
 
   SquareTPSSampleNNExchange(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
       : WaveFunctionComponentT(config), tn(config.rows(), config.cols()) {
@@ -43,16 +45,6 @@ class SquareTPSSampleNNExchange : public WaveFunctionComponent<TenElemT, QNT> {
     tn.InitBTen(LEFT, 0);
     this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
   }
-
-
-//  SplitIndexTPS<TenElemT, QNT> operator*(const SplitIndexTPS<TenElemT, QNT> &sitps) const {
-//
-//
-//  }
-//
-//  operator SplitIndexTPS<TenElemT, QNT>() const {
-//
-//  }
 
   void MonteCarloSweepUpdate(const SplitIndexTPS<TenElemT, QNT> &sitps,
                              std::uniform_real_distribution<double> &u_double,
@@ -97,13 +89,23 @@ class SquareTPSSampleNNExchange : public WaveFunctionComponent<TenElemT, QNT> {
   }
 
  private:
+  // the code is exactly same for fermion and boson since only the square of norms are used.
   bool ExchangeUpdate_(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
                        const SplitIndexTPS<TenElemT, QNT> &sitps,
                        std::uniform_real_distribution<double> &u_double) {
     if (this->config(site1) == this->config(site2)) {
       return false;
     }
-    assert(sitps(site1)[this->config(site1)].GetIndexes() == sitps(site1)[this->config(site2)].GetIndexes());
+    if constexpr (Index<QNT>::IsFermionic()) {
+      std::vector<Index<QNT>> index1 = sitps(site1)[this->config(site1)].GetIndexes();
+      std::vector<Index<QNT>> index2 = sitps(site1)[this->config(site2)].GetIndexes();
+      for (size_t i = 0; i < 4; i++) {
+        assert(index1[i] == index2[i]);
+      }
+    } else {
+      assert(sitps(site1)[this->config(site1)].GetIndexes() == sitps(site1)[this->config(site2)].GetIndexes());
+    }
+
     TenElemT psi_b = tn.ReplaceNNSiteTrace(site1, site2, bond_dir, sitps(site1)[this->config(site2)],
                                            sitps(site2)[this->config(site1)]);
     bool exchange;

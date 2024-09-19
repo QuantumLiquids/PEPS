@@ -106,6 +106,44 @@ struct VMCOptimizePara {
   std::optional<ConjugateGradientParams> cg_params;
 };
 
+struct MCMeasurementPara {
+  MCMeasurementPara(void) = default;
+
+  MCMeasurementPara(BMPSTruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
+                    size_t mc_sweeps_between_sample,
+                    const std::vector<size_t> &occupancy,
+                    const size_t rows, const size_t cols,
+                    const std::string &wavefunction_path = kTpsPath) :
+      bmps_trunc_para(trunc_para), mc_samples(samples),
+      mc_warm_up_sweeps(warm_up_sweeps),
+      mc_sweeps_between_sample(mc_sweeps_between_sample),
+      init_config(rows, cols),
+      wavefunction_path(wavefunction_path) {
+    init_config.Random(occupancy);
+  }
+
+  MCMeasurementPara(BMPSTruncatePara trunc_para, size_t samples, size_t warm_up_sweeps,
+                    size_t mc_sweeps_between_sample,
+                    const Configuration &init_config,
+                    const std::string &wavefunction_path = kTpsPath) :
+      bmps_trunc_para(trunc_para), mc_samples(samples),
+      mc_warm_up_sweeps(warm_up_sweeps),
+      mc_sweeps_between_sample(mc_sweeps_between_sample),
+      init_config(init_config),
+      wavefunction_path(wavefunction_path) {}
+
+  operator BMPSTruncatePara() const {
+    return bmps_trunc_para;
+  }
+  BMPSTruncatePara bmps_trunc_para;
+
+  size_t mc_samples;
+  size_t mc_warm_up_sweeps;
+  size_t mc_sweeps_between_sample;
+
+  Configuration init_config;
+  std::string wavefunction_path;
+};
 }//qlpeps
 
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_VMC_OPTIMIZE_PARA_H

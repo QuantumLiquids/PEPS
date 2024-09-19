@@ -200,7 +200,7 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t D
   delete (*this)(site - 1);
   (*this)(site - 1) = pnext_ten;
   if constexpr (Tensor::IsFermionic()) {
-    (*this)(site)->Transpose({0, 1, 3, 2});
+    (*this)(site - 1)->Transpose({0, 1, 3, 2});
   }
   //set ten canonical type
   return std::make_pair(D, actual_trunc_err);
@@ -672,23 +672,48 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
   const size_t N = this->size();
 #ifndef NDEBUG
   assert(mpo.size() == N);
-  auto mpo_original = mpo;
 #endif
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   BMPS<TenElemT, QNT> res_mps(position_, N);
-  IndexT idx1;
-
-  idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
+  IndexT idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
   IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
   Tensor r = IndexCombine<TenElemT, QNT>(idx1, idx2, IN);
   r.Transpose({2, 0, 1});
+  /*
+   *      ----1 (connected to mpo tensor)
+   *      |
+   *  0---r---2 (connected to mps tensor)
+   */
   for (size_t i = 0; i < N; i++) {
     Tensor tmp1, tmp2;
-    Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
-    constexpr size_t ctrct_axes = 3 + Tensor::IsFermionic();
-    Contract<TenElemT, QNT, true, true>(tmp1, *mpo[i], ctrct_axes, pre_post, 2, tmp2);
     if constexpr (Tensor::IsFermionic()) {
-      tmp2.FuseIndex({1, 5});
+      Contract<TenElemT, QNT, false, false>(r, (*this)[i], 2, 0, 1, tmp1);
+      Tensor mpo_trans = *mpo[i];
+      switch (this->position_) {
+        case DOWN: {
+          break;
+        }
+        case LEFT: {
+          mpo_trans.Transpose({3, 0, 1, 2, 4});
+          break;
+        }
+        case UP: {
+          mpo_trans.Transpose({2, 3, 0, 1, 4});
+          break;
+        }
+        case RIGHT: {
+          mpo_trans.Transpose({1, 2, 3, 0, 4});
+          break;
+        }
+      }
+      Contract<TenElemT, QNT, false, true>(tmp1, mpo_trans, 1, 0, 2, tmp2);
+      assert(tmp2.GetIndex(1).dim() == 1);
+      assert(tmp2.GetIndex(5).dim() == 1);
+      tmp2.FuseIndex(1, 5);
+      assert(tmp2.GetIndex(0).dim() == 1);
+    } else {
+      Contract<TenElemT, QNT, false, false>((*this)[i], r, 0, 2, 1, tmp1);
+      Contract<TenElemT, QNT, false, true>(tmp1, *mpo[i], 3, pre_post, 2, tmp2);
     }
     res_mps.alloc(i);
     if (i < this->size() - 1) {
@@ -705,14 +730,17 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
       QR(&tmp2, ldim, mps_div, res_mps(i), &r);
       if constexpr (Tensor::IsFermionic()) {
         res_mps(i)->Transpose({0, 1, 3, 2});
+        assert(res_mps(i)->GetIndex(3).dim() == 1);
       }
     } else {
       auto trivial_idx1 = InverseIndex(tmp2.GetIndex(0));
       auto trivial_idx2 = InverseIndex(tmp2.GetIndex(2 + Tensor::IsFermionic()));
+      assert(trivial_idx1.dim() == 1);
+      assert(trivial_idx2.dim() == 1);
       Tensor right_boundary = IndexCombine<TenElemT, QNT>(trivial_idx1, trivial_idx2, OUT);
       std::vector<size_t> ctrct_axes;
       if constexpr (Tensor::IsFermionic()) {
-        ctrct_axes = {3, 1};
+        ctrct_axes = {0, 3};
       } else {
         ctrct_axes = {0, 2};
       }
@@ -731,7 +759,7 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
     actual_trunc_err_max = std::max(actual_trunc_err, actual_trunc_err_max);
   }
 #ifndef NDEBUG
-  MultipleMPOResCheck_(mpo_original, false, *this, res_mps, position_);
+  MultipleMPOResCheck_(mpo, true, *this, res_mps, position_);
 #endif
   return res_mps;
 }
@@ -744,7 +772,8 @@ BMPS<TenElemT, QNT>::MultipleMPO2SiteVariationalCompress_(const TransferMPO &mpo
                                                           const double trunc_err,
                                                           const double variational_converge_tol,
                                                           const size_t max_iter) const {
-  static_assert(!Tensor::IsFermionic());
+//  static_assert(!Tensor::IsFermionic());
+  assert(!Tensor::IsFermionic());
   const size_t N = this->size();
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;
@@ -904,7 +933,8 @@ BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo
                                                           const double trunc_err,
                                                           const double variational_converge_tol,
                                                           const size_t max_iter) const {
-  static_assert(!Tensor::IsFermionic());
+//  static_assert(!Tensor::IsFermionic());
+  assert(!Tensor::IsFermionic());
   const size_t N = this->size();
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;

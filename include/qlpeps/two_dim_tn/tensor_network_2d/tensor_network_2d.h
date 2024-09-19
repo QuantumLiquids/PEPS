@@ -28,7 +28,7 @@ using BTenPOSITION = BMPSPOSITION;
 
 /**  2-dimensional finite-size tensor network and its environments (boundary MPS and so on)
  *
- *  For bosonic tensor network, the index order of the tensors is
+ *  For boson tensor network, the index order of the tensors is
  *
  *         3
  *         |
@@ -36,11 +36,15 @@ using BTenPOSITION = BMPSPOSITION;
  *         |
  *         1
  *
- *  For fermionic tensor network, there is additional 1-dim index which are used to
+ *  For fermion tensor network, there is additional 1-dim index which are used to
  *  match the even parities of the tensors, which is the last index.
  *
- * @tparam TenElemT
- * @tparam QNT
+ *  @note Trace functions for fermion tensor network also return a c-number. But
+ *  by the definition, the wave-function components of the fermion wave function
+ *  are also associated with the order of the single-particle fermion quantum number (means, the site indices).
+ *  When calling these trace functions, one should carefully investigate the default
+ *  fermion orders, by, carefully reading the code (so sad), so that to make sure
+ *  they give what you want.
  */
 template<typename TenElemT, typename QNT>
 class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
@@ -134,7 +138,7 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   void BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1);
 
   void UpdateSiteConfig(const SiteIdx &site, const size_t update_config, const SITPS &tps,
-                        bool check_envs = false);
+                        bool check_envs = true);
 
   /**
    * Calculate the trace by contracting the environment tensors around a NN bond
@@ -207,6 +211,8 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
 
 }//qlpeps
 
-#include "tensor_network_2d_impl.h"
+#include "tensor_network_2d_basic_impl.h"
+#include "tensor_network_2d_bten_operation.h"
+#include "tensor_network_2d_trace_impl.h"
 
 #endif //QLPEPS_TWO_DIM_TN_TPS_TENSOR_NETWORK_2D_H

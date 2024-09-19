@@ -287,6 +287,13 @@ add_unittest(test_measure_complex
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
+add_unittest(test_fermion_measure
+        "test_algorithm/test_fermion_mc_measure.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
+
+
 ## Test utility
 add_unittest(test_conjugate_gradient_solver
         "test_utility/test_conjugate_gradient_solver.cpp"

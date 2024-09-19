@@ -266,7 +266,7 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_TransverseIsing" + std::to_string(Lx) + "x" + std::to_string(Ly);
-  VMCOptimizePara mc_measure_para = VMCOptimizePara(
+  MCMeasurementPara mc_measure_para = MCMeasurementPara(
       BMPSTruncatePara(4, 8, 1e-10,
                        CompressMPSScheme::VARIATION2Site,
                        std::make_optional<double>(1e-14),
@@ -274,9 +274,6 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
       mc_samples, mc_warmup, 1,
       std::vector<size_t>(2, Lx * Ly / 2),
       Ly, Lx,
-      {0.1},
-      StochasticGradient,
-      ConjugateGradientParams(),
       tps_path);
   auto measure_executor =
       new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(mc_measure_para,
@@ -487,7 +484,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_Heisenberg" + std::to_string(Lx) + "x" + std::to_string(Ly);
-  VMCOptimizePara mc_measure_para = VMCOptimizePara(
+  MCMeasurementPara mc_measure_para = MCMeasurementPara(
       BMPSTruncatePara(4, 12, 1e-14,
                        CompressMPSScheme::VARIATION2Site,
                        std::make_optional<double>(1e-14),
@@ -495,9 +492,6 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
       mc_samples, mc_warmup, 1,
       std::vector<size_t>(2, Lx * Ly / 2),
       Ly, Lx,
-      {0.1},
-      StochasticGradient,
-      ConjugateGradientParams(),
       tps_path);
   auto tps1 = TPS<QLTEN_Complex, U1QN>(peps1);
   auto sitps1 = SplitIndexTPS<QLTEN_Complex, U1QN>(tps1);
@@ -799,16 +793,14 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   using WaveFunctionT = SquareTPSSample3SiteExchange<QLTEN_Complex, U1QN>;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
-  VMCOptimizePara mc_measure_para = VMCOptimizePara(
+  MCMeasurementPara mc_measure_para = MCMeasurementPara(
       BMPSTruncatePara(4, 8, 1e-10,
                        CompressMPSScheme::VARIATION2Site,
                        std::make_optional<double>(1e-14),
                        std::make_optional<size_t>(10)),
       mc_samples, mc_warmup, 1,
       std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx,
-      {0.1},
-      StochasticGradient);
+      Ly, Lx);
   auto tps1 = TPS<QLTEN_Complex, U1QN>(peps1);
   auto sitps1 = SplitIndexTPS<QLTEN_Complex, U1QN>(tps1);
 
