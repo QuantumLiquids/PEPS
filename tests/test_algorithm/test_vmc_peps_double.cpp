@@ -104,16 +104,6 @@ struct SpinSystemVMCPEPS : public testing::Test {
                       params.step_len,
                       StochasticGradient);
 
-  DQLTensor did = DQLTensor({pb_in, pb_out});
-  DQLTensor dsz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsp = DQLTensor({pb_in, pb_out});
-  DQLTensor dsm = DQLTensor({pb_in, pb_out});
-
-  ZQLTensor zid = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsz = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
-
   boost::mpi::communicator world;
 
   void SetUp(void) {
@@ -124,20 +114,6 @@ struct SpinSystemVMCPEPS : public testing::Test {
     }
 
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-
-    did({0, 0}) = 1;
-    did({1, 1}) = 1;
-    dsz({0, 0}) = 0.5;
-    dsz({1, 1}) = -0.5;
-    dsp({0, 1}) = 1;
-    dsm({1, 0}) = 1;
-
-    zid({0, 0}) = 1;
-    zid({1, 1}) = 1;
-    zsz({0, 0}) = 0.5;
-    zsz({1, 1}) = -0.5;
-    zsp({0, 1}) = 1;
-    zsm({1, 0}) = 1;
   }
 };
 

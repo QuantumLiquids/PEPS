@@ -269,6 +269,11 @@ add_mpi_unittest(test_vmc_peps_mpi
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "2"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
+add_unittest(test_fermion_vmc_peps
+        "test_algorithm/test_fermion_vmc_peps.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+)
 add_unittest(test_square_heisenberg
         "test_algorithm/test_square_heisenberg.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"

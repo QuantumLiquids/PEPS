@@ -10,7 +10,7 @@
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
+#include "qlpeps/algorithm/vmc_update/vmc_peps.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_tJ_model.h"
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
 
@@ -32,6 +32,15 @@ struct FileParams : public CaseParamsParserBasic {
     MC_samples = ParseInt("MC_samples");
     WarmUp = ParseInt("WarmUp");
     size_t update_times = ParseInt("UpdateNum");
+    step_len = std::vector<double>(update_times);
+    Continue_from_VMC = ParseBool("Continue_from_VMC");
+    if (update_times > 0) {
+      step_len[0] = ParseDouble("StepLengthFirst");
+      double step_len_change = ParseDouble("StepLengthDecrease");
+      for (size_t i = 1; i < update_times; i++) {
+        step_len[i] = step_len[0] - i * step_len_change;
+      }
+    }
   }
 
   size_t Ly;
@@ -41,6 +50,8 @@ struct FileParams : public CaseParamsParserBasic {
   size_t Db_max;
   size_t MC_samples;
   size_t WarmUp;
+  bool Continue_from_VMC;
+  std::vector<double> step_len;
 };
 
 struct Z2tJModelTools : public testing::Test {
@@ -65,14 +76,17 @@ struct Z2tJModelTools : public testing::Test {
                           QNSctT(fZ2QN(0), 1)}, // |0> empty state
                          TenIndexDirType::OUT
   );
-  MCMeasurementPara mc_measurement_para = MCMeasurementPara(
-      BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      file_params.MC_samples, file_params.WarmUp, 1,
-      {(N - hole_num) / 2, (N - hole_num) / 2, hole_num},
-      Ly, Lx);
+  VMCOptimizePara optimize_para =
+      VMCOptimizePara(BMPSTruncatePara(file_params.Db_min, file_params.Db_max,
+                                       1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                       std::make_optional<double>(1e-14),
+                                       std::make_optional<size_t>(10)),
+                      file_params.MC_samples, file_params.WarmUp, 1,
+                      {(N - hole_num) / 2, (N - hole_num) / 2, hole_num},
+                      Ly, Lx,
+                      file_params.step_len,
+                      StochasticReconfiguration,
+                      ConjugateGradientParams(100, 1e-4, 20, 0.01));
 
   std::string simple_update_peps_path = "peps_tj_doping0.125";
   boost::mpi::communicator world;
@@ -84,7 +98,7 @@ struct Z2tJModelTools : public testing::Test {
     }
 
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-    mc_measurement_para.wavefunction_path =
+    optimize_para.wavefunction_path =
         "tps_tJ_doping" + std::to_string(doping) + "_D" + std::to_string(file_params.D);
   }
 };
@@ -93,19 +107,29 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure) {
   using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
   Model tj_solver(t, J);
 
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(pb_out, Ly, Lx);
-  peps.Load("peps_tj_doping0.125");
-  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
-  auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
-                                                                                      sitps,
-                                                                                      world,
-                                                                                      tj_solver);
+  VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
-  measure_executor->Execute();
-  measure_executor->OutputEnergy();
-  delete measure_executor;
+  if (file_params.Continue_from_VMC) {
+    executor = new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
+                                                                                 Ly, Lx,
+                                                                                 world,
+                                                                                 tj_solver);
+
+  } else {
+    SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(pb_out, Ly, Lx);
+    peps.Load(simple_update_peps_path);
+    auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+    auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+
+    executor =
+        new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
+                                                                          sitps,
+                                                                          world,
+                                                                          tj_solver);
+
+  }
+  executor->Execute();
+  delete executor;
 }
 
 int main(int argc, char *argv[]) {

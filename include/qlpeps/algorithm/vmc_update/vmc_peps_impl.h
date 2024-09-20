@@ -170,8 +170,11 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Re
 //        gten_samples_({row, col})[i].reserve(optimize_para.mc_samples);
 //        g_times_energy_samples_({row, col})[i].reserve(optimize_para.mc_samples);
 //      }
+      gten_sum_({row, col}) = std::vector<Tensor>(dim);
+      for (size_t compt = 0; compt < dim; compt++) {
+        gten_sum_({row, col})[compt] = Tensor(split_index_tps_({row, col})[compt].GetIndexes());
+      }
 
-      gten_sum_({row, col}) = std::vector<Tensor>(dim, Tensor(split_index_tps_({row, col})[0].GetIndexes()));
       g_times_energy_sum_({row, col}) = gten_sum_({row, col});
     }
   }
@@ -516,7 +519,10 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Cl
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
       size_t dim = split_index_tps_.PhysicalDim({row, col});
-      gten_sum_({row, col}) = std::vector<Tensor>(dim, Tensor(split_index_tps_({row, col})[0].GetIndexes()));
+      gten_sum_({row, col}) = std::vector<Tensor>(dim);
+      for (size_t compt = 0; compt < dim; compt++) {
+        gten_sum_({row, col})[compt] = Tensor(split_index_tps_({row, col})[compt].GetIndexes());
+      }
       g_times_energy_sum_({row, col}) = gten_sum_({row, col});
     }
   }
@@ -565,7 +571,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Sa
 //      g_times_energy_samples_({row, col})[basis].push_back(gten_times_energy);
       Tensor gten;
       if constexpr (Tensor::IsFermionic()) {
-        CalGTenForFermionicTensors(holes({row, col}), tps_sample_.tn({row, col}));
+        gten = CalGTenForFermionicTensors(holes({row, col}), tps_sample_.tn({row, col}));
         // tps_sample_.tn({row, col})  is  split_index_tps_({row, col})[basis];
       } else {
         gten = inv_psi * holes({row, col});  //holes should be dag in CalEnergyAndHoles function

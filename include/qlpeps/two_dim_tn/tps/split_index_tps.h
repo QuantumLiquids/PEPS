@@ -197,12 +197,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     for (size_t row = 0; row < this->rows(); ++row) {
       for (size_t col = 0; col < this->cols(); ++col) {
         std::vector<Tensor> fermion_parity_ops(4);
-        if constexpr (Tensor::IsFermionic()) {
-          for (size_t j = 0; j < 4; j++) {
-            Index<QNT> idx = right({row, col})[0].GetIndex(j);
-            fermion_parity_ops[j] = Eye<TenElemT, QNT>(InverseIndex(idx));
-          }
-        }
+        bool has_fermion_parity_ops_set(false);
         for (size_t i = 0; i < phy_dim; i++) {
           if ((*this)({row, col})[i].IsDefault() || right({row, col})[i].IsDefault()) {
             continue;
@@ -210,6 +205,13 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
           Tensor ten_dag = Dag((*this)({row, col})[i]);
           Tensor scalar;
           if constexpr (Tensor::IsFermionic()) {
+            if (!has_fermion_parity_ops_set) {
+              for (size_t j = 0; j < 4; j++) {
+                Index<QNT> idx = right({row, col})[i].GetIndex(j);
+                fermion_parity_ops[j] = Eye<TenElemT, QNT>(InverseIndex(idx));
+              }
+              has_fermion_parity_ops_set = true;
+            }
             // insert the fermion parity operators
             Tensor temp = right({row, col})[i];
             for (size_t j = 0; j < 4; j++) {
