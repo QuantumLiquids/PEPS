@@ -60,7 +60,6 @@ struct Z2tJModelTools : public testing::Test {
   );
   IndexT pb_in = InverseIndex(pb_out);
 
-  DTensor df = DTensor({pb_in, pb_out});
   DTensor dsz = DTensor({pb_in, pb_out});
   DTensor dsp = DTensor({pb_in, pb_out});
   DTensor dsm = DTensor({pb_in, pb_out});
@@ -68,15 +67,6 @@ struct Z2tJModelTools : public testing::Test {
   DTensor dcdagup = DTensor({pb_in, pb_out});
   DTensor dcdn = DTensor({pb_in, pb_out});
   DTensor dcdagdn = DTensor({pb_in, pb_out});
-
-  ZTensor zf = ZTensor({pb_in, pb_out});
-  ZTensor zsz = ZTensor({pb_in, pb_out});
-  ZTensor zsp = ZTensor({pb_in, pb_out});
-  ZTensor zsm = ZTensor({pb_in, pb_out});
-  ZTensor zcup = ZTensor({pb_in, pb_out});
-  ZTensor zcdagup = ZTensor({pb_in, pb_out});
-  ZTensor zcdn = ZTensor({pb_in, pb_out});
-  ZTensor zcdagdn = ZTensor({pb_in, pb_out});
 
   // nearest-neighbor Hamiltonian term, for the construction of evolve gates
   DTensor dham_tj_nn = DTensor({pb_in, pb_out, pb_in, pb_out});
@@ -95,9 +85,6 @@ struct Z2tJModelTools : public testing::Test {
 
   void SetUp(void) {
     //set up basic operators
-    df({0, 0}) = -1;
-    df({1, 1}) = -1;
-    df({2, 2}) = 1;
     dsz({0, 0}) = 0.5;
     dsz({1, 1}) = -0.5;
     dsp({1, 0}) = 1;
@@ -107,17 +94,6 @@ struct Z2tJModelTools : public testing::Test {
     dcdn({1, 2}) = 1;
     dcdagdn({2, 1}) = 1;
 
-    zf({0, 0}) = -1;
-    zf({1, 1}) = -1;
-    zf({2, 2}) = 1;
-    zsz({0, 0}) = 0.5;
-    zsz({1, 1}) = -0.5;
-    zsp({1, 0}) = 1;
-    zsm({0, 1}) = 1;
-    zcup({0, 2}) = 1;
-    zcdagup({2, 0}) = 1;
-    zcdn({1, 2}) = 1;
-    zcdagdn({2, 1}) = 1;
 
     //set up nearest-neighbor Hamiltonian terms
     //-t (c^dag_{i, s} c_{j,s} + c^dag_{j,s} c_{i,s}) + J S_i \cdot S_j

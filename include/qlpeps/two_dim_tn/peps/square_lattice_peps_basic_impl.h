@@ -426,26 +426,46 @@ bool SquareLatticePEPS<TenElemT, QNT>::Load(const std::string path) {
 template<typename TenElemT, typename QNT>
 SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
   auto tps = TPS<TenElemT, QNT>(rows_, cols_);
-  for (size_t row = 0; row < rows_; row++) {
-    for (size_t col = 0; col < cols_; col++) {
-      tps.alloc(row, col);
-      const DTensor lam_left_sqrt = ElementWiseSqrt(lambda_horiz({row, col}));
-      const DTensor lam_right_sqrt = ElementWiseSqrt(lambda_horiz({row, col + 1}));
-      const DTensor lam_up_sqrt = ElementWiseSqrt(lambda_vert({row, col}));
-      const DTensor lam_down_sqrt = ElementWiseSqrt(lambda_vert({row + 1, col}));
+  if constexpr (TenT::IsFermionic()) {
+    tps({0, 0}) = Gamma({0, 0});
+    // first row
+    for (size_t col = 1; col < this->cols_; col++) {
+      Contract(&lambda_horiz({0, col}), {1}, &Gamma({0, col}), {0}, &tps({0, col}));
+    }
+    // first column
+    for (size_t row = 1; row < this->rows_; row++) {
+      Contract(&lambda_vert({row, 0}), {1}, &Gamma({row, 0}), {3}, &tps({row, 0}));
+      tps({row, 0}).Transpose({1, 2, 3, 0, 4});
+    }
+    for (size_t col = 1; col < this->cols_; col++) {
+      for (size_t row = 1; row < this->rows_; row++) {
+        TenT temp;
+        Contract(&lambda_horiz({row, col}), {1}, &Gamma({row, col}), {0}, &temp);
+        Contract(&lambda_vert({row, col}), {1}, &temp, {3}, &tps({row, col}));
+        tps({row, col}).Transpose({1, 2, 3, 0, 4});
+      }
+    }
+  } else {
+    for (size_t row = 0; row < rows_; row++) {
+      for (size_t col = 0; col < cols_; col++) {
+        tps.alloc(row, col);
+        const DTensor lam_left_sqrt = ElementWiseSqrt(lambda_horiz({row, col}));
+        const DTensor lam_right_sqrt = ElementWiseSqrt(lambda_horiz({row, col + 1}));
+        const DTensor lam_up_sqrt = ElementWiseSqrt(lambda_vert({row, col}));
+        const DTensor lam_down_sqrt = ElementWiseSqrt(lambda_vert({row + 1, col}));
 
-      TenT tmp[3];
-      Contract<TenElemT, QNT, true, true>(lam_up_sqrt, Gamma({row, col}), 1, 3, 1, tmp[0]);
-      Contract<TenElemT, QNT, false, true>(lam_right_sqrt, tmp[0], 0, 4, 1, tmp[1]);
-      Contract<TenElemT, QNT, false, true>(lam_down_sqrt, tmp[1], 0, 4, 1, tmp[2]);
-      Contract<TenElemT, QNT, true, true>(lam_left_sqrt, tmp[2], 1, 4, 1, tps({row, col}));
+        TenT tmp[3];
+        Contract<TenElemT, QNT, true, true>(lam_up_sqrt, Gamma({row, col}), 1, 3, 1, tmp[0]);
+        Contract<TenElemT, QNT, false, true>(lam_right_sqrt, tmp[0], 0, 4, 1, tmp[1]);
+        Contract<TenElemT, QNT, false, true>(lam_down_sqrt, tmp[1], 0, 4, 1, tmp[2]);
+        Contract<TenElemT, QNT, true, true>(lam_left_sqrt, tmp[2], 1, 4, 1, tps({row, col}));
 #ifndef NDEBUG
-      auto physical_index = Gamma(row, col)->GetIndex(4);
-      assert(physical_index == tps(row, col)->GetIndex(4));
+        auto physical_index = Gamma(row, col)->GetIndex(4);
+        assert(physical_index == tps(row, col)->GetIndex(4));
 #endif
+      }
     }
   }
-
   return tps;
 }
 

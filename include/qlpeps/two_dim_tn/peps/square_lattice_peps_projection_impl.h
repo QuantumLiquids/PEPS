@@ -116,14 +116,16 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
       norm = tmp_ten[4].QuasiNormalize();
       if (!ham.IsDefault()) { //estimate the local energy by local environment
         const TenT *state = tmp_ten + 4;
+        /*
+         *       2        3
+         *       |        |
+         *  0------state------1
+         */
         if (TenT::IsFermionic()) {
           std::vector<TenT> identitys(2);
           for (size_t i = 0; i < 2; i++) {
             auto index = state->GetIndex(i);
-            identitys[i] = TenT({InverseIndex(index), index});
-            for (size_t j = 0; j < index.dim(); j++) {
-              identitys[i]({j, j}) = 1.0;
-            }
+            identitys[i] = Eye<TenElemT, QNT>(InverseIndex(index));
           }
 
           TenT temp1, temp3, temp_scale;

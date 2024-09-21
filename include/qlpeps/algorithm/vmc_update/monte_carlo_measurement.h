@@ -228,7 +228,7 @@ class MonteCarloMeasurementExecutor : public Executor {
       std::string filename = "energy_statistics";
       std::ofstream ofs(filename, std::ofstream::binary);
       ofs.write((const char *) &energy, 1 * sizeof(TenElemT));
-      ofs.write((const char *) &en_err, 1 * sizeof(TenElemT));
+      ofs.write((const char *) &en_err, 1 * sizeof(double));
       ofs.write((const char *) bond_energys.data(), bond_energys.size() * sizeof(TenElemT));
       ofs.write((const char *) energy_auto_corr.data(), energy_auto_corr.size() * sizeof(TenElemT));
       ofs << std::endl;
@@ -237,7 +237,7 @@ class MonteCarloMeasurementExecutor : public Executor {
       filename = "one_point_functions";
       ofs.open(filename, std::ofstream::binary);
       ofs.write((const char *) one_point_functions.data(), one_point_functions.size() * sizeof(TenElemT));
-      ofs.write((const char *) one_point_function_errs.data(), one_point_function_errs.size() * sizeof(TenElemT));
+      ofs.write((const char *) one_point_function_errs.data(), one_point_function_errs.size() * sizeof(double));
       ofs.write((const char *) one_point_functions_auto_corr.data(),
                 one_point_functions_auto_corr.size() * sizeof(TenElemT));
       ofs << std::endl;
@@ -246,7 +246,7 @@ class MonteCarloMeasurementExecutor : public Executor {
       filename = "two_point_functions";
       ofs.open(filename, std::ofstream::binary);
       ofs.write((const char *) two_point_functions.data(), two_point_functions.size() * sizeof(TenElemT));
-      ofs.write((const char *) two_point_function_errs.data(), two_point_function_errs.size() * sizeof(TenElemT));
+      ofs.write((const char *) two_point_function_errs.data(), two_point_function_errs.size() * sizeof(double));
       ofs << std::endl;
       ofs.close();
     }

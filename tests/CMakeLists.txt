@@ -239,7 +239,7 @@ add_unittest(test_simple_update_complex
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 add_unittest(test_fermion_simple_update
-        "test_algorithm/test_fermion_simple_and_update.cpp"
+        "test_algorithm_fermion/test_fermion_simple_and_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
@@ -270,7 +270,7 @@ add_mpi_unittest(test_vmc_peps_mpi
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 add_unittest(test_fermion_vmc_peps
-        "test_algorithm/test_fermion_vmc_peps.cpp"
+        "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
@@ -293,7 +293,7 @@ add_unittest(test_measure_complex
 )
 
 add_unittest(test_fermion_measure
-        "test_algorithm/test_fermion_mc_measure.cpp"
+        "test_algorithm_fermion/test_fermion_mc_measure.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
