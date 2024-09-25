@@ -225,7 +225,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Pr
         std::cout << "Conjugate gradient parameters have not been set!" << std::endl;
         exit(1);
       }
-      std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:" << (*optimize_para.cg_params).diag_shift
+      std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:" << optimize_para.cg_params.value().diag_shift
                 << "\n";
     }
     std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
@@ -738,7 +738,7 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
   if (world_.rank() == kMasterProc) {
     pgten_ave_ = &gten_ave_;
   }
-  const ConjugateGradientParams &cg_params = (*optimize_para.cg_params);
+  const ConjugateGradientParams &cg_params = optimize_para.cg_params.value();
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t cgsolver_iter;
