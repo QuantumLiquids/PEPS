@@ -243,7 +243,7 @@ TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
 
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
-  //half-filling
+
   size_t site_idx = 0, sz_int = 0;
   size_t sites_per_hole = (size_t) (1.0 / doping);
   for (size_t y = 0; y < Ly; y++) {

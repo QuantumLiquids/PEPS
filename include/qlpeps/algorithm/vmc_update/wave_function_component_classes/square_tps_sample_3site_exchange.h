@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Explicit class of wave function component in square lattice. Monte Carlo sweep realized by NNN 3-site exchange.
 */
 
-#ifndef QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_3SITE_EXCHANGE_H
-#define QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_3SITE_EXCHANGE_H
+#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_CLASSES_SQUARE_TPS_SAMPLE_3SITE_EXCHANGE_H
+#define QLPEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_CLASSES_SQUARE_TPS_SAMPLE_3SITE_EXCHANGE_H
 
 #include "qlpeps/algorithm/vmc_update/wave_function_component.h"    // WaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
@@ -131,4 +131,4 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
 
 }//qlpeps
 
-#endif //QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_3SITE_EXCHANGE_H
+#endif //QLPEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_CLASSES_SQUARE_TPS_SAMPLE_3SITE_EXCHANGE_H

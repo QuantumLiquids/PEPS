@@ -239,7 +239,7 @@ add_unittest(test_simple_update_complex
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 add_unittest(test_fermion_simple_update
-        "test_algorithm_fermion/test_fermion_simple_and_update.cpp"
+        "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )

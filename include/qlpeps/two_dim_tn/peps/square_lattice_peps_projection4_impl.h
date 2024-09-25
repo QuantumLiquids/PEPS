@@ -239,7 +239,6 @@ std::array<QLTensor<TenElemT, QNT>, 4> ConstructUpsilons(
     const std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
   std::array<QLTensor<TenElemT, QNT>, 4> gamma_gamma_dags, Upsilons;
   for (size_t i = 0; i < 4; i++) {
     gamma_gamma_dags[i] = CalTransferMatOfGamma(gammas[i]);
@@ -666,8 +665,9 @@ void WeightedTraceGaugeFixing(
     QLTensor<TenElemT, QNT> &gamma_head,
     QLTensor<TenElemT, QNT> &gamma_tail
 ) {
+  double diff;
 #ifndef NDEBUG
-  auto diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
+  diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
   assert(diff < 1e-12);
 #endif
 
@@ -806,9 +806,6 @@ void WeightedTraceGaugeFixingInSquareLocalLoop(
     std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
 ) {
-  using TenT = QLTensor<TenElemT, QNT>;
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
-
   // Construct the Upsilon_i tensor
   Upsilons = ConstructUpsilons(gammas, lambdas);
   for (size_t i = 0; i < 4; i++) {
