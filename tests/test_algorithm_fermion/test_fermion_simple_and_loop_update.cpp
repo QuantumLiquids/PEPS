@@ -4,7 +4,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-08-16
 *
-* Description: QuantumLiquids/PEPS project. Unittests for PEPS Simple Update in Fermionic model.
+* Description: QuantumLiquids/PEPS project. Unittests for PEPS Simple Update in fermion model.
 */
 
 #define PLAIN_TRANSPOSE 1
@@ -38,6 +38,96 @@ struct SimpleUpdateTestParams : public CaseParamsParserBasic {
   double Tau0;
   size_t Steps;
 };
+
+struct Z2SpinlessFreeFermionTools : public testing::Test {
+  using IndexT = Index<fZ2QN>;
+  using QNSctT = QNSector<fZ2QN>;
+  using QNSctVecT = QNSectorVec<fZ2QN>;
+
+  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
+  SimpleUpdateTestParams params = SimpleUpdateTestParams(params_file);
+  size_t Lx = params.Lx; //cols
+  size_t Ly = params.Ly;
+
+  double t = 1.0;
+  fZ2QN qn0 = fZ2QN(0);
+  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
+                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                         TenIndexDirType::OUT
+  );
+  IndexT pb_in = InverseIndex(pb_out);
+
+  DTensor c = DTensor({pb_in, pb_out});   // annihilation operator
+  DTensor cdag = DTensor({pb_in, pb_out});// creation operator
+  DTensor n = DTensor({pb_in, pb_out});   // density operator
+
+  DTensor ham_nn = DTensor({pb_in, pb_out, pb_in, pb_out});
+  void SetUp(void) {
+    n({0, 0}) = 1.0;
+    c({0, 1}) = 1;
+    cdag({1, 0}) = 1;
+
+    ham_nn({1, 0, 0, 1}) = t; //extra sign here
+    ham_nn({0, 1, 1, 0}) = -t;
+  }
+};
+
+double CalGroundStateEnergyForSpinlessNNFreeFermionOBC(
+    const size_t Lx,
+    const size_t Ly,
+    const size_t particle_num
+) {
+  const size_t num_sites = Lx * Ly;
+  std::vector<double> energy_levels;
+
+  // Calculate the energy levels
+  for (size_t kx = 0; kx < Lx; ++kx) {
+    for (size_t ky = 0; ky < Ly; ++ky) {
+      double theta_x = M_PI * (kx + 1) / (Lx + 1);
+      double theta_y = M_PI * (ky + 1) / (Ly + 1);
+      double energy = -2 * (std::cos(theta_x) + std::cos(theta_y));
+      energy_levels.push_back(energy);
+    }
+  }
+
+  // Sort energy levels in ascending order
+  std::sort(energy_levels.begin(), energy_levels.end());
+
+  // Sum the lowest `particle_num` energy levels
+  double ground_state_energy = 0.0;
+  for (size_t i = 0; i < particle_num; ++i) {
+    ground_state_energy += energy_levels[i];
+  }
+
+  return ground_state_energy;
+}
+
+TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
+
+  std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
+  //half-filling
+  size_t n_int = 0;
+  for (size_t y = 0; y < Ly; y++) {
+    for (size_t x = 0; x < Lx; x++) {
+      activates[y][x] = n_int % 2;
+      n_int++;
+    }
+  }
+  peps0.Initial(activates);
+
+  SimpleUpdatePara update_para(params.Steps, params.Tau0, 1, params.D, 1e-10);
+  SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
+                                                                             ham_nn);
+  su_exe->Execute();
+  auto peps = su_exe->GetPEPS();
+  delete su_exe;
+  peps.Dump("peps_spinless_free_fermion_half_filling");
+  double exact_gs_energy = CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, Lx * Ly / 2);
+  std::cout << "Exact ground state energy : " << exact_gs_energy << std::endl;
+}
 
 struct Z2tJModelTools : public testing::Test {
   using IndexT = Index<fZ2QN>;
@@ -89,6 +179,7 @@ struct Z2tJModelTools : public testing::Test {
     dsz({1, 1}) = -0.5;
     dsp({1, 0}) = 1;
     dsm({0, 1}) = 1;
+    // actually the fermionic operators have the odd parity which are not well-defined in our tensor's scenarios.
     dcup({0, 2}) = 1;
     dcdagup({2, 0}) = 1;
     dcdn({1, 2}) = 1;

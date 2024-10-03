@@ -225,7 +225,8 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Pr
         std::cout << "Conjugate gradient parameters have not been set!" << std::endl;
         exit(1);
       }
-      std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:" << optimize_para.cg_params.value().diag_shift
+      std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:"
+                << optimize_para.cg_params.value().diag_shift
                 << "\n";
     }
     std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
@@ -427,11 +428,11 @@ void VMCPEPSExecutor<TenElemT, QNT,
   Timer tps_update_timer("tps_update");
   size_t sr_iter;
   double sr_natural_grad_norm;
-  SITPST init_guess;
+  SITPST sr_init_guess;
   if (iter == 0) {
-    init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim()); //set 0 as initial guess
+    sr_init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim()); //set 0 as initial guess
   } else {
-    init_guess = natural_grad_;
+    sr_init_guess = natural_grad_;
   }
 
   double step_len = optimize_para.step_lens[iter];
@@ -442,20 +443,20 @@ void VMCPEPSExecutor<TenElemT, QNT,
       UpdateTPSByVecAndSynchronize_(grad_, step_len);
       break;
     case StochasticReconfiguration: {
-      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess, false);
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, sr_init_guess, false);
       sr_iter = iter_natural_grad_norm.first;
       sr_natural_grad_norm = iter_natural_grad_norm.second;
       break;
     }
     case RandomStepStochasticReconfiguration: {
       step_len *= unit_even_distribution(random_engine);
-      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess, false);
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, sr_init_guess, false);
       sr_iter = iter_natural_grad_norm.first;
       sr_natural_grad_norm = iter_natural_grad_norm.second;
       break;
     }
     case NormalizedStochasticReconfiguration: {
-      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, init_guess, true);
+      auto iter_natural_grad_norm = StochReconfigUpdateTPS_(grad_, step_len, sr_init_guess, true);
       sr_iter = iter_natural_grad_norm.first;
       sr_natural_grad_norm = iter_natural_grad_norm.second;
       break;

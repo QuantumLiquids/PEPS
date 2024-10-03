@@ -51,13 +51,89 @@ struct FileParams : public CaseParamsParserBasic {
   std::vector<double> step_len;
 };
 
+struct Z2SpinlessFreeFermionTools : public testing::Test {
+  using IndexT = Index<fZ2QN>;
+  using QNSctT = QNSector<fZ2QN>;
+  using QNSctVecT = QNSectorVec<fZ2QN>;
+
+  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+
+  FileParams file_params = FileParams(params_file);
+  size_t Lx = file_params.Lx; //cols
+  size_t Ly = file_params.Ly;
+  size_t N = Lx * Ly;
+
+  double t = 1.0;
+  fZ2QN qn0 = fZ2QN(0);
+  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
+                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                         TenIndexDirType::OUT
+  );
+  IndexT pb_in = InverseIndex(pb_out);
+
+  VMCOptimizePara optimize_para =
+      VMCOptimizePara(BMPSTruncatePara(file_params.Db_min, file_params.Db_max,
+                                       1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                       std::make_optional<double>(1e-14),
+                                       std::make_optional<size_t>(10)),
+                      file_params.MC_samples, file_params.WarmUp, 1,
+                      {N / 2, N / 2},
+                      Ly, Lx,
+                      file_params.step_len,
+                      StochasticReconfiguration,
+                      ConjugateGradientParams(100, 1e-4, 20, 0.01));
+
+  std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";
+  boost::mpi::communicator world;
+  void SetUp(void) {
+    ::testing::TestEventListeners &listeners =
+        ::testing::UnitTest::GetInstance()->listeners();
+    if (world.rank() != 0) {
+      delete listeners.Release(listeners.default_result_printer());
+    }
+
+    qlten::hp_numeric::SetTensorManipulationThreads(1);
+    optimize_para.wavefunction_path =
+        "tps_spinless_fermion_half_filling_D" + std::to_string(file_params.D);
+  }
+};
+
+TEST_F(Z2SpinlessFreeFermionTools, VariationalMonteCarloUpdate) {
+  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  Model spinless_fermion_solver;
+
+  VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+
+  if (file_params.Continue_from_VMC) {
+    executor = new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
+                                                                                  Ly, Lx,
+                                                                                 world,
+                                                                                 spinless_fermion_solver);
+
+  } else {
+    SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(pb_out, Ly, Lx);
+    peps.Load(simple_update_peps_path);
+    auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+    auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+
+    executor =
+        new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
+                                                                          sitps,
+                                                                          world,
+                                                                          spinless_fermion_solver);
+
+  }
+  executor->Execute();
+  delete executor;
+}
+
 struct Z2tJModelTools : public testing::Test {
   using IndexT = Index<fZ2QN>;
   using QNSctT = QNSector<fZ2QN>;
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
   using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using ZTensor = QLTensor<QLTEN_Complex, fZ2QN>;
   using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
 
   FileParams file_params = FileParams(params_file);
@@ -100,7 +176,7 @@ struct Z2tJModelTools : public testing::Test {
   }
 };
 
-TEST_F(Z2tJModelTools, MonteCarloMeasure) {
+TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
   using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
   Model tj_solver(t, J);
 
