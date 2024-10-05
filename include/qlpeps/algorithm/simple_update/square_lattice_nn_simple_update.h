@@ -44,6 +44,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   TenElemT e0(0.0);
+  double norm = 1.0;
   double middle_bond_trunc_err;
 #ifdef QLPEPS_TIMING_MODE
   Timer vertical_nn_projection_timer("vertical_nn_projection");
@@ -52,6 +53,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
     for (size_t row = 0; row < this->ly_ - 1; row++) {
       auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, VERTICAL, para, ham_nn_);
       e0 += proj_res.e_loc.value();
+      norm *= proj_res.norm;
       if (col == this->lx_ / 2 && row == this->ly_ / 2 - 1) {
         middle_bond_trunc_err = proj_res.trunc_err;
       }
@@ -66,6 +68,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
     for (size_t row = 0; row < this->ly_; row++) {
       auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, col}, HORIZONTAL, para, ham_nn_);
       e0 += proj_res.e_loc.value();
+      norm *= proj_res.norm;
     }
   }
 
@@ -79,6 +82,8 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0
+            << "Estimated En =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
+            << std::right << -std::log(norm) / this->update_para.tau
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " TruncErr = " << std::setprecision(2) << std::scientific << middle_bond_trunc_err << std::fixed
             << " SweepTime = " << std::setw(8) << sweep_time

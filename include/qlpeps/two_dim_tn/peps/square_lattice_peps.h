@@ -168,7 +168,8 @@ class SquareLatticePEPS {
   // Projecting Gate Functions
   double SingleSiteProject(
       const TenT &gate_ten,
-      const SiteIdx &site
+      const SiteIdx &site,
+      const bool canonicalize
   );
 
   ///< first two indexes of gate_ten are connected to PEPS's physical indexes

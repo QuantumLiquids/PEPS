@@ -51,7 +51,7 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen(const qlpeps::BTenPOSITION positio
   if constexpr (Tensor::IsFermionic()) {
     auto qn = index0.GetQNSct(0).GetQn();
     auto qn0 = qn + (-qn);
-    auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, OUT);
+    auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, IN);
     ten = Tensor({index0, index1, index2, trivial_index_out});
     ten({0, 0, 0, 0}) = TenElemT(1.0);
   } else {
@@ -116,7 +116,7 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen2(const BTenPOSITION position, cons
   if constexpr (Tensor::IsFermionic()) {
     auto qn = index0.GetQNSct(0).GetQn();
     auto qn0 = qn + (-qn);
-    auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, OUT);
+    auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, IN);
     ten = Tensor({index0, index1, index2, index3, trivial_index_out});
     ten({0, 0, 0, 0, 0}) = TenElemT(1.0);
   } else {

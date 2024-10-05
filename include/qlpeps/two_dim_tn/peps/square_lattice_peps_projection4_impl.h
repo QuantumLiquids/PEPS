@@ -214,19 +214,11 @@ QLTensor<TenElemT, QNT> CalTransferMatOfGamma(
   if constexpr (!TenT::IsFermionic()) {
     Contract(&gamma, {1, 2, 3}, &gamma_dag, {1, 2, 3}, &gamma_gamma_dag); //O(D^6 d)
   } else {
-    Index<QNT> idx2 = gamma.GetIndex(2);
-    Index<QNT> idx3 = gamma.GetIndex(3);
-    TenT id2 = TenT({InverseIndex(idx2), idx2}),
-        id3 = TenT({InverseIndex(idx3), idx3});
-    for (size_t i = 0; i < idx2.dim(); i++) {
-      id2({i, i}) = 1.0;
-    }
-    for (size_t i = 0; i < idx3.dim(); i++) {
-      id3({i, i}) = 1.0;
-    }
+    auto id2 = Eye<TenElemT>(gamma.GetIndex(2));
+    auto id3 = Eye<TenElemT>(gamma.GetIndex(3));
     TenT temp1, temp2;
-    Contract(&gamma, {2}, &id2, {0}, &temp1);
-    Contract(&temp1, {2}, &id3, {0}, &temp2);
+    Contract(&gamma, {2}, &id2, {1}, &temp1);
+    Contract(&temp1, {2}, &id3, {1}, &temp2);
     Contract(&temp2, {1, 3, 4}, &gamma_dag, {1, 2, 3}, &gamma_gamma_dag);
   }
   gamma_gamma_dag.Transpose({0, 2, 1, 3});
@@ -283,19 +275,12 @@ TenElemT GammaLambdaMPSLoopOverlap(
     if constexpr (!TenT::IsFermionic()) {
       Contract(&eaten_gammas0[i], {1, 2, 3}, &eaten_gammas1[i], {1, 2, 3}, &gamma_gamma_dags[i]); //O(D^6 d)
     } else {
-      Index<QNT> idx2 = eaten_gammas0[i].GetIndex(2);
-      Index<QNT> idx3 = eaten_gammas0[i].GetIndex(3);
-      TenT id2 = TenT({InverseIndex(idx2), idx2}),
-          id3 = TenT({InverseIndex(idx3), idx3});
-      for (size_t j = 0; j < idx2.dim(); j++) {
-        id2({j, j}) = 1.0;
-      }
-      for (size_t j = 0; j < idx3.dim(); j++) {
-        id3({j, j}) = 1.0;
-      }
+      TenT id2 = Eye<TenElemT>(eaten_gammas0[i].GetIndex(2));
+      TenT id3 = Eye<TenElemT>(eaten_gammas0[i].GetIndex(3));
+
       TenT temp1, temp2;
-      Contract(&eaten_gammas0[i], {2}, &id2, {0}, &temp1);
-      Contract(&temp1, {2}, &id3, {0}, &temp2);
+      Contract(&eaten_gammas0[i], {2}, &id2, {1}, &temp1);
+      Contract(&temp1, {2}, &id3, {1}, &temp2);
       Contract(&temp2, {1, 3, 4}, &eaten_gammas1[i], {1, 2, 3}, &gamma_gamma_dags[i]);
     }
     gamma_gamma_dags[i].Transpose({0, 2, 1, 3});
@@ -603,18 +588,10 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
   size_t iter;
   TenT vec = vec0;
   vec.QuasiNormalize();
-  auto vec_last_dag = Dag(vec);
+  TenT vec_last_dag = Dag(vec);
   std::vector<TenT> fermion_parity_ops(2);
   if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
-    for (size_t i = 0; i < 2; i++) {
-      Index<QNT> idx = vec0.GetIndex(i);
-      fermion_parity_ops[i] = Eye<TenElemT, QNT>(InverseIndex(idx));
-    }
-
-    TenT temp1, temp2;
-    Contract(&fermion_parity_ops[1], {1}, &vec_last_dag, {1}, &temp1);
-    Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
-    vec_last_dag = temp2;
+    vec_last_dag.ActFermionPOps();
   }
   for (iter = 0; iter < iter_max; iter++) {
     vec = transfer_tens_multiple_vec(vec, sigma, sigma_dag, Upsilon);
@@ -628,10 +605,7 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
     eigen_value_last = eigen_value;
     vec_last_dag = Dag(vec);
     if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
-      TenT temp1, temp2;
-      Contract(&fermion_parity_ops[1], {1}, &vec_last_dag, {1}, &temp1);
-      Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
-      vec_last_dag = temp2;
+      vec_last_dag.ActFermionPOps();
     }
   }
   std::cout << "dominant eigenvector solver in power method doesn't converge" << std::endl;
@@ -812,10 +786,6 @@ void WeightedTraceGaugeFixingInSquareLocalLoop(
     WeightedTraceGaugeFixing(arnoldi_params,
                              inv_tol, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
   }
-
-#ifndef NDEBUG
-  assert(gammas[0].GetIndex(4).GetDir() == OUT);
-#endif
 }
 
 template<typename ElemT, typename QNT>
@@ -853,6 +823,8 @@ struct PtenVec {
   ElemT operator*(const PtenVec &rhs) const {
     TenT scalar, p_ten_dag = Dag(this->p_ten);
     if constexpr (TenT::IsFermionic()) {
+      p_ten_dag.ActFermionPOps();
+#ifndef NDEBUG
       std::vector<TenT> fermion_parity_ops(2);
       for (size_t i = 0; i < 2; i++) {
         Index<QNT> idx = p_ten.GetIndex(i);
@@ -861,10 +833,12 @@ struct PtenVec {
       TenT temp1, temp2;
       Contract(&fermion_parity_ops[1], {1}, &p_ten_dag, {1}, &temp1);
       Contract(&fermion_parity_ops[0], {1}, &temp1, {1}, &temp2);
-      Contract(&temp2, {0, 1}, &rhs.p_ten, {0, 1}, &scalar);
-    } else {
-      Contract(&p_ten_dag, {0, 1}, &rhs.p_ten, {0, 1}, &scalar);
+
+      TenT diff = p_ten_dag + (-temp2);
+      assert(diff.GetQuasi2Norm() < 1e-12);
+#endif
     }
+    Contract(&p_ten_dag, {0, 1}, &rhs.p_ten, {0, 1}, &scalar);
     return scalar();
   }
   double NormSquare(void) const {

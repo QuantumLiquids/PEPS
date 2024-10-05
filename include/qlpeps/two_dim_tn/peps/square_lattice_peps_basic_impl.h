@@ -26,11 +26,11 @@ SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces):
     lambda_vert(hilbert_spaces.size() + 1, hilbert_spaces[0].size()),
     lambda_horiz(hilbert_spaces.size(), hilbert_spaces[0].size() + 1) {
 #ifndef NDEBUG
-  for (size_t i = 0; i < hilbert_spaces.size(); i++) {
-    for (size_t j = 0; j < hilbert_spaces[0].size(); j++) {
-      assert(hilbert_spaces[i][j].GetDir() == qlten::OUT);
-    }
-  }
+//  for (size_t i = 0; i < hilbert_spaces.size(); i++) {
+//    for (size_t j = 0; j < hilbert_spaces[0].size(); j++) {
+//      assert(hilbert_spaces[i][j].GetDir() == qlten::OUT);
+//    }
+//  }
   assert(rows_ > 0 && cols_ > 0);
 #endif
 //  QNT qn_site000 = hilbert_spaces[0][0].GetQNSct(0).GetQn();
@@ -97,9 +97,10 @@ SquareLatticePEPS<TenElemT, QNT>::SquareLatticePEPS(const Index<QNT> &local_hilb
  */
 template<typename TenElemT, typename QNT>
 void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> &activates) {
-  Index<QNT> index0_in({QNSector(qn0_, 1)}, IN), index0_out({QNSector(qn0_, 1)}, OUT);
+  Index<QNT> virtual_index0_in({QNSector(qn0_, 1)}, IN),
+      virtual_index0_out({QNSector(qn0_, 1)}, OUT);
   // The lambda tensors surrounding the PEPS
-  DTensor surrounding_lam = DTensor({index0_in, index0_out});
+  DTensor surrounding_lam = DTensor({virtual_index0_in, virtual_index0_out});
   surrounding_lam({0, 0}) = 1.0;
   // upper vertical lambda
   for (size_t col = 0; col < cols_; col++) {
@@ -135,13 +136,18 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
   for (size_t col = 0; col < cols_; col++) {
     const size_t row = 0;
     Index<QNT> index0 = lambda_horiz({row, col}).GetIndex(0);
-    Index<QNT> index2 = index0_out;
+    Index<QNT> index2 = virtual_index0_out;
     Index<QNT> index3 = lambda_vert({row, col}).GetIndex(0);
     Index<QNT> phy_idx = Gamma({row, col}).GetIndex(4);
     QNT index1_qn = index0.GetQNSct(0).GetQn()  // in
-        + index3.GetQNSct(0).GetQn()        //in
-        - index2.GetQNSct(0).GetQn()      //out
-        - phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+        + index3.GetQNSct(0).GetQn()            //in
+        - index2.GetQNSct(0).GetQn();           //out
+    if (phy_idx.GetDir() == OUT) {
+      index1_qn += -phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+    } else {
+      index1_qn += phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+    }
+
     Index<QNT> index1({QNSector(index1_qn, 1)}, OUT);
     Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
     Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;
@@ -158,13 +164,17 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
     //set a layer of gamma tensors
     for (size_t col = 0; col < cols_; col++) {
       Index<QNT> index0 = lambda_horiz({row, col}).GetIndex(0);
-      Index<QNT> index2 = index0_out;
+      Index<QNT> index2 = virtual_index0_out;
       Index<QNT> index3 = lambda_vert({row, col}).GetIndex(0);
       Index<QNT> phy_idx = Gamma({row, col}).GetIndex(4);
-      QNT index1_qn = index0.GetQNSct(0).GetQn()  // in
-          + index3.GetQNSct(0).GetQn()        //in
-          - index2.GetQNSct(0).GetQn()      //out
-          - phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+      QNT index1_qn = index0.GetQNSct(0).GetQn()   // in
+          + index3.GetQNSct(0).GetQn()             //in
+          - index2.GetQNSct(0).GetQn();            //out
+      if (phy_idx.GetDir() == OUT) {
+        index1_qn += -phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+      } else {
+        index1_qn += phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+      }
       Index<QNT> index1({QNSector(index1_qn, 1)}, OUT);
       Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
       Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;
@@ -187,9 +197,13 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
     Index<QNT> index3 = lambda_vert({row, col}).GetIndex(0);
     Index<QNT> phy_idx = Gamma({row, col}).GetIndex(4);
     QNT index2_qn = index0.GetQNSct(0).GetQn()  // in
-        + index3.GetQNSct(0).GetQn()        //in
-        - index1.GetQNSct(0).GetQn()      //out
-        - phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+        + index3.GetQNSct(0).GetQn()            //in
+        - index1.GetQNSct(0).GetQn();           //out
+    if (phy_idx.GetDir() == OUT) {
+      index2_qn += -phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+    } else {
+      index2_qn += phy_idx.GetQNSctFromActualCoor(activates[row][col]).GetQn();
+    }
     Index<QNT> index2({QNSector(index2_qn, 1)}, OUT);
     Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
     Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;

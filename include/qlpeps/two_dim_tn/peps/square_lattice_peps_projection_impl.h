@@ -22,42 +22,74 @@ bool is_nan(const double &value) {
   return std::isnan(value);
 }
 
+bool is_nan(const std::complex<double> &value) {
+  return std::isnan(value.real()) || std::isnan(value.imag());
+}
+
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::SingleSiteProject(const SquareLatticePEPS::TenT &gate_ten,
-                                                           const SiteIdx &site) {
-//  size_t row = site[0], col = site[1];
-//  TenT eaten_lam_ten = EatSurroundLambdas_(site);
-//  TenT tmp_ten[5];
+                                                           const SiteIdx &site,
+                                                           const bool canonicalize) {
+
   TenT tmp_ten;
   Contract<TenElemT, QNT, true, true>(Gamma(site), gate_ten, 4, 0, 1, tmp_ten);
   Gamma(site) = std::move(tmp_ten);
-//  TenT u, vt;
-//  DTensor *s = new DTensor();
-//  SVD(tmp_ten, 1, qn0_, &u, s, &vt);
-//  if (col != 0) {
-//    Contract(&Gamma({row, col - 1}), 2, &u, 0, &tmp_ten[1]);
-//    tmp_ten[1].Transpose({0, 1, 4, 2, 3});
-//    Gamma({row, col - 1}) = std::move(tmp_ten[1]);
-//  }
-//  delete lambda_horiz(row, col);
-//  lambda_horiz(row, col) = s;
-//  Contract<TenElemT, QNT, false, false>(vt, *s, 0, 1, 1, tmp_ten[2]);
-//
-//  s = new DTensor();
-//  u = TenT();
-//  vt = TenT();
-//  SVD(tmp_ten[2], 1, qn0_, &u, s, &vt);
-//  if (row != this->Rows() - 1) {
-//    Contract(&Gamma({row + 1, col}), 3, &u, 0, &tmp_ten[3]);
-//    tmp_ten[3].Transpose({0, 1, 2, 4, 3});
-//    Gamma({row + 1, col}) = std::move(tmp_ten[1]);
-//  }
+  if (!canonicalize) {
+    return 1.0;
+  } else {
+    std::cout << "todo code. After high-order SVD." << std::endl;
+    return 1.0;
+  }
+  /*
+  size_t row = site.row(), col = site.col();
+  TenT eaten_lam_ten = EatSurroundLambdas_(site);
+  TenT tmp_tens[5];
+  TenT u, vt;
+  DTensor *s = new DTensor();
+  SVD(&tmp_ten, 1, qn0_, &u, s, &vt);
+  if (col != 0) {
+    Contract(&Gamma({row, col - 1}), 2, &u, 0, &tmp_tens[0]);
+    tmp_ten[0].Transpose({0, 1, 4, 2, 3});
+    Gamma({row, col - 1}) = std::move(tmp_ten[0]);
+  }
+  delete lambda_horiz(row, col);
+  lambda_horiz(row, col) = s;
+  Contract<TenElemT, QNT, false, false>(vt, *s, 0, 1, 1, tmp_ten[2]);
+
+  s = new DTensor();
+  u = TenT();
+  vt = TenT();
+  SVD(tmp_ten[2], 1, qn0_, &u, s, &vt);
+  if (row != this->Rows() - 1) {
+    Contract(&Gamma({row + 1, col}), 3, &u, 0, &tmp_ten[3]);
+    tmp_ten[3].Transpose({0, 1, 2, 4, 3});
+    Gamma({row + 1, col}) = std::move(tmp_ten[1]);
+  }
 
   return 1;
+   */
 }
-
-bool is_nan(const std::complex<double> &value) {
-  return std::isnan(value.real()) || std::isnan(value.imag());
+template<typename TenElemT, typename QNT>
+TenElemT EvaluateTwoSiteEnergy(const QLTensor<TenElemT, QNT> &ham,
+                               const QLTensor<TenElemT, QNT> &state) {
+  using TenT = QLTensor<TenElemT, QNT>;
+  TenT temp, temp_scale;
+  Contract(&state, {2, 3}, &ham, {0, 2}, &temp);
+  /*
+   *       2        3
+   *       |        |
+   *  0------state------1
+   */
+  if (TenT::IsFermionic()) {
+    TenT state_dag = Dag(state);
+    state_dag.ActFermionPOps();
+    Contract(&temp, {0, 1, 2, 3}, &state_dag, {0, 1, 2, 3}, &temp_scale);
+    return temp_scale();
+  } else {// bosonic case
+    temp.Dag();
+    Contract(&temp, {0, 1, 2, 3}, &state, {0, 1, 2, 3}, &temp_scale);
+    return temp_scale();
+  }
 }
 
 template<typename TenElemT, typename QNT>
@@ -116,37 +148,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
       norm = tmp_ten[4].QuasiNormalize();
       if (!ham.IsDefault()) { //estimate the local energy by local environment
         const TenT *state = tmp_ten + 4;
-        /*
-         *       2        3
-         *       |        |
-         *  0------state------1
-         */
-        if (TenT::IsFermionic()) {
-          std::vector<TenT> identitys(2);
-          for (size_t i = 0; i < 2; i++) {
-            auto index = state->GetIndex(i);
-            identitys[i] = Eye<TenElemT, QNT>(InverseIndex(index));
-          }
-
-          TenT temp1, temp3, temp_scale;
-          temp1 = *state;
-          for (size_t i = 0; i < 2; i++) {
-            TenT temp2;
-            Contract(&identitys[1 - i], {0}, &temp1, {1}, &temp2);
-            temp1 = temp2;
-          }
-
-          auto state_dag = Dag(*state);
-          Contract(&temp1, {2, 3}, &ham, {0, 2}, &temp3);
-          Contract(&temp3, {0, 1, 2, 3}, &state_dag, {0, 1, 2, 3}, &temp_scale);
-          e_loc = temp_scale();
-        } else {// bosonic case
-          TenT temp, temp_scale;
-          Contract(state, {2, 3}, &ham, {0, 2}, &temp);
-          temp.Dag();
-          Contract(&temp, {0, 1, 2, 3}, state, {0, 1, 2, 3}, &temp_scale);
-          e_loc = temp_scale();
-        }
+        e_loc = EvaluateTwoSiteEnergy(ham, *state);
       }
       tmp_ten[4].Transpose({0, 2, 1, 3});
       lambda_horiz({row, rcol}) = DTensor();
@@ -209,35 +211,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
       norm = tmp_ten[4].QuasiNormalize();
       if (!ham.IsDefault()) { //estimate the local energy by local environment
         const TenT *state = tmp_ten + 4;
-        if (TenT::IsFermionic()) {
-          std::vector<TenT> identitys(2);
-          for (size_t i = 0; i < 2; i++) {
-            auto index = state->GetIndex(i);
-            identitys[i] = TenT({InverseIndex(index), index});
-            for (size_t j = 0; j < index.dim(); j++) {
-              identitys[i]({j, j}) = 1.0;
-            }
-          }
-
-          TenT temp1, temp3, temp_scale;
-          temp1 = *state;
-          for (size_t i = 0; i < 2; i++) {
-            TenT temp2;
-            Contract(&identitys[1 - i], {0}, &temp1, {1}, &temp2);
-            temp1 = temp2;
-          }
-
-          auto state_dag = Dag(*state);
-          Contract(&temp1, {2, 3}, &ham, {0, 2}, &temp3);
-          Contract(&temp3, {0, 1, 2, 3}, &state_dag, {0, 1, 2, 3}, &temp_scale);
-          e_loc = temp_scale();
-        } else {// bosonic case
-          TenT temp, temp_scale;
-          Contract(state, {2, 3}, &ham, {0, 2}, &temp);
-          temp.Dag();
-          Contract(&temp, {0, 1, 2, 3}, tmp_ten + 4, {0, 1, 2, 3}, &temp_scale);
-          e_loc = temp_scale();
-        }
+        e_loc = EvaluateTwoSiteEnergy(ham, *state);
       }
       tmp_ten[4].Transpose({0, 2, 1, 3});
       lambda_vert({row + 1, col}) = DTensor();

@@ -11,7 +11,7 @@
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_tJ_model.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
 
 using namespace qlten;
@@ -43,6 +43,70 @@ struct FileParams : public CaseParamsParserBasic {
   size_t WarmUp;
 };
 
+struct Z2SpinlessFreeFermionTools : public testing::Test {
+  using IndexT = Index<fZ2QN>;
+  using QNSctT = QNSector<fZ2QN>;
+  using QNSctVecT = QNSectorVec<fZ2QN>;
+
+  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+
+  FileParams file_params = FileParams(params_file);
+  size_t Lx = file_params.Lx; //cols
+  size_t Ly = file_params.Ly;
+  size_t N = Lx * Ly;
+
+  double t = 1.0;
+  fZ2QN qn0 = fZ2QN(0);
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
+  );
+  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
+
+  MCMeasurementPara mc_measurement_para = MCMeasurementPara(
+      BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
+                       CompressMPSScheme::SVD_COMPRESS,
+                       std::make_optional<double>(1e-14),
+                       std::make_optional<size_t>(10)),
+      file_params.MC_samples, file_params.WarmUp, 1,
+      {N / 2, N / 2},
+      Ly, Lx);
+
+  std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";
+  boost::mpi::communicator world;
+  void SetUp(void) {
+    ::testing::TestEventListeners &listeners =
+        ::testing::UnitTest::GetInstance()->listeners();
+    if (world.rank() != 0) {
+      delete listeners.Release(listeners.default_result_printer());
+    }
+
+    qlten::hp_numeric::SetTensorManipulationThreads(1);
+    mc_measurement_para.wavefunction_path =
+        "tps_spinless_fermion_half_filling_D" + std::to_string(file_params.D);
+  }
+};
+
+TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure) {
+  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  Model spinless_fermion_solver;
+
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  peps.Load(simple_update_peps_path);
+  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto measure_executor =
+      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+                                                                                      sitps,
+                                                                                      world,
+                                                                                      spinless_fermion_solver);
+
+  measure_executor->Execute();
+  measure_executor->OutputEnergy();
+  delete measure_executor;
+}
+
 struct Z2tJModelTools : public testing::Test {
   using IndexT = Index<fZ2QN>;
   using QNSctT = QNSector<fZ2QN>;
@@ -61,9 +125,9 @@ struct Z2tJModelTools : public testing::Test {
   double doping = 0.125;
   size_t hole_num = size_t(double(N) * doping);
 
-  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
-                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
-                         TenIndexDirType::OUT
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
   );
   MCMeasurementPara mc_measurement_para = MCMeasurementPara(
       BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
@@ -93,7 +157,7 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure) {
   using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
   Model tj_solver(t, J);
 
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(pb_out, Ly, Lx);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
   auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);

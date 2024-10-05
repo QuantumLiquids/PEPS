@@ -23,13 +23,13 @@ BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position, const size_t size,
   assert(local_hilbert_space.dim() == 1);
   if constexpr (Tensor::IsFermionic()) {
     assert(local_hilbert_space.GetQNSct(0).GetQn().IsFermionParityEven());
-    Tensor mps_ten = Tensor({index0_in_, local_hilbert_space, index0_out_, index0_out_});
+    Tensor mps_ten = Tensor({index0_in_, local_hilbert_space, index0_out_, index0_in_});
     mps_ten({0, 0, 0, 0}) = 1.0;
     for (size_t i = 0; i < size; i++) {
       this->alloc(i);
       (*this)[i] = mps_ten;
     }
-  } else { //bosonic
+  } else { //boson
     Tensor mps_ten = Tensor({index0_in_, local_hilbert_space, index0_out_});
     mps_ten({0, 0, 0}) = 1.0;
     for (size_t i = 0; i < size; i++) {
@@ -52,7 +52,7 @@ BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position,
       assert(hilbert_spaces.at(i).dim() == 1);
       assert(hilbert_spaces.at(i).GetQNSct(0).GetQn().IsFermionParityEven());
       this->alloc(i);
-      (*this)[i] = Tensor({index0_in_, hilbert_spaces.at(i), index0_out_, index0_out_});
+      (*this)[i] = Tensor({index0_in_, hilbert_spaces.at(i), index0_out_, index0_in_});
       (*this)[i]({0, 0, 0, 0}) = 1.0;
     }
   } else {
@@ -733,14 +733,14 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
         assert(res_mps(i)->GetIndex(3).dim() == 1);
       }
     } else {
-      auto trivial_idx1 = InverseIndex(tmp2.GetIndex(0));
+      auto trivial_idx1 = InverseIndex(tmp2.GetIndex(0 + Tensor::IsFermionic()));
       auto trivial_idx2 = InverseIndex(tmp2.GetIndex(2 + Tensor::IsFermionic()));
-      assert(trivial_idx1.dim() == 1);
-      assert(trivial_idx2.dim() == 1);
+      assert(trivial_idx1 == InverseIndex((*this)[i].GetIndex(2)));
+      assert(trivial_idx2 == InverseIndex(mpo[N - 1]->GetIndex((position_ + 1) % 4)));
       Tensor right_boundary = IndexCombine<TenElemT, QNT>(trivial_idx1, trivial_idx2, OUT);
       std::vector<size_t> ctrct_axes;
       if constexpr (Tensor::IsFermionic()) {
-        ctrct_axes = {0, 3};
+        ctrct_axes = {1, 3};
       } else {
         ctrct_axes = {0, 2};
       }
@@ -748,6 +748,7 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
       assert(res_mps[i].GetRawDataPtr() != nullptr);
       if constexpr (Tensor::IsFermionic()) {
         res_mps(i)->Transpose({1, 2, 3, 0});
+        assert(res_mps(i)->GetIndex(3).GetDir() == IN);
       }
     }
   }

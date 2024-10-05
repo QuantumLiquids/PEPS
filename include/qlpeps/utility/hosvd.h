@@ -55,9 +55,7 @@ struct HOSVDRes {
  *   middle_ten : firstly the new generated legs, then the original external legs.
  *                the new generated legs in order consistent with u_tens order.
  *
- * @tparam TenElemT
- * @tparam QNT
- * @param t
+ * @param t index order : first the legs who are going to be decomposed, then the legs who will be preserved.
  * @param ldims
  * @param lqns
  * @param Dmin
@@ -85,6 +83,7 @@ HOSVDRes<TenElemT, QNT> HOSVD(
         &res.u_tens[i], &res.lambda_tens[i], &vt,
         &res.actual_trunc_err, &res.actual_D);
     iterative_core_ten = Tensor();
+    //bug: here contract s and vt
     Contract<TenElemT, QNT, false, false>(vt, res.lambda_tens[i], 0, 1, 1, iterative_core_ten);
   }
   //Split out lambdas

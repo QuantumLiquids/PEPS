@@ -66,11 +66,11 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 
   double t = 1.0;
   fZ2QN qn0 = fZ2QN(0);
-  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
-                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
-                         TenIndexDirType::OUT
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
   );
-  IndexT pb_in = InverseIndex(pb_out);
+  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
 
   VMCOptimizePara optimize_para =
       VMCOptimizePara(BMPSTruncatePara(file_params.Db_min, file_params.Db_max,
@@ -81,7 +81,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
                       {N / 2, N / 2},
                       Ly, Lx,
                       file_params.step_len,
-                      StochasticReconfiguration,
+                      StochasticGradient,
                       ConjugateGradientParams(100, 1e-4, 20, 0.01));
 
   std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";
@@ -107,12 +107,12 @@ TEST_F(Z2SpinlessFreeFermionTools, VariationalMonteCarloUpdate) {
 
   if (file_params.Continue_from_VMC) {
     executor = new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
-                                                                                  Ly, Lx,
+                                                                                 Ly, Lx,
                                                                                  world,
                                                                                  spinless_fermion_solver);
 
   } else {
-    SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(pb_out, Ly, Lx);
+    SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
     peps.Load(simple_update_peps_path);
     auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
     auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
@@ -145,9 +145,9 @@ struct Z2tJModelTools : public testing::Test {
   double doping = 0.125;
   size_t hole_num = size_t(double(N) * doping);
 
-  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
-                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
-                         TenIndexDirType::OUT
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
   );
   VMCOptimizePara optimize_para =
       VMCOptimizePara(BMPSTruncatePara(file_params.Db_min, file_params.Db_max,
@@ -189,7 +189,7 @@ TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
                                                                                  tj_solver);
 
   } else {
-    SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(pb_out, Ly, Lx);
+    SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
     peps.Load(simple_update_peps_path);
     auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
     auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);

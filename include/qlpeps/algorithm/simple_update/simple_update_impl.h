@@ -38,18 +38,18 @@ std::vector<size_t> DuplicateElements(const std::vector<size_t> &input) {
  *
  *          1         3
  *          |         |
- *          ^         ^
+ *          v         v
  *          |---ham---|
- *          ^         ^
+ *          v         v
  *          |         |
  *          0         2
  *
  *  One more example is the 3-site hamiltonian:
  *          1         3         5
  *          |         |         |
- *          ^         ^         ^
+ *          v         v         v
  *          |--------ham--------|
- *          ^         ^         ^
+ *          v         v         v
  *          |         |         |
  *          0         2         4
  * @return
@@ -58,9 +58,9 @@ std::vector<size_t> DuplicateElements(const std::vector<size_t> &input) {
  *
  *          3         4         5
  *          |         |         |
- *          ^         ^         ^
+ *          v         v         v
  *          |----exp(-tau*H)----|
- *          ^         ^         ^
+ *          v         v         v
  *          |         |         |
  *          0         1         2
  */
@@ -85,6 +85,9 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
     id(DuplicateElements(coor)) = 1.0;
   }
   id.Transpose(transpose_axes);
+  if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() == OUT) {
+    id.ActFermionPOps();
+  }
 
   std::vector<Tensor> taylor_terms = {id, ham_scale};
   taylor_terms.reserve(kMaxTaylorExpansionOrder);

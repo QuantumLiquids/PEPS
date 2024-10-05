@@ -51,24 +51,27 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 
   double t = 1.0;
   fZ2QN qn0 = fZ2QN(0);
-  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
-                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
-                         TenIndexDirType::OUT
+  // |ket>
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
   );
-  IndexT pb_in = InverseIndex(pb_out);
+  // <bra|
+  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
 
-  DTensor c = DTensor({pb_in, pb_out});   // annihilation operator
-  DTensor cdag = DTensor({pb_in, pb_out});// creation operator
-  DTensor n = DTensor({pb_in, pb_out});   // density operator
+  DTensor c = DTensor({loc_phy_ket, loc_phy_bra});   // annihilation operator
+  DTensor cdag = DTensor({loc_phy_ket, loc_phy_bra});// creation operator
+  DTensor n = DTensor({loc_phy_ket, loc_phy_bra});   // density operator
 
-  DTensor ham_nn = DTensor({pb_in, pb_out, pb_in, pb_out});
+  DTensor ham_nn = DTensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra});//site: i-j-j-i (i<j)
   void SetUp(void) {
     n({0, 0}) = 1.0;
-    c({0, 1}) = 1;
-    cdag({1, 0}) = 1;
+    c({1, 0}) = 1;
+    cdag({0, 1}) = 1;
 
-    ham_nn({1, 0, 0, 1}) = t; //extra sign here
-    ham_nn({0, 1, 1, 0}) = -t;
+    ham_nn({1, 0, 1, 0}) = -t;
+    ham_nn({0, 1, 0, 1}) = -t;
+    ham_nn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
   }
 };
 
@@ -104,7 +107,7 @@ double CalGroundStateEnergyForSpinlessNNFreeFermionOBC(
 
 TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
 
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   //half-filling
@@ -144,24 +147,14 @@ struct Z2tJModelTools : public testing::Test {
   double J = 0.3;
   double doping = 0.125;
   fZ2QN qn0 = fZ2QN(0);
-  IndexT pb_out = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
-                          QNSctT(fZ2QN(0), 1)}, // |0> empty state
-                         TenIndexDirType::OUT
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
   );
-  IndexT pb_in = InverseIndex(pb_out);
-
-  DTensor dsz = DTensor({pb_in, pb_out});
-  DTensor dsp = DTensor({pb_in, pb_out});
-  DTensor dsm = DTensor({pb_in, pb_out});
-  DTensor dcup = DTensor({pb_in, pb_out});
-  DTensor dcdagup = DTensor({pb_in, pb_out});
-  DTensor dcdn = DTensor({pb_in, pb_out});
-  DTensor dcdagdn = DTensor({pb_in, pb_out});
+  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
 
   // nearest-neighbor Hamiltonian term, for the construction of evolve gates
-  DTensor dham_tj_nn = DTensor({pb_in, pb_out, pb_in, pb_out});
-  ZTensor zham_tj_nn = ZTensor({pb_in, pb_out, pb_in, pb_out});
-
+  DTensor dham_tj_nn = DTensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra}); //i-j-j-i (i < j)
   // loop update data
   IndexT vb_out = IndexT({QNSctT(fZ2QN(0), 4),
                           QNSctT(fZ2QN(1), 4)},
@@ -174,34 +167,21 @@ struct Z2tJModelTools : public testing::Test {
   DuoMatrix<LoopGateT> evolve_gates = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
   void SetUp(void) {
-    //set up basic operators
-    dsz({0, 0}) = 0.5;
-    dsz({1, 1}) = -0.5;
-    dsp({1, 0}) = 1;
-    dsm({0, 1}) = 1;
-    // actually the fermionic operators have the odd parity which are not well-defined in our tensor's scenarios.
-    dcup({0, 2}) = 1;
-    dcdagup({2, 0}) = 1;
-    dcdn({1, 2}) = 1;
-    dcdagdn({2, 1}) = 1;
-
-
     //set up nearest-neighbor Hamiltonian terms
     //-t (c^dag_{i, s} c_{j,s} + c^dag_{j,s} c_{i,s}) + J S_i \cdot S_j
-    dham_tj_nn({2, 0, 0, 2}) = t; //extra sign here
-    dham_tj_nn({2, 1, 1, 2}) = t; //extra sign here
-    dham_tj_nn({0, 2, 2, 0}) = -t;
-    dham_tj_nn({1, 2, 2, 1}) = -t;
+    dham_tj_nn({2, 0, 2, 0}) = -t;
+    dham_tj_nn({2, 1, 2, 1}) = -t;
+    dham_tj_nn({0, 2, 0, 2}) = -t;
+    dham_tj_nn({1, 2, 1, 2}) = -t;
 
-    dham_tj_nn({0, 0, 0, 0}) = 0.25 * J;
-    dham_tj_nn({1, 1, 1, 1}) = 0.25 * J;
-    dham_tj_nn({1, 1, 0, 0}) = -0.25 * J;
-    dham_tj_nn({0, 0, 1, 1}) = -0.25 * J;
-    dham_tj_nn({0, 1, 1, 0}) = 0.5 * J;
-    dham_tj_nn({1, 0, 0, 1}) = 0.5 * J;
+    dham_tj_nn({0, 0, 0, 0}) = 0.25 * J;    //FM, diagonal element
+    dham_tj_nn({1, 1, 1, 1}) = 0.25 * J;    //FM, diagonal element
+    dham_tj_nn({0, 1, 1, 0}) = -0.25 * J;   //AFM,diagonal element
+    dham_tj_nn({1, 0, 0, 1}) = -0.25 * J;   //AFM,diagonal element
+    dham_tj_nn({0, 1, 0, 1}) = 0.5 * J;     //off diagonal element
+    dham_tj_nn({1, 0, 1, 0}) = 0.5 * J;     //off diagonal element
 
-    zham_tj_nn = ToComplex(dham_tj_nn);
-
+    dham_tj_nn.Transpose({3, 0, 2, 1});
     GenerateSquaretJAllEvolveGates(loop_tau, evolve_gates);
   }
 
@@ -254,7 +234,7 @@ struct Z2tJModelTools : public testing::Test {
     LoopGateT gates;
     for (size_t i = 0; i < 4; i++) {
 
-      gates[i] = DTensor({vb_in, pb_in, pb_out, vb_out});
+      gates[i] = DTensor({vb_in, loc_phy_bra, loc_phy_ket, vb_out});
       DTensor &gate = gates[i];
       //Id
       gate({0, 0, 0, 0}) = 1.0;
@@ -298,7 +278,7 @@ struct Z2tJModelTools : public testing::Test {
 TEST_F(Z2tJModelTools, tJModelHalfFillingSimpleUpdate) {
   // ED ground state energy in 4x4 = -9.189207065192949 * J
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
 
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   //half-filling
@@ -331,24 +311,27 @@ TEST_F(Z2tJModelTools, tJModelHalfFillingSimpleUpdate) {
 TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   // ED ground state energy in 4x4 -6.65535490684301
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
-
-  std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
-
-  size_t site_idx = 0, sz_int = 0;
-  size_t sites_per_hole = (size_t) (1.0 / doping);
-  for (size_t y = 0; y < Ly; y++) {
-    for (size_t x = 0; x < Lx; x++) {
-      if (site_idx % sites_per_hole == 1) {
-        activates[y][x] = 2;
-      } else {
-        activates[y][x] = sz_int % 2;
-        sz_int++;
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
+  std::string peps_path = "peps_tj_doping0.125";
+  if (IsPathExist(peps_path)) {
+    peps0.Load(peps_path);
+  } else {
+    std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
+    size_t site_idx = 0, sz_int = 0;
+    size_t sites_per_hole = (size_t) (1.0 / doping);
+    for (size_t y = 0; y < Ly; y++) {
+      for (size_t x = 0; x < Lx; x++) {
+        if (site_idx % sites_per_hole == 1) {
+          activates[y][x] = 2;
+        } else {
+          activates[y][x] = sz_int % 2;
+          sz_int++;
+        }
+        site_idx++;
       }
-      site_idx++;
     }
+    peps0.Initial(activates);
   }
-  peps0.Initial(activates);
 
   SimpleUpdatePara update_para(params.Steps, params.Tau0, 1, params.D, 1e-10);
   SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
@@ -357,13 +340,13 @@ TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   su_exe->Execute();
   auto peps = su_exe->GetPEPS();
   delete su_exe;
-  peps.Dump("peps_tj_doping0.125");
+  peps.Dump(peps_path);
 }
 
 TEST_F(Z2tJModelTools, tJModelDopingLoopUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   omp_set_num_threads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
   peps0.Load("peps_tj_doping0.125");
   peps0.NormalizeAllTensor();
 
