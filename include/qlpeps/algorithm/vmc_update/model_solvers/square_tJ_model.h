@@ -174,7 +174,7 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
                                              HORIZONTAL,
                                              tn,
                                              (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                             t_, J_);
+                                             t_, J_, has_nn_term_);
       tn.BTenMoveStep(RIGHT);
     }
     //measure correlation along the middle horizontal line
@@ -216,7 +216,7 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
                                              VERTICAL,
                                              tn,
                                              (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                             t_, J_);
+                                             t_, J_, has_nn_term_);
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }
