@@ -18,7 +18,7 @@ class SquaretJModel : public ModelEnergySolver<TenElemT, QNT>, ModelMeasurementS
   using SITPS = SplitIndexTPS<TenElemT, QNT>;
  public:
   SquaretJModel(void) = delete;
-  SquaretJModel(double t, double J) : t_(t), J_(J) {}
+  SquaretJModel(double t, double J, bool has_nn_term) : t_(t), J_(J), has_nn_term_(has_nn_term) {}
 
   template<typename WaveFunctionComponentType, bool calchols = true>
   TenElemT CalEnergyAndHoles(
@@ -35,6 +35,7 @@ class SquaretJModel : public ModelEnergySolver<TenElemT, QNT>, ModelMeasurementS
  private:
   double t_;
   double J_;
+  bool has_nn_term_;
 };
 
 double tJConfig2Density(const size_t config) {
@@ -61,14 +62,14 @@ TenElemT EvaluateBondEnergyFortJModel(
     const TensorNetwork2D<TenElemT, QNT> &tn,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
-    double t, double J
+    double t, double J, bool has_nn_term
 ) {
   if (config1 == config2) {
     if (config1 == 2) {
       // two empty state, no energy contribution
       return 0.0;
     } else {
-      return J * 0.25; // sz * sz
+      return J * (0.25 - int(has_nn_term) / 4.0); // sz * sz - 1/4 * n * n
     }
   } else {
     TenElemT psi = tn.Trace(site1, site2, orient);
@@ -83,7 +84,7 @@ TenElemT EvaluateBondEnergyFortJModel(
     } else {
       // spin anti-parallel
       // only spin interaction energy contribution
-      return (-0.25 + ratio * 0.5) * J;
+      return (-0.25 + ratio * 0.5 - int(has_nn_term) / 4.0) * J;
     }
   }
 }
@@ -115,7 +116,7 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
                                                HORIZONTAL,
                                                tn,
                                                (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                               t_, J_);
+                                               t_, J_, has_nn_term_);
         tn.BTenMoveStep(RIGHT);
       }
     }
@@ -136,7 +137,7 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
                                              VERTICAL,
                                              tn,
                                              (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                             t_, J_);
+                                             t_, J_, has_nn_term_);
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }

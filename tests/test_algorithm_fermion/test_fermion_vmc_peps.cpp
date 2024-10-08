@@ -178,7 +178,7 @@ struct Z2tJModelTools : public testing::Test {
 
 TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
   using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
-  Model tj_solver(t, J);
+  Model tj_solver(t, J, false);
 
   VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 

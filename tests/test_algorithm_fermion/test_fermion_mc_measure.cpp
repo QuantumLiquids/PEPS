@@ -155,7 +155,7 @@ struct Z2tJModelTools : public testing::Test {
 
 TEST_F(Z2tJModelTools, MonteCarloMeasure) {
   using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
-  Model tj_solver(t, J);
+  Model tj_solver(t, J, false);
 
   SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
