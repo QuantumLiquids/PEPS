@@ -169,12 +169,14 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
       //Calculate horizontal bond energy contribution
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row, col + 1};
-      energy += EvaluateBondEnergyFortJModel(site1, site2,
+      TenElemT bond_energy = EvaluateBondEnergyFortJModel(site1, site2,
                                              config(site1), config(site2),
                                              HORIZONTAL,
                                              tn,
                                              (*split_index_tps)(site1), (*split_index_tps)(site2),
                                              t_, J_, has_nn_term_);
+      res.bond_energys_loc.push_back(bond_energy);
+      energy += bond_energy;
       tn.BTenMoveStep(RIGHT);
     }
     //measure correlation along the middle horizontal line
@@ -211,12 +213,14 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      energy += EvaluateBondEnergyFortJModel(site1, site2,
+      TenElemT bond_energy =  EvaluateBondEnergyFortJModel(site1, site2,
                                              config(site1), config(site2),
                                              VERTICAL,
                                              tn,
                                              (*split_index_tps)(site1), (*split_index_tps)(site2),
                                              t_, J_, has_nn_term_);
+      res.bond_energys_loc.push_back(bond_energy);
+      energy += bond_energy;
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }
