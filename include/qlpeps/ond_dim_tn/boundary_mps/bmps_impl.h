@@ -22,13 +22,25 @@ BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position, const size_t size,
     tens_cano_type_(size, MPSTenCanoType::RIGHT) {
   assert(local_hilbert_space.dim() == 1);
   if constexpr (Tensor::IsFermionic()) {
-    assert(local_hilbert_space.GetQNSct(0).GetQn().IsFermionParityEven());
-    Tensor mps_ten = Tensor({index0_in_, local_hilbert_space, index0_out_, index0_in_});
-    mps_ten({0, 0, 0, 0}) = 1.0;
+    Index<QNT> last_vb_out_idx = index0_out_;
     for (size_t i = 0; i < size; i++) {
       this->alloc(i);
-      (*this)[i] = mps_ten;
+      Index<QNT> this_vb_in_idx = InverseIndex(last_vb_out_idx);
+      QNT qn_vb_out = this_vb_in_idx.GetQNSct(0).GetQn();
+      if (local_hilbert_space.GetDir() == IN) {
+        qn_vb_out += local_hilbert_space.GetQNSct(0).GetQn();
+      } else {
+        qn_vb_out += -local_hilbert_space.GetQNSct(0).GetQn();
+      }
+      Index<QNT> this_vb_out_idx = IndexT({QNSector<QNT>(qn_vb_out, 1)},
+                                          qlten::TenIndexDirType::OUT
+      );
+      (*this)[i] = Tensor({this_vb_in_idx, local_hilbert_space, this_vb_out_idx, index0_in_});
+      (*this)[i]({0, 0, 0, 0}) = 1.0;
+
+      last_vb_out_idx = this_vb_out_idx;
     }
+    assert(last_vb_out_idx.GetQNSct(0).GetQn().IsFermionParityEven());
   } else { //boson
     Tensor mps_ten = Tensor({index0_in_, local_hilbert_space, index0_out_});
     mps_ten({0, 0, 0}) = 1.0;
@@ -48,13 +60,26 @@ BMPS<TenElemT, QNT>::BMPS(const BMPSPOSITION position,
     center_(0),
     tens_cano_type_(hilbert_spaces.size(), MPSTenCanoType::RIGHT) {
   if constexpr (Tensor::IsFermionic()) {
+    Index<QNT> last_vb_out_idx = index0_out_;
     for (size_t i = 0; i < hilbert_spaces.size(); i++) {
       assert(hilbert_spaces.at(i).dim() == 1);
-      assert(hilbert_spaces.at(i).GetQNSct(0).GetQn().IsFermionParityEven());
       this->alloc(i);
-      (*this)[i] = Tensor({index0_in_, hilbert_spaces.at(i), index0_out_, index0_in_});
+      Index<QNT> this_vb_in_idx = InverseIndex(last_vb_out_idx);
+      QNT qn_vb_out = this_vb_in_idx.GetQNSct(0).GetQn();
+      if (hilbert_spaces.at(i).GetDir() == IN) {
+        qn_vb_out += hilbert_spaces.at(i).GetQNSct(0).GetQn();
+      } else {
+        qn_vb_out += -hilbert_spaces.at(i).GetQNSct(0).GetQn();
+      }
+      Index<QNT> this_vb_out_idx = IndexT({QNSector<QNT>(qn_vb_out, 1)},
+                                          qlten::TenIndexDirType::OUT
+      );
+      (*this)[i] = Tensor({this_vb_in_idx, hilbert_spaces.at(i), this_vb_out_idx, index0_in_});
       (*this)[i]({0, 0, 0, 0}) = 1.0;
+
+      last_vb_out_idx = this_vb_out_idx;
     }
+    assert(last_vb_out_idx.GetQNSct(0).GetQn().IsFermionParityEven());
   } else {
     for (size_t i = 0; i < hilbert_spaces.size(); i++) {
       this->alloc(i);
