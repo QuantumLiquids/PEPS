@@ -135,6 +135,7 @@ struct Z2tJModelTools : public testing::Test {
   using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
   using ZTensor = QLTensor<QLTEN_Complex, fZ2QN>;
   using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleTNNFlipT = SquareTPSSampletJ3SiteExchange<QLTEN_Double, fZ2QN>;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -173,7 +174,7 @@ struct Z2tJModelTools : public testing::Test {
   }
 };
 
-TEST_F(Z2tJModelTools, MonteCarloMeasure) {
+TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
   using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
   Model tj_solver(t, J, false);
 
@@ -183,6 +184,25 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure) {
   auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
   auto measure_executor =
       new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+                                                                                      sitps,
+                                                                                      world,
+                                                                                      tj_solver);
+
+  measure_executor->Execute();
+  measure_executor->OutputEnergy();
+  delete measure_executor;
+}
+
+TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
+  using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
+  Model tj_solver(t, J, false);
+
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  peps.Load("peps_tj_doping0.125");
+  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto measure_executor =
+      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
                                                                                       sitps,
                                                                                       world,
                                                                                       tj_solver);
