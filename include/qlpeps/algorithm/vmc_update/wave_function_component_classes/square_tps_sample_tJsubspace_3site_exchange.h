@@ -111,36 +111,32 @@ class SquareTPSSampletJ3SiteExchange : public WaveFunctionComponent<TenElemT, QN
                                            sitps(site1)[this->config(site3)],
                                            sitps(site2)[this->config(site1)],
                                            sitps(site3)[this->config(site2)]);
-    size_t final_state;
+    TenElemT psi3, psi4, psi5;
+    std::vector<double> weights;
     if (this->config(site1) == this->config(site2) ||
         this->config(site2) == this->config(site3) ||
         this->config(site1) == this->config(site3)) { // rotate case like before
       double psi_abs_max = std::max({std::abs(psi0), std::abs(psi1), std::abs(psi2)});
-      std::vector<double>
-          weights = {std::norm(psi0 / psi_abs_max), std::norm(psi1 / psi_abs_max), std::norm(psi2 / psi_abs_max)};
-
-      final_state = NonDBMCMCStateUpdate(0, weights, u_double(random_engine));
+      weights = {std::norm(psi0 / psi_abs_max), std::norm(psi1 / psi_abs_max), std::norm(psi2 / psi_abs_max)};
     } else {// configuration on three sites are all different
-      TenElemT psi3 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
-                                             sitps(site1)[this->config(site1)],
-                                             sitps(site2)[this->config(site3)],
-                                             sitps(site3)[this->config(site2)]);
-      TenElemT psi4 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
-                                             sitps(site1)[this->config(site3)],
-                                             sitps(site2)[this->config(site2)],
-                                             sitps(site3)[this->config(site1)]);
-      TenElemT psi5 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
-                                             sitps(site1)[this->config(site2)],
-                                             sitps(site2)[this->config(site1)],
-                                             sitps(site3)[this->config(site3)]);
+      psi3 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
+                                    sitps(site1)[this->config(site1)],
+                                    sitps(site2)[this->config(site3)],
+                                    sitps(site3)[this->config(site2)]);
+      psi4 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
+                                    sitps(site1)[this->config(site3)],
+                                    sitps(site2)[this->config(site2)],
+                                    sitps(site3)[this->config(site1)]);
+      psi5 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
+                                    sitps(site1)[this->config(site2)],
+                                    sitps(site2)[this->config(site1)],
+                                    sitps(site3)[this->config(site3)]);
       double psi_abs_max = std::max({std::abs(psi0), std::abs(psi1), std::abs(psi2),
                                      std::abs(psi3), std::abs(psi4), std::abs(psi5)});
-      std::vector<double>
-          weights = {std::norm(psi0 / psi_abs_max), std::norm(psi1 / psi_abs_max), std::norm(psi2 / psi_abs_max),
-                     std::norm(psi3 / psi_abs_max), std::norm(psi4 / psi_abs_max), std::norm(psi5 / psi_abs_max)};
-
-      final_state = NonDBMCMCStateUpdate(0, weights, u_double(random_engine));
+      weights = {std::norm(psi0 / psi_abs_max), std::norm(psi1 / psi_abs_max), std::norm(psi2 / psi_abs_max),
+                 std::norm(psi3 / psi_abs_max), std::norm(psi4 / psi_abs_max), std::norm(psi5 / psi_abs_max)};
     }
+    size_t final_state = NonDBMCMCStateUpdate(0, weights, u_double(random_engine));
     switch (final_state) {
       case 0: {
         return false;
@@ -159,14 +155,17 @@ class SquareTPSSampletJ3SiteExchange : public WaveFunctionComponent<TenElemT, QN
       }
       case 3: {
         std::swap(this->config(site2), this->config(site3));
+        this->amplitude = psi3;
         break;
       }
       case 4: {
         std::swap(this->config(site1), this->config(site3));
+        this->amplitude = psi4;
         break;
       }
       case 5: {
         std::swap(this->config(site1), this->config(site2));
+        this->amplitude = psi5;
         break;
       }
     }
@@ -175,7 +174,6 @@ class SquareTPSSampletJ3SiteExchange : public WaveFunctionComponent<TenElemT, QN
     tn.UpdateSiteConfig(site2, this->config(site2), sitps);
     tn.UpdateSiteConfig(site3, this->config(site3), sitps);
     return true;
-
   }
 }; //SquareTPSSampletJ3SiteExchange
 
