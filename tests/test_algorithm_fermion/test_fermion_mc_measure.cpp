@@ -50,6 +50,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 
   using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
   using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -88,7 +89,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
   }
 };
 
-TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure) {
+TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
   using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
   Model spinless_fermion_solver;
 
@@ -101,6 +102,25 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure) {
                                                                                       sitps,
                                                                                       world,
                                                                                       spinless_fermion_solver);
+
+  measure_executor->Execute();
+  measure_executor->OutputEnergy();
+  delete measure_executor;
+}
+
+TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
+  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  Model spinless_fermion_solver;
+
+  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  peps.Load(simple_update_peps_path);
+  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto measure_executor =
+      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
+                                                                                       sitps,
+                                                                                       world,
+                                                                                       spinless_fermion_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();

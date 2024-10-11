@@ -224,6 +224,7 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t D
   Contract((*this)(site - 1), &temp_ten, {{2}, {0}}, pnext_ten);
   delete (*this)(site - 1);
   (*this)(site - 1) = pnext_ten;
+  assert(!pnext_ten->HasNan());
   if constexpr (Tensor::IsFermionic()) {
     (*this)(site - 1)->Transpose({0, 1, 3, 2});
   }
@@ -236,48 +237,30 @@ std::vector<double> BMPS<TenElemT, QNT>::GetEntanglementEntropy(size_t
                                                                 n) {
   size_t N = this->size();
   std::vector<double> ee_list(N - 1);
-  Centralize(N
-                 - 1);
-  (*this)[N - 1].
-      Normalize();
+  Centralize(N - 1);
+  (*this)[N - 1].Normalize();
 
-  for (
-      size_t i = N - 1;
-      i >= 1; --i) { // site
+  for (size_t i = N - 1; i >= 1; --i) { // site
     auto s = RightCanonicalizeTen(i);
     double ee = 0;
     double sum_of_p2n = 0.0;
-    for (
-        size_t k = 0;
-        k < s.
-            GetShape()[0];
-        ++k) { // indices of singular value matrix
+    for (size_t k = 0; k < s.GetShape()[0]; ++k) { // indices of singular value matrix
       double singular_value = s(k, k);
       double p = singular_value * singular_value;
       if (n == 1) {
-        ee += (-
-            p * std::log(p)
-        );
+        ee += (-p * std::log(p));
       } else {
         double p_to_n = p;
-        for (
-            size_t j = 1;
-            j < n;
-            j++) { // order of power
-          p_to_n *=
-              p;
+        for (size_t j = 1; j < n; j++) { // order of power
+          p_to_n *= p;
         }
-        sum_of_p2n +=
-            p_to_n;
+        sum_of_p2n += p_to_n;
       }
     }
     if (n == 1) {
-      ee_list[i - 1] =
-          ee;
+      ee_list[i - 1] = ee;
     } else {
-      ee_list[i - 1] = -
-          std::log(sum_of_p2n)
-          / (double) (n - 1);
+      ee_list[i - 1] = -std::log(sum_of_p2n) / (double) (n - 1);
 // note above formula must be in form of n-1 rather 1-n because of n is type of size_t
     }
   }
@@ -774,6 +757,7 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
       if constexpr (Tensor::IsFermionic()) {
         res_mps(i)->Transpose({1, 2, 3, 0});
         assert(res_mps(i)->GetIndex(3).GetDir() == IN);
+        assert(!res_mps(i)->HasNan());
       }
     }
   }

@@ -418,6 +418,53 @@ void TensorNetwork2D<TenElemT, QNT>::BTen2MoveStep(const BTenPOSITION position, 
   GrowBTen2Step_(Opposite(position), slice_num1);
 }
 
+/*
+ * e.g. bten_position = LEFT
+ *
+ *           ++-------mps_ten1---
+ *           ||          |
+ *           ||          |
+ *  BTEN-LEFT||-------mpo_ten----
+ *           ||          |
+ *           ||          |
+ *           ++-------mps_ten2---
+ *  mpo_ten is the original mpo which haven't been transposed
+*/
+template<typename TenElemT, typename QNT>
+QLTensor<TenElemT, QNT> FermionGrowBTenStep(
+    const BTenPOSITION bten_position,
+    const QLTensor<TenElemT, QNT> &bten,
+    const QLTensor<TenElemT, QNT> &mps_ten1,
+    QLTensor<TenElemT, QNT> mpo_ten,
+    const QLTensor<TenElemT, QNT> &mps_ten2
+) {
+  switch (bten_position) {
+    case LEFT : {
+      mpo_ten.Transpose({3, 0, 1, 2, 4});
+      break;
+    }
+    case DOWN : {
+      break;
+    }
+    case RIGHT : {
+      mpo_ten.Transpose({1, 2, 3, 0, 4});
+      break;
+    }
+    case UP : {
+      mpo_ten.Transpose({2, 3, 0, 1, 4});
+    }
+  }
+  QLTensor<TenElemT, QNT> tmp1, tmp2, next_bten;
+  Contract<TenElemT, QNT, true, true>(mps_ten1, bten, 2, 0, 1, tmp1);
+  tmp1.FuseIndex(0, 5);
+  Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 2, 0, 2, tmp2);
+  tmp2.FuseIndex(1, 5);
+  Contract(&tmp2, {1, 3}, &mps_ten2, {0, 1}, &next_bten);
+  next_bten.FuseIndex(0, 4);
+  next_bten.Transpose({1, 2, 3, 0});
+  return next_bten;
+}
+
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep(const BTenPOSITION post) {
   size_t ctrct_mpo_start_idx = (size_t(post) + 3) % 4;
@@ -462,30 +509,9 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTenStep(const BTenPOSITION post) {
   mps_ten1 = &bmps_set_[pre_post].back()[N - bten_size];
   mps_ten2 = &bmps_set_[next_post].back()[bten_size - 1];
   if constexpr (Tensor::IsFermionic()) {
-    Tensor mpo_ten = (*this)(grown_site);
-    switch (post) {
-      case LEFT : {
-        mpo_ten.Transpose({3, 0, 1, 2, 4});
-        break;
-      }
-      case DOWN : {
-        break;
-      }
-      case RIGHT : {
-        mpo_ten.Transpose({1, 2, 3, 0, 4});
-        break;
-      }
-      case UP : {
-        mpo_ten.Transpose({2, 3, 0, 1, 4});
-      }
-    }
-    Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set_.at(post).back(), 2, 0, 1, tmp1);
-    tmp1.FuseIndex(0, 5);
-    Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 2, 0, 2, tmp2);
-    tmp2.FuseIndex(1, 5);
-    Contract(&tmp2, {1, 3}, mps_ten2, {0, 1}, &next_bten);
-    next_bten.FuseIndex(0, 4);
-    next_bten.Transpose({1, 2, 3, 0});
+    next_bten =
+        FermionGrowBTenStep(post, bten_set_.at(post).back(),
+                            *mps_ten1, (*this)(grown_site), *mps_ten2);
   } else {
     Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set_.at(post).back(), 2, 0, 1, tmp1);
     Contract<TenElemT, QNT, false, false>(tmp1, (*this)(grown_site), 1, ctrct_mpo_start_idx, 2, tmp2);

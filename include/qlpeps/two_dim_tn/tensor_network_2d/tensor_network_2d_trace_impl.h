@@ -236,7 +236,7 @@ TensorNetwork2D<TenElemT, QNT>::ReplaceNNSiteTrace(const SiteIdx &site_a, const 
     Contract(&tmp[2], {0, 1, 2}, &tmp[5], {2, 1, 0}, &tmp[6]);
     return tmp[6]();
   }
-}
+} //ReplaceNNSiteTrace
 
 template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left_up_site,
@@ -370,13 +370,13 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
   }
 }
 
+///< For fermion case, the sign of the output is meaningless.
 template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceTNNSiteTrace(const SiteIdx &site0,
                                                              const BondOrientation mps_orient,
                                                              const TensorNetwork2D::Tensor &replaced_ten0,
                                                              const TensorNetwork2D::Tensor &replaced_ten1,
                                                              const TensorNetwork2D::Tensor &replaced_ten2) const {
-  static_assert(!Tensor::IsFermionic());
   Tensor tmp[10];
   if (mps_orient == HORIZONTAL) {
     /*
@@ -415,26 +415,39 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceTNNSiteTrace(const SiteIdx &site
     const Tensor &left_bten = bten_set_.at(LEFT)[col0];
     const Tensor &right_bten = bten_set_.at(RIGHT)[this->cols() - col2 - 1];
 #endif
+    if constexpr (Tensor::IsFermionic()) {
+      Tensor next_left_bten1 =
+          FermionGrowBTenStep(LEFT, left_bten,
+                              mps_ten0, replaced_ten0, mps_ten1);
+      Tensor next_left_bten2 =
+          FermionGrowBTenStep(LEFT, next_left_bten1,
+                              mps_ten2, replaced_ten1, mps_ten3);
+      Tensor next_left_bten3 =
+          FermionGrowBTenStep(LEFT, next_left_bten2,
+                              mps_ten4, replaced_ten2, mps_ten5);
+      Contract(&next_left_bten3, {0, 1, 2}, &right_bten, {2, 1, 0}, tmp);
+      return tmp[0]({0, 0});
+    } else { // Boson
+      const Tensor &mpo_ten0 = replaced_ten0,
+          mpo_ten1 = replaced_ten1,
+          mpo_ten2 = replaced_ten2;
 
-    const Tensor &mpo_ten0 = replaced_ten0,
-        mpo_ten1 = replaced_ten1,
-        mpo_ten2 = replaced_ten2;
+      Contract<TenElemT, QNT, true, true>(mps_ten0, left_bten, 2, 0, 1, tmp[0]);
+      Contract<TenElemT, QNT, false, false>(tmp[0], mpo_ten0, 1, 3, 2, tmp[1]);
+      Contract(&tmp[1], {0, 2}, &mps_ten1, {0, 1}, &tmp[2]);
 
-    Contract<TenElemT, QNT, true, true>(mps_ten0, left_bten, 2, 0, 1, tmp[0]);
-    Contract<TenElemT, QNT, false, false>(tmp[0], mpo_ten0, 1, 3, 2, tmp[1]);
-    Contract(&tmp[1], {0, 2}, &mps_ten1, {0, 1}, &tmp[2]);
+      Contract<TenElemT, QNT, true, true>(mps_ten2, tmp[2], 2, 0, 1, tmp[3]);
+      Contract<TenElemT, QNT, false, false>(tmp[3], mpo_ten1, 1, 3, 2, tmp[4]);
+      Contract(&tmp[4], {0, 2}, &mps_ten3, {0, 1}, &tmp[5]);
 
-    Contract<TenElemT, QNT, true, true>(mps_ten2, tmp[2], 2, 0, 1, tmp[3]);
-    Contract<TenElemT, QNT, false, false>(tmp[3], mpo_ten1, 1, 3, 2, tmp[4]);
-    Contract(&tmp[4], {0, 2}, &mps_ten3, {0, 1}, &tmp[5]);
+      Contract<TenElemT, QNT, true, true>(mps_ten4, tmp[5], 2, 0, 1, tmp[6]);
+      Contract<TenElemT, QNT, false, false>(tmp[6], mpo_ten2, 1, 3, 2, tmp[7]);
+      Contract(&tmp[7], {0, 2}, &mps_ten5, {0, 1}, &tmp[8]);
 
-    Contract<TenElemT, QNT, true, true>(mps_ten4, tmp[5], 2, 0, 1, tmp[6]);
-    Contract<TenElemT, QNT, false, false>(tmp[6], mpo_ten2, 1, 3, 2, tmp[7]);
-    Contract(&tmp[7], {0, 2}, &mps_ten5, {0, 1}, &tmp[8]);
-
-    Contract(&tmp[8], {0, 1, 2}, &right_bten, {2, 1, 0}, &tmp[9]);
-    return tmp[9]();
-  } else {
+      Contract(&tmp[8], {0, 1, 2}, &right_bten, {2, 1, 0}, &tmp[9]);
+      return tmp[9]();
+    }
+  } else { // mps_orient == VERTICAL
     /*
      *        MPS-LEFT            MPS-RIGHT
      * BTEN-UP   ++=================++
@@ -469,20 +482,34 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceTNNSiteTrace(const SiteIdx &site
     const Tensor &top_bten = bten_set_.at(UP)[row0];
     const Tensor &bottom_bten = bten_set_.at(DOWN)[this->rows() - row2 - 1];
 
-    Contract<TenElemT, QNT, true, true>(mps_ten0, top_bten, 2, 0, 1, tmp[0]);
-    Contract<TenElemT, QNT, false, false>(tmp[0], replaced_ten0, 1, 2, 2, tmp[1]);
-    Contract(&tmp[1], {0, 2}, &mps_ten1, {0, 1}, &tmp[2]);
+    if constexpr (Tensor::IsFermionic()) {
+      Tensor next_up_bten1 =
+          FermionGrowBTenStep(UP, top_bten,
+                              mps_ten0, replaced_ten0, mps_ten1);
+      Tensor next_up_bten2 =
+          FermionGrowBTenStep(UP, next_up_bten1,
+                              mps_ten2, replaced_ten1, mps_ten3);
+      Tensor next_up_bten3 =
+          FermionGrowBTenStep(UP, next_up_bten2,
+                              mps_ten4, replaced_ten2, mps_ten5);
+      Contract(&next_up_bten3, {0, 1, 2}, &bottom_bten, {2, 1, 0}, tmp);
+      return tmp[0]({0, 0});
+    } else { // Boson
+      Contract<TenElemT, QNT, true, true>(mps_ten0, top_bten, 2, 0, 1, tmp[0]);
+      Contract<TenElemT, QNT, false, false>(tmp[0], replaced_ten0, 1, 2, 2, tmp[1]);
+      Contract(&tmp[1], {0, 2}, &mps_ten1, {0, 1}, &tmp[2]);
 
-    Contract<TenElemT, QNT, true, true>(mps_ten2, tmp[2], 2, 0, 1, tmp[3]);
-    Contract<TenElemT, QNT, false, false>(tmp[3], replaced_ten1, 1, 2, 2, tmp[4]);
-    Contract(&tmp[4], {0, 2}, &mps_ten3, {0, 1}, &tmp[5]);
+      Contract<TenElemT, QNT, true, true>(mps_ten2, tmp[2], 2, 0, 1, tmp[3]);
+      Contract<TenElemT, QNT, false, false>(tmp[3], replaced_ten1, 1, 2, 2, tmp[4]);
+      Contract(&tmp[4], {0, 2}, &mps_ten3, {0, 1}, &tmp[5]);
 
-    Contract<TenElemT, QNT, true, true>(mps_ten4, tmp[5], 2, 0, 1, tmp[6]);
-    Contract<TenElemT, QNT, false, false>(tmp[6], replaced_ten2, 1, 2, 2, tmp[7]);
-    Contract(&tmp[7], {0, 2}, &mps_ten5, {0, 1}, &tmp[8]);
+      Contract<TenElemT, QNT, true, true>(mps_ten4, tmp[5], 2, 0, 1, tmp[6]);
+      Contract<TenElemT, QNT, false, false>(tmp[6], replaced_ten2, 1, 2, 2, tmp[7]);
+      Contract(&tmp[7], {0, 2}, &mps_ten5, {0, 1}, &tmp[8]);
 
-    Contract(&tmp[8], {0, 1, 2}, &bottom_bten, {2, 1, 0}, &tmp[9]);
-    return tmp[9]();
+      Contract(&tmp[8], {0, 1, 2}, &bottom_bten, {2, 1, 0}, &tmp[9]);
+      return tmp[9]();
+    }
   }
 }
 

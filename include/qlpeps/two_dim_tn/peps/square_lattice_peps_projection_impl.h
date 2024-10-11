@@ -17,15 +17,6 @@ namespace qlpeps {
 using namespace qlten;
 using qlmps::mock_qlten::SVD;
 
-// helper
-bool is_nan(const double &value) {
-  return std::isnan(value);
-}
-
-bool is_nan(const std::complex<double> &value) {
-  return std::isnan(value.real()) || std::isnan(value.imag());
-}
-
 template<typename TenElemT, typename QNT>
 double SquareLatticePEPS<TenElemT, QNT>::SingleSiteProject(const SquareLatticePEPS::TenT &gate_ten,
                                                            const SiteIdx &site,
@@ -240,7 +231,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
   assert(physical_index == Gamma(row, col)->GetIndex(4));
   assert(Gamma(row, col)->GetIndex(1) == lambda_vert(row + 1, col)->GetIndex(1));
   for (size_t i = 0; i < 7; i++) {
-    assert(!is_nan(*tmp_ten[i].GetBlkSparDataTen().GetActualRawDataPtr()));
+    assert(!tmp_ten[i].HasNan());
   }
 #endif
   return {norm, actual_trunc_err, actual_D, e_loc};

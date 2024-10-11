@@ -32,6 +32,14 @@ class WaveFunctionComponent {
                                      std::vector<double> &accept_rates) = 0;
 };
 
+template<typename ElemT>
+bool IsAmplitudeSquareLegal(const ElemT &amplitude) {
+  const double min_positive = std::numeric_limits<double>::min();
+  const double max_positive = std::numeric_limits<double>::max();
+  return std::abs(amplitude) > std::sqrt(min_positive)
+      && std::abs(amplitude) < std::sqrt(max_positive);
+}
+
 template<typename TenElemT, typename QNT>
 BMPSTruncatePara
     WaveFunctionComponent<TenElemT, QNT>::trun_para = BMPSTruncatePara(0, 0, 0.0,
