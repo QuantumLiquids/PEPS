@@ -29,6 +29,12 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
+    if (!IsAmplitudeSquareLegal(this->amplitude)) {
+      std::cout << "warning : wavefunction amplitude = "
+                << this->amplitude
+                << ", square of amplitude will be illegal! "
+                << std::endl;
+    }
   }
 
   /**
