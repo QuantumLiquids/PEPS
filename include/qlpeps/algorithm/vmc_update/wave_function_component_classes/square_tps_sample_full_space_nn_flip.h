@@ -112,7 +112,7 @@ class SquareTPSSampleFullSpaceNNFlip : public WaveFunctionComponent<TenElemT, QN
     for (size_t i = 0; i < dim * dim; i++) {
       weights[i] = std::norm(alternative_psi[i] / this->amplitude);
     }
-    size_t final_state = NonDBMCMCStateUpdate(init_config, weights, u_double(random_engine));
+    size_t final_state = NonDBMCMCStateUpdate(init_config, weights, random_engine);
     if (final_state == init_config) {
       return false;
     }

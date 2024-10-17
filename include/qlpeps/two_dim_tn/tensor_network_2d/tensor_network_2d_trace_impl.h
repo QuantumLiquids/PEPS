@@ -244,7 +244,7 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
                                                              const BondOrientation mps_orient,
                                                              const TensorNetwork2D::Tensor &ten_left,
                                                              const TensorNetwork2D::Tensor &ten_right) const {
-  static_assert(!Tensor::IsFermionic());
+  assert(!Tensor::IsFermionic());
   const size_t row1 = left_up_site[0];
   const size_t row2 = row1 + 1;
   const size_t col1 = left_up_site[1];
@@ -519,7 +519,7 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const Site
                                                                       const BondOrientation mps_orient, //mps orientation is the same with longer side orientation
                                                                       const Tensor &ten_left,
                                                                       const Tensor &ten_right) const {
-  static_assert(!Tensor::IsFermionic());
+  assert(!Tensor::IsFermionic());
   Tensor mpo_ten[6];
   Tensor tmp[13];
   if (mps_orient == HORIZONTAL) {

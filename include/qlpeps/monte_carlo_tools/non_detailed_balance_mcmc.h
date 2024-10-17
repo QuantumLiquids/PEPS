@@ -20,11 +20,12 @@
 
 namespace qlpeps {
 
+template<class RandGenerator>
 size_t NonDBMCMCStateUpdate(size_t init_state,
                             std::vector<double> weights,
-                            const double rand_num) {
+                            RandGenerator &generator) {
   const size_t n = weights.size();
-  std::vector<double> p(n, 0.0); //transition probabilities
+//  std::vector<double> p(n, 0.0); //transition probabilities
 #ifndef NDEBUG
   for (auto w : weights) {
     assert(w >= 0);
@@ -33,7 +34,7 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
 #endif
   // Swap the first weight with the maximum weight
   auto max_weight_iter = std::max_element(weights.cbegin(), weights.cend());
-  size_t max_weight_id = max_weight_iter - weights.cbegin();
+  const size_t max_weight_id = max_weight_iter - weights.cbegin();
 #ifndef NDEBUG
   assert(weights[max_weight_id] > 0);
 #endif
@@ -61,22 +62,24 @@ size_t NonDBMCMCStateUpdate(size_t init_state,
   for (size_t j = 0; j < n; j++) {
     v[j] = std::max(0.0,
                     std::min({delta[j], weights[j] - delta[j] + weights[init_state], weights[init_state], weights[j]}));
-    if (weights[j] != 0.0)
-      p[j] = v[j] / weights[init_state];
+//    if (weights[j] != 0.0)
+//      p[j] = v[j] / weights[init_state];
   }
 #ifndef NDEBUG
 #if defined(REAL_GCC) && (__GNUC__ < 9 || (__GNUC__ == 9 && __GNUC_MINOR__ < 1))
-  double sum_p = std::accumulate(p.begin(), p.end(), 0.0);
+  double sum_v = std::accumulate(v.begin(), v.end(), 0.0);
 #else
-  double sum_p = std::reduce(p.begin(), p.end());
+  double sum_v = std::reduce(v.begin(), v.end());
 #endif
-  assert(std::abs(sum_p - 1.0) < 1e-10);
+  assert(std::abs(sum_v - weights[init_state]) / std::abs(weights[init_state]) < 1e-13);
 #endif
-  double p_accumulate = 0.0;
+  double v_accumulate = 0.0;
   size_t final_state;
+  std::uniform_real_distribution<double> uniform_dist(0.0, weights[init_state]);
+  double rand_num = uniform_dist(generator);
   for (size_t j = 0; j < n; j++) {
-    p_accumulate += p[j];
-    if (rand_num < p_accumulate) {
+    v_accumulate += v[j];
+    if (rand_num < v_accumulate) {
       final_state = j;
       break;
     }

@@ -100,7 +100,9 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   void GrowFullBMPS(const BMPSPOSITION position, const BMPSTruncatePara &trunc_para);
 
   void DeleteInnerBMPS(const BMPSPOSITION position) {
-    bmps_set_[position].erase(bmps_set_[position].begin() + 1, bmps_set_[position].end());
+    if (!bmps_set_[position].empty()) {
+      bmps_set_[position].erase(bmps_set_[position].begin() + 1, bmps_set_[position].end());
+    }
   }
 
   /**

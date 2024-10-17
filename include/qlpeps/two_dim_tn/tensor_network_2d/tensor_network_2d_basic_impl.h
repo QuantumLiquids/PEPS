@@ -271,8 +271,8 @@ QLTensor<TenElemT, QNT> TensorNetwork2D<TenElemT, QNT>::PunchHole(const qlpeps::
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::UpdateSiteConfig(const qlpeps::SiteIdx &site, const size_t update_config,
-                                                      const SplitIndexTPS<TenElemT, QNT> &istps, bool check_envs) {
-  (*this)(site) = istps(site)[update_config];
+                                                      const SplitIndexTPS<TenElemT, QNT> &sitps, bool check_envs) {
+  (*this)(site) = sitps(site)[update_config];
   if (check_envs) {
     const size_t row = site[0];
     const size_t col = site[1];

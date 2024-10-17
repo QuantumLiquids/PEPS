@@ -54,6 +54,7 @@ void TensorNetwork2D<TenElemT, QNT>::InitBTen(const qlpeps::BTenPOSITION positio
     auto trivial_index_out = Index<QNT>({QNSector(qn0, 1)}, IN);
     ten = Tensor({index0, index1, index2, trivial_index_out});
     ten({0, 0, 0, 0}) = TenElemT(1.0);
+    assert(ten.Div().IsFermionParityEven());
   } else {
     ten = Tensor({index0, index1, index2});
     ten({0, 0, 0}) = TenElemT(1.0);
@@ -385,14 +386,14 @@ void TensorNetwork2D<TenElemT, QNT>::GrowFullBTen2(const BTenPOSITION post, cons
           break;
         }
       }
-      Contract<TenElemT, QNT, true, true>(*mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
+      Contract<TenElemT, QNT, true, true>(mps_ten1, bten_set2_.at(post).back(), 2, 0, 1, tmp1);
       tmp1.FuseIndex(0, 6);
       Contract<TenElemT, QNT, false, true>(tmp1, mpo_ten1, 2, 0, 2, tmp2);
       tmp2.FuseIndex(2, 6);
       tmp2.Transpose({1, 0, 2, 3, 4, 5});
       Contract<TenElemT, QNT, false, false>(tmp2, mpo_ten2, 5, 0, 2, tmp3);
       tmp3.FuseIndex(0, 6);
-      Contract(&tmp3, {1, 4}, mps_ten2, {0, 1}, &next_bten);
+      Contract(&tmp3, {1, 4}, &mps_ten2, {0, 1}, &next_bten);
       tmp3.FuseIndex(0, 5);
       tmp3.Transpose({1, 2, 3, 4, 0});
     } else {

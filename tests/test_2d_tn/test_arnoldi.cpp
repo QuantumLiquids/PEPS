@@ -34,7 +34,7 @@ void RunTestArnoldiSolver(
                                sigma_dag,
                                left_vec0,
                                params,
-                               left_vec_multiple_transfer_tens<TenElemT, QNT>);
+                               TransfTenMultiVec<TenElemT, QNT>(left_vec_multiple_transfer_tens<TenElemT, QNT>));
 
   auto multipled_left_vec = left_vec_multiple_transfer_tens(eig_res.eig_vec, sigma, sigma_dag, Upsilon);
   auto multipled_left_vec2 = eig_res.eigenvalue * eig_res.eig_vec;
@@ -46,7 +46,7 @@ void RunTestArnoldiSolver(
                           sigma_dag,
                           right_vec0,
                           params,
-                          right_vec_multiple_transfer_tens<TenElemT, QNT>);
+                          TransfTenMultiVec<TenElemT, QNT>(right_vec_multiple_transfer_tens<TenElemT, QNT>));
 
   auto multipled_right_vec = right_vec_multiple_transfer_tens(eig_res.eig_vec, sigma, sigma_dag, Upsilon);
   auto multipled_right_vec2 = eig_res.eigenvalue * eig_res.eig_vec;

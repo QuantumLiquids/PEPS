@@ -206,7 +206,8 @@ add_unittest(test_split_index_tps
 )
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "/Users/wanghaoxin/GitHub/PEPS/tests/test_data/"
 )
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
@@ -241,7 +242,7 @@ add_unittest(test_simple_update_complex
 add_unittest(test_fermion_simple_update
         "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
 add_unittest(test_loop_update_double
         "test_algorithm/test_loop_update_double.cpp"
@@ -272,7 +273,7 @@ add_mpi_unittest(test_vmc_peps_mpi
 add_unittest(test_fermion_vmc_peps
         "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
 add_unittest(test_square_heisenberg
         "test_algorithm/test_square_heisenberg.cpp"
@@ -295,7 +296,13 @@ add_unittest(test_measure_complex
 add_unittest(test_fermion_measure
         "test_algorithm_fermion/test_fermion_mc_measure.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
+)
+
+add_unittest(test_fermion_mc_update
+        "test_algorithm_fermion/test_fermion_mc_update.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${CMAKE_CURRENT_LIST_DIR}/test_data/"
 )
 
 

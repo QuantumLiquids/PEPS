@@ -65,8 +65,13 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 3, true);
+      this->amplitude = tn.ReplaceTNNSiteTrace({row, 0}, HORIZONTAL,
+                                               sitps({row, 0})[this->config({row, 0})],
+                                               sitps({row, 1})[this->config({row, 1})],
+                                               sitps({row, 2})[this->config({row, 2})]);
       for (size_t col = 0; col < tn.cols() - 2; col++) {
-        flip_accept_num += Rotate3Update_({row, col}, {row, col + 1}, {row, col + 2}, HORIZONTAL, sitps, u_double);
+        flip_accept_num +=
+            Exchange3SiteUpdate_({row, col}, {row, col + 1}, {row, col + 2}, HORIZONTAL, sitps, u_double);
         if (col < tn.cols() - 3) {
           tn.BTenMoveStep(RIGHT);
         }
@@ -83,8 +88,12 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
     for (size_t col = 0; col < tn.cols(); col++) {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 3, true);
+      this->amplitude = tn.ReplaceTNNSiteTrace({0, col}, VERTICAL,
+                                               sitps({0, col})[this->config({0, col})],
+                                               sitps({1, col})[this->config({1, col})],
+                                               sitps({2, col})[this->config({2, col})]);
       for (size_t row = 0; row < tn.rows() - 2; row++) {
-        flip_accept_num += Rotate3Update_({row, col}, {row + 1, col}, {row + 2, col}, VERTICAL, sitps, u_double);
+        flip_accept_num += Exchange3SiteUpdate_({row, col}, {row + 1, col}, {row + 2, col}, VERTICAL, sitps, u_double);
         if (row < tn.rows() - 3) {
           tn.BTenMoveStep(DOWN);
         }
@@ -100,40 +109,53 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
   }
 
  private:
-  ///< NB! physical dim == 2
-  bool Rotate3Update_(const SiteIdx &site1, const SiteIdx &site2, const SiteIdx &site3,
-                      BondOrientation bond_dir,
-                      const SplitIndexTPS<TenElemT, QNT> &sitps,
-                      std::uniform_real_distribution<double> &u_double) {
-    if (this->config(site1) == this->config(site2) && this->config(site2) == this->config(site3)) {
+  bool Exchange3SiteUpdate_(const SiteIdx &site1, const SiteIdx &site2, const SiteIdx &site3,
+                            BondOrientation bond_dir,
+                            const SplitIndexTPS<TenElemT, QNT> &sitps,
+                            std::uniform_real_distribution<double> &u_double) {
+    size_t spin1 = this->config(site1);
+    size_t spin2 = this->config(site2);
+    size_t spin3 = this->config(site3);
+    if (spin1 == spin2 && spin2 == spin3) {
       return false;
     }
+    std::vector<size_t> spins = {spin1, spin2, spin3};
+    std::sort(spins.begin(), spins.end());
 
-    TenElemT psi0 = this->amplitude;
-    TenElemT psi1 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
-                                           sitps(site1)[this->config(site2)],
-                                           sitps(site2)[this->config(site3)],
-                                           sitps(site3)[this->config(site1)]);
-    TenElemT psi2 = tn.ReplaceTNNSiteTrace(site1, bond_dir,
-                                           sitps(site1)[this->config(site3)],
-                                           sitps(site2)[this->config(site1)],
-                                           sitps(site3)[this->config(site2)]);
-    double psi_abs_max = std::max({std::abs(psi0), std::abs(psi1), std::abs(psi2)});
-    std::vector<double>
-        weights = {std::norm(psi0 / psi_abs_max), std::norm(psi1 / psi_abs_max), std::norm(psi2 / psi_abs_max)};
+    std::vector<std::vector<size_t>> permutations;
+    do {
+      permutations.push_back(spins);
+    } while (std::next_permutation(spins.begin(), spins.end()));
+    std::vector<size_t> initial_spins = {spin1, spin2, spin3};
+    size_t init_state =
+        std::distance(permutations.begin(), std::find(permutations.begin(), permutations.end(), initial_spins));
+    std::vector<TenElemT> psis(permutations.size());
+    double psi_abs_max = 0;
+    for (size_t i = 0; i < permutations.size(); ++i) {
+      if (i != init_state) {
+        psis[i] = tn.ReplaceTNNSiteTrace(site1, bond_dir,
+                                         sitps(site1)[permutations[i][0]],
+                                         sitps(site2)[permutations[i][1]],
+                                         sitps(site3)[permutations[i][2]]);
 
-    size_t final_state = NonDBMCMCStateUpdate(0, weights, u_double(random_engine));
-    if (final_state == 0) {
-      return false;
-    } else if (final_state == 1) {
-      std::swap(this->config(site1), this->config(site2));
-      std::swap(this->config(site2), this->config(site3));
-      this->amplitude = psi1;
-    } else if (final_state == 2) {
-      std::swap(this->config(site2), this->config(site3));
-      std::swap(this->config(site1), this->config(site2));
-      this->amplitude = psi2;
+      } else {
+        psis[i] = this->amplitude;
+      }
+      psi_abs_max = std::max(psi_abs_max, std::abs(psis[i]));
     }
+    std::vector<double> weights(permutations.size());
+    for (size_t i = 0; i < weights.size(); i++) {
+      weights[i] = std::norm(psis[i] / psi_abs_max);
+    }
+
+    size_t final_state = NonDBMCMCStateUpdate(init_state, weights, random_engine);
+    if (final_state == init_state) {
+      return false;
+    }
+    this->config(site1) = permutations[final_state][0];
+    this->config(site2) = permutations[final_state][1];
+    this->config(site3) = permutations[final_state][2];
+    this->amplitude = psis[final_state];
     tn.UpdateSiteConfig(site1, this->config(site1), sitps);
     tn.UpdateSiteConfig(site2, this->config(site2), sitps);
     tn.UpdateSiteConfig(site3, this->config(site3), sitps);

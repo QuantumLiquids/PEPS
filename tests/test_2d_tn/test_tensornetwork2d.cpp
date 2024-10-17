@@ -10,14 +10,14 @@
 #include <bitset>
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/two_dim_tn/tps/split_index_tps.h"    //TPS, SplitIndexTPS
+#include "qlpeps/qlpeps.h"
 
 using namespace qlten;
 using namespace qlpeps;
 
 using qlten::special_qn::U1QN;
 using qlten::special_qn::ZnQN;
+using qlten::special_qn::fZ2QN;
 
 ///< Exact solution for Finite-size OBC Square Ising model
 class SquareIsingModel {
@@ -276,94 +276,99 @@ std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
     TensorNetwork2D<TenElemT, QNT> tn2d,
     BMPSTruncatePara trunc_para
 ) {
-  std::vector<TenElemT> amplitudes(22);
+  std::vector<TenElemT> amplitudes;
+  amplitudes.reserve(26);
   tn2d.GrowBMPSForRow(2, trunc_para);
   tn2d.InitBTen(BTenPOSITION::LEFT, 2);
   tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  amplitudes[0] = tn2d.Trace({2, 0}, HORIZONTAL);
-
+  amplitudes.push_back(tn2d.Trace({2, 0}, HORIZONTAL));
+  amplitudes.push_back(tn2d.ReplaceTNNSiteTrace({2, 0},
+                                                HORIZONTAL,
+                                                tn2d({2, 0}),
+                                                tn2d({2, 1}),
+                                                tn2d({2, 2})));
   tn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  amplitudes[1] = tn2d.Trace({2, 1}, HORIZONTAL);
-  tn2d.GrowBMPSForCol(1, trunc_para);
-  tn2d.InitBTen(BTenPOSITION::DOWN, 1);
-  tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  amplitudes[2] = tn2d.Trace({tn2d.rows() - 2, 1}, VERTICAL);
-  tn2d.BTenMoveStep(BTenPOSITION::UP);
-  amplitudes[3] = tn2d.Trace({tn2d.rows() - 3, 1}, VERTICAL);
-
-  tn2d.GrowBMPSForRow(2, trunc_para);
-  tn2d.InitBTen(BTenPOSITION::LEFT, 2);
-  tn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
-  amplitudes[4] = tn2d.Trace({2, 0}, HORIZONTAL);
-  tn2d.BTenMoveStep(BTenPOSITION::RIGHT);
-  amplitudes[5] = tn2d.Trace({2, 1}, HORIZONTAL);
+  amplitudes.push_back(tn2d.Trace({2, 1}, HORIZONTAL));
+  amplitudes.push_back(tn2d.ReplaceTNNSiteTrace({2, 1},
+                                                HORIZONTAL,
+                                                tn2d({2, 1}),
+                                                tn2d({2, 2}),
+                                                tn2d({2, 3})));
 
   tn2d.GrowBMPSForCol(1, trunc_para);
   tn2d.InitBTen(BTenPOSITION::DOWN, 1);
   tn2d.GrowFullBTen(BTenPOSITION::UP, 1, 2, true);
-  amplitudes[6] = tn2d.Trace({tn2d.rows() - 2, 1}, VERTICAL);
+  amplitudes.push_back(tn2d.Trace({tn2d.rows() - 2, 1}, VERTICAL));
   tn2d.BTenMoveStep(BTenPOSITION::UP);
-  amplitudes[7] = tn2d.Trace({tn2d.rows() - 3, 1}, VERTICAL);
-
+  amplitudes.push_back(tn2d.Trace({tn2d.rows() - 3, 1}, VERTICAL));
+  amplitudes.push_back(tn2d.ReplaceTNNSiteTrace({tn2d.rows() - 3, 1},
+                                                VERTICAL,
+                                                tn2d({tn2d.rows() - 3, 1}),
+                                                tn2d({tn2d.rows() - 2, 1}),
+                                                tn2d({tn2d.rows() - 1, 1})));
+  if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
+    //since the code for NNN Trace and Sqrt5 Trace are not implemented.
+    return amplitudes;
+  }
   /***** HORIZONTAL MPS *****/
   tn2d.GrowBMPSForRow(1, trunc_para);
   tn2d.InitBTen2(BTenPOSITION::LEFT, 1);
   tn2d.GrowFullBTen2(BTenPOSITION::RIGHT, 1, 2, true);
 
-  amplitudes[8] = tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                           HORIZONTAL,
-                                           tn2d({2, 0}), tn2d({1, 1})); // trace original tn
-  amplitudes[9] = tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                           HORIZONTAL,
-                                           tn2d({1, 0}), tn2d({2, 1})); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
+                                                HORIZONTAL,
+                                                tn2d({2, 0}), tn2d({1, 1}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
+                                                HORIZONTAL,
+                                                tn2d({1, 0}), tn2d({2, 1}))); // trace original tn
 
   tn2d.BTen2MoveStep(BTenPOSITION::RIGHT, 1);
-  amplitudes[10] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                            HORIZONTAL,
-                                            tn2d({2, 1}), tn2d({1, 2})); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                HORIZONTAL,
+                                                tn2d({2, 1}), tn2d({1, 2}))); // trace original tn
 
-  amplitudes[11] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                            HORIZONTAL,
-                                            tn2d({1, 1}), tn2d({2, 2})); // trace original tn
-  amplitudes[12] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
-                                                     HORIZONTAL,
-                                                     tn2d({2, 0}), tn2d({1, 2})); // trace original tn
-  amplitudes[13] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                                     HORIZONTAL,
-                                                     tn2d({2, 1}), tn2d({1, 3})); // trace original tn
-  amplitudes[14] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
-                                                     HORIZONTAL,
-                                                     tn2d({1, 0}), tn2d({2, 2})); // trace original tn
-  amplitudes[15] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                                     HORIZONTAL,
-                                                     tn2d({1, 1}), tn2d({2, 3})); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                HORIZONTAL,
+                                                tn2d({1, 1}), tn2d({2, 2}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
+                                                         HORIZONTAL,
+                                                         tn2d({2, 0}), tn2d({1, 2}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                         HORIZONTAL,
+                                                         tn2d({2, 1}), tn2d({1, 3}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
+                                                         HORIZONTAL,
+                                                         tn2d({1, 0}), tn2d({2, 2}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                         HORIZONTAL,
+                                                         tn2d({1, 1}), tn2d({2, 3}))); // trace original tn
 
 
   /***** VERTICAL MPS *****/
   tn2d.GrowBMPSForCol(1, trunc_para);
   tn2d.GrowFullBTen2(BTenPOSITION::DOWN, 1, 2, true);
   tn2d.GrowFullBTen2(BTenPOSITION::UP, 1, 2, true);
-  amplitudes[16] = tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
-                                            VERTICAL,
-                                            tn2d({3, 1}), tn2d({2, 2})); // trace original tn
-  amplitudes[17] = tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
-                                            VERTICAL,
-                                            tn2d({2, 1}), tn2d({3, 2})); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                VERTICAL,
+                                                tn2d({3, 1}), tn2d({2, 2}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({2, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                VERTICAL,
+                                                tn2d({2, 1}), tn2d({3, 2}))); // trace original tn
 
   tn2d.BTen2MoveStep(BTenPOSITION::UP, 1);
-  amplitudes[18] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                            VERTICAL,
-                                            tn2d({2, 1}), tn2d({1, 2})); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                VERTICAL,
+                                                tn2d({2, 1}), tn2d({1, 2}))); // trace original tn
 
-  amplitudes[19] = tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                            VERTICAL,
-                                            tn2d({1, 1}), tn2d({2, 2})); // trace original tn
-  amplitudes[20] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
-                                                     VERTICAL,
-                                                     tn2d({3, 1}), tn2d({1, 2})); // trace original tn
-  amplitudes[21] = tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
-                                                     VERTICAL,
-                                                     tn2d({1, 1}), tn2d({3, 2})); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                VERTICAL,
+                                                tn2d({1, 1}), tn2d({2, 2}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTDOWN_TO_RIGHTUP,
+                                                         VERTICAL,
+                                                         tn2d({3, 1}), tn2d({1, 2}))); // trace original tn
+  amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
+                                                         VERTICAL,
+                                                         tn2d({1, 1}), tn2d({3, 2}))); // trace original tn
   return amplitudes;
 }
 
@@ -393,22 +398,23 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
  * Open Boundary Condition two-dimensional Ising model's Tensor network, with imposing Z2 symmetry.
  */
 struct OBCIsing2DZ2TenNet : public testing::Test {
-  using QNT = ZnQN<2>;
-  using IndexT = Index<ZnQN<2>>;
-  using QNSctT = QNSector<ZnQN<2>>;
-  using QNSctVecT = QNSectorVec<ZnQN<2>>;
-  using DQLTensor = QLTensor<QLTEN_Double, ZnQN<2>>;
-  using ZQLTensor = QLTensor<QLTEN_Complex, ZnQN<2>>;
+  using Z2QN = ZnQN<2>;
+  using QNT = Z2QN;
+  using IndexT = Index<Z2QN>;
+  using QNSctT = QNSector<Z2QN>;
+  using QNSctVecT = QNSectorVec<Z2QN>;
+  using DQLTensor = QLTensor<QLTEN_Double, Z2QN>;
+  using ZQLTensor = QLTensor<QLTEN_Complex, Z2QN>;
 
   const size_t Lx = 10;
   const size_t Ly = 24;
   const double beta = std::log(1 + std::sqrt(2.0)) / 2.0; // critical point
-  IndexT vb_out = IndexT({QNSctT(ZnQN<2>( 0), 1),
-                          QNSctT(ZnQN<2>( 1), 1)},
+  IndexT vb_out = IndexT({QNSctT(Z2QN(0), 1),
+                          QNSctT(Z2QN(1), 1)},
                          TenIndexDirType::OUT
   );
   IndexT vb_in = InverseIndex(vb_out);
-  IndexT trivial_out = IndexT({QNSctT(ZnQN<2>( 0), 1)},
+  IndexT trivial_out = IndexT({QNSctT(Z2QN(0), 1)},
                               TenIndexDirType::OUT
   );
   IndexT trivial_in = InverseIndex(trivial_out);
@@ -543,38 +549,38 @@ struct OBCIsing2DZ2TenNet : public testing::Test {
   }//SetUp
 };
 
-TEST_F(OBCIsing2DZ2TenNet, TestIsingZ2TenNetContraction) {
+TEST_F(OBCIsing2DZ2TenNet, TestTrace) {
   BMPSTruncatePara trunc_para = BMPSTruncatePara(1, 10, 1e-15, CompressMPSScheme::SVD_COMPRESS,
                                                  std::make_optional<double>(1e-14),
                                                  std::make_optional<size_t>(10));
   auto dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
-  for (size_t i = 1; i < dZ_set.size(); i++) {
+  for (size_t i = 0; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
   auto zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
-  for (size_t i = 1; i < zZ_set.size(); i++) {
+  for (size_t i = 0; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
   dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
-  for (size_t i = 1; i < dZ_set.size(); i++) {
+  for (size_t i = 0; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
   zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
-  for (size_t i = 1; i < zZ_set.size(); i++) {
+  for (size_t i = 0; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 
   trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
   dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
-  for (size_t i = 1; i < dZ_set.size(); i++) {
+  for (size_t i = 0; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
   zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
-  for (size_t i = 1; i < zZ_set.size(); i++) {
+  for (size_t i = 0; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
@@ -594,6 +600,154 @@ TEST_F(OBCIsing2DZ2TenNet, TestCopy) {
   ztn2d_cp.GrowBMPSForRow(1, trunc_para);
   assert(ztn2d_cp.DirectionCheck());
   ztn2d_cp = ztn2d;
+}
+
+std::string tj_ipeps_data_path;
+
+struct ProjectedtJTensorNetwork : public testing::Test {
+  using QNT = fZ2QN;
+  using IndexT = Index<fZ2QN>;
+  using QNSctT = QNSector<fZ2QN>;
+  using QNSctVecT = QNSectorVec<fZ2QN>;
+
+  using Tensor = QLTensor<QLTEN_Double, fZ2QN>;
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
+
+  size_t Lx = 24;
+  size_t Ly = 20;
+  size_t N = Lx * Ly;
+  double t = 3;
+  double J = 1;
+  double doping = 0.125; // actually the data is doping 0.124 from iPEPS simple update
+  size_t hole_num = size_t(double(N) * doping);
+  size_t num_up = (N - hole_num) / 2;
+  size_t num_down = (N - hole_num) / 2;
+  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
+                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
+  );
+
+  size_t Db_min = 16;
+  size_t Db_max = 50;
+
+  size_t MC_samples = 100;
+  size_t WarmUp = 100;
+
+  TensorNetwork2D<QLTEN_Double, QNT> dtn2d = TensorNetwork2D<QLTEN_Double, QNT>(Ly, Lx);
+  TensorNetwork2D<QLTEN_Complex, QNT> ztn2d = TensorNetwork2D<QLTEN_Complex, QNT>(Ly, Lx);
+
+  void SetUp() {
+    qlten::hp_numeric::SetTensorManipulationThreads(1);
+    SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps = CreateFiniteSizeOBCTPS();
+
+    TPSSampleTNNFlipT::trun_para = BMPSTruncatePara(Db_min, Db_max, 1e-10,
+                                                    CompressMPSScheme::SVD_COMPRESS,
+                                                    std::make_optional<double>(1e-14),
+                                                    std::make_optional<size_t>(10));
+    Configuration config(Ly, Lx);
+    config.Random({N * 7 / 16, N * 7 / 16, N / 8});
+    TPSSampleTNNFlipT tps_sample(split_idx_tps, config);
+    std::uniform_real_distribution<double> u_double = std::uniform_real_distribution<double>(0, 1);
+    std::vector<double> accept_rate(1);
+    for (size_t i = 0; i < 20; i++) {
+      tps_sample.MonteCarloSweepUpdate(split_idx_tps, u_double, accept_rate);
+    }
+    std::cout << "Monte-Carlo warmed up." << std::endl;
+    dtn2d = tps_sample.tn;
+    dtn2d.DeleteInnerBMPS(qlpeps::UP);
+    dtn2d.DeleteInnerBMPS(qlpeps::DOWN);
+    dtn2d.DeleteInnerBMPS(qlpeps::LEFT);
+    dtn2d.DeleteInnerBMPS(qlpeps::RIGHT);
+    for (size_t row = 0; row < Ly; row++) {
+      for (size_t col = 0; col < Lx; col++) {
+        ztn2d({row, col}) = ToComplex(dtn2d({row, col}));
+      }
+    }
+    ztn2d.InitBMPS();
+  }//SetUp
+
+  SplitIndexTPS<QLTEN_Double, fZ2QN> CreateFiniteSizeOBCTPS() {
+    Tensor ten_a, ten_b;
+    std::ifstream ifs(tj_ipeps_data_path + "ipeps_tJ_ta_doping0.125.qlten");
+    ifs >> ten_a;
+    ifs.close();
+    ifs.open(tj_ipeps_data_path + "ipeps_tJ_tb_doping0.125.qlten");
+    ifs >> ten_b;
+    ifs.close();
+    auto qn0 = fZ2QN(0);
+    TPS<QLTEN_Double, fZ2QN> tps(Ly, Lx);
+    for (size_t row = 0; row < Ly; row++) {
+      for (size_t col = 0; col < Lx; col++) {
+        Tensor local_ten;
+        if ((row + col) % 2 == 0) {
+          local_ten = ten_a;
+        } else {
+          local_ten = ten_b;
+        }
+        Tensor u, v;
+        Tensor s;
+        size_t D_act;
+        double trunc_err_act;
+        if (row == 0) {
+          local_ten.Transpose({3, 0, 1, 2, 4});
+          SVD(&local_ten, 1, qn0, 0, 1, 1, &u, &s, &v, &trunc_err_act, &D_act);
+          if (!s.GetIndex(0).GetQNSct(0).GetQn().IsFermionParityEven()) {
+            std::cout << "(row, col) = (" << row << "," << col << "), UP odd fermion parity s" << std::endl;
+          }
+          local_ten = v;
+          local_ten.Transpose({1, 2, 3, 0, 4});
+        } else if (row == Ly - 1) {
+          local_ten.Transpose({1, 2, 3, 0, 4});
+          SVD(&local_ten, 1, qn0, 0, 1, 1, &u, &s, &v, &trunc_err_act, &D_act);
+          if (!s.GetIndex(0).GetQNSct(0).GetQn().IsFermionParityEven()) {
+            std::cout << "(row, col) = (" << row << "," << col << "), DOWN odd fermion parity s" << std::endl;
+          }
+          local_ten = v;
+          local_ten.Transpose({3, 0, 1, 2, 4});
+        }
+        u = Tensor();
+        v = Tensor();
+        s = Tensor();
+        if (col == 0) {
+          SVD(&local_ten, 1, qn0, 0, 1, 1, &u, &s, &v, &trunc_err_act, &D_act);
+          if (!s.GetIndex(0).GetQNSct(0).GetQn().IsFermionParityEven()) {
+            std::cout << "(row, col) = (" << row << "," << col << "), LEFT odd fermion parity s" << std::endl;
+          }
+          local_ten = v;
+        } else if (col == Lx - 1) {
+          local_ten.Transpose({2, 3, 0, 1, 4});
+          SVD(&local_ten, 1, qn0, 0, 1, 1, &u, &s, &v, &trunc_err_act, &D_act);
+          if (!s.GetIndex(0).GetQNSct(0).GetQn().IsFermionParityEven()) {
+            std::cout << "(row, col) = (" << row << "," << col << "), RIGHT odd fermion parity s" << std::endl;
+          }
+          local_ten = v;
+          local_ten.Transpose({2, 3, 0, 1, 4});
+        }
+        tps({row, col}) = local_ten;
+      }
+    }
+    SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps(tps);
+    split_idx_tps.NormalizeAllSite();
+    split_idx_tps *= 3.0;
+    return split_idx_tps;
+  }
+};
+
+TEST_F(ProjectedtJTensorNetwork, TestTrace) {
+  BMPSTruncatePara trunc_para = BMPSTruncatePara(Db_min, Db_max, 1e-15,
+                                                 CompressMPSScheme::SVD_COMPRESS,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
+  auto dpsi_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  for (size_t i = 1; i < dpsi_set.size(); i++) {
+    EXPECT_NEAR(std::abs(dpsi_set[i]) / std::abs(dpsi_set[0]), 1.0, 1e-7);
+  }
+  auto zpsi_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  for (size_t i = 1; i < zpsi_set.size(); i++) {
+    EXPECT_NEAR(std::abs(zpsi_set[i].real()) / std::abs(dpsi_set[0]), 1.0, 1e-7);
+    EXPECT_NEAR(zpsi_set[i].imag(), 0.0, 1e-15);
+  }
 }
 
 /**
@@ -726,4 +880,12 @@ TEST_F(ExtremelyProjectedSpinTenNet, HeisenbergD6WaveFunctionComponnet) {
   for (size_t i = 1; i < psi.size(); i++) {
     EXPECT_NEAR(psi[0], psi[i], 1e-10);
   }
+}
+
+int main(int argc, char *argv[]) {
+  boost::mpi::environment env;
+  testing::InitGoogleTest(&argc, argv);
+  std::cout << argc << std::endl;
+  tj_ipeps_data_path = argv[1];
+  return RUN_ALL_TESTS();
 }

@@ -135,7 +135,7 @@ struct Z2tJModelTools : public testing::Test {
   using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
   using ZTensor = QLTensor<QLTEN_Complex, fZ2QN>;
   using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  using TPSSampleTNNFlipT = SquareTPSSampletJ3SiteExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -203,9 +203,9 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
   auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
   auto measure_executor =
       new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
-                                                                                      sitps,
-                                                                                      world,
-                                                                                      tj_solver);
+                                                                                       sitps,
+                                                                                       world,
+                                                                                       tj_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();
