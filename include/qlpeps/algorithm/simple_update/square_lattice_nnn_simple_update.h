@@ -50,27 +50,29 @@ template<typename TenElemT, typename QNT>
 double SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  double norm = 1.0;
   double e0 = 0.0;
 
   for (size_t col = 1; col < this->lx_; col++) {  //first row
-    norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {0, col - 1}, HORIZONTAL, para);
-    e0 += -std::log(norm) / this->update_para.tau;
+    ProjectionRes<TenElemT>
+        proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {0, col - 1}, HORIZONTAL, para);
+    e0 += -std::log(proj_res.norm) / this->update_para.tau;
   }
 
   for (size_t row = 0; row < this->ly_ - 1; row++) {  // first and last column
-    norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_half_, {row, 0}, VERTICAL, para);
-    e0 += -std::log(norm) / this->update_para.tau;
-    norm = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_half_, {row, this->lx_ - 1}, VERTICAL, para);
-    e0 += -std::log(norm) / this->update_para.tau;
+    ProjectionRes<TenElemT>
+        proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_half_, {row, 0}, VERTICAL, para);
+    e0 += -std::log(proj_res.norm) / this->update_para.tau;
+    proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_half_, {row, this->lx_ - 1}, VERTICAL, para);
+    e0 += -std::log(proj_res.norm) / this->update_para.tau;
   }
 
   for (size_t col = 1; col < this->lx_; col++) {
     for (size_t row = 0; row < this->ly_ - 1; row++) {
-      norm = this->peps_.LowerRightTriangleProject(evolve_gate_tri_, {row, col}, para);
-      e0 += -std::log(norm) / this->update_para.tau;
+      ProjectionRes<TenElemT>
+          proj_res = this->peps_.LowerRightTriangleProject(evolve_gate_tri_, {row, col}, para);
+      e0 += -std::log(proj_res.norm) / this->update_para.tau;
 
-      norm = this->peps_.LowerLeftTriangleProject(evolve_gate_tri_, {row, col - 1}, para);
+      double norm = this->peps_.LowerLeftTriangleProject(evolve_gate_tri_, {row, col - 1}, para);
       e0 += -std::log(norm) / this->update_para.tau;
     }
   }
@@ -83,7 +85,7 @@ double SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(v
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
 
-  return norm;
+  return e0;
 }
 }
 
