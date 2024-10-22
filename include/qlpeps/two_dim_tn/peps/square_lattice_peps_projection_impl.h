@@ -484,8 +484,6 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
  * -----B-------------C--------
  *      |             |
  *      |             |
- * @tparam TenElemT
- * @tparam QNT
  * @param gate_ten  order of the indexes: upper-left site; lower-left site; lower-right site.
  * @param upper_site
  * @param trunc_para
@@ -518,7 +516,7 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
    *
    */
   tmp_ten[2] = EatSurroundLambdas_(lower_left_site);
-  Contract<TenElemT, QNT, true, false>(r0, tmp_ten[2], 2, 3, 1, tmp_ten[3]);
+  Contract<TenElemT, QNT, true, false>(r0, tmp_ten[2], 2, 4, 1, tmp_ten[3]);
   Contract<TenElemT, QNT, true, false>(tmp_ten[3], r1, 5, 2, 1, tmp_ten[4]);
   Contract(tmp_ten + 4, {1, 2, 6}, &gate_ten, {0, 1, 2}, tmp_ten + 5);
 

@@ -491,13 +491,13 @@ SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
  * @return physical index 0, auxiliary indexes follow original order
  *
  * res:
- *          3
+ *          4
  *          |
  *          |
- *    0-----T------2   and physical idx = 4
+ *    1-----T------3   and physical idx = 0
  *          |
  *          |
- *          1
+ *          2
  */
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> SquareLatticePEPS<TenElemT, QNT>::EatSurroundLambdas_(const SiteIdx &site) const {

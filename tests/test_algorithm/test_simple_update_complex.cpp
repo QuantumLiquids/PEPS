@@ -40,7 +40,7 @@ struct SystemSizeParams : public CaseParamsParserBasic {
 };
 
 // Test spin systems
-struct SpinSystemSimpleUpdate : public testing::Test {
+struct SpinOneHalfSystemSimpleUpdate : public testing::Test {
   size_t Lx; //cols
   size_t Ly;
 
@@ -144,7 +144,7 @@ struct SpinSystemSimpleUpdate : public testing::Test {
   }
 };
 
-TEST_F(SpinSystemSimpleUpdate, NNIsing) {
+TEST_F(SpinOneHalfSystemSimpleUpdate, NNIsing) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
@@ -168,7 +168,7 @@ TEST_F(SpinSystemSimpleUpdate, NNIsing) {
   delete su_exe;
 }
 
-TEST_F(SpinSystemSimpleUpdate, NNHeisenberg) {
+TEST_F(SpinOneHalfSystemSimpleUpdate, NNHeisenberg) {
   SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   for (size_t y = 0; y < Ly; y++) {
@@ -197,7 +197,7 @@ TEST_F(SpinSystemSimpleUpdate, NNHeisenberg) {
   delete su_exe;
 }
 
-TEST_F(SpinSystemSimpleUpdate, NNHeisenbergD8) {
+TEST_F(SpinOneHalfSystemSimpleUpdate, NNHeisenbergD8) {
   SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
   peps0.Load("zsu_update_resultD4");
 
@@ -213,7 +213,7 @@ TEST_F(SpinSystemSimpleUpdate, NNHeisenbergD8) {
   delete su_exe;
 }
 
-TEST_F(SpinSystemSimpleUpdate, TriangleNNHeisenberg) {
+TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
   SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   size_t sz_int = 0;
@@ -375,7 +375,7 @@ TEST_F(TestSimpleUpdateSpinSystemSquareJ1J2, J1J2Heisenberg) {
   delete su_exe;
 }
 
-//TEST_F(SpinSystemSimpleUpdate, NNHeisenbergD16) {
+//TEST_F(SpinOneHalfSystemSimpleUpdate, NNHeisenbergD16) {
 //  SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
 //  peps0.Load("su_update_resultD8");
 //

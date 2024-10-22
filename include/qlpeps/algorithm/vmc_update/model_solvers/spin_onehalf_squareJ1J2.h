@@ -8,9 +8,10 @@
 #ifndef QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
 #define QLPEPS_VMC_PEPS_SPIN_ONEHALF_SQUAREJ1J2_H
 
-#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      //ModelEnergySolver
+#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
-#include "qlpeps/utility/helpers.h"                               //ComplexConjugate
+#include "qlpeps/utility/helpers.h"                               // ComplexConjugate
+#include "spin_onehalf_heisenberg_square.h"                       // EvaluateNNBondEnergyForAFMHeisenbergModel
 namespace qlpeps {
 using namespace qlten;
 
@@ -38,6 +39,35 @@ class SpinOneHalfJ1J2HeisenbergSquare : public ModelEnergySolver<TenElemT, QNT>,
  private:
   double j2_;
 };
+
+template<typename TenElemT, typename QNT>
+TenElemT EvaluateNNNSSForAFMHeisenbergModel(
+    const SiteIdx site1, const SiteIdx site2,
+    const size_t config1, const size_t config2,
+    const DIAGONAL_DIR diagonal_dir,
+    const TensorNetwork2D<TenElemT, QNT> &tn,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+    const TenElemT inv_psi
+) {
+  if (config1 == config2) {
+    return 0.25;
+  } else {
+    SiteIdx left_up_site;
+    if (diagonal_dir == LEFTUP_TO_RIGHTDOWN) {
+      left_up_site = site1;
+    } else {
+      left_up_site = {site2.row(), site1.col()};
+    }
+    TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+                                             diagonal_dir,
+                                             HORIZONTAL,
+                                             split_index_tps_on_site1[config2],
+                                             split_index_tps_on_site2[config1]);
+    TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
+    return (-0.25 + ratio * 0.5);
+  }
+}
 
 template<typename TenElemT, typename QNT>
 template<typename WaveFunctionComponentType>
@@ -68,17 +98,16 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
         const SiteIdx site2 = {row, col + 1};
-        if (config(site1) == config(site2)) {
-          e1 += 0.25;
-          res.bond_energys_loc.push_back(0.25);
-        } else {
-          TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
-                                                  (*split_index_tps)(site1)[config(site2)],
-                                                  (*split_index_tps)(site2)[config(site1)]);
-          auto bond_energy1 = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-          e1 += bond_energy1;
-          res.bond_energys_loc.push_back(bond_energy1);
-        }
+        TenElemT bond_energy = EvaluateNNBondEnergyForAFMHeisenbergModel(site1, site2,
+                                                                         config(site1),
+                                                                         config(site2),
+                                                                         HORIZONTAL,
+                                                                         tn,
+                                                                         (*split_index_tps)(site1),
+                                                                         (*split_index_tps)(site2),
+                                                                         inv_psi);
+        res.bond_energys_loc.push_back(bond_energy);
+        e1 += bond_energy;
         tn.BTenMoveStep(RIGHT);
       }
     }
@@ -133,35 +162,28 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
         //Calculate diagonal energy contribution
         SiteIdx site1 = {row, col};
         SiteIdx site2 = {row + 1, col + 1};
-        if (config(site1) == config(site2)) {
-          e2 += 0.25;
-          res.bond_energys_loc.push_back(0.25 * j2_);
-        } else {
-          TenElemT psi_ex = tn.ReplaceNNNSiteTrace(site1,
-                                                   LEFTUP_TO_RIGHTDOWN,
-                                                   HORIZONTAL,
-                                                   (*split_index_tps)(site1)[config(site2)],
-                                                   (*split_index_tps)(site2)[config(site1)]);
-          TenElemT bond_energy2 = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-          e2 += bond_energy2;
-          res.bond_energys_loc.push_back(bond_energy2 * j2_);
-        }
-
+        TenElemT diag_ss = EvaluateNNNSSForAFMHeisenbergModel(site1, site2,
+                                                              config(site1),
+                                                              config(site2),
+                                                              LEFTUP_TO_RIGHTDOWN,
+                                                              tn,
+                                                              (*split_index_tps)(site1),
+                                                              (*split_index_tps)(site2),
+                                                              inv_psi);
+        res.bond_energys_loc.push_back(diag_ss * j2_);
+        e2 += diag_ss;
         site1 = {row + 1, col}; //left-down
         site2 = {row, col + 1}; //right-up
-        if (config(site1) == config(site2)) {
-          e2 += 0.25;
-          res.bond_energys_loc.push_back(0.25 * j2_);
-        } else {
-          TenElemT psi_ex = tn.ReplaceNNNSiteTrace({row, col},
-                                                   LEFTDOWN_TO_RIGHTUP,
-                                                   HORIZONTAL,
-                                                   (*split_index_tps)(site1)[config(site2)],  //the tensor at left
-                                                   (*split_index_tps)(site2)[config(site1)]);
-          TenElemT bond_energy2 = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-          e2 += bond_energy2;
-          res.bond_energys_loc.push_back(bond_energy2 * j2_);
-        }
+        diag_ss = EvaluateNNNSSForAFMHeisenbergModel(site1, site2,
+                                                     config(site1),
+                                                     config(site2),
+                                                     LEFTDOWN_TO_RIGHTUP,
+                                                     tn,
+                                                     (*split_index_tps)(site1),
+                                                     (*split_index_tps)(site2),
+                                                     inv_psi);
+        res.bond_energys_loc.push_back(diag_ss * j2_);
+        e2 += diag_ss;
         tn.BTen2MoveStep(RIGHT, row);
       }
       tn.BMPSMoveStep(DOWN, trunc_para);
@@ -179,17 +201,17 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      if (config(site1) == config(site2)) {
-        e1 += 0.25;
-        res.bond_energys_loc.push_back(0.25);
-      } else {
-        TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
-                                                (*split_index_tps)(site1)[config(site2)],
-                                                (*split_index_tps)(site2)[config(site1)]);
-        auto bond_energy1 = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-        e1 += bond_energy1;
-        res.bond_energys_loc.push_back(bond_energy1);
-      }
+      TenElemT bond_energy = EvaluateNNBondEnergyForAFMHeisenbergModel(site1,
+                                                                       site2,
+                                                                       config(site1),
+                                                                       config(site2),
+                                                                       VERTICAL,
+                                                                       tn,
+                                                                       (*split_index_tps)(site1),
+                                                                       (*split_index_tps)(site2),
+                                                                       inv_psi);
+      res.bond_energys_loc.push_back(bond_energy);
+      e1 += bond_energy;
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }
@@ -236,14 +258,15 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
         const SiteIdx site2 = {row, col + 1};
-        if (config(site1) == config(site2)) {
-          e1 += 0.25;
-        } else {
-          TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
-                                                  (*split_index_tps)(site1)[config(site2)],
-                                                  (*split_index_tps)(site2)[config(site1)]);
-          e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-        }
+        e1 += EvaluateNNBondEnergyForAFMHeisenbergModel(site1,
+                                                        site2,
+                                                        config(site1),
+                                                        config(site2),
+                                                        HORIZONTAL,
+                                                        tn,
+                                                        (*split_index_tps)(site1),
+                                                        (*split_index_tps)(site2),
+                                                        inv_psi);
         tn.BTenMoveStep(RIGHT);
       }
     }
@@ -256,29 +279,25 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
         //Calculate diagonal energy contribution
         SiteIdx site1 = {row, col};
         SiteIdx site2 = {row + 1, col + 1};
-        if (config(site1) == config(site2)) {
-          e2 += 0.25;
-        } else {
-          TenElemT psi_ex = tn.ReplaceNNNSiteTrace(site1,
-                                                   LEFTUP_TO_RIGHTDOWN,
-                                                   HORIZONTAL,
-                                                   (*split_index_tps)(site1)[config(site2)],
-                                                   (*split_index_tps)(site2)[config(site1)]);
-          e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-        }
+        e2 += EvaluateNNNSSForAFMHeisenbergModel(site1, site2,
+                                                 config(site1),
+                                                 config(site2),
+                                                 LEFTUP_TO_RIGHTDOWN,
+                                                 tn,
+                                                 (*split_index_tps)(site1),
+                                                 (*split_index_tps)(site2),
+                                                 inv_psi);
 
         site1 = {row + 1, col}; //left-down
         site2 = {row, col + 1}; //right-up
-        if (config(site1) == config(site2)) {
-          e2 += 0.25;
-        } else {
-          TenElemT psi_ex = tn.ReplaceNNNSiteTrace({row, col},
-                                                   LEFTDOWN_TO_RIGHTUP,
-                                                   HORIZONTAL,
-                                                   (*split_index_tps)(site1)[config(site2)],  //the tensor at left
-                                                   (*split_index_tps)(site2)[config(site1)]);
-          e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-        }
+        e2 += EvaluateNNNSSForAFMHeisenbergModel(site1, site2,
+                                                 config(site1),
+                                                 config(site2),
+                                                 LEFTDOWN_TO_RIGHTUP,
+                                                 tn,
+                                                 (*split_index_tps)(site1),
+                                                 (*split_index_tps)(site2),
+                                                 inv_psi);
         tn.BTen2MoveStep(RIGHT, row);
       }
       tn.BMPSMoveStep(DOWN, trunc_para);
@@ -296,14 +315,15 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      if (config(site1) == config(site2)) {
-        e1 += 0.25;
-      } else {
-        TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
-                                                (*split_index_tps)(site1)[config(site2)],
-                                                (*split_index_tps)(site2)[config(site1)]);
-        e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
-      }
+      e1 += EvaluateNNBondEnergyForAFMHeisenbergModel(site1,
+                                                      site2,
+                                                      config(site1),
+                                                      config(site2),
+                                                      VERTICAL,
+                                                      tn,
+                                                      (*split_index_tps)(site1),
+                                                      (*split_index_tps)(site2),
+                                                      inv_psi);
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }

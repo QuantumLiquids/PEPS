@@ -48,13 +48,14 @@ TenElemT EvaluateNNBondEnergyForAFMHeisenbergModel(
   if (config1 == config2) {
     return 0.25;
   } else {
-    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
+    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
                                             split_index_tps_on_site1[config2],
                                             split_index_tps_on_site2[config1]);
     TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
     return (-0.25 + ratio * 0.5);
   }
 }
+
 template<typename TenElemT, typename QNT>
 template<typename WaveFunctionComponentType, bool calchols>
 TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_index_tps,
@@ -126,27 +127,16 @@ TenElemT SpinOneHalfHeisenbergSquare<TenElemT, QNT>::CalEnergyAndHoles(const SIT
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      if (config(site1) == config(site2)) {
-        energy += 0.25;
-      } else {
-        TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
-                                                (*split_index_tps)(site1)[config(site2)],
-                                                (*split_index_tps)(site2)[config(site1)]);
-        TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
-        if (std::abs(ratio) > bond_energy_extremly_large) {
-          std::cout << "Warning [Unreasonable bond energy]: "
-                    << "Site : (" << row << ", " << col << ") "
-                    << "Bond Orient :" << " V, "
-                    << "psi_ex : " << std::scientific << psi_ex
-                    << ", psi_0 : " << std::scientific << tps_sample->amplitude
-                    << ", ratio : " << std::scientific << ratio
-                    << std::endl;
-          // set the bond energy = 0.0
-          has_unreasonable_bond_energy = true;
-        } else {
-          energy += (-0.25 + ratio * 0.5);
-        }
-      }
+      TenElemT bond_energy = EvaluateNNBondEnergyForAFMHeisenbergModel(site1,
+                                                                       site2,
+                                                                       config(site1),
+                                                                       config(site2),
+                                                                       VERTICAL,
+                                                                       tn,
+                                                                       (*split_index_tps)(site1),
+                                                                       (*split_index_tps)(site2),
+                                                                       inv_psi);
+      energy += bond_energy;
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }
@@ -189,27 +179,15 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
       //Calculate horizontal bond energy contribution
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row, col + 1};
-      TenElemT horizontal_bond_energy;
-      if (config(site1) == config(site2)) {
-        horizontal_bond_energy = 0.25;
-      } else {
-        TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
-                                                (*split_index_tps)(site1)[config(site2)],
-                                                (*split_index_tps)(site2)[config(site1)]);
-        TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
-        if (std::abs(ratio) > bond_energy_extremly_large) {
-          std::cout << "Warning [Unreasonable bond energy]: "
-                    << "Site : (" << row << ", " << col << ") "
-                    << "Bond Orient :" << " H, "
-                    << "psi_ex : " << std::scientific << psi_ex
-                    << ", psi_0 : " << std::scientific << tps_sample->amplitude
-                    << ", ratio : " << std::scientific << ratio
-                    << std::endl;
-          horizontal_bond_energy = 0.0;
-        } else {
-          horizontal_bond_energy = (-0.25 + ratio * 0.5);
-        }
-      }
+      TenElemT horizontal_bond_energy = EvaluateNNBondEnergyForAFMHeisenbergModel(site1,
+                                                                                  site2,
+                                                                                  config(site1),
+                                                                                  config(site2),
+                                                                                  HORIZONTAL,
+                                                                                  tn,
+                                                                                  (*split_index_tps)(site1),
+                                                                                  (*split_index_tps)(site2),
+                                                                                  inv_psi);
       energy += horizontal_bond_energy;
       res.bond_energys_loc.push_back(horizontal_bond_energy);
       tn.BTenMoveStep(RIGHT);
@@ -225,7 +203,7 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
         res.two_point_functions_loc.push_back(sz1 * sz2);
       }
 
-      std::vector<TenElemT> diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
+      std::vector<TenElemT> off_diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
       tn(site1) = (*split_index_tps)(site1)[1 - config(site1)]; //temporally change
       tn.TruncateBTen(LEFT, lx / 4 + 1); // may be above two lines should be summarized as an API
       tn.GrowBTenStep(LEFT);//left boundary tensor just across Lx/4
@@ -234,10 +212,10 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
         SiteIdx site2 = {row, lx / 4 + i};
         //sm(i) * sp(j)
         if (config(site2) == config(site1)) {
-          diag_corr[i - 1] = 0.0;
+          off_diag_corr[i - 1] = 0.0;
         } else {
           TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
-          diag_corr[i - 1] = (ComplexConjugate(psi_ex * inv_psi));
+          off_diag_corr[i - 1] = (ComplexConjugate(psi_ex * inv_psi));
         }
         tn.BTenMoveStep(RIGHT);
       }
@@ -247,9 +225,9 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
         for (size_t i = 1; i <= lx / 2; i++) {  //sp(i) * sm(j) = 0
           res.two_point_functions_loc.push_back(0.0);
         }
-        res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), diag_corr.begin(), diag_corr.end());
+        res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), off_diag_corr.begin(), off_diag_corr.end());
       } else {
-        res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), diag_corr.begin(), diag_corr.end());
+        res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), off_diag_corr.begin(), off_diag_corr.end());
         for (size_t i = 1; i <= lx / 2; i++) {  //sm(i) * sp(j) = 0
           res.two_point_functions_loc.push_back(0.0);
         }
@@ -271,27 +249,15 @@ ObservablesLocal<TenElemT> SpinOneHalfHeisenbergSquare<TenElemT, QNT>::SampleMea
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      TenElemT vertical_bond_energy;
-      if (config(site1) == config(site2)) {
-        vertical_bond_energy = 0.25;
-      } else {
-        TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
-                                                (*split_index_tps)(site1)[config(site2)],
-                                                (*split_index_tps)(site2)[config(site1)]);
-        TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
-        if (std::abs(ratio) > bond_energy_extremly_large) {
-          std::cout << "Warning [Unreasonable bond energy]: "
-                    << "Site : (" << row << ", " << col << ") "
-                    << "Bond Orient :" << " V, "
-                    << "psi_ex : " << std::scientific << psi_ex
-                    << ", psi_0 : " << std::scientific << tps_sample->amplitude
-                    << ", ratio : " << std::scientific << ratio
-                    << std::endl;
-          vertical_bond_energy = 0.0;
-        } else {
-          vertical_bond_energy = (-0.25 + ratio * 0.5);
-        }
-      }
+      TenElemT vertical_bond_energy = EvaluateNNBondEnergyForAFMHeisenbergModel(site1,
+                                                                                site2,
+                                                                                config(site1),
+                                                                                config(site2),
+                                                                                VERTICAL,
+                                                                                tn,
+                                                                                (*split_index_tps)(site1),
+                                                                                (*split_index_tps)(site2),
+                                                                                inv_psi);
       energy += vertical_bond_energy;
       res.bond_energys_loc.push_back(vertical_bond_energy);
       if (row < tn.rows() - 2) {
