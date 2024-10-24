@@ -30,6 +30,22 @@ enum WAVEFUNCTION_UPDATE_SCHEME {
   NaturalGradientLineSearch               //8
 };
 
+// Function to convert enum to string
+std::string WavefunctionUpdateSchemeString(WAVEFUNCTION_UPDATE_SCHEME scheme) {
+  switch (scheme) {
+    case StochasticGradient:return "StochasticGradient";
+    case RandomStepStochasticGradient:return "RandomStepStochasticGradient";
+    case StochasticReconfiguration:return "StochasticReconfiguration";
+    case RandomStepStochasticReconfiguration:return "RandomStepStochasticReconfiguration";
+    case NormalizedStochasticReconfiguration:return "NormalizedStochasticReconfiguration";
+    case RandomGradientElement:return "RandomGradientElement";
+    case BoundGradientElement:return "BoundGradientElement";
+    case GradientLineSearch:return "GradientLineSearch";
+    case NaturalGradientLineSearch:return "NaturalGradientLineSearch";
+    default:return "Unknown scheme";
+  }
+}
+
 ///< Conjugate gradient parameters used in Stochastic Reconfiguration update PEPS
 struct ConjugateGradientParams {
   size_t max_iter;

@@ -214,12 +214,13 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Pr
     std::cout << std::setw(indent) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
               << optimize_para.bmps_trunc_para.D_max << "\n";
     std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
-              << static_cast<int>(optimize_para.bmps_trunc_para.compress_scheme) << "\n";
+              << CompressMPSSchemeString(optimize_para.bmps_trunc_para.compress_scheme) << "\n";
     std::cout << std::setw(indent) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
     std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << optimize_para.mc_sweeps_between_sample
               << "\n";
     std::cout << std::setw(indent) << "PEPS update times:" << optimize_para.step_lens.size() << "\n";
-    std::cout << std::setw(indent) << "PEPS update strategy:" << optimize_para.update_scheme << "\n";
+    std::cout << std::setw(indent) << "PEPS update strategy:"
+              << WavefunctionUpdateSchemeString(optimize_para.update_scheme) << "\n";
     if (stochastic_reconfiguration_update_class_) {
       if (!optimize_para.cg_params.has_value()) {
         std::cout << "Conjugate gradient parameters have not been set!" << std::endl;
@@ -540,16 +541,14 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Cl
  */
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> CalGTenForFermionicTensors(
-    const QLTensor<TenElemT, QNT> &hole_ten,
+    const QLTensor<TenElemT, QNT> &hole_ten_dag,
     const QLTensor<TenElemT, QNT> &split_index_tps_ten
 ) {
-  auto hole_ten_dag = Dag(hole_ten);
-  QLTensor<TenElemT, QNT> psi_ten, psi_conj_inv_ten, hole_div_psi_conj;
-  Contract(&hole_ten_dag, {1, 2, 3, 4}, &split_index_tps_ten, {0, 1, 2, 3}, &psi_ten);
-  psi_conj_inv_ten = psi_ten;
-  psi_conj_inv_ten({0, 0}) = 1.0 / ComplexConjugate(psi_ten({0, 0}));
-  Contract(&hole_ten, {0}, &psi_conj_inv_ten, {0}, &hole_div_psi_conj);
-  return hole_div_psi_conj;
+  auto hole_ten = Dag(hole_ten_dag);
+  QLTensor<TenElemT, QNT> psi_ten, hole_dag_psi;
+  Contract(&hole_ten, {1, 2, 3, 4}, &split_index_tps_ten, {0, 1, 2, 3}, &psi_ten);
+  Contract(&hole_ten_dag, {0}, &psi_ten, {0}, &hole_dag_psi);
+  return hole_dag_psi * (1.0 / std::norm(psi_ten.GetElem({0, 0})));
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -614,22 +613,8 @@ VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GatherS
   //calculate grad in each processor
   const size_t sample_num = optimize_para.mc_samples;
   gten_ave_ = gten_sum_ * (1.0 / sample_num);
-  for (size_t row = 0; row < ly_; row++) {
-    for (size_t col = 0; col < lx_; col++) {
-      const size_t phy_dim = grad_({row, col}).size();
-      for (size_t compt = 0; compt < phy_dim; compt++) {
-//        if (g_times_energy_samples_({row, col})[compt].size() == 0) {
-//          grad_({row, col})[compt] = Tensor(split_index_tps_({row, col})[compt].GetIndexes());
-//        } else {
-//          grad_({row, col})[compt] =
-//              Mean(g_times_energy_samples_({row, col})[compt], sample_num) +
-//              (-energy) * Mean(gten_samples_({row, col})[compt], sample_num);
-//        }
-        grad_({row, col})[compt] = g_times_energy_sum_({row, col})[compt] * (1.0 / sample_num)
-            + ComplexConjugate(-energy) * gten_ave_({row, col})[compt];
-      }
-    }
-  }
+  grad_ = g_times_energy_sum_ * (1.0 / sample_num) + ComplexConjugate(-energy) * gten_ave_;
+
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
       const size_t phy_dim = grad_({row, col}).size();

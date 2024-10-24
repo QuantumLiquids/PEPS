@@ -26,6 +26,16 @@ enum class CompressMPSScheme {
   VARIATION1Site
 };
 
+// Convert enum class to descriptive string
+std::string CompressMPSSchemeString(CompressMPSScheme scheme) {
+  switch (scheme) {
+    case CompressMPSScheme::SVD_COMPRESS:return "Singular Value Decomposition Compression";
+    case CompressMPSScheme::VARIATION2Site:return "Two-Site Variational Compression";
+    case CompressMPSScheme::VARIATION1Site:return "Single-Site Variational Compression";
+    default:return "Unknown compression scheme";
+  }
+}
+
 struct BMPSTruncatePara {
   size_t D_min;
   size_t D_max;

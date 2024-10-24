@@ -275,6 +275,10 @@ add_unittest(test_fermion_vmc_peps
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
+add_unittest(test_fermion_peps_exact_summation
+        "test_algorithm_fermion/test_fermion_exact_optimization.cpp"
+        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
 add_unittest(test_square_heisenberg
         "test_algorithm/test_square_heisenberg.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"

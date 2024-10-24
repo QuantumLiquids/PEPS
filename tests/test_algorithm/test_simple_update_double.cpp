@@ -221,21 +221,6 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
   delete su_exe;
 }
 
-//TEST_F(SpinOneHalfSystemSimpleUpdate, NNHeisenbergD16) {
-//  SquareLatticePEPS<QLTEN_Double, U1QN> peps0(pb_out, Ly, Lx);
-//  peps0.Load("su_update_resultD8");
-//
-//  SimpleUpdatePara update_para(10, 0.05, 1, 16, 1e-10);
-//
-//  auto su_exe = SimpleUpdateExecutor(update_para, dham_hei_nn, peps0);
-//  su_exe.Execute();
-//  auto tps16 = TPS<QLTEN_Double, U1QN>(su_exe.GetPEPS());
-//
-//  su_exe.DumpResult("su_update_resultD16", true);
-//  tps16.Dump("tps_heisenberg_D16");
-//}
-
-
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;

@@ -23,24 +23,6 @@ using namespace qlten;
 using qlmps::IsPathExist;
 using qlmps::CreatPath;
 
-std::vector<bool> KagomeConfig2Sz(
-    const Configuration &config
-) {
-  std::vector<bool> local_sz;
-  local_sz.reserve(config.size() * 3 - config.rows() - config.cols());
-  for (size_t row = 0; row < config.rows(); row++) {
-    for (size_t col = 0; col < config.cols(); col++) {
-      size_t local_config = config({row, col});
-      local_sz.push_back(local_config & 1); //left upper site
-      if (row < config.cols() - 1)    // remove corner
-        local_sz.push_back(local_config >> 1 & 1);//lower site
-      if (col < config.cols() - 1)  //remove corner
-        local_sz.push_back(local_config >> 2 & 1);//right site
-    }
-  }
-  return local_sz;
-}
-
 ///< sum (config1 * config2)
 template<typename ElemT>
 ElemT SpinConfigurationOverlap(
@@ -52,18 +34,6 @@ ElemT SpinConfigurationOverlap(
     overlap += sz1[i] * sz2[i];
   }
   return overlap;
-}
-
-///< 1/N * sum (sz1 * sz2)
-double SpinConfigurationOverlap2(
-    const std::vector<bool> &sz1,
-    const std::vector<bool> &sz2
-) {
-  int overlap_sum(0);
-  for (size_t i = 0; i < sz1.size(); i++) {
-    overlap_sum += (2 * (int) sz1[i] - 1) * (2 * (int) sz2[i] - 1);
-  }
-  return double(overlap_sum) / sz1.size();
 }
 
 template<typename T>
@@ -147,7 +117,7 @@ class MonteCarloMeasurementExecutor : public Executor {
 
   void Execute(void) override;
 
-  void ReplicaTest(void); // for check the ergodicity
+  void ReplicaTest(std::function<double(const Configuration &, const Configuration &)>); // for check the ergodicity
 
   void LoadTenData(void);
 
@@ -341,7 +311,10 @@ MonteCarloMeasurementExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::ReplicaTest() {
+void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::ReplicaTest(
+    std::function<double(const Configuration &,
+                         const Configuration &)> overlap_func // calculate overlap like, 1/N * sum (sz1 * sz2)
+) {
   SynchronizeConfiguration_();
   std::vector<double> overlaps;
   overlaps.reserve(mc_measure_para.mc_samples);
@@ -365,8 +338,7 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
                                &status);
 
     // calculate overlap
-    double overlap = SpinConfigurationOverlap2(KagomeConfig2Sz(tps_sample_.config), KagomeConfig2Sz(config2));
-    overlaps.push_back(overlap);
+    overlaps.push_back(overlap_func(tps_sample_.config, config2));
     if (world_.rank() == kMasterProc && (sweep + 1) % (mc_measure_para.mc_samples / 10) == 0) {
       PrintProgressBar((sweep + 1), mc_measure_para.mc_samples);
 
