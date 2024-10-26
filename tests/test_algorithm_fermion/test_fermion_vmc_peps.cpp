@@ -81,7 +81,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
                       {N / 2, N / 2},
                       Ly, Lx,
                       file_params.step_len,
-                      StochasticGradient,
+                      StochasticReconfiguration,
                       ConjugateGradientParams(100, 1e-4, 20, 0.01));
 
   std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";

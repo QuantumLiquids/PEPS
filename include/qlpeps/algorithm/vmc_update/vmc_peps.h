@@ -59,6 +59,8 @@ class VMCPEPSExecutor : public Executor {
 
   void LoadTenData(const std::string &tps_path);
 
+  void InitConfigs_(const std::string &path);
+
   void DumpData(const bool release_mem = false);
 
   void DumpData(const std::string &tps_path, const bool release_mem = false);

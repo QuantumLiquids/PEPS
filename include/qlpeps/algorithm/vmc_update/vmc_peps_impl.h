@@ -102,6 +102,7 @@ VMCPEPSExecutor<TenElemT,
     stochastic_reconfiguration_update_class_ = false;
   }
   NormalizeTPS_();
+  InitConfigs_(optimize_para.wavefunction_path);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -137,6 +138,7 @@ VMCPEPSExecutor<TenElemT,
     stochastic_reconfiguration_update_class_ = false;
   }
   LoadTenData();
+  InitConfigs_(optimize_para.wavefunction_path);
   NormalizeTPS_();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
@@ -638,9 +640,6 @@ VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GatherS
 /**
  * Stochastic gradient descent update peps
  *
- * @tparam TenElemT
- * @tparam QNT
- * @tparam EnergySolver
  * @param grad
  * @param step_len
  * @note Normalization condition: tensors in each site are normalized.
@@ -728,9 +727,18 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
   SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t cgsolver_iter;
-  natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
-                                          cg_params.max_iter, cg_params.tolerance,
-                                          cg_params.residue_restart_step, cgsolver_iter, world_);
+  if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
+    auto signed_grad = grad;
+    signed_grad.ActFermionPOps();
+    natural_grad_ = ConjugateGradientSolver(s_matrix, signed_grad, init_guess,
+                                            cg_params.max_iter, cg_params.tolerance,
+                                            cg_params.residue_restart_step, cgsolver_iter, world_);
+  } else {
+    natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
+                                            cg_params.max_iter, cg_params.tolerance,
+                                            cg_params.residue_restart_step, cgsolver_iter, world_);
+  }
+
   return cgsolver_iter;
 }
 
@@ -771,18 +779,22 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Lo
     std::cout << "Loading TPS files fails." << std::endl;
     exit(-1);
   }
+}
+
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
+void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::InitConfigs_(const std::string &path) {
   Configuration config(ly_, lx_);
-  bool load_config = config.Load(tps_path, world_.rank());
+  bool load_config = config.Load(path, world_.rank());
   if (load_config) {
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+    warm_up_ = true;
   } else {
     std::cout << "Loading configuration in rank " << world_.rank()
               << " fails. Use preset configuration and random warm up."
               << std::endl;
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, optimize_para.init_config);
-    WarmUp_();
+    warm_up_ = false;
   }
-  warm_up_ = true;
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>

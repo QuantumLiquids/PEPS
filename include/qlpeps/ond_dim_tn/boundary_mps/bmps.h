@@ -29,7 +29,7 @@ enum class CompressMPSScheme {
 // Convert enum class to descriptive string
 std::string CompressMPSSchemeString(CompressMPSScheme scheme) {
   switch (scheme) {
-    case CompressMPSScheme::SVD_COMPRESS:return "Singular Value Decomposition Compression";
+    case CompressMPSScheme::SVD_COMPRESS:return "SVD Compression";
     case CompressMPSScheme::VARIATION2Site:return "Two-Site Variational Compression";
     case CompressMPSScheme::VARIATION1Site:return "Single-Site Variational Compression";
     default:return "Unknown compression scheme";

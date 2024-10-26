@@ -215,6 +215,41 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     return res;
   }
 
+  // no insertion of fermion sign parity operator
+  TenElemT DirectProduct(const SplitIndexTPS &right) const {
+    TenElemT res(0);
+    size_t phy_dim = PhysicalDim();
+    for (size_t row = 0; row < this->rows(); ++row) {
+      for (size_t col = 0; col < this->cols(); ++col) {
+        for (size_t i = 0; i < phy_dim; i++) {
+          if ((*this)({row, col})[i].IsDefault() || right({row, col})[i].IsDefault()) {
+            continue;
+          }
+          Tensor ten_dag = Dag((*this)({row, col})[i]);
+          Tensor scalar;
+          if constexpr (Tensor::IsFermionic()) {
+            Contract(&ten_dag, {0, 1, 2, 3, 4}, &right({row, col})[i], {0, 1, 2, 3, 4}, &scalar);
+          } else {
+            Contract(&ten_dag, {0, 1, 2, 3}, &right({row, col})[i], {0, 1, 2, 3}, &scalar);
+          }
+          res += TenElemT(scalar());
+        }
+      }
+    }
+    return res;
+  }
+
+  void ActFermionPOps() {
+    if constexpr (Tensor::IsFermionic()) {
+      for (auto &tens : *this) {
+        for (auto &ten : tens) {
+          if (!ten.IsDefault())
+            ten.ActFermionPOps();
+        }
+      }
+    }
+  }
+
   SplitIndexTPS operator-() const {
     SplitIndexTPS res(this->rows(), this->cols());
     size_t phy_dim = PhysicalDim();

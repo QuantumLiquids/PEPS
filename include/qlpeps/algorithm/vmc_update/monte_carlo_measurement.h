@@ -523,14 +523,14 @@ void MonteCarloMeasurementExecutor<TenElemT,
   bool load_config = config.Load(path, world_.rank());
   if (load_config) {
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+    warm_up_ = true;
   } else {
     std::cout << "Loading configuration in rank " << world_.rank()
               << " fails. Random generate it and warm up."
               << std::endl;
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, mc_measure_para.init_config);
-    WarmUp_();
+    warm_up_ = false;
   }
-  warm_up_ = true;
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
