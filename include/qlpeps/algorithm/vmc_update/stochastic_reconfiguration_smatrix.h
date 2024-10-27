@@ -31,23 +31,18 @@ class SRSMatrix {
       world_size_(world_size) {}
 
   SITPS operator*(const SITPS &v0) const {
-    SITPS res = (*gten_samples_)[0] * (*gten_samples_)[0].DirectProduct(v0);
+    SITPS res = (*gten_samples_)[0] * ((*gten_samples_)[0] * v0);
     for (size_t i = 1; i < gten_samples_->size(); i++) {
-      res += (*gten_samples_)[i] * (*gten_samples_)[i].DirectProduct(v0);
+      res += (*gten_samples_)[i] * ((*gten_samples_)[i] * v0);
     }
     res *= 1.0 / double(gten_samples_->size() * world_size_);
     if (gten_ave_ != nullptr) { //kMasterProc
-      res += (-(gten_ave_->DirectProduct(v0))) * (*gten_ave_);
+      res += (-((*gten_ave_) * v0)) * (*gten_ave_);
       if (diag_shift != 0.0) {
         res += (diag_shift * v0);
       }
     }
-    if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
-      res.ActFermionPOps();
-      return res;
-    } else {
-      return res;
-    }
+    return res;
   }
 
   TenElemT diag_shift = 0.0;

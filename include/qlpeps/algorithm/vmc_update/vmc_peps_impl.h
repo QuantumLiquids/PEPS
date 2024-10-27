@@ -630,10 +630,11 @@ VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GatherS
       }
     }
   }
+  grad_.ActFermionPOps();
   if (world_.rank() == kMasterProc) {
     grad_norm_.push_back(grad_.NormSquare());
   }
-  //do not broad cast because only broad cast the updated TPS
+  //do not broadcast because only broadcast the updated TPS
   return std::make_pair(energy, grad_);
 }
 
@@ -729,7 +730,7 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
   size_t cgsolver_iter;
   if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
     auto signed_grad = grad;
-    signed_grad.ActFermionPOps();
+    signed_grad.ActFermionPOps();   // Act back
     natural_grad_ = ConjugateGradientSolver(s_matrix, signed_grad, init_guess,
                                             cg_params.max_iter, cg_params.tolerance,
                                             cg_params.residue_restart_step, cgsolver_iter, world_);

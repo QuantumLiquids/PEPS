@@ -158,11 +158,12 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSummation) {
   std::cout << "simple update E0 = " << std::setw(14) << std::fixed
             << std::setprecision(kEnergyOutputPrecision) << energy << std::endl;
   SplitIndexTPS<QLTEN_Double, fZ2QN> gradient = (g_times_e_weighted_sum - energy * g_weighted_sum) * (1.0 / weight_sum);
+  gradient.ActFermionPOps();
   std::cout << "grad norm : " << gradient.NormSquare() << std::endl;
   for (size_t i = 0; i < 20; i++) {
     weights = {};
     e_loc_set = {};
-    double step_len = (i + 1) * 0.01;
+    double step_len = (i + 1) * 0.0001;
     SplitIndexTPS<QLTEN_Double, fZ2QN> updated_split_index_tps = split_index_tps - step_len * gradient;
 
     for (auto &config : all_configs) {
@@ -304,6 +305,7 @@ TEST_F(Z2tJTools, ExactSummation) {
               << std::setprecision(kEnergyOutputPrecision) << energy << std::endl;
     SplitIndexTPS<QLTEN_Double, fZ2QN>
         gradient = (g_times_e_weighted_sum - energy * g_weighted_sum) * (1.0 / weight_sum);
+    gradient.ActFermionPOps();
     split_index_tps += (-0.01) * gradient;
   }
 }
