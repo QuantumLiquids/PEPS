@@ -200,6 +200,8 @@ struct Z2tJTools : public testing::Test {
   SplitIndexTPS<QLTEN_Double, fZ2QN> split_index_tps = SplitIndexTPS<QLTEN_Double, fZ2QN>(Ly, Lx);
   double t = 1.0;
   double J = 0.3;
+  double energy_exact = -2.94316357;
+  size_t Db = 4;
   fZ2QN qn0 = fZ2QN(0);
   // |ket>
   IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
@@ -238,7 +240,7 @@ struct Z2tJTools : public testing::Test {
     dham_tj_nn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
 
 
-    SimpleUpdatePara update_para(50, 0.1, 1, 4, 1e-10);
+    SimpleUpdatePara update_para(100, 0.1, 1, Db, 1e-10);
     SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
         *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
                                                                                dham_tj_nn);
@@ -253,6 +255,7 @@ struct Z2tJTools : public testing::Test {
   //half-filling
   void GenerateAllConfigs() {
     std::vector<size_t> config_vec = {2, 2, 0, 1};
+    std::sort(config_vec.begin(), config_vec.end());
     do {
       all_configs.push_back(Vec2Config(config_vec, Lx, Ly));
     } while (std::next_permutation(config_vec.begin(),
@@ -264,9 +267,9 @@ struct Z2tJTools : public testing::Test {
 TEST_F(Z2tJTools, ExactSummation) {
   using WaveFunctionComponentT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
   WaveFunctionComponentT::trun_para =
-      BMPSTruncatePara(1, 4, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
-
-  for (size_t i = 0; i < 20; i++) {
+      BMPSTruncatePara(1, Db, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
+  double energy;
+  for (size_t i = 0; i < 100; i++) {
     std::vector<double> weights;
     std::vector<double> e_loc_set;
     SplitIndexTPS<QLTEN_Double, fZ2QN> g_weighted_sum(Ly, Lx, 3);
@@ -296,16 +299,22 @@ TEST_F(Z2tJTools, ExactSummation) {
 
     double weight_sum = 0.0;  // wave-function overlap
     double e_loc_sum = 0.0;
-    for (size_t i = 0; i < e_loc_set.size(); i++) {
-      e_loc_sum += e_loc_set[i] * weights[i];
-      weight_sum += weights[i];
+    for (size_t j = 0; j < e_loc_set.size(); j++) {
+      e_loc_sum += e_loc_set[j] * weights[j];
+      weight_sum += weights[j];
     }
-    double energy = e_loc_sum / weight_sum;
-    std::cout << "simple update E0 = " << std::setw(14) << std::fixed
-              << std::setprecision(kEnergyOutputPrecision) << energy << std::endl;
+    energy = e_loc_sum / weight_sum;
+
     SplitIndexTPS<QLTEN_Double, fZ2QN>
         gradient = (g_times_e_weighted_sum - energy * g_weighted_sum) * (1.0 / weight_sum);
     gradient.ActFermionPOps();
-    split_index_tps += (-0.01) * gradient;
+    std::cout << "E0 = " << std::setw(14) << std::fixed
+              << std::setprecision(kEnergyOutputPrecision) << energy
+              << "Grad Norm :" << std::setw(8) << std::fixed
+              << std::setprecision(kEnergyOutputPrecision) << gradient.NormSquare()
+              << std::endl;
+    split_index_tps += (-0.1) * gradient;
   }
+  EXPECT_GE(energy, energy_exact);
+  EXPECT_NEAR(energy, energy_exact, 1e-5);
 }

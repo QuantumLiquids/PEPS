@@ -734,6 +734,7 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
     natural_grad_ = ConjugateGradientSolver(s_matrix, signed_grad, init_guess,
                                             cg_params.max_iter, cg_params.tolerance,
                                             cg_params.residue_restart_step, cgsolver_iter, world_);
+    natural_grad_.ActFermionPOps(); // question: why works?
   } else {
     natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
                                             cg_params.max_iter, cg_params.tolerance,
