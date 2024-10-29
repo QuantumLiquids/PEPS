@@ -138,12 +138,12 @@ TEST_F(SpinSystemSimpleUpdate, SquareHeisenberg) {
 
   su_exe->update_para.Dmax = 6;
   su_exe->update_para.Trunc_err = 1e-15;
-  su_exe->SetStepLenth(0.05);
+  su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
   su_exe->update_para.Dmax = 6;
   su_exe->update_para.Trunc_err = 1e-15;
-  su_exe->SetStepLenth(0.01);
+  su_exe->ResetStepLenth(0.01);
   su_exe->Execute();
 
   auto tps = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());

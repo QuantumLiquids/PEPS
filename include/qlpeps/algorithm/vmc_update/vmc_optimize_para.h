@@ -104,15 +104,12 @@ struct VMCOptimizePara {
     return bmps_trunc_para;
   }
 
-  BMPSTruncatePara bmps_trunc_para; // Truncation Error and bond dimensionts for compressing boundary MPS
+  BMPSTruncatePara bmps_trunc_para; // Truncation error and bond dimension for compressing boundary MPS
 
-  //MC parameters
+  //Monte-Carlo parameters
   size_t mc_samples;
   size_t mc_warm_up_sweeps;
   size_t mc_sweeps_between_sample;
-
-//  // e.g. In spin model, how many spin up sites and how many spin down sites.
-//  std::vector<size_t> occupancy_num;
 
   Configuration init_config;
 

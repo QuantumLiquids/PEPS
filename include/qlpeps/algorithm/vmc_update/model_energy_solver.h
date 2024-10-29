@@ -2,7 +2,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-08-02
 *
-* Description: QuantumLiquids/PEPS project. Model Energy Solver base class. Also an example on how to write a ModelEnergySolver.
+* Description: QuantumLiquids/PEPS project. Model Energy Solver base class.
 */
 
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
@@ -10,7 +10,6 @@
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"      //SplitIndexTPS
-#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/square_tps_sample_nn_exchange.h"     //SquareTPSSampleNNExchange
 
 namespace qlpeps {
 
@@ -55,7 +54,6 @@ bool WaveFunctionAmplitudeConsistencyCheck(
   }
   return true;
 }
-
 
 }//qlpeps
 

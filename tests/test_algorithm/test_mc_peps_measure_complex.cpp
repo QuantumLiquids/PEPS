@@ -12,11 +12,8 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"    // SpinOneHalfHeisenbergSquare
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_squareJ1J2.h"           // SpinOneHalfJ1J2HeisenbergSquare
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
-
+#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
 #include "qlmps/case_params_parser.h"
 
 using namespace qlten;

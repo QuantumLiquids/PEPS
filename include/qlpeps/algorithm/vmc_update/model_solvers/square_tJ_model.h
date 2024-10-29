@@ -52,6 +52,10 @@ double tJConfig2Spinz(const size_t config) {
     case 2: {
       return 0.0;
     }
+    default: {
+      std::cerr << "Unexpected config : " << config << " in t-J model" << std::endl;
+      exit(1);
+    }
   }
 }
 template<typename TenElemT, typename QNT>
@@ -99,6 +103,8 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
   const Configuration &config = tps_sample->config;
   const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
   tn.GenerateBMPSApproach(UP, trunc_para);
+  std::vector<double> psi_abs_gather;
+  psi_abs_gather.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
@@ -170,11 +176,11 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row, col + 1};
       TenElemT bond_energy = EvaluateBondEnergyFortJModel(site1, site2,
-                                             config(site1), config(site2),
-                                             HORIZONTAL,
-                                             tn,
-                                             (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                             t_, J_, has_nn_term_);
+                                                          config(site1), config(site2),
+                                                          HORIZONTAL,
+                                                          tn,
+                                                          (*split_index_tps)(site1), (*split_index_tps)(site2),
+                                                          t_, J_, has_nn_term_);
       res.bond_energys_loc.push_back(bond_energy);
       energy += bond_energy;
       tn.BTenMoveStep(RIGHT);
@@ -213,12 +219,12 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
-      TenElemT bond_energy =  EvaluateBondEnergyFortJModel(site1, site2,
-                                             config(site1), config(site2),
-                                             VERTICAL,
-                                             tn,
-                                             (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                             t_, J_, has_nn_term_);
+      TenElemT bond_energy = EvaluateBondEnergyFortJModel(site1, site2,
+                                                          config(site1), config(site2),
+                                                          VERTICAL,
+                                                          tn,
+                                                          (*split_index_tps)(site1), (*split_index_tps)(site2),
+                                                          t_, J_, has_nn_term_);
       res.bond_energys_loc.push_back(bond_energy);
       energy += bond_energy;
       if (row < tn.rows() - 2) {
@@ -229,13 +235,14 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
   }
+  assert(!is_nan(energy));
   res.energy_loc = energy;
   res.one_point_functions_loc.reserve(2 * tn.rows() * tn.cols());
   //charge
-  for (auto &spin_config : config) {
+  for (const auto &spin_config : config) {
     res.one_point_functions_loc.push_back((spin_config == 2) ? 0.0 : 1.0);
   }
-  for (auto &spin_config : config) {
+  for (const auto &spin_config : config) {
     if (spin_config == 0) {
       res.one_point_functions_loc.push_back(0.5); // spin up
     } else if (spin_config == 1) {

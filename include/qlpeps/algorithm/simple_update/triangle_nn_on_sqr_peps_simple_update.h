@@ -90,7 +90,7 @@ double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdat
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  return norm_a * norm_b;
+  return (e_a + e_b) / 2;
 }
 }
 

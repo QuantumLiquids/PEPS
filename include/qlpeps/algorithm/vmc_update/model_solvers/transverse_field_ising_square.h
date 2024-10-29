@@ -52,7 +52,7 @@ TenElemT TransverseIsingSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *sp
   TenElemT energy(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   std::vector<TenElemT> psi_gather;
   psi_gather.reserve(tn.rows() + tn.cols());

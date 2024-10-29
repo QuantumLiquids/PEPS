@@ -33,11 +33,7 @@ template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElemT, QNT> &ham);
 
 /** SimpleUpdateExecutor
- * execution for simple update in the optimization of SquareLatticePEPS
- *
- *
- * @tparam TenElemT
- * @tparam QNT
+ * abstract class for execution on simple update in SquareLatticePEPS
  */
 template<typename TenElemT, typename QNT>
 class SimpleUpdateExecutor : public Executor {
@@ -47,6 +43,11 @@ class SimpleUpdateExecutor : public Executor {
 
   SimpleUpdateExecutor(const SimpleUpdatePara &update_para,
                        const PEPST &peps_initial);
+
+  void ResetStepLenth(double tau) {
+    update_para.tau = tau;
+    SetEvolveGate_();
+  }
 
   void Execute(void) override;
 
@@ -58,9 +59,13 @@ class SimpleUpdateExecutor : public Executor {
     return peps_.Dump(path, release_mem);
   }
 
-  void SetStepLenth(double tau) {
-    update_para.tau = tau;
-    SetEvolveGate_();
+  double GetEstimatedEnergy(void) const {
+    if (estimated_energy_.has_value()) {
+      return estimated_energy_.value();
+    } else {
+      std::cout << "No estimated energy value!" << std::endl;
+      return 0.0;
+    }
   }
 
   SimpleUpdatePara update_para;
@@ -68,11 +73,14 @@ class SimpleUpdateExecutor : public Executor {
 
   virtual void SetEvolveGate_(void) = 0;
 
+  // return the estimated energy
   virtual double SimpleUpdateSweep_(void) = 0;
 
   const size_t lx_;
   const size_t ly_;
   PEPST peps_;
+
+  std::optional<double> estimated_energy_;
 };
 
 }//qlpeps

@@ -57,10 +57,9 @@ TEST_F(StatisticsTest, GatherStatisticListOfDataTest) {
     }
 //    std::cout << std::endl;
     double n = world.size();
-    double
-        expected_err =
-        std::sqrt((n - 1) * (2 * n - 1) / 6 - (double) (n - 1) / 2.0 * (double) (n - 1) / 2.0)
-            / std::sqrt(n - 1);
+    double expected_err =
+        std::sqrt((n - 1) * (2 * n - 1) / 6
+                      - (double) (n - 1) / 2.0 * (double) (n - 1) / 2.0) / std::sqrt(n - 1);
     std::vector<double> expected_std_errs(5, expected_err);
     for (size_t i = 0; i < expected_avgs.size(); i++) {
       EXPECT_EQ(expected_avgs[i], actual_avgs[i]);

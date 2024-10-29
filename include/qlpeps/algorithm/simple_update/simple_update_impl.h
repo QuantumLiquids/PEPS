@@ -117,8 +117,6 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
 
 /**
  *
- * @tparam TenElemT
- * @tparam QNT
  * @param update_para
  * @param ham_nn
  *          1         3
@@ -155,20 +153,30 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
   SetEvolveGate_();
   for (size_t step = 0; step < update_para.steps; step++) {
     std::cout << "step = " << step << "\t";
-    SimpleUpdateSweep_();
+    estimated_energy_ = SimpleUpdateSweep_();
   }
   SetStatus(qlten::FINISH);
 }
 
-//helper
-template<typename TenElemT, typename QNT>
-void PrintLambda(const QLTensor<TenElemT, QNT> &lambda) {
-  std::cout << std::setprecision(4) << std::scientific << std::endl;
-  std::cout << "[";
+template<typename QNT>
+void PrintLambda(const QLTensor<QLTEN_Double, QNT> &lambda) {
+  std::cout << std::setprecision(4) << std::scientific;
+
+  // Extract the diagonal elements of lambda into a vector
+  std::vector<double> diagonal_elements(lambda.GetShape()[0]);
   for (size_t i = 0; i < lambda.GetShape()[0]; i++) {
-    std::cout << " " << lambda({i, i});
+    diagonal_elements[i] = lambda({i, i});
   }
-  std::cout << "]" << std::endl;
+
+  // Sort the diagonal elements in descending order
+  std::sort(diagonal_elements.begin(), diagonal_elements.end(), std::greater<double>());
+
+  // Print the sorted elements
+  std::cout << "[";
+  for (const auto &element : diagonal_elements) {
+    std::cout << " " << element;
+  }
+  std::cout << " ]" << std::endl;
 }
 }//qlpeps;
 #endif //QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H

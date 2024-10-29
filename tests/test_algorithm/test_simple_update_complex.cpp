@@ -188,7 +188,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, NNHeisenberg) {
 
   su_exe->update_para.Dmax = 4;
   su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->SetStepLenth(0.05);
+  su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
   auto tps4 = TPS<QLTEN_Complex, U1QN>(su_exe->GetPEPS());
@@ -235,7 +235,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
 
   su_exe->update_para.Dmax = 4;
   su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->SetStepLenth(0.05);
+  su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
   auto tps4 = TPS<QLTEN_Complex, U1QN>(su_exe->GetPEPS());
@@ -366,7 +366,7 @@ TEST_F(TestSimpleUpdateSpinSystemSquareJ1J2, J1J2Heisenberg) {
 
   su_exe->update_para.Dmax = 4;
   su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->SetStepLenth(0.05);
+  su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
   auto tps4 = TPS<QLTEN_Complex, U1QN>(su_exe->GetPEPS());

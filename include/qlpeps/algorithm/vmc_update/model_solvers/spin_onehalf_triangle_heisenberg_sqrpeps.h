@@ -48,7 +48,7 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::CalEnergyAndHoles(const
   TenElemT e(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   std::vector<TenElemT> psi_gather;
@@ -149,7 +149,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
   res.bond_energys_loc.reserve(N * 3);
   res.two_point_functions_loc.reserve(lx / 2 * 3 + N * N);
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = SquareTPSSampleNNExchange<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < ly; row++) {
@@ -278,7 +278,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
   }
   res.energy_loc = energy_loc;
   res.one_point_functions_loc.reserve(tn.rows() * tn.cols());
-  for (auto &spin_config: config) {
+  for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }
   std::vector<TenElemT> all2all_sz_corr = CalculateSzAll2AllCorrelation_(config);
@@ -289,12 +289,12 @@ ObservablesLocal<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, QNT>::Sampl
 
 template<typename TenElemT, typename QNT>
 std::vector<TenElemT> SpinOneHalfTriHeisenbergSqrPEPS<TenElemT,
-    QNT>::CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const {
+                                                      QNT>::CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const {
   std::vector<TenElemT> res;
   size_t N = config.size();
   res.reserve(N * N);
-  for (auto &c1: config) {
-    for (auto &c2: config) {
+  for (auto &c1 : config) {
+    for (auto &c2 : config) {
       if (c1 == c2) {
         res.push_back(0.25);
       } else {

@@ -149,6 +149,8 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, AFM_ClassicalIsing) {
       *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,
                                                                             dham_ising_nn);
   su_exe->Execute();
+  double ex_energy = -0.25 * ((Lx - 1) * Ly + (Ly - 1) * Lx);
+  EXPECT_NEAR(ex_energy, su_exe->GetEstimatedEnergy(), 1e-10);
   delete su_exe;
 }
 
@@ -163,22 +165,24 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
   // stage 2, D = 4
   su_exe->update_para.Dmax = 4;
   su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->SetStepLenth(0.05); // call to re-evaluate the evolution gates
+  su_exe->ResetStepLenth(0.05); // call to re-evaluate the evolution gates
   su_exe->Execute();
   auto tps_d4 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_nn_hei_D4", false);
   tps_d4.Dump("tps_square_nn_hei_D4");
 
-  // stage 2, D = 8
+  // stage 3, D = 8
   su_exe->update_para.Dmax = 8;
   su_exe->update_para.Trunc_err = 1e-10;
   su_exe->update_para.steps = 100;
-  su_exe->SetStepLenth(0.01);
+  su_exe->ResetStepLenth(0.01);
   su_exe->Execute();
   auto tps_d8 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_nn_hei_D8", true);
   tps_d8.Dump("tps_square_nn_hei_D8");
   delete su_exe;
+
+  // Question: How to check the calculation results?
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
@@ -192,7 +196,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
 
   su_exe->update_para.Dmax = 4;
   su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->SetStepLenth(0.05);
+  su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
   auto tps4 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
@@ -212,7 +216,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
 
   su_exe->update_para.Dmax = 4;
   su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->SetStepLenth(0.05);
+  su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
   auto tps4 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
