@@ -641,10 +641,11 @@ struct ProjectedtJTensorNetwork : public testing::Test {
     qlten::hp_numeric::SetTensorManipulationThreads(1);
     SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps = CreateFiniteSizeOBCTPS();
 
-    TPSSampleTNNFlipT::trun_para = BMPSTruncatePara(Db_min, Db_max, 1e-10,
-                                                    CompressMPSScheme::SVD_COMPRESS,
-                                                    std::make_optional<double>(1e-14),
-                                                    std::make_optional<size_t>(10));
+    WaveFunctionComponent<QLTEN_Double, fZ2QN>::trun_para = BMPSTruncatePara(Db_min, Db_max, 1e-10,
+                                                                             CompressMPSScheme::SVD_COMPRESS,
+                                                                             std::make_optional<double>(
+                                                                                 1e-14),
+                                                                             std::make_optional<size_t>(10));
     Configuration config(Ly, Lx);
     config.Random({N * 7 / 16, N * 7 / 16, N / 8});
     TPSSampleTNNFlipT tps_sample(split_idx_tps, config);

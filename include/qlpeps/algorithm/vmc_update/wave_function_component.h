@@ -20,8 +20,7 @@ class WaveFunctionComponent {
   Configuration config;
   TenElemT amplitude;
 
-  //try to think a better design
-  static BMPSTruncatePara trun_para;
+  static std::optional<BMPSTruncatePara> trun_para;
 
   WaveFunctionComponent(const size_t rows, const size_t cols) :
       config(rows, cols), amplitude(0) {}
@@ -41,12 +40,7 @@ bool IsAmplitudeSquareLegal(const ElemT &amplitude) {
 }
 
 template<typename TenElemT, typename QNT>
-BMPSTruncatePara
-    WaveFunctionComponent<TenElemT, QNT>::trun_para = BMPSTruncatePara(0, 0, 0.0,
-                                                                       CompressMPSScheme::VARIATION2Site,
-                                                                       std::optional<double>(),
-                                                                       std::optional<size_t>());
-
+std::optional<BMPSTruncatePara> WaveFunctionComponent<TenElemT, QNT>::trun_para;
 }//qlpeps
 
 

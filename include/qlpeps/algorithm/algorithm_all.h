@@ -22,6 +22,6 @@
 #include "qlpeps/algorithm/vmc_update/vmc_peps.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers//build_in_model_solvers_all.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
 
 #endif //QLPEPS_ALGORITHM_ALGORITHM_ALL_H

@@ -25,8 +25,8 @@ using namespace qlten;
  *
  * @tparam TenElemT wavefunctional elementary type, real or complex
  * @tparam QNT quantum number type
- * @tparam WaveFunctionComponentType the derived class of WaveFunctionComponent, control the monte carlo sweep method
- * @tparam EnergySolver Energy solver, corresponding to the model
+ * @tparam WaveFunctionComponentType the derived class of WaveFunctionComponent, defines the monte carlo sweep method
+ * @tparam EnergySolver Energy solver, define evaluation of the model energy and holes in PEPS
  */
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 class VMCPEPSExecutor : public Executor {
@@ -72,8 +72,6 @@ class VMCPEPSExecutor : public Executor {
 
   void LineSearchOptimizeTPS_(void);
   void IterativeOptimizeTPS_(void);
-
-  void Measure_(void);
 
   // Level 2 Member Functions
   void PrintExecutorInfo_(void);

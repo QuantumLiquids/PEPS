@@ -238,7 +238,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
   TenElemT e1(0), e2(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   std::vector<TenElemT> psi_gather;

@@ -52,7 +52,7 @@ TenElemT TransverseIsingSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *sp
   TenElemT energy(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   std::vector<TenElemT> psi_gather;
   psi_gather.reserve(tn.rows() + tn.cols());
@@ -115,7 +115,7 @@ ObservablesLocal<TenElemT> TransverseIsingSquare<TenElemT, QNT>::SampleMeasure(
   res.bond_energys_loc.reserve(lx * ly * 2);
   res.two_point_functions_loc.reserve(lx / 2 * 3);
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   std::vector<TenElemT> psi_gather;

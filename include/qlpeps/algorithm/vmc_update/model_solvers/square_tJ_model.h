@@ -101,7 +101,7 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
   TenElemT energy(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   tn.GenerateBMPSApproach(UP, trunc_para);
   std::vector<double> psi_abs_gather;
   psi_abs_gather.reserve(tn.rows() + tn.cols());
@@ -166,7 +166,7 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const size_t lx = tn.cols(), ly = tn.rows();
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);

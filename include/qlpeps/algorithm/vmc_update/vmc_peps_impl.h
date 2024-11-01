@@ -154,7 +154,6 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Ex
   } else {
     IterativeOptimizeTPS_();
   }
-  Measure_();
   DumpData();
   SetStatus(ExecutorStatus::FINISH);
 }
@@ -763,11 +762,6 @@ std::vector<double> VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, En
     tps_sample_.MonteCarloSweepUpdate(split_index_tps_, unit_even_distribution, accept_rates);
   }
   return accept_rates;
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Measure_(void) {
-
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>

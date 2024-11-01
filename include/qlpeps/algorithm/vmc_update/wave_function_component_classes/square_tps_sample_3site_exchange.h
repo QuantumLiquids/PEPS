@@ -25,7 +25,7 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
   SquareTPSSample3SiteExchange(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
       : WaveFunctionComponentT(config), tn(config.rows(), config.cols()) {
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
-    tn.GrowBMPSForRow(0, this->trun_para);
+    tn.GrowBMPSForRow(0, this->trun_para.value());
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
@@ -45,7 +45,7 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
                   const std::vector<size_t> &occupancy_num) {
     this->config.Random(occupancy_num);
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, this->config);
-    tn.GrowBMPSForRow(0, this->trun_para);
+    tn.GrowBMPSForRow(0, this->trun_para.value());
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
@@ -61,7 +61,7 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
                              std::uniform_real_distribution<double> &u_double,
                              std::vector<double> &accept_rates) {
     size_t flip_accept_num = 0;
-    tn.GenerateBMPSApproach(UP, this->trun_para);
+    tn.GenerateBMPSApproach(UP, this->trun_para.value());
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 3, true);
@@ -77,14 +77,14 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
         }
       }
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN, this->trun_para);
+        tn.BMPSMoveStep(DOWN, this->trun_para.value());
       }
     }
 
     tn.DeleteInnerBMPS(LEFT);
     tn.DeleteInnerBMPS(RIGHT);
 
-    tn.GenerateBMPSApproach(LEFT, this->trun_para);
+    tn.GenerateBMPSApproach(LEFT, this->trun_para.value());
     for (size_t col = 0; col < tn.cols(); col++) {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 3, true);
@@ -99,7 +99,7 @@ class SquareTPSSample3SiteExchange : public WaveFunctionComponent<TenElemT, QNT>
         }
       }
       if (col < tn.cols() - 1) {
-        tn.BMPSMoveStep(RIGHT, this->trun_para);
+        tn.BMPSMoveStep(RIGHT, this->trun_para.value());
       }
     }
 
