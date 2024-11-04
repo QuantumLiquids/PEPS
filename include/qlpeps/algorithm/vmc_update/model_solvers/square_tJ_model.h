@@ -73,7 +73,7 @@ TenElemT EvaluateBondEnergyFortJModel(
       // two empty state, no energy contribution
       return 0.0;
     } else {
-      return J * (0.25 - int(has_nn_term) / 4.0); // sz * sz - 1/4 * n * n
+      return J * (0.25 - double(int(has_nn_term)) / 4.0); // sz * sz - 1/4 * n * n
     }
   } else {
     TenElemT psi = tn.Trace(site1, site2, orient);
@@ -86,7 +86,7 @@ TenElemT EvaluateBondEnergyFortJModel(
       // only hopping energy contribution
       return (-t) * ratio;
     } else {
-      // spin anti-parallel
+      // spin antiparallel
       // only spin interaction energy contribution
       return (-0.25 + ratio * 0.5 - int(has_nn_term) / 4.0) * J;
     }

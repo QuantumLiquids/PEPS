@@ -16,14 +16,8 @@
 
 using namespace qlten;
 using namespace qlpeps;
-
 using qlten::special_qn::U1QN;
-using IndexT = Index<U1QN>;
-using QNSctT = QNSector<U1QN>;
-using QNSctVecT = QNSectorVec<U1QN>;
-
-using DTensor = QLTensor<QLTEN_Double, U1QN>;
-using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
+using qlten::special_qn::Z2QN;
 
 using qlmps::CaseParamsParserBasic;
 
@@ -64,8 +58,89 @@ std::vector<MatrixElement<double>> GenerateTriElements(
   return tri_elements;
 }
 
+// XX + Z
+struct TransverseFieldIsing : public testing::Test {
+  using IndexT = Index<Z2QN>;
+  using QNSctT = QNSector<Z2QN>;
+  using QNSctVecT = QNSectorVec<Z2QN>;
+  using DTensor = QLTensor<QLTEN_Double, Z2QN>;
+
+  size_t Ly = 4;
+  size_t Lx = 4;
+
+  size_t h = 3.0;
+  // ED ground state energy = -50.186623882777752
+  Z2QN qn0 = Z2QN(0);
+
+  IndexT pb_out = IndexT({QNSctT(Z2QN(0), 1),
+                          QNSctT(Z2QN(1), 1)},
+                         TenIndexDirType::OUT
+  );
+  IndexT pb_in = InverseIndex(pb_out);
+  //sigma operators
+  DTensor xx_term = DTensor({pb_in, pb_out, pb_in, pb_out});
+  DTensor z_term = DTensor({pb_in, pb_out});
+  using PEPST = SquareLatticePEPS<QLTEN_Double, Z2QN>;
+  PEPST peps0 = PEPST(pb_out, Ly, Lx);
+  void SetUp(void) {
+    z_term({0, 0}) = 1.0 * h;
+    z_term({1, 1}) = -1.0 * h;
+
+    xx_term({0, 1, 0, 1}) = 1.0;
+    xx_term({1, 0, 1, 0}) = 1.0;
+    xx_term({1, 0, 0, 1}) = 1.0;
+    xx_term({0, 1, 1, 0}) = 1.0;
+
+    std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx, 1));
+    peps0.Initial(activates);
+  }
+};
+
+TEST_F(TransverseFieldIsing, SimpleUpdate) {
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+  // stage 1, D = 2
+  SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
+  SimpleUpdateExecutor<QLTEN_Double, Z2QN>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, Z2QN>(update_para, peps0,
+                                                                            xx_term,
+                                                                            z_term);
+  su_exe->Execute();
+
+  // stage 2, D = 4
+  su_exe->update_para.Dmax = 4;
+  su_exe->update_para.Trunc_err = 1e-10;
+  su_exe->ResetStepLenth(0.01); // call to re-evaluate the evolution gates
+  su_exe->Execute();
+  auto tps_d4 = TPS<QLTEN_Double, Z2QN>(su_exe->GetPEPS());
+  su_exe->DumpResult("peps_square_transverse_field_ising_D4", false);
+  tps_d4.Dump("tps_square_transverse_field_ising_D4");
+
+  // stage 3, D = 6
+  su_exe->update_para.Dmax = 6;
+  su_exe->update_para.Trunc_err = 1e-12;
+  su_exe->ResetStepLenth(0.001); // call to re-evaluate the evolution gates
+  su_exe->Execute();
+
+  // stage 4, D = 8
+  su_exe->update_para.Dmax = 8;
+  su_exe->update_para.Trunc_err = 1e-15;
+  su_exe->update_para.steps = 100;
+  su_exe->ResetStepLenth(0.0001);
+  su_exe->Execute();
+  auto tps_d8 = TPS<QLTEN_Double, Z2QN>(su_exe->GetPEPS());
+  su_exe->DumpResult("peps_square_transverse_field_ising_D8", true);
+  tps_d8.Dump("tps_square_transverse_field_ising_D8");
+  delete su_exe;
+}
+
 // Test spin systems
 struct SpinOneHalfSystemSimpleUpdate : public testing::Test {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using QNSctVecT = QNSectorVec<U1QN>;
+
+  using DTensor = QLTensor<QLTEN_Double, U1QN>;
+
   SystemSizeParams params = SystemSizeParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
