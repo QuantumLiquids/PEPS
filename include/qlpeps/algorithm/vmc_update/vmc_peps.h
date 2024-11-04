@@ -103,6 +103,8 @@ class VMCPEPSExecutor : public Executor {
   size_t CalcNaturalGradient_(const VMCPEPSExecutor::SITPST &grad, const SITPST &init_guess);
 
   std::vector<double> MCSweep_(void);
+
+  bool AcceptanceRateCheck(const std::vector<double> &) const;
   // Input Data Region
   const boost::mpi::communicator world_;
 

@@ -321,6 +321,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
     std::cout << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_calculation_time << "s"
               << "\n";
   }
+  AcceptanceRateCheck(accept_rates_avg);
   LineSearch_(*search_dir, optimize_para.step_lens);
 }
 
@@ -353,7 +354,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
     TenElemT en_self = Mean(energy_samples_); //energy value in each processor
     auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(world_));
     qlten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
-    if (world_.rank() == 0) {
+    if (world_.rank() == kMasterProc) {
       energy_trajectory_.push_back(energy);
       energy_error_traj_.push_back(en_err);
 
@@ -499,6 +500,7 @@ void VMCPEPSExecutor<TenElemT, QNT,
               << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << gradient_update_time << "s"
               << "\n";
   }
+  AcceptanceRateCheck(accept_rates_avg);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -817,6 +819,24 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Du
     DumpVecData(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
   }
 //  DumpVecData(tps_path + "/sum_configs" + std::to_string(world_.rank()), sum_configs_);
+}
+
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
+bool VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::AcceptanceRateCheck(
+    const std::vector<double> &accept_rate) const {
+  bool too_small = false;
+  for (size_t i = 0; i < accept_rate.size(); i++) {
+    // Find the global maximum across all processes
+    double global_max;
+    boost::mpi::all_reduce(world_, accept_rate[i], global_max, boost::mpi::maximum<double>());
+    if (accept_rate[i] < 0.5 * global_max) {
+      too_small = true;
+      std::cout << "Process " << world_.rank() << ": Acceptance rate[" << i
+                << "] = " << accept_rate[i] << " is too small compared to global max "
+                << global_max << std::endl;
+    }
+  }
+  return too_small;
 }
 
 }//qlpeps
