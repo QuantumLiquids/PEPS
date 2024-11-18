@@ -108,9 +108,7 @@ class SquareLatticePEPS {
   SquareLatticePEPS(const Index<QNT> &local_hilbert_space, size_t rows, size_t cols);
 
   // Copy constructor
-  SquareLatticePEPS(const SquareLatticePEPS<TenElemT, QNT> &rhs)
-      : rows_(rhs.rows_), cols_(rhs.cols_), Gamma(rhs.Gamma), lambda_vert(rhs.lambda_vert),
-        lambda_horiz(rhs.lambda_horiz) {}
+  SquareLatticePEPS(const SquareLatticePEPS<TenElemT, QNT> &rhs) = default;
 
   // Move constructor
   SquareLatticePEPS(SquareLatticePEPS<TenElemT, QNT> &&rhs) noexcept
@@ -118,16 +116,7 @@ class SquareLatticePEPS {
         lambda_horiz(std::move(rhs.lambda_horiz)) {}
 
   // Assignment operator
-  SquareLatticePEPS<TenElemT, QNT> &operator=(const SquareLatticePEPS<TenElemT, QNT> &rhs) {
-    if (this != &rhs) {
-      rows_ = rhs.rows_;
-      cols_ = rhs.cols_;
-      Gamma = rhs.Gamma;
-      lambda_vert = rhs.lambda_vert;
-      lambda_horiz = rhs.lambda_horiz;
-    }
-    return *this;
-  }
+  SquareLatticePEPS<TenElemT, QNT> &operator=(const SquareLatticePEPS<TenElemT, QNT> &rhs) = default;
 
   // Move assignment operator
   SquareLatticePEPS<TenElemT, QNT> &operator=(SquareLatticePEPS<TenElemT, QNT> &&rhs) noexcept {
@@ -164,13 +153,6 @@ class SquareLatticePEPS {
   bool IsBondDimensionEven(void) const;
 
   double NormalizeAllTensor(void);
-
-  // Projecting Gate Functions
-  double SingleSiteProject(
-      const TenT &gate_ten,
-      const SiteIdx &site,
-      const bool canonicalize
-  );
 
   ///< first two indexes of gate_ten are connected to PEPS's physical indexes
   ProjectionRes<TenElemT> NearestNeighborSiteProject(

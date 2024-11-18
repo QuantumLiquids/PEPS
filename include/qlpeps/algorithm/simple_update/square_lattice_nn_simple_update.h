@@ -9,8 +9,8 @@
  *             uniform nearest-neighbor interaction models in square lattice
 */
 
-#ifndef QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
-#define QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#ifndef QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#define QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
 
 #include "qlpeps/algorithm/simple_update/simple_update.h"
 
@@ -37,108 +37,28 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
                                       const PEPST &peps_initial,
                                       const Tensor &ham_nn,
                                       const Tensor &ham_onsite = Tensor()) :
-      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_nn_(ham_nn),
-      ham_on_site_(ham_onsite),
+      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_two_site_term_(ham_nn),
+      ham_one_site_term_(ham_onsite),
       horizontal_nn_ham_set_(this->ly_, this->lx_ - 1),
       vertical_nn_ham_set_(this->ly_ - 1, this->lx_),
       horizontal_nn_evolve_gate_set_(this->ly_, this->lx_ - 1),
       vertical_nn_evolve_gate_set_(this->ly_ - 1, this->lx_) {}
 
  private:
-  void SetEvolveGate_(void) override {
-    if (ham_on_site_.IsDefault()) {
-      Tensor evolve_gate_nn = TaylorExpMatrix(this->update_para.tau, ham_nn_);
-      for (auto &ten : horizontal_nn_ham_set_) {
-        ten = ham_nn_;
-      }
-      for (auto &ten : vertical_nn_ham_set_) {
-        ten = ham_nn_;
-      }
-      for (auto &ten : horizontal_nn_evolve_gate_set_) {
-        ten = evolve_gate_nn;
-      }
-      for (auto &ten : vertical_nn_evolve_gate_set_) {
-        ten = evolve_gate_nn;
-      }
-    } else {// transverse-field Ising, Hubbard model, t-J + chemical potential
-      //construct the on-site identity operator
-      Tensor id(ham_on_site_.GetIndexes());
-      if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() != OUT) {
-        std::cerr << "Index direction of on-site hamiltonian is unexpected." << std::endl;
-      }
-      for (size_t i = 0; i < id.GetShape()[0]; i++) {
-        id({i, i}) = 1.0;
-      }
-      if (Tensor::IsFermionic()) {
-        id.ActFermionPOps();
-      }
-      Tensor middle_ham = ConstructBondHamiltonian(0.25, 0.25, id);
-      Tensor middle_evolve_gate = ConstructEvolveOperator(0.25, 0.25, id);
-      for (size_t col = 0; col < this->lx_ - 1; col++) {
-        for (size_t row = 1; row < this->ly_ - 1; row++) {
-          horizontal_nn_evolve_gate_set_({row, col}) = middle_evolve_gate;
-          horizontal_nn_ham_set_({row, col}) = middle_ham;
-        }
-      }
-      for (size_t col = 1; col < this->lx_ - 1; col++) {
-        for (size_t row = 0; row < this->ly_ - 1; row++) {
-          vertical_nn_evolve_gate_set_({row, col}) = middle_evolve_gate;
-          vertical_nn_ham_set_({row, col}) = middle_ham;
-        }
-      }
-      Tensor edge_ham = ConstructBondHamiltonian(0.375, 0.375, id);
-      Tensor edge_evolve_gate = ConstructEvolveOperator(0.375, 0.375, id);
-      for (size_t col = 1; col < this->lx_ - 2; col++) {
-        horizontal_nn_evolve_gate_set_({0, col}) = edge_evolve_gate;
-        horizontal_nn_evolve_gate_set_({this->ly_ - 1, col}) = edge_evolve_gate;
-
-        horizontal_nn_ham_set_({0, col}) = edge_ham;
-        horizontal_nn_ham_set_({this->ly_ - 1, col}) = edge_ham;
-      }
-      for (size_t row = 1; row < this->ly_ - 2; row++) {
-        vertical_nn_evolve_gate_set_({row, 0}) = edge_evolve_gate;
-        vertical_nn_evolve_gate_set_({row, this->lx_ - 1}) = edge_evolve_gate;
-
-        vertical_nn_ham_set_({row, 0}) = edge_ham;
-        vertical_nn_ham_set_({row, this->lx_ - 1}) = edge_ham;
-      }
-
-      Tensor corner_ham = ConstructBondHamiltonian(0.5, 0.375, id);
-      Tensor corner_evolve_gate = ConstructEvolveOperator(0.5, 0.375, id);
-      horizontal_nn_evolve_gate_set_({0, 0}) = corner_evolve_gate;
-      vertical_nn_evolve_gate_set_({0, 0}) = corner_evolve_gate;
-      vertical_nn_evolve_gate_set_({0, this->lx_ - 1}) = corner_evolve_gate;
-      horizontal_nn_evolve_gate_set_({this->ly_ - 1, 0}) = corner_evolve_gate;
-      horizontal_nn_ham_set_({0, 0}) = corner_ham;
-      vertical_nn_ham_set_({0, 0}) = corner_ham;
-      vertical_nn_ham_set_({0, this->lx_ - 1}) = corner_ham;
-      horizontal_nn_ham_set_({this->ly_ - 1, 0}) = corner_ham;
-
-      corner_ham = ConstructBondHamiltonian(0.375, 0.5, id);
-      corner_evolve_gate = ConstructEvolveOperator(0.375, 0.5, id);
-      horizontal_nn_evolve_gate_set_({0, this->lx_ - 2}) = corner_evolve_gate;
-      vertical_nn_evolve_gate_set_({this->ly_ - 2, 0}) = corner_evolve_gate;
-      horizontal_nn_evolve_gate_set_({this->ly_ - 1, this->lx_ - 2}) = corner_evolve_gate;
-      vertical_nn_evolve_gate_set_({this->ly_ - 2, this->lx_ - 1}) = corner_evolve_gate;
-      horizontal_nn_ham_set_({0, this->lx_ - 2}) = corner_ham;
-      vertical_nn_ham_set_({this->ly_ - 2, 0}) = corner_ham;
-      horizontal_nn_ham_set_({this->ly_ - 1, this->lx_ - 2}) = corner_ham;
-      vertical_nn_ham_set_({this->ly_ - 2, this->lx_ - 1}) = corner_ham;
-    }
-  }
+  void SetEvolveGate_(void) override;
 
   /**
-   * @return h_ij = ham_nn_ + h1 * ham_on_site_ * id + h2 * id * ham_on_site_
+   * @return h_ij = ham_two_site_term_ + h1 * ham_one_site_term_ * id + h2 * id * ham_one_site_term_
    */
   Tensor ConstructBondHamiltonian(const TenElemT h1,
                                   const TenElemT h2,
                                   const Tensor &id) const {
     Tensor left, right;
-    Contract(&ham_on_site_, {}, &id, {}, &left);
+    Contract(&ham_one_site_term_, {}, &id, {}, &left);
     left *= h1;
-    Contract(&id, {}, &ham_on_site_, {}, &right);
+    Contract(&id, {}, &ham_one_site_term_, {}, &right);
     right *= h2;
-    return ham_nn_ + left + right;
+    return ham_two_site_term_ + left + right;
   }
 
   Tensor ConstructEvolveOperator(const TenElemT h1,
@@ -150,8 +70,8 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
 
   double SimpleUpdateSweep_(void) override;
 
-  Tensor ham_nn_; //bond term
-  Tensor ham_on_site_;  // on-site term
+  Tensor ham_two_site_term_; //bond term
+  Tensor ham_one_site_term_;  // on-site term
 
   TenMatrix<Tensor> horizontal_nn_ham_set_;
   TenMatrix<Tensor> vertical_nn_ham_set_;
@@ -159,6 +79,89 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
   TenMatrix<Tensor> horizontal_nn_evolve_gate_set_;
   TenMatrix<Tensor> vertical_nn_evolve_gate_set_;
 };
+
+template<typename TenElemT, typename QNT>
+void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
+  if (ham_one_site_term_.IsDefault()) {
+    Tensor evolve_gate_nn = TaylorExpMatrix(this->update_para.tau, ham_two_site_term_);
+    for (auto &ten : horizontal_nn_ham_set_) {
+      ten = ham_two_site_term_;
+    }
+    for (auto &ten : vertical_nn_ham_set_) {
+      ten = ham_two_site_term_;
+    }
+    for (auto &ten : horizontal_nn_evolve_gate_set_) {
+      ten = evolve_gate_nn;
+    }
+    for (auto &ten : vertical_nn_evolve_gate_set_) {
+      ten = evolve_gate_nn;
+    }
+  } else {// transverse-field Ising, Hubbard model, t-J + chemical potential
+    //construct the on-site identity operator
+    Tensor id(ham_one_site_term_.GetIndexes());
+    if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() != OUT) {
+      std::cerr << "Index direction of on-site hamiltonian is unexpected." << std::endl;
+    }
+    for (size_t i = 0; i < id.GetShape()[0]; i++) {
+      id({i, i}) = 1.0;
+    }
+    if (Tensor::IsFermionic()) {
+      id.ActFermionPOps();
+    }
+    Tensor middle_ham = ConstructBondHamiltonian(0.25, 0.25, id);
+    Tensor middle_evolve_gate = ConstructEvolveOperator(0.25, 0.25, id);
+    for (size_t col = 0; col < this->lx_ - 1; col++) {
+      for (size_t row = 1; row < this->ly_ - 1; row++) {
+        horizontal_nn_evolve_gate_set_({row, col}) = middle_evolve_gate;
+        horizontal_nn_ham_set_({row, col}) = middle_ham;
+      }
+    }
+    for (size_t col = 1; col < this->lx_ - 1; col++) {
+      for (size_t row = 0; row < this->ly_ - 1; row++) {
+        vertical_nn_evolve_gate_set_({row, col}) = middle_evolve_gate;
+        vertical_nn_ham_set_({row, col}) = middle_ham;
+      }
+    }
+    Tensor edge_ham = ConstructBondHamiltonian(0.375, 0.375, id);
+    Tensor edge_evolve_gate = ConstructEvolveOperator(0.375, 0.375, id);
+    for (size_t col = 1; col < this->lx_ - 2; col++) {
+      horizontal_nn_evolve_gate_set_({0, col}) = edge_evolve_gate;
+      horizontal_nn_evolve_gate_set_({this->ly_ - 1, col}) = edge_evolve_gate;
+
+      horizontal_nn_ham_set_({0, col}) = edge_ham;
+      horizontal_nn_ham_set_({this->ly_ - 1, col}) = edge_ham;
+    }
+    for (size_t row = 1; row < this->ly_ - 2; row++) {
+      vertical_nn_evolve_gate_set_({row, 0}) = edge_evolve_gate;
+      vertical_nn_evolve_gate_set_({row, this->lx_ - 1}) = edge_evolve_gate;
+
+      vertical_nn_ham_set_({row, 0}) = edge_ham;
+      vertical_nn_ham_set_({row, this->lx_ - 1}) = edge_ham;
+    }
+
+    Tensor corner_ham = ConstructBondHamiltonian(0.5, 0.375, id);
+    Tensor corner_evolve_gate = ConstructEvolveOperator(0.5, 0.375, id);
+    horizontal_nn_evolve_gate_set_({0, 0}) = corner_evolve_gate;
+    vertical_nn_evolve_gate_set_({0, 0}) = corner_evolve_gate;
+    vertical_nn_evolve_gate_set_({0, this->lx_ - 1}) = corner_evolve_gate;
+    horizontal_nn_evolve_gate_set_({this->ly_ - 1, 0}) = corner_evolve_gate;
+    horizontal_nn_ham_set_({0, 0}) = corner_ham;
+    vertical_nn_ham_set_({0, 0}) = corner_ham;
+    vertical_nn_ham_set_({0, this->lx_ - 1}) = corner_ham;
+    horizontal_nn_ham_set_({this->ly_ - 1, 0}) = corner_ham;
+
+    corner_ham = ConstructBondHamiltonian(0.375, 0.5, id);
+    corner_evolve_gate = ConstructEvolveOperator(0.375, 0.5, id);
+    horizontal_nn_evolve_gate_set_({0, this->lx_ - 2}) = corner_evolve_gate;
+    vertical_nn_evolve_gate_set_({this->ly_ - 2, 0}) = corner_evolve_gate;
+    horizontal_nn_evolve_gate_set_({this->ly_ - 1, this->lx_ - 2}) = corner_evolve_gate;
+    vertical_nn_evolve_gate_set_({this->ly_ - 2, this->lx_ - 1}) = corner_evolve_gate;
+    horizontal_nn_ham_set_({0, this->lx_ - 2}) = corner_ham;
+    vertical_nn_ham_set_({this->ly_ - 2, 0}) = corner_ham;
+    horizontal_nn_ham_set_({this->ly_ - 1, this->lx_ - 2}) = corner_ham;
+    vertical_nn_ham_set_({this->ly_ - 2, this->lx_ - 1}) = corner_ham;
+  }
+}
 
 template<typename TenElemT, typename QNT>
 double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
@@ -223,4 +226,4 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
 }
 }
 
-#endif //QLPEPS_VMC_PEPS_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
+#endif //QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H

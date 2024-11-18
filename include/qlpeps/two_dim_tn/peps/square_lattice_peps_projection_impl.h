@@ -18,49 +18,6 @@ using namespace qlten;
 using qlmps::mock_qlten::SVD;
 
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::SingleSiteProject(const SquareLatticePEPS::TenT &gate_ten,
-                                                           const SiteIdx &site,
-                                                           const bool canonicalize) {
-
-  TenT tmp_ten;
-  Contract<TenElemT, QNT, true, true>(Gamma(site), gate_ten, 4, 0, 1, tmp_ten);
-  Gamma(site) = std::move(tmp_ten);
-  if (!canonicalize) {
-    return 1.0;
-  } else {
-    std::cout << "todo code. After high-order SVD." << std::endl;
-    return 1.0;
-  }
-  /*
-  size_t row = site.row(), col = site.col();
-  TenT eaten_lam_ten = EatSurroundLambdas_(site);
-  TenT tmp_tens[5];
-  TenT u, vt;
-  DTensor *s = new DTensor();
-  SVD(&tmp_ten, 1, qn0_, &u, s, &vt);
-  if (col != 0) {
-    Contract(&Gamma({row, col - 1}), 2, &u, 0, &tmp_tens[0]);
-    tmp_ten[0].Transpose({0, 1, 4, 2, 3});
-    Gamma({row, col - 1}) = std::move(tmp_ten[0]);
-  }
-  delete lambda_horiz(row, col);
-  lambda_horiz(row, col) = s;
-  Contract<TenElemT, QNT, false, false>(vt, *s, 0, 1, 1, tmp_ten[2]);
-
-  s = new DTensor();
-  u = TenT();
-  vt = TenT();
-  SVD(tmp_ten[2], 1, qn0_, &u, s, &vt);
-  if (row != this->Rows() - 1) {
-    Contract(&Gamma({row + 1, col}), 3, &u, 0, &tmp_ten[3]);
-    tmp_ten[3].Transpose({0, 1, 2, 4, 3});
-    Gamma({row + 1, col}) = std::move(tmp_ten[1]);
-  }
-
-  return 1;
-   */
-}
-template<typename TenElemT, typename QNT>
 TenElemT EvaluateTwoSiteEnergy(const QLTensor<TenElemT, QNT> &ham,
                                const QLTensor<TenElemT, QNT> &state) {
   using TenT = QLTensor<TenElemT, QNT>;

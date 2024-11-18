@@ -17,5 +17,6 @@
 //fermion models
 #include "square_spinless_free_fermion.h"
 #include "square_tJ_model.h"
+#include "square_hubbard_model.h"
 
 #endif //QLPEPS_ALGORITHM_VMC_PEPS_MODEL_SOLVERS_BUILD_IN_MODEL_SOLVERS_ALL_H

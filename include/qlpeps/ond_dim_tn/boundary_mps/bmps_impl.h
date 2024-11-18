@@ -264,8 +264,7 @@ std::vector<double> BMPS<TenElemT, QNT>::GetEntanglementEntropy(size_t
 // note above formula must be in form of n-1 rather 1-n because of n is type of size_t
     }
   }
-  return
-      ee_list;
+  return ee_list;
 }
 
 template<typename TenElemT, typename QNT>
