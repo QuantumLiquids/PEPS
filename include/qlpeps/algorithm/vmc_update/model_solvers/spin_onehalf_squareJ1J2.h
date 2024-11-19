@@ -82,7 +82,7 @@ ObservablesLocal<TenElemT> SpinOneHalfJ1J2HeisenbergSquare<TenElemT, QNT>::Sampl
   res.bond_energys_loc.reserve(tn.rows() * tn.cols() * 4);
   res.two_point_functions_loc.reserve(tn.cols() / 2 * 3);
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para;
+  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   std::vector<TenElemT> psi_gather;
