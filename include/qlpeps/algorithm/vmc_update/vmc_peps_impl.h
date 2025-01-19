@@ -32,25 +32,28 @@ QLTensor<TenElemT, QNT> Mean(const std::vector<QLTensor<TenElemT, QNT> *> &tenso
 
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> MPIMeanTensor(const QLTensor<TenElemT, QNT> &tensor,
-                                      const boost::mpi::communicator &world) {
+                                      const MPI_Comm &comm) {
   using Tensor = QLTensor<TenElemT, QNT>;
-  if (world.rank() == kMasterProc) {
-    std::vector<Tensor *> ten_list(world.size(), nullptr);
-    for (size_t proc = 0; proc < world.size(); proc++) {
-      if (proc != kMasterProc) {
+  int rank, mpi_size;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &mpi_size);
+  if (rank == kMPIMasterRank) {
+    std::vector<Tensor *> ten_list(mpi_size, nullptr);
+    for (size_t proc = 0; proc < mpi_size; proc++) {
+      if (proc != kMPIMasterRank) {
         ten_list[proc] = new Tensor();
-        recv_qlten(world, proc, 2 * proc, *ten_list[proc]);
+        ten_list[proc]->MPI_Recv(proc, 2 * proc, comm);
       } else {
         ten_list[proc] = new Tensor(tensor);
       }
     }
-    Tensor res = Mean(ten_list, world.size());
+    Tensor res = Mean(ten_list, mpi_size);
     for (auto pten : ten_list) {
       delete pten;
     }
     return res;
   } else {
-    send_qlten(world, kMasterProc, 2 * world.rank(), tensor);
+    tensor.MPI_Send(kMPIMasterRank, 2 * rank, comm);
     return Tensor();
   }
 }
@@ -61,11 +64,11 @@ VMCPEPSExecutor<TenElemT,
                 WaveFunctionComponentType,
                 EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                                                const TPST &tps_init,
-                                               const boost::mpi::communicator &world,
+                                               const MPI_Comm &comm,
                                                const EnergySolver &solver) :
     VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>(optimize_para,
                                                                             SITPST(tps_init),
-                                                                            world,
+                                                                            comm,
                                                                             solver) {}
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -74,10 +77,10 @@ VMCPEPSExecutor<TenElemT,
                 WaveFunctionComponentType,
                 EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                                                const SITPST &sitpst_init,
-                                               const boost::mpi::communicator &world,
+                                               const MPI_Comm &comm,
                                                const EnergySolver &solver) :
     optimize_para(optimize_para),
-    world_(world),
+    comm_(comm),
     lx_(sitpst_init.cols()),
     ly_(sitpst_init.rows()),
     energy_solver_(solver),
@@ -91,7 +94,9 @@ VMCPEPSExecutor<TenElemT,
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
-  random_engine.seed(std::random_device{}() + 10086 * world.rank());
+  MPI_Comm_rank(comm_, &rank_);
+  MPI_Comm_size(comm_, &mpi_size_);
+  random_engine.seed(std::random_device{}() + 10086 * rank_);
   WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
   tps_sample_ = WaveFunctionComponentType(sitpst_init, optimize_para.init_config);
   if (std::find(stochastic_reconfiguration_method.cbegin(),
@@ -114,10 +119,10 @@ VMCPEPSExecutor<TenElemT,
                 WaveFunctionComponentType,
                 EnergySolver>::VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                                                const size_t ly, const size_t lx,
-                                               const boost::mpi::communicator &world,
+                                               const MPI_Comm &comm,
                                                const EnergySolver &solver):
     optimize_para(optimize_para),
-    world_(world), lx_(lx), ly_(ly),
+    comm_(comm), lx_(lx), ly_(ly),
     energy_solver_(solver),
     split_index_tps_(ly, lx),
     warm_up_(false),
@@ -128,8 +133,10 @@ VMCPEPSExecutor<TenElemT,
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
+  MPI_Comm_rank(comm_, &rank_);
+  MPI_Comm_size(comm_, &mpi_size_);
   WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
-  random_engine.seed(std::random_device{}() + 10086 * world.rank());
+  random_engine.seed(std::random_device{}() + 10086 * rank_);
   if (std::find(stochastic_reconfiguration_method.cbegin(),
                 stochastic_reconfiguration_method.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
@@ -184,12 +191,12 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Re
       size_t dim = split_index_tps_({row, col}).size();
       grad_({row, col}) = std::vector<Tensor>(dim);
     }
-  if (world_.rank() == 0) {
+  if (rank_ == 0) {
     energy_trajectory_.reserve(optimize_para.step_lens.size());
     energy_error_traj_.reserve(optimize_para.step_lens.size());
   }
 
-  if (world_.rank() == kMasterProc)
+  if (rank_ == kMPIMasterRank)
     grad_norm_.reserve(optimize_para.step_lens.size());
 
   if (stochastic_reconfiguration_update_class_) {
@@ -204,7 +211,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Re
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::PrintExecutorInfo_(void) {
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     const size_t indent = 40;
     std::cout << std::left;
     std::cout << "\n";
@@ -232,7 +239,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Pr
                 << "\n";
     }
     std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
-    std::cout << std::setw(indent) << "The number of processors (including master):" << world_.size() << "\n";
+    std::cout << std::setw(indent) << "The number of processors (including master):" << mpi_size_ << "\n";
     std::cout << std::setw(indent) << "The number of threads per processor:"
               << hp_numeric::GetTensorManipulationThreads()
               << "\n";
@@ -247,7 +254,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Wa
       MCSweep_();
     }
     double elasp_time = warm_up_timer.Elapsed();
-    std::cout << "Proc " << std::setw(4) << world_.rank() << " warm up completes T = " << elasp_time << "s."
+    std::cout << "Proc " << std::setw(4) << rank_ << " warm up completes T = " << elasp_time << "s."
               << std::endl;
     warm_up_ = true;
   }
@@ -281,14 +288,14 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
   SITPST *search_dir(nullptr);
   switch (optimize_para.update_scheme) {
     case GradientLineSearch: {
-      if (world_.rank() == kMasterProc)
+      if (rank_ == kMPIMasterRank)
         search_dir = &grad_;
       break;
     }
     case NaturalGradientLineSearch: {
       auto init_guess = SITPST(ly_, lx_, split_index_tps_.PhysicalDim());
       cgsolver_iter = CalcNaturalGradient_(grad_, init_guess);
-      if (world_.rank() == kMasterProc) {
+      if (rank_ == kMPIMasterRank) {
         search_dir = &natural_grad_;
         sr_natural_grad_norm = natural_grad_.NormSquare();
       }
@@ -300,7 +307,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
     }
   }
 
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     double gradient_calculation_time = grad_calculation_timer.Elapsed();
     std::cout << "Initial Search Direction Calculation :\n"
               << "E0 = " << std::setw(14 * sizeof(TenElemT) / sizeof(double)) << std::fixed
@@ -330,7 +337,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
                                                                                                               QNT> &search_dir,
                                                                                           const std::vector<double> &strides) {
 
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     en_min_ = Real(energy_trajectory_[0]);
   }
   tps_lowest_ = split_index_tps_;
@@ -352,9 +359,9 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
       SampleEnergy_();
     }
     TenElemT en_self = Mean(energy_samples_); //energy value in each processor
-    auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(world_));
-    qlten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
-    if (world_.rank() == kMasterProc) {
+    auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(comm_));
+    qlten::hp_numeric::MPI_Bcast(&energy, 1, kMPIMasterRank, MPI_Comm(comm_));
+    if (rank_ == kMPIMasterRank) {
       energy_trajectory_.push_back(energy);
       energy_error_traj_.push_back(en_err);
 
@@ -385,7 +392,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
                 << std::endl;
     }
   }
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     split_index_tps_ = tps_lowest_;
   }
 }
@@ -423,7 +430,7 @@ void VMCPEPSExecutor<TenElemT, QNT,
   TenElemT en_step;
   std::tie(en_step, std::ignore) = GatherStatisticEnergyAndGrad_();
 
-  if (world_.rank() == kMasterProc && en_min_ > Real(en_step)) {
+  if (rank_ == kMPIMasterRank && en_min_ > Real(en_step)) {
     en_min_ = Real(en_step);
     tps_lowest_ = split_index_tps_;
   }
@@ -477,7 +484,7 @@ void VMCPEPSExecutor<TenElemT, QNT,
 
   double tps_update_time = tps_update_timer.Elapsed();
 
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     double gradient_update_time = grad_update_timer.Elapsed();
     std::cout << "Iter " << std::setw(4) << iter
               << "Alpha = " << std::setw(9) << std::scientific << std::setprecision(1) << step_len
@@ -606,9 +613,9 @@ template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, ty
 std::pair<TenElemT, SplitIndexTPS<TenElemT, QNT>>
 VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GatherStatisticEnergyAndGrad_(void) {
   TenElemT en_self = Mean(energy_samples_); //energy value in each processor
-  auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(world_));
-  qlten::hp_numeric::MPI_Bcast(&energy, 1, kMasterProc, MPI_Comm(world_));
-  if (world_.rank() == 0) {
+  auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(comm_));
+  qlten::hp_numeric::MPI_Bcast(&energy, 1, kMPIMasterRank, MPI_Comm(comm_));
+  if (rank_ == kMPIMasterRank) {
     energy_trajectory_.push_back(energy);
     energy_error_traj_.push_back(en_err);
   }
@@ -623,16 +630,16 @@ VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GatherS
       const size_t phy_dim = grad_({row, col}).size();
       for (size_t compt = 0; compt < phy_dim; compt++) {
         // gather and estimate grad in master (and maybe the error bar of grad)
-        grad_({row, col})[compt] = MPIMeanTensor(grad_({row, col})[compt], world_);
+        grad_({row, col})[compt] = MPIMeanTensor(grad_({row, col})[compt], comm_);
         // note here the grad data except in master are clear
         if (stochastic_reconfiguration_update_class_) {
-          gten_ave_({row, col})[compt] = MPIMeanTensor(gten_ave_({row, col})[compt], world_);
+          gten_ave_({row, col})[compt] = MPIMeanTensor(gten_ave_({row, col})[compt], comm_);
         }
       }
     }
   }
   grad_.ActFermionPOps();
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     grad_norm_.push_back(grad_.NormSquare());
   }
   //do not broadcast because only broadcast the updated TPS
@@ -652,11 +659,11 @@ void VMCPEPSExecutor<TenElemT,
                      WaveFunctionComponentType,
                      EnergySolver>::UpdateTPSByVecAndSynchronize_(const VMCPEPSExecutor::SITPST &grad,
                                                                   double step_len) {
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     split_index_tps_ += (-step_len) * grad;
     NormalizeTPS_();
   }
-  BroadCast(split_index_tps_, world_);
+  BroadCast(split_index_tps_, comm_);
   Configuration config = tps_sample_.config;
   tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
 }
@@ -666,31 +673,19 @@ void VMCPEPSExecutor<TenElemT, QNT,
                      WaveFunctionComponentType,
                      EnergySolver>::BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad,
                                                                double step_len) {
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     for (size_t row = 0; row < ly_; row++)
       for (size_t col = 0; col < lx_; col++) {
         const size_t phy_dim = grad_({row, col}).size();
-        double norm = 0;
         for (size_t compt = 0; compt < phy_dim; compt++) {
           Tensor &grad_ten = grad({row, col})[compt];
           grad_ten.ElementWiseBoundTo(step_len);
           split_index_tps_({row, col})[compt] += (-step_len) * grad_ten;
         }
-        NormalizeTPS_();
-        for (size_t compt = 0; compt < phy_dim; compt++) {
-          SendBroadCastQLTensor(world_, split_index_tps_({row, col})[compt], kMasterProc);
-        }
       }
-  } else {
-    for (size_t row = 0; row < ly_; row++)
-      for (size_t col = 0; col < lx_; col++) {
-        const size_t phy_dim = grad_({row, col}).size();
-        for (size_t compt = 0; compt < phy_dim; compt++) {
-          split_index_tps_({row, col})[compt] = Tensor();
-          RecvBroadCastQLTensor(world_, split_index_tps_({row, col})[compt], kMasterProc);
-        }
-      }
+    NormalizeTPS_();
   }
+  BroadCast(split_index_tps_, comm_);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -722,11 +717,11 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
     const VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::SITPST &grad,
     const SITPST &init_guess) {
   SITPST *pgten_ave_(nullptr);
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     pgten_ave_ = &gten_ave_;
   }
   const ConjugateGradientParams &cg_params = optimize_para.cg_params.value();
-  SRSMatrix s_matrix(&gten_samples_, pgten_ave_, world_.size());
+  SRSMatrix s_matrix(&gten_samples_, pgten_ave_, mpi_size_);
   s_matrix.diag_shift = cg_params.diag_shift;
   size_t cgsolver_iter;
   if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
@@ -734,12 +729,12 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
     signed_grad.ActFermionPOps();   // Act back
     natural_grad_ = ConjugateGradientSolver(s_matrix, signed_grad, init_guess,
                                             cg_params.max_iter, cg_params.tolerance,
-                                            cg_params.residue_restart_step, cgsolver_iter, world_);
+                                            cg_params.residue_restart_step, cgsolver_iter, comm_);
     natural_grad_.ActFermionPOps(); // question: why works?
   } else {
     natural_grad_ = ConjugateGradientSolver(s_matrix, grad, init_guess,
                                             cg_params.max_iter, cg_params.tolerance,
-                                            cg_params.residue_restart_step, cgsolver_iter, world_);
+                                            cg_params.residue_restart_step, cgsolver_iter, comm_);
   }
 
   return cgsolver_iter;
@@ -747,7 +742,7 @@ size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::GradientRandElementSign_() {
-  if (world_.rank() == kMasterProc)
+  if (rank_ == kMPIMasterRank)
     for (size_t row = 0; row < ly_; row++) {
       for (size_t col = 0; col < lx_; col++) {
         size_t dim = split_index_tps_({row, col}).size();
@@ -782,12 +777,12 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Lo
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::InitConfigs_(const std::string &path) {
   Configuration config(ly_, lx_);
-  bool load_config = config.Load(path, world_.rank());
+  bool load_config = config.Load(path, rank_);
   if (load_config) {
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
     warm_up_ = true;
   } else {
-    std::cout << "Loading configuration in rank " << world_.rank()
+    std::cout << "Loading configuration in rank " << rank_
               << " fails. Use preset configuration and random warm up."
               << std::endl;
     tps_sample_ = WaveFunctionComponentType(split_index_tps_, optimize_para.init_config);
@@ -804,36 +799,40 @@ template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, ty
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::DumpData(const std::string &tps_path,
                                                                                        const bool release_mem) {
   std::string energy_data_path = "./energy";
-  if (world_.rank() == kMasterProc) {
+  if (rank_ == kMPIMasterRank) {
     split_index_tps_.Dump(tps_path, release_mem);
     tps_lowest_.Dump(tps_path + "lowest", release_mem);
     if (!qlmps::IsPathExist(energy_data_path)) {
       qlmps::CreatPath(energy_data_path);
     }
   }
-  world_.barrier(); // configurations dump will collapse when creating path if there is no barrier.
-  tps_sample_.config.Dump(tps_path, world_.rank());
-  DumpVecData(energy_data_path + "/energy_sample" + std::to_string(world_.rank()), energy_samples_);
-  if (world_.rank() == kMasterProc) {
+  MPI_Barrier(comm_); // configurations dump will collapse when creating path if there is no barrier.
+  tps_sample_.config.Dump(tps_path, rank_);
+  DumpVecData(energy_data_path + "/energy_sample" + std::to_string(rank_), energy_samples_);
+  if (rank_ == kMPIMasterRank) {
     DumpVecData(energy_data_path + "/energy_trajectory", energy_trajectory_);
     DumpVecData(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
   }
-//  DumpVecData(tps_path + "/sum_configs" + std::to_string(world_.rank()), sum_configs_);
+//  DumpVecData(tps_path + "/sum_configs" + std::to_string(rank_), sum_configs_);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 bool VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::AcceptanceRateCheck(
     const std::vector<double> &accept_rate) const {
   bool too_small = false;
+  std::vector<double> global_max(accept_rate.size());
+  HANDLE_MPI_ERROR(::MPI_Allreduce(accept_rate.data(),
+                                   global_max.data(),
+                                   accept_rate.size(),
+                                   MPI_DOUBLE,
+                                   MPI_MAX,
+                                   comm_));
   for (size_t i = 0; i < accept_rate.size(); i++) {
-    // Find the global maximum across all processes
-    double global_max;
-    boost::mpi::all_reduce(world_, accept_rate[i], global_max, boost::mpi::maximum<double>());
-    if (accept_rate[i] < 0.5 * global_max) {
+    if (accept_rate[i] < 0.5 * global_max[i]) { //anomaly case
       too_small = true;
-      std::cout << "Process " << world_.rank() << ": Acceptance rate[" << i
+      std::cout << "Process " << rank_ << ": Acceptance rate[" << i
                 << "] = " << accept_rate[i] << " is too small compared to global max "
-                << global_max << std::endl;
+                << global_max[i] << std::endl;
     }
   }
   return too_small;

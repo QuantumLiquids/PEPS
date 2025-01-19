@@ -36,7 +36,7 @@ class SRSMatrix {
       res += (*gten_samples_)[i] * ((*gten_samples_)[i] * v0);
     }
     res *= 1.0 / double(gten_samples_->size() * world_size_);
-    if (gten_ave_ != nullptr) { //kMasterProc
+    if (gten_ave_ != nullptr) { //kMPIMasterRank
       res += (-((*gten_ave_) * v0)) * (*gten_ave_);
       if (diag_shift != 0.0) {
         res += (diag_shift * v0);

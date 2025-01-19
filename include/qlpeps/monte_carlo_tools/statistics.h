@@ -11,13 +11,11 @@
 #include <vector>
 #include <fstream>
 #include <algorithm>
-
-#include "boost/mpi.hpp"
-#include "boost/serialization/complex.hpp"
-#include "qlpeps/consts.h"      //kMasterProc
+#include "qlten/framework/hp_numeric/mpi_fun.h"
+#include "qlpeps/consts.h"                        //kMPIMasterRank
 
 namespace qlpeps {
-using namespace boost::mpi;
+using namespace qlten;
 
 template<typename DataType>
 void DumpVecData(
@@ -101,11 +99,11 @@ std::vector<T> AveListOfData(
   return ave;
 }
 
-///< only rank 0 obatained the result.
+///< only rank 0 obtained the result.
 template<typename ElemT>
 std::pair<ElemT, double> GatherStatisticSingleData(
     ElemT data,
-    MPI_Comm comm) {
+    const MPI_Comm &comm) {
   int comm_rank, comm_size;
   MPI_Comm_rank(comm, &comm_rank);
   MPI_Comm_size(comm, &comm_size);
@@ -116,23 +114,19 @@ std::pair<ElemT, double> GatherStatisticSingleData(
   double standard_err(0);
 
   ElemT *gather_data;
-  if (comm_rank == kMasterProc) {
+  if (comm_rank == kMPIMasterRank) {
     gather_data = new ElemT[comm_size];
   }
-  if (sizeof(ElemT) == sizeof(double)) {
-    int err_msg = ::MPI_Gather((void *) &data, 1, MPI_DOUBLE, (void *) gather_data, 1, MPI_DOUBLE, kMasterProc, comm);
-  } else if (sizeof(ElemT) == sizeof(std::complex<double>)) {
-    int err_msg = ::MPI_Gather((void *) &data,
-                               1,
-                               MPI_DOUBLE_COMPLEX,
-                               (void *) gather_data,
-                               1,
-                               MPI_DOUBLE_COMPLEX,
-                               kMasterProc,
-                               comm);
-  }
+  HANDLE_MPI_ERROR(::MPI_Gather(&data,
+                                1,
+                                hp_numeric::GetMPIDataType<ElemT>(),
+                                (void *) gather_data,
+                                1,
+                                hp_numeric::GetMPIDataType<ElemT>(),
+                                kMPIMasterRank,
+                                comm));
 
-  if (comm_rank == kMasterProc) {
+  if (comm_rank == kMPIMasterRank) {
     ElemT sum = 0.0;
     for (size_t i = 0; i < comm_size; i++) {
       sum += gather_data[i];
@@ -153,8 +147,8 @@ std::pair<ElemT, double> GatherStatisticSingleData(
 
 template<typename ElemT>
 void GatherStatisticListOfData(
-    std::vector<ElemT> data,
-    const boost::mpi::communicator &world,
+    const std::vector<ElemT> data,
+    const MPI_Comm &comm,
     std::vector<ElemT> &avg, //output
     std::vector<double> &std_err//output
 ) {
@@ -164,16 +158,29 @@ void GatherStatisticListOfData(
     std_err = std::vector<double>();
     return;
   }
-  const size_t world_size = world.size();
+  int rank, mpi_size;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &mpi_size);
+  const size_t world_size = mpi_size;
   if (world_size == 1) {
     avg = data;
     std_err = std::vector<double>();
     return;
   }
-  std::vector<ElemT> all_data(world_size * data_size);
-  boost::mpi::gather(world, data.data(), data_size, all_data.data(), kMasterProc);
+  std::vector<ElemT> all_data;
+  if (rank == kMPIMasterRank) {
+    all_data.resize(world_size * data_size);
+  }
+  HANDLE_MPI_ERROR(::MPI_Gather(data.data(),
+                                data_size,
+                                hp_numeric::GetMPIDataType<ElemT>(),
+                                rank == kMPIMasterRank ? all_data.data() : nullptr,
+                                data_size,
+                                hp_numeric::GetMPIDataType<ElemT>(),
+                                kMPIMasterRank,
+                                comm));
 
-  if (world.rank() == kMasterProc) {
+  if (rank == kMPIMasterRank) {
     std::vector<std::vector<ElemT>> data_gather_transposed(data_size, std::vector<ElemT>(world_size));
     for (size_t i = 0; i < world_size; i++) {
       for (size_t j = 0; j < data_size; j++) {

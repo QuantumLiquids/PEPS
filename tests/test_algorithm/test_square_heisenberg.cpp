@@ -189,12 +189,14 @@ struct SpinSystemVMCPEPS : public testing::Test {
   ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
   ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
 
-  boost::mpi::communicator world;
-
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
   void SetUp(size_t L) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
 
@@ -255,7 +257,7 @@ TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
   executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para, tps,
-                                                                           world);
+                                                                           comm);
   executor->Execute();
   size_t end_flop = flop;
   double elapsed_time = vmc_timer.Elapsed();
@@ -287,7 +289,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
   if (qlmps::IsPathExist(optimize_para.wavefunction_path)) {
     executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para,
                                                                              Ly, Lx,
-                                                                             world);
+                                                                             comm);
   } else {
     TPS<QLTEN_Double, U1QN> tps = TPS<QLTEN_Double, U1QN>(Ly, Lx);
     std::string tps_path = "Hei_TPS" + std::to_string(Ly) + "x"
@@ -297,16 +299,18 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
       exit(-2);
     };
     executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para, tps,
-                                                                             world);
+                                                                             comm);
   }
   executor->Execute();
   delete executor;
 }
 
 int main(int argc, char *argv[]) {
-  boost::mpi::environment env;
+  MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   L = atoi(argv[1]);
   hp_numeric::SetTensorManipulationThreads(1);
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
+  MPI_Finalize();
+  return test_err;
 }

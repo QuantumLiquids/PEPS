@@ -10,8 +10,6 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 
-#include "boost/mpi.hpp"                            //boost::mpi
-
 #include "qlpeps/two_dim_tn/tps/tps.h"              // TPS
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
 
@@ -38,18 +36,18 @@ class VMCPEPSExecutor : public Executor {
 
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                   const TPST &tps_init,
-                  const boost::mpi::communicator &world,
+                  const MPI_Comm &comm,
                   const EnergySolver &solver = EnergySolver());
 
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                   const SITPST &sitpst_init,
-                  const boost::mpi::communicator &world,
+                  const MPI_Comm &comm,
                   const EnergySolver &solver = EnergySolver());
 
   //Load Data from path
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                   const size_t ly, const size_t lx,
-                  const boost::mpi::communicator &world,
+                  const MPI_Comm &comm,
                   const EnergySolver &solver = EnergySolver());
 
   void Execute(void) override;
@@ -106,7 +104,9 @@ class VMCPEPSExecutor : public Executor {
 
   bool AcceptanceRateCheck(const std::vector<double> &) const;
   // Input Data Region
-  const boost::mpi::communicator world_;
+  const MPI_Comm comm_;
+  int rank_;
+  int mpi_size_;
 
   size_t lx_; //cols
   size_t ly_; //rows

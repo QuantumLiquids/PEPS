@@ -10,6 +10,7 @@
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/qlpeps.h"
+#include "../test_mpi_env.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -85,11 +86,14 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
                       ConjugateGradientParams(100, 1e-4, 20, 0.01));
 
   std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";
-  boost::mpi::communicator world;
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
 
@@ -108,7 +112,7 @@ TEST_F(Z2SpinlessFreeFermionTools, VariationalMonteCarloUpdate) {
   if (file_params.Continue_from_VMC) {
     executor = new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                  Ly, Lx,
-                                                                                 world,
+                                                                                 comm,
                                                                                  spinless_fermion_solver);
 
   } else {
@@ -120,7 +124,7 @@ TEST_F(Z2SpinlessFreeFermionTools, VariationalMonteCarloUpdate) {
     executor =
         new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                           sitps,
-                                                                          world,
+                                                                          comm,
                                                                           spinless_fermion_solver);
 
   }
@@ -162,11 +166,14 @@ struct Z2tJModelTools : public testing::Test {
                       ConjugateGradientParams(100, 1e-4, 20, 0.01));
 
   std::string simple_update_peps_path = "peps_tj_doping0.125";
-  boost::mpi::communicator world;
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
 
@@ -185,7 +192,7 @@ TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
   if (file_params.Continue_from_VMC) {
     executor = new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                                  Ly, Lx,
-                                                                                 world,
+                                                                                 comm,
                                                                                  tj_solver);
 
   } else {
@@ -197,7 +204,7 @@ TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
     executor =
         new VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(optimize_para,
                                                                           sitps,
-                                                                          world,
+                                                                          comm,
                                                                           tj_solver);
 
   }
@@ -206,9 +213,8 @@ TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
 }
 
 int main(int argc, char *argv[]) {
-  boost::mpi::environment env;
   testing::InitGoogleTest(&argc, argv);
-  std::cout << argc << std::endl;
+  ::testing::AddGlobalTestEnvironment(new MPIEnvironment);
   params_file = argv[1];
   return RUN_ALL_TESTS();
 }

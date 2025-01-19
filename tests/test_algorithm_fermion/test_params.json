@@ -10,8 +10,8 @@
     "MC_samples": 100,
     "WarmUp": 100,
     "Continue_from_VMC": false,
-    "StepLengthFirst": 0.1,
-    "StepLengthDecrease": 0.01,
+    "StepLengthFirst": 0.001,
+    "StepLengthDecrease": 0.0,
     "UpdateNum": 10
   }
 }

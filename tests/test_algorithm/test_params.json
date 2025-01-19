@@ -3,8 +3,8 @@
     "Ly": 4,
     "Lx": 4,
     "D": 4,
-    "Tau0": 0.1,
-    "Steps": 100,
+    "Tau0": 0.001,
+    "Steps": 1000,
     "Dbmps_min": 4,
     "Dbmps_max": 4,
     "MC_samples": 100,
@@ -12,6 +12,6 @@
     "Continue_from_VMC": false,
     "StepLengthFirst": 0.1,
     "StepLengthDecrease": 0.01,
-    "UpdateNum": 2
+    "UpdateNum": 10
   }
 }

@@ -200,6 +200,7 @@ struct Z2tJTools : public testing::Test {
   SplitIndexTPS<QLTEN_Double, fZ2QN> split_index_tps = SplitIndexTPS<QLTEN_Double, fZ2QN>(Ly, Lx);
   double t = 1.0;
   double J = 0.3;
+  double mu = 0.0;
   double energy_exact = -2.94316357;
   size_t Db = 4;
   fZ2QN qn0 = fZ2QN(0);
@@ -275,7 +276,7 @@ TEST_F(Z2tJTools, ExactSummation) {
     SplitIndexTPS<QLTEN_Double, fZ2QN> g_weighted_sum(Ly, Lx, 3);
     SplitIndexTPS<QLTEN_Double, fZ2QN> g_times_e_weighted_sum(Ly, Lx, 3);
     using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
-    Model tj_model(t, J, false);
+    Model tj_model(t, J, false, mu);
     for (auto &config : all_configs) {
       WaveFunctionComponentT tps_sample(split_index_tps, config);
       weights.push_back(std::norm(tps_sample.amplitude));

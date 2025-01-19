@@ -244,41 +244,35 @@ operator*(const QLTEN_Double scalar, const SplitIndexTPS<QLTEN_Complex, QNT> &sp
 template<typename TenElemT, typename QNT>
 void BroadCast(
     SplitIndexTPS<TenElemT, QNT> &split_index_tps,
-    const boost::mpi::communicator &world
+    const MPI_Comm &comm
 ) {
-  CGSolverBroadCastVector(split_index_tps, world);
+  CGSolverBroadCastVector(split_index_tps, comm);
 }
 
 template<typename TenElemT, typename QNT>
 void CGSolverBroadCastVector(
     SplitIndexTPS<TenElemT, QNT> &v,
-    const boost::mpi::communicator &world
+    const MPI_Comm &comm
 ) {
+  int rank, mpi_size;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &mpi_size);
   using Tensor = QLTensor<TenElemT, QNT>;
   size_t rows = v.rows(), cols = v.cols(), phy_dim = 0;
-  broadcast(world, rows, kMasterProc);
-  broadcast(world, cols, kMasterProc);
-  if (world.rank() != kMasterProc) {
+  HANDLE_MPI_ERROR(::MPI_Bcast(&rows, 1, MPI_UNSIGNED_LONG_LONG, kMPIMasterRank, comm));
+  HANDLE_MPI_ERROR(::MPI_Bcast(&cols, 1, MPI_UNSIGNED_LONG_LONG, kMPIMasterRank, comm));
+  if (rank != kMPIMasterRank) {
     v = SplitIndexTPS<TenElemT, QNT>(rows, cols);
   } else {
     phy_dim = v.PhysicalDim();
   }
-  broadcast(world, phy_dim, kMasterProc);
-  if (world.rank() == kMasterProc) {
-    for (size_t row = 0; row < rows; ++row) {
-      for (size_t col = 0; col < cols; ++col) {
-        for (size_t compt = 0; compt < phy_dim; compt++) {
-          SendBroadCastQLTensor(world, v({row, col})[compt], kMasterProc);
-        }
-      }
-    }
-  } else {
-    for (size_t row = 0; row < rows; ++row) {
-      for (size_t col = 0; col < cols; ++col) {
-        v({row, col}) = std::vector<Tensor>(phy_dim);
-        for (size_t compt = 0; compt < phy_dim; compt++) {
-          RecvBroadCastQLTensor(world, v({row, col})[compt], kMasterProc);
-        }
+  HANDLE_MPI_ERROR(::MPI_Bcast(&phy_dim, 1, MPI_UNSIGNED_LONG_LONG, kMPIMasterRank, comm));
+
+  for (size_t row = 0; row < rows; ++row) {
+    for (size_t col = 0; col < cols; ++col) {
+      if (rank != kMPIMasterRank) { v({row, col}) = std::vector<Tensor>(phy_dim); }
+      for (size_t compt = 0; compt < phy_dim; compt++) {
+        qlten::MPI_Bcast(v({row, col})[compt], kMPIMasterRank, comm);
       }
     }
   }
@@ -286,51 +280,43 @@ void CGSolverBroadCastVector(
 
 template<typename TenElemT, typename QNT>
 void CGSolverSendVector(
-    const boost::mpi::communicator &world,
+    const MPI_Comm &comm,
     const SplitIndexTPS<TenElemT, QNT> &v,
     const size_t dest,
     const int tag
 ) {
   using Tensor = QLTensor<TenElemT, QNT>;
-  size_t rows = v.rows(), cols = v.cols(), phy_dim = v({0, 0}).size();
-  world.send(dest, tag, rows);
-  world.send(dest, tag, cols);
-  world.send(dest, tag, phy_dim);
-  for (size_t row = 0; row < rows; ++row) {
-    for (size_t col = 0; col < cols; ++col) {
-      for (size_t compt = 0; compt < phy_dim; compt++) {
-        const Tensor &ten = v({row, col})[compt];
-        send_qlten(world, dest, tag, ten);
-      }
+  size_t peps_size[3] = {v.rows(), v.cols(), v.PhysicalDim()};
+  ::MPI_Send(peps_size, 3, MPI_UNSIGNED_LONG_LONG, dest, tag, comm);
+  for (auto &tens : v) {
+    for (const Tensor &ten : tens) {
+      ten.MPI_Send(dest, tag, comm);
     }
   }
 }
 
 template<typename TenElemT, typename QNT>
-size_t CGSolverRecvVector(
-    const boost::mpi::communicator &world,
+MPI_Status CGSolverRecvVector(
+    const MPI_Comm &comm,
     SplitIndexTPS<TenElemT, QNT> &v,
-    const size_t src,
-    const int tag
+    int src,
+    int tag
 ) {
   using Tensor = QLTensor<TenElemT, QNT>;
-  size_t rows, cols, phy_dim;
-  boost::mpi::status status = world.recv(src, tag, rows);
-  size_t actual_src = status.source();
-  size_t actual_tag = status.tag();
-  world.recv(actual_src, actual_tag, cols);
-  world.recv(actual_src, actual_tag, phy_dim);
+  size_t peps_size[3];
+  MPI_Status status;
+  HANDLE_MPI_ERROR(::MPI_Recv(peps_size, 3, MPI_UNSIGNED_LONG_LONG, src, tag, comm, &status));
+  src = status.MPI_SOURCE;
+  tag = status.MPI_TAG;
+  auto [rows, cols, phy_dim] = peps_size;
   v = SplitIndexTPS<TenElemT, QNT>(rows, cols);
-  for (size_t row = 0; row < rows; ++row) {
-    for (size_t col = 0; col < cols; ++col) {
-      v({row, col}) = std::vector<Tensor>(phy_dim);
-      for (size_t compt = 0; compt < phy_dim; compt++) {
-        Tensor &ten = v({row, col})[compt];
-        recv_qlten(world, actual_src, actual_tag, ten);
-      }
+  for (auto &tens : v) {
+    tens = std::vector<Tensor>(phy_dim);
+    for (Tensor &ten : tens) {
+      status = ten.MPI_Recv(src, tag, comm);
     }
   }
-  return actual_src;
+  return status;
 }
 
 }//qlpeps

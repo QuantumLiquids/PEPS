@@ -57,11 +57,6 @@ else ()
 endif ()
 
 
-find_package(Boost
-        1.74.0
-        REQUIRED
-        COMPONENTS serialization mpi)
-
 find_package(MPI REQUIRED)
 
 #set omp flag
@@ -92,13 +87,10 @@ macro(add_unittest
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
-            Boost::serialization
-            Boost::mpi
             ${MPI_CXX_LINK_FLAGS}
             ${MPI_mpi_LIBRARY}
             ${LINK_LIBS} "${LINK_LIB_FLAGS}")
@@ -113,6 +105,67 @@ macro(add_unittest
     # Print the value of INPUT_ARGS
 endmacro()
 
+macro(add_two_type_unittest
+        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
+    # Compile for QLTEN_Double
+    add_executable(${TEST_NAME}_double ${TEST_SRC})
+    target_compile_options(${TEST_NAME}_double
+            PRIVATE ${CFLAGS}
+            PRIVATE ${OMP_FLAGS})
+    target_include_directories(${TEST_NAME}_double
+            PRIVATE ${QLPEPS_HEADER_PATH}
+            PRIVATE ${hptt_INCLUDE_DIR}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE ${MPI_CXX_HEADER_DIR})
+    target_compile_definitions(${TEST_NAME}_double PRIVATE TEN_ELEM_TYPE=QLTEN_Double)
+    target_link_libraries(${TEST_NAME}_double
+            GTest::GTest GTest::Main
+            ${hptt_LIBRARY}
+            ${MPI_CXX_LINK_FLAGS}
+            ${MPI_mpi_LIBRARY}
+            "${LINK_LIB_FLAGS}")
+    add_test(NAME ${TEST_NAME}_double
+            COMMAND ${TEST_NAME}_double ${INPUT_ARGS}
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    set_target_properties(${TEST_NAME}_double PROPERTIES FOLDER tests)
+
+    # Compile for QLTEN_Complex
+    add_executable(${TEST_NAME}_complex ${TEST_SRC})
+    target_compile_options(${TEST_NAME}_complex
+            PRIVATE ${CFLAGS}
+            PRIVATE ${OMP_FLAGS})
+    target_include_directories(${TEST_NAME}_complex
+            PRIVATE ${QLPEPS_HEADER_PATH}
+            PRIVATE ${hptt_INCLUDE_DIR}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE ${MPI_CXX_HEADER_DIR})
+    target_compile_definitions(${TEST_NAME}_complex PRIVATE TEN_ELEM_TYPE=QLTEN_Complex)
+    target_link_libraries(${TEST_NAME}_complex
+            GTest::GTest GTest::Main
+            ${hptt_LIBRARY}
+            ${MPI_CXX_LINK_FLAGS}
+            ${MPI_mpi_LIBRARY}
+            "${LINK_LIB_FLAGS}")
+    add_test(NAME ${TEST_NAME}_complex
+            COMMAND ${TEST_NAME}_complex ${INPUT_ARGS}
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
+    set_target_properties(${TEST_NAME}_complex PROPERTIES FOLDER tests)
+endmacro()
+
+macro(add_mpi_unittest_run
+        TEST_NAME PROCESSOR_NUM INPUT_ARGS)
+    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
+        add_test(NAME ${TEST_NAME}_mpi
+                COMMAND ${MPIEXEC_EXECUTABLE}
+                ${MPIEXEC_NUMPROC_FLAG} ${PROCESSOR_NUM}
+                $<TARGET_FILE:${TEST_NAME}>
+                ${INPUT_ARGS}
+                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    endif ()
+    set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
+endmacro()
 
 macro(add_mpi_unittest
         TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS PROCESSOR_NUM INPUT_ARGS)
@@ -128,59 +181,16 @@ macro(add_mpi_unittest
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${Boost_INCLUDE_DIR}
             PRIVATE ${MPI_CXX_HEADER_DIR})
     target_link_libraries(${TEST_NAME}
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
-            Boost::serialization
-            Boost::mpi
             ${MPI_CXX_LINK_FLAGS}
             ${MPI_mpi_LIBRARY}
             "${LINK_LIBS}" "${LINK_LIB_FLAGS}"
     )
-
-    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
-        add_test(
-                NAME ${TEST_NAME}
-                COMMAND ${MPIEXEC_EXECUTABLE}
-                ${MPIEXEC_NUMPROC_FLAG} ${PROCESSOR_NUM}
-                $<TARGET_FILE:${TEST_NAME}>
-                ${INPUT_ARGS}
-                WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-    endif ()
-    set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
+    add_mpi_unittest_run(${TEST_NAME} ${PROCESSOR_NUM} "${INPUT_ARGS}")
 endmacro()
-
-
-macro(compile_unittest
-        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS)
-    add_executable(${TEST_NAME}
-            ${TEST_SRC})
-
-    target_compile_options(${TEST_NAME}
-            PRIVATE ${CFLAGS}
-            PRIVATE ${OMP_FLAGS}
-    )
-    target_include_directories(${TEST_NAME}
-            PRIVATE ${QLPEPS_HEADER_PATH}
-            PRIVATE ${hptt_INCLUDE_DIR}
-            PRIVATE ${QLTENSOR_HEADER_PATH}
-            PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${Boost_INCLUDE_DIR}
-            PRIVATE ${MPI_CXX_HEADER_DIR})
-    target_link_libraries(${TEST_NAME}
-            GTest::GTest GTest::Main
-            ${hptt_LIBRARY}
-            Boost::serialization
-            Boost::mpi
-            ${MPI_CXX_LINK_FLAGS}
-            ${MPI_mpi_LIBRARY}
-            "${LINK_LIBS}" "${LINK_LIB_FLAGS}"
-    )
-    set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
-endmacro()
-
 
 ## Test basis for tensor networks
 # Test DuoVMatrix class
@@ -229,47 +239,34 @@ add_unittest(test_non_detailed_balance_mcmc
 )
 ## Test algorithms
 # Test simple update
-add_unittest(test_simple_update_double
-        "test_algorithm/test_simple_update_double.cpp"
+add_two_type_unittest(test_simple_update
+        "test_algorithm/test_simple_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
-add_unittest(test_simple_update_complex
-        "test_algorithm/test_simple_update_complex.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
-)
+
 add_unittest(test_fermion_simple_update
         "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
-add_unittest(test_loop_update_double
-        "test_algorithm/test_loop_update_double.cpp"
+add_two_type_unittest(test_loop_update
+        "test_algorithm/test_loop_update.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
-add_unittest(test_loop_update_complex
-        "test_algorithm/test_loop_update_complex.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
-)
+
 # Test vmc-peps
-add_unittest(test_vmc_peps_double
-        "test_algorithm/test_vmc_peps_double.cpp"
+add_two_type_unittest(test_vmc_peps
+        "test_algorithm/test_vmc_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
-add_unittest(test_vmc_peps_complex
-        "test_algorithm/test_vmc_peps_complex.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
-)
-add_mpi_unittest(test_vmc_peps_mpi
-        "test_algorithm/test_vmc_peps_double.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "2"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
-)
+
+add_mpi_unittest_run(test_vmc_peps_double "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json")
+add_mpi_unittest_run(test_vmc_peps_complex "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json")
+
+
 add_unittest(test_fermion_vmc_peps
         "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
@@ -285,19 +282,14 @@ add_unittest(test_square_heisenberg
         "4"
 )
 
-add_unittest(test_measure_double
-        "test_algorithm/test_mc_peps_measure_double.cpp"
+add_two_type_unittest(test_measure
+        "test_algorithm/test_mc_peps_measure.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
-add_unittest(test_measure_complex
-        "test_algorithm/test_mc_peps_measure_complex.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
-)
 
-add_unittest(test_fermion_measure
+add_two_type_unittest(test_fermion_measure
         "test_algorithm_fermion/test_fermion_mc_measure.cpp"
         "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"

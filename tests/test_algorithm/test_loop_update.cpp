@@ -25,13 +25,12 @@ using qlten::special_qn::U1QN;
 using IndexT = Index<U1QN>;
 using QNSctT = QNSector<U1QN>;
 using QNSctVecT = QNSectorVec<U1QN>;
-
-using DQLTensor = QLTensor<QLTEN_Double, U1QN>;
-using ZQLTensor = QLTensor<QLTEN_Complex, U1QN>;
+using TenElemT = TEN_ELEM_TYPE;
+using Tensor = QLTensor<TenElemT, U1QN>;
 
 using qlmps::CaseParamsParserBasic;
 
-using LoopGateT = std::array<ZQLTensor, 4>;
+using LoopGateT = std::array<Tensor, 4>;
 char *params_file;
 
 struct SystemSizeParams : public CaseParamsParserBasic {
@@ -56,14 +55,13 @@ struct TransverseIsingLoopUpdate : public testing::Test {
   );
   IndexT pb_in = InverseIndex(pb_out);
 
-  DQLTensor did = DQLTensor({pb_in, pb_out});
-  DQLTensor dsz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsigmaz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsigmax = DQLTensor({pb_in, pb_out});
-  DQLTensor dsp = DQLTensor({pb_in, pb_out});
-  DQLTensor dsm = DQLTensor({pb_in, pb_out});
-  DQLTensor dham_nn;
-  ZQLTensor zham_nn;
+  Tensor did = Tensor({pb_in, pb_out});
+  Tensor dsz = Tensor({pb_in, pb_out});
+  Tensor dsigmaz = Tensor({pb_in, pb_out});
+  Tensor dsigmax = Tensor({pb_in, pb_out});
+  Tensor dsp = Tensor({pb_in, pb_out});
+  Tensor dsm = Tensor({pb_in, pb_out});
+  Tensor dham_nn;
 
   double tau0 = 0.1;
   double tau1 = 0.01;
@@ -74,11 +72,15 @@ struct TransverseIsingLoopUpdate : public testing::Test {
   DuoMatrix<LoopGateT> evolve_gates1 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
   DuoMatrix<LoopGateT> evolve_gates2 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
-  boost::mpi::communicator world;//mpi support for measurement
+  const MPI_Comm comm = MPI_COMM_WORLD;//mpi support for measurement
+  int rank;
+  int mpi_size;
   void SetUp(void) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
     did({0, 0}) = 1;
@@ -92,12 +94,12 @@ struct TransverseIsingLoopUpdate : public testing::Test {
     dsp({0, 1}) = 1;
     dsm({1, 0}) = 1;
 
-    DQLTensor ham_nn1, ham_nn2, ham_nn3;
+    Tensor ham_nn1, ham_nn2, ham_nn3;
     Contract(&(dsigmaz), {}, &dsigmaz, {}, &ham_nn1);
     Contract(&(dsigmax), {}, &did, {}, &ham_nn2);
     Contract(&(did), {}, &dsigmax, {}, &ham_nn3);
     dham_nn = -ham_nn1 + (-0.25) * h * ham_nn2 + (-0.25) * h * ham_nn3;
-    zham_nn = ToComplex(dham_nn);
+
     GenerateTransIsingAllEvolveGates(tau0, h, evolve_gates0);
     GenerateTransIsingAllEvolveGates(tau1, h, evolve_gates1);
     GenerateTransIsingAllEvolveGates(tau2, h, evolve_gates2);
@@ -163,12 +165,12 @@ struct TransverseIsingLoopUpdate : public testing::Test {
     const std::vector<size_t> ms = {m0, m1, m2, m3};
     const std::vector<size_t> ns = {n0, n1, n2, n3};
     LoopGateT gates;
-    gates[0] = ZQLTensor({pb_out, pb_in, pb_out, pb_out});
-    gates[1] = ZQLTensor({pb_in, pb_in, pb_out, pb_out});
-    gates[2] = ZQLTensor({pb_in, pb_in, pb_out, pb_in});
-    gates[3] = ZQLTensor({pb_out, pb_in, pb_out, pb_in});
+    gates[0] = Tensor({pb_out, pb_in, pb_out, pb_out});
+    gates[1] = Tensor({pb_in, pb_in, pb_out, pb_out});
+    gates[2] = Tensor({pb_in, pb_in, pb_out, pb_in});
+    gates[3] = Tensor({pb_out, pb_in, pb_out, pb_in});
     for (size_t i = 0; i < 4; i++) {
-      ZQLTensor &gate = gates[i];
+      Tensor &gate = gates[i];
       //Id
       gate({0, 0, 0, 0}) = 1.0;
       gate({0, 1, 1, 0}) = 1.0;
@@ -189,7 +191,7 @@ struct TransverseIsingLoopUpdate : public testing::Test {
 TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   //initial peps as direct product state
-  SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
 
   for (size_t y = 0; y < Ly; y++) {
@@ -201,10 +203,10 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   peps0.Initial(activates);
 
   //simple update, in boundary the setting of hamiltonian has edge errors
-  SimpleUpdateExecutor<QLTEN_Complex, U1QN>
-      *su_exe1 = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Complex, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-5),
-                                                                              peps0,
-                                                                              zham_nn);
+  SimpleUpdateExecutor<TenElemT, U1QN>
+      *su_exe1 = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-5),
+                                                                         peps0,
+                                                                         dham_nn);
   su_exe1->Execute();
   auto peps1 = su_exe1->GetPEPS();
   delete su_exe1;
@@ -218,40 +220,40 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
                                            fet_tol, fet_max_iter,
                                            cg_params);
 
-  auto *loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                                   arnoldi_params,
-                                                                   1e-7,
-                                                                   fet_params),
-                                                               100,
-                                                               tau0,
-                                                               evolve_gates0,
-                                                               peps1);
+  auto *loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                              arnoldi_params,
+                                                              1e-7,
+                                                              fet_params),
+                                                          100,
+                                                          tau0,
+                                                          evolve_gates0,
+                                                          peps1);
   loop_exe->Execute();
 
   auto peps2 = loop_exe->GetPEPS();
   delete loop_exe;
 
-  loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                             arnoldi_params,
-                                                             1e-7,
-                                                             fet_params),
-                                                         100,
-                                                         tau1,
-                                                         evolve_gates1,
-                                                         peps2);
+  loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                        arnoldi_params,
+                                                        1e-7,
+                                                        fet_params),
+                                                    100,
+                                                    tau1,
+                                                    evolve_gates1,
+                                                    peps2);
 
   loop_exe->Execute();
   auto peps3 = loop_exe->GetPEPS();
   delete loop_exe;
 
-  loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                             arnoldi_params,
-                                                             1e-7,
-                                                             fet_params),
-                                                         200,
-                                                         tau2,
-                                                         evolve_gates2,
-                                                         peps3);
+  loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                        arnoldi_params,
+                                                        1e-7,
+                                                        fet_params),
+                                                    200,
+                                                    tau2,
+                                                    evolve_gates2,
+                                                    peps3);
 
   loop_exe->Execute();
   auto peps4 = loop_exe->GetPEPS();
@@ -259,10 +261,10 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
 
 
   //measure the energy
-  auto tps = TPS<QLTEN_Complex, U1QN>(peps4);
-  auto sitps = SplitIndexTPS<QLTEN_Complex, U1QN>(tps);
-  using Model = TransverseIsingSquare<QLTEN_Complex, U1QN>;
-  using SquareTPSSampleFullSpaceNNFlipT = SquareTPSSampleFullSpaceNNFlip<QLTEN_Complex, U1QN>;
+  auto tps = TPS<TenElemT, U1QN>(peps4);
+  auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
+  using Model = TransverseIsingSquare<TenElemT, U1QN>;
+  using SquareTPSSampleFullSpaceNNFlipT = SquareTPSSampleFullSpaceNNFlip<TenElemT, U1QN>;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_TransverseIsing" + std::to_string(Lx) + "x" + std::to_string(Ly);
@@ -276,10 +278,10 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
       Ly, Lx,
       tps_path);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(mc_measure_para,
-                                                                                                     sitps,
-                                                                                                     world,
-                                                                                                     Model(h));
+      new MonteCarloMeasurementExecutor<TenElemT, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(mc_measure_para,
+                                                                                                sitps,
+                                                                                                comm,
+                                                                                                Model(h));
   measure_executor->Execute();
   measure_executor->OutputEnergy();
   delete measure_executor;
@@ -316,13 +318,12 @@ struct HeisenbergLoopUpdate : public testing::Test {
 
   IndexT vb_in = InverseIndex(vb_out);
 
-  DQLTensor did = DQLTensor({pb_in, pb_out});
-  DQLTensor dsz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsp = DQLTensor({pb_in, pb_out});
-  DQLTensor dsm = DQLTensor({pb_in, pb_out});
+  Tensor did = Tensor({pb_in, pb_out});
+  Tensor dsz = Tensor({pb_in, pb_out});
+  Tensor dsp = Tensor({pb_in, pb_out});
+  Tensor dsm = Tensor({pb_in, pb_out});
 
-  DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
-  ZQLTensor zham_hei_nn;
+  Tensor dham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
 
   double tau0 = 0.01;
   double tau1 = 0.001;
@@ -330,7 +331,8 @@ struct HeisenbergLoopUpdate : public testing::Test {
   DuoMatrix<LoopGateT> evolve_gates0 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
   DuoMatrix<LoopGateT> evolve_gates1 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
-  boost::mpi::communicator world;//mpi support for measurement
+  const MPI_Comm comm = MPI_COMM_WORLD;//mpi support for measurement
+  int rank, mpi_size;
   void GenerateSquareHeisenbergAllEvolveGates(
       const double tau, // imaginary time
       DuoMatrix<LoopGateT> &evolve_gates //output
@@ -379,8 +381,8 @@ struct HeisenbergLoopUpdate : public testing::Test {
     const std::vector<size_t> ns = {n0, n1, n2, n3};
     LoopGateT gates;
     for (size_t i = 0; i < 4; i++) {
-      gates[i] = ZQLTensor({vb_in, pb_in, pb_out, vb_out});
-      ZQLTensor &gate = gates[i];
+      gates[i] = Tensor({vb_in, pb_in, pb_out, vb_out});
+      Tensor &gate = gates[i];
       //Id
       gate({0, 0, 0, 0}) = 1.0;
       gate({0, 1, 1, 0}) = 1.0;
@@ -407,7 +409,9 @@ struct HeisenbergLoopUpdate : public testing::Test {
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
     did({0, 0}) = 1;
@@ -424,7 +428,6 @@ struct HeisenbergLoopUpdate : public testing::Test {
     dham_hei_nn({0, 1, 1, 0}) = 0.5;
     dham_hei_nn({1, 0, 0, 1}) = 0.5;
 
-    zham_hei_nn = ToComplex(dham_hei_nn);
     GenerateSquareHeisenbergAllEvolveGates(tau0, evolve_gates0);
     GenerateSquareHeisenbergAllEvolveGates(tau1, evolve_gates1);
   }
@@ -433,7 +436,7 @@ struct HeisenbergLoopUpdate : public testing::Test {
 TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   //initial peps as direct product state
-  SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
 
   for (size_t y = 0; y < Ly; y++) {
@@ -445,10 +448,10 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   peps0.Initial(activates);
 
   //simple update, in boundary the setting of hamiltonian has edge errors
-  SimpleUpdateExecutor<QLTEN_Complex, U1QN>
-      *su_exe1 = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Complex, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-10),
-                                                                              peps0,
-                                                                              zham_hei_nn);
+  SimpleUpdateExecutor<TenElemT, U1QN>
+      *su_exe1 = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-10),
+                                                                         peps0,
+                                                                         dham_hei_nn);
   su_exe1->Execute();
   auto peps1 = su_exe1->GetPEPS();
   delete su_exe1;
@@ -464,14 +467,14 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
                                            fet_tol, fet_max_iter,
                                            cg_params);
 
-  auto *loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                                   arnoldi_params,
-                                                                   1e-7,
-                                                                   fet_params),
-                                                               30,
-                                                               tau0,
-                                                               evolve_gates0,
-                                                               peps1);
+  auto *loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                              arnoldi_params,
+                                                              1e-7,
+                                                              fet_params),
+                                                          150,
+                                                          tau0,
+                                                          evolve_gates0,
+                                                          peps1);
 
   loop_exe->Execute();
 
@@ -479,13 +482,13 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   delete loop_exe;
 
   //measure simple update state energy
-  using Model = SpinOneHalfHeisenbergSquare<QLTEN_Complex, U1QN>;
-  using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Complex, U1QN>;
+  using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
+  using WaveFunctionT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_Heisenberg" + std::to_string(Lx) + "x" + std::to_string(Ly);
   MCMeasurementPara mc_measure_para = MCMeasurementPara(
-      BMPSTruncatePara(4, 12, 1e-14,
+      BMPSTruncatePara(4, 8, 1e-10,
                        CompressMPSScheme::VARIATION2Site,
                        std::make_optional<double>(1e-14),
                        std::make_optional<size_t>(10)),
@@ -493,27 +496,27 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
       std::vector<size_t>(2, Lx * Ly / 2),
       Ly, Lx,
       tps_path);
-  auto tps1 = TPS<QLTEN_Complex, U1QN>(peps1);
-  auto sitps1 = SplitIndexTPS<QLTEN_Complex, U1QN>(tps1);
+  auto tps1 = TPS<TenElemT, U1QN>(peps1);
+  auto sitps1 = SplitIndexTPS<TenElemT, U1QN>(tps1);
   sitps1.NormalizeAllSite();
 
   auto measure_executor1 =
-      new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, WaveFunctionT, Model>(mc_measure_para,
-                                                                                   sitps1,
-                                                                                   world,
-                                                                                   Model());
+      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+                                                                              sitps1,
+                                                                              comm,
+                                                                              Model());
   measure_executor1->Execute();
   measure_executor1->OutputEnergy();
   delete measure_executor1;
 
-//  measure the loop update energy
-  auto tps = TPS<QLTEN_Complex, U1QN>(peps2);
-  auto sitps = SplitIndexTPS<QLTEN_Complex, U1QN>(tps);
+  //measure the loop update energy
+  auto tps = TPS<TenElemT, U1QN>(peps2);
+  auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, WaveFunctionT, Model>(mc_measure_para,
-                                                                                   sitps,
-                                                                                   world,
-                                                                                   Model());
+      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+                                                                              sitps,
+                                                                              comm,
+                                                                              Model());
   measure_executor->Execute();
   measure_executor->OutputEnergy();
   delete measure_executor;
@@ -545,14 +548,13 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
   );
   IndexT vb_in = InverseIndex(vb_out);
 
-  DQLTensor did = DQLTensor({pb_in, pb_out});
-  DQLTensor dsz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsp = DQLTensor({pb_in, pb_out});
-  DQLTensor dsm = DQLTensor({pb_in, pb_out});
+  Tensor did = Tensor({pb_in, pb_out});
+  Tensor dsz = Tensor({pb_in, pb_out});
+  Tensor dsp = Tensor({pb_in, pb_out});
+  Tensor dsm = Tensor({pb_in, pb_out});
 
-  DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
-  DQLTensor dham_hei_tri;
-  ZQLTensor zham_hei_nn, zham_hei_tri;
+  Tensor dham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
+  Tensor dham_hei_tri;
 
   double tau0 = 0.1;
   double tau1 = 0.01;
@@ -562,7 +564,7 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
   DuoMatrix<LoopGateT> evolve_gates1 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
   DuoMatrix<LoopGateT> evolve_gates2 = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
-  boost::mpi::communicator world;//mpi support for measurement
+  const MPI_Comm comm = MPI_COMM_WORLD;//mpi support for measurement
   void GenerateTriangleHeisenbergAllEvolveGates(
       const double tau, // imaginary time
       DuoMatrix<LoopGateT> &evolve_gates //output
@@ -610,12 +612,12 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
   ) {
     const std::vector<size_t> ns = {n0, n1, n2, n3};
     LoopGateT gates;
-    gates[0] = ZQLTensor({vb_out, pb_in, pb_out, vb_out});
-    gates[1] = ZQLTensor({vb_in, pb_in, pb_out, vb_out});
-    gates[2] = ZQLTensor({vb_in, pb_in, pb_out, vb_in});
-    gates[3] = ZQLTensor({vb_out, pb_in, pb_out, vb_in});
+    gates[0] = Tensor({vb_out, pb_in, pb_out, vb_out});
+    gates[1] = Tensor({vb_in, pb_in, pb_out, vb_out});
+    gates[2] = Tensor({vb_in, pb_in, pb_out, vb_in});
+    gates[3] = Tensor({vb_out, pb_in, pb_out, vb_in});
     for (size_t i = 0; i < 4; i++) {
-      ZQLTensor &gate = gates[i];
+      Tensor &gate = gates[i];
       //Id
       gate({0, 0, 0, 0}) = 1.0;
       gate({0, 1, 1, 0}) = 1.0;
@@ -638,7 +640,7 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
     }
 
     for (auto i : {0}) {
-      ZQLTensor &gate = gates[i];
+      Tensor &gate = gates[i];
       gate({1, 0, 0, 1}) = double(ns[3]);
       gate({1, 1, 1, 1}) = double(ns[3]);
 
@@ -650,11 +652,14 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
     }
     return gates;
   }
-
+  int mpi_size;
+  int rank;
   void SetUp(void) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
     did({0, 0}) = 1;
@@ -671,9 +676,9 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
     dham_hei_nn({0, 1, 1, 0}) = 0.5;
     dham_hei_nn({1, 0, 0, 1}) = 0.5;
 
-    DQLTensor ham_hei_tri_terms[3];
+    Tensor ham_hei_tri_terms[3];
     for (size_t i = 0; i < 3; i++) {
-      ham_hei_tri_terms[i] = DQLTensor({pb_in, pb_out, pb_in, pb_out, pb_in, pb_out});
+      ham_hei_tri_terms[i] = Tensor({pb_in, pb_out, pb_in, pb_out, pb_in, pb_out});
     }
 
     for (size_t i = 0; i < 2; i++) {
@@ -703,8 +708,7 @@ struct TriangleHeisenbergLoopUpdate : public testing::Test {
       ham_hei_tri_terms[2]({i, i, 1, 0, 0, 1}) = 0.5;
     }
     dham_hei_tri = ham_hei_tri_terms[0] + ham_hei_tri_terms[1] + ham_hei_tri_terms[2];
-    zham_hei_nn = ToComplex(dham_hei_nn);
-    zham_hei_tri = ToComplex(dham_hei_tri);
+
     GenerateTriangleHeisenbergAllEvolveGates(tau0, evolve_gates0);
     GenerateTriangleHeisenbergAllEvolveGates(tau1, evolve_gates1);
     GenerateTriangleHeisenbergAllEvolveGates(tau2, evolve_gates2);
@@ -715,7 +719,7 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   omp_set_num_threads(4);
   //initial peps as direct product state
-  SquareLatticePEPS<QLTEN_Complex, U1QN> peps0(pb_out, Ly, Lx);
+  SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
 
   for (size_t y = 0; y < Ly; y++) {
@@ -727,12 +731,12 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   peps0.Initial(activates);
 
   //simple update, in boundary the setting of hamiltonian has edge errors
-  SimpleUpdateExecutor<QLTEN_Complex, U1QN>
+  SimpleUpdateExecutor<TenElemT, U1QN>
       *su_exe1 =
-      new TriangleNNModelSquarePEPSSimpleUpdateExecutor<QLTEN_Complex, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-10),
-                                                                             peps0,
-                                                                             zham_hei_nn,
-                                                                             zham_hei_tri);
+      new TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, U1QN>(SimpleUpdatePara(100, 0.1, 1, 4, 1e-10),
+                                                                        peps0,
+                                                                        dham_hei_nn,
+                                                                        dham_hei_tri);
   su_exe1->Execute();
   auto peps1 = su_exe1->GetPEPS();
   delete su_exe1;
@@ -747,41 +751,41 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
                                            fet_tol, fet_max_iter,
                                            cg_params);
 
-  auto *loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                                   arnoldi_params,
-                                                                   1e-7,
-                                                                   fet_params),
-                                                               100,
-                                                               tau0,
-                                                               evolve_gates0,
-                                                               peps1);
+  auto *loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                              arnoldi_params,
+                                                              1e-7,
+                                                              fet_params),
+                                                          100,
+                                                          tau0,
+                                                          evolve_gates0,
+                                                          peps1);
 
   loop_exe->Execute();
 
   auto peps2 = loop_exe->GetPEPS();
   delete loop_exe;
 
-  loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                             arnoldi_params,
-                                                             1e-7,
-                                                             fet_params),
-                                                         100,
-                                                         tau1,
-                                                         evolve_gates1,
-                                                         peps2);
+  loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                        arnoldi_params,
+                                                        1e-7,
+                                                        fet_params),
+                                                    100,
+                                                    tau1,
+                                                    evolve_gates1,
+                                                    peps2);
 
   loop_exe->Execute();
   auto peps3 = loop_exe->GetPEPS();
   delete loop_exe;
 
-  loop_exe = new LoopUpdateExecutor<QLTEN_Complex, U1QN>(LoopUpdateTruncatePara(
-                                                             arnoldi_params,
-                                                             1e-7,
-                                                             fet_params),
-                                                         100,
-                                                         tau2,
-                                                         evolve_gates2,
-                                                         peps3);
+  loop_exe = new LoopUpdateExecutor<TenElemT, U1QN>(LoopUpdateTruncatePara(
+                                                        arnoldi_params,
+                                                        1e-7,
+                                                        fet_params),
+                                                    100,
+                                                    tau2,
+                                                    evolve_gates2,
+                                                    peps3);
 
   loop_exe->Execute();
   auto peps4 = loop_exe->GetPEPS();
@@ -789,8 +793,8 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
 
   //measure simple update state energy
 
-  using Model = SpinOneHalfTriHeisenbergSqrPEPS<QLTEN_Complex, U1QN>;
-  using WaveFunctionT = SquareTPSSample3SiteExchange<QLTEN_Complex, U1QN>;
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, U1QN>;
+  using WaveFunctionT = SquareTPSSample3SiteExchange<TenElemT, U1QN>;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   MCMeasurementPara mc_measure_para = MCMeasurementPara(
@@ -801,26 +805,26 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
       mc_samples, mc_warmup, 1,
       std::vector<size_t>(2, Lx * Ly / 2),
       Ly, Lx);
-  auto tps1 = TPS<QLTEN_Complex, U1QN>(peps1);
-  auto sitps1 = SplitIndexTPS<QLTEN_Complex, U1QN>(tps1);
+  auto tps1 = TPS<TenElemT, U1QN>(peps1);
+  auto sitps1 = SplitIndexTPS<TenElemT, U1QN>(tps1);
 
   auto measure_executor1 =
-      new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, WaveFunctionT, Model>(mc_measure_para,
-                                                                                   sitps1,
-                                                                                   world,
-                                                                                   Model());
+      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+                                                                              sitps1,
+                                                                              comm,
+                                                                              Model());
   measure_executor1->Execute();
   measure_executor1->OutputEnergy();
   delete measure_executor1;
 
   //measure the loop update energy
-  auto tps = TPS<QLTEN_Complex, U1QN>(peps4);
-  auto sitps = SplitIndexTPS<QLTEN_Complex, U1QN>(tps);
+  auto tps = TPS<TenElemT, U1QN>(peps4);
+  auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, WaveFunctionT, Model>(mc_measure_para,
-                                                                                   sitps,
-                                                                                   world,
-                                                                                   Model());
+      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+                                                                              sitps,
+                                                                              comm,
+                                                                              Model());
   measure_executor->Execute();
   measure_executor->OutputEnergy();
   delete measure_executor;
@@ -828,9 +832,11 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
 }
 
 int main(int argc, char *argv[]) {
-  boost::mpi::environment env;
+  MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   params_file = argv[1];
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
+  MPI_Finalize();
+  return test_err;
 }

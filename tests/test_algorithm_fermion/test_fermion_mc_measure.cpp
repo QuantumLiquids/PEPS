@@ -21,6 +21,7 @@ using qlmps::CaseParamsParserBasic;
 char *params_file;
 
 using qlten::special_qn::fZ2QN;
+using TenElemT = TEN_ELEM_TYPE;
 
 struct FileParams : public CaseParamsParserBasic {
   FileParams(const char *f) : CaseParamsParserBasic(f) {
@@ -48,9 +49,9 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
   using QNSctT = QNSector<fZ2QN>;
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
-  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
+  using DTensor = QLTensor<TenElemT, fZ2QN>;
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, fZ2QN>;
+  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<TenElemT, fZ2QN>;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -75,11 +76,14 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
       Ly, Lx);
 
   std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";
-  boost::mpi::communicator world;
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
 
@@ -90,18 +94,18 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 };
 
 TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
-  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  using Model = SquareSpinlessFreeFermion<TenElemT, fZ2QN>;
   Model spinless_fermion_solver;
 
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load(simple_update_peps_path);
-  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto tps = TPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
-                                                                                      sitps,
-                                                                                      world,
-                                                                                      spinless_fermion_solver);
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+                                                                                  sitps,
+                                                                                  comm,
+                                                                                  spinless_fermion_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();
@@ -109,18 +113,18 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
 }
 
 TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
-  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  using Model = SquareSpinlessFreeFermion<TenElemT, fZ2QN>;
   Model spinless_fermion_solver;
 
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load(simple_update_peps_path);
-  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto tps = TPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
-                                                                                       sitps,
-                                                                                       world,
-                                                                                       spinless_fermion_solver);
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
+                                                                                   sitps,
+                                                                                   comm,
+                                                                                   spinless_fermion_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();
@@ -132,10 +136,9 @@ struct Z2tJModelTools : public testing::Test {
   using QNSctT = QNSector<fZ2QN>;
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
-  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using ZTensor = QLTensor<QLTEN_Complex, fZ2QN>;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
+  using DTensor = QLTensor<TenElemT, fZ2QN>;
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, fZ2QN>;
+  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<TenElemT, fZ2QN>;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -160,11 +163,14 @@ struct Z2tJModelTools : public testing::Test {
       Ly, Lx);
 
   std::string simple_update_peps_path = "peps_tj_doping0.125";
-  boost::mpi::communicator world;
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
 
@@ -175,18 +181,18 @@ struct Z2tJModelTools : public testing::Test {
 };
 
 TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
-  using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
+  using Model = SquaretJModel<TenElemT, fZ2QN>;
   Model tj_solver(t, J, false, 0);
 
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
-  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto tps = TPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
-                                                                                      sitps,
-                                                                                      world,
-                                                                                      tj_solver);
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+                                                                                  sitps,
+                                                                                  comm,
+                                                                                  tj_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();
@@ -194,18 +200,18 @@ TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
 }
 
 TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
-  using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
+  using Model = SquaretJModel<TenElemT, fZ2QN>;
   Model tj_solver(t, J, false, 0);
 
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
-  auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
+  auto tps = TPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<QLTEN_Double, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
-                                                                                       sitps,
-                                                                                       world,
-                                                                                       tj_solver);
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, TPSSampleTNNFlipT, Model>(mc_measurement_para,
+                                                                                   sitps,
+                                                                                   comm,
+                                                                                   tj_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();
@@ -213,9 +219,10 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
 }
 
 int main(int argc, char *argv[]) {
-  boost::mpi::environment env;
+  MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   params_file = argv[1];
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
+  MPI_Finalize();
 }

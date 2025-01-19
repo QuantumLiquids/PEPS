@@ -194,4 +194,52 @@ class MySquareMatrix {
   std::vector<std::vector<ElemT>> data_;
 };
 
+template<typename ElemT>
+void CGSolverBroadCastVector(
+    MyVector<ElemT> &x0,
+    const MPI_Comm &comm
+) {
+  int rank, mpi_size;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &mpi_size);
+  size_t length;
+  if (rank == kMPIMasterRank) { length = x0.GetSize(); }
+  HANDLE_MPI_ERROR(::MPI_Bcast(&length, 1, MPI_UNSIGNED_LONG_LONG, kMPIMasterRank, comm));
+  if (rank != kMPIMasterRank) { x0.GetElements().resize(length); }
+  HANDLE_MPI_ERROR(::MPI_Bcast(x0.GetElements().data(),
+                               length,
+                               hp_numeric::GetMPIDataType<ElemT>(),
+                               kMPIMasterRank,
+                               comm));
+}
+
+template<typename ElemT>
+void CGSolverSendVector(
+    const MPI_Comm &comm,
+    const MyVector<ElemT> &v,
+    const int dest,
+    const int tag
+) {
+  size_t length = v.GetSize();
+  hp_numeric::MPI_Send(length, dest, tag, comm);
+  hp_numeric::MPI_Send(v.GetElements().data(), length, dest, tag, comm);
+}
+
+template<typename ElemT>
+MPI_Status CGSolverRecvVector(
+    const MPI_Comm &comm,
+    MyVector<ElemT> &v,
+    int src,
+    int tag
+) {
+  size_t length;
+  auto status = hp_numeric::MPI_Recv(length, src, tag, comm);
+  src = status.MPI_SOURCE;
+  tag = status.MPI_TAG;
+  v.GetElements().resize(length);
+  status = hp_numeric::MPI_Recv(v.GetElements().data(), length, src, tag, comm);
+  return status;
+}
+
+
 #endif //QLPEPS_VMC_PEPS_MY_VECTOR_MATRIX_H

@@ -33,8 +33,6 @@ const std::string pm_sign = "\u00b1";         // for output standard error
 const size_t kMaxTaylorExpansionOrder = 1000;
 const int kEnergyOutputPrecision = 8;
 
-const size_t kMasterProc = 0;
-
 std::uniform_real_distribution<double> unit_even_distribution(0, 1);
 } /* qlpeps */
 

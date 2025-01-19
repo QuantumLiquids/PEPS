@@ -378,5 +378,7 @@ int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   params_file = argv[1];
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
+MPI_Finalize();
+return test_err;
 }

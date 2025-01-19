@@ -7,8 +7,6 @@
 * Description: QuantumLiquids/PEPS project. Unittests for Monte-Carlo Measurement for finite-size PEPS.
 */
 
-
-
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
@@ -23,10 +21,8 @@ using qlten::special_qn::U1QN;
 using IndexT = Index<U1QN>;
 using QNSctT = QNSector<U1QN>;
 using QNSctVecT = QNSectorVec<U1QN>;
-
-using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Complex, U1QN>;
-
-boost::mpi::environment env;
+using TenElemT = TEN_ELEM_TYPE;
+using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
 
 using qlmps::CaseParamsParserBasic;
 
@@ -54,7 +50,7 @@ struct FileParams : public CaseParamsParserBasic {
 };
 
 // Test spin systems
-struct SpinSystemVMCPEPS : public testing::Test {
+struct SpinSystemMCPEPS : public testing::Test {
   FileParams params = FileParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
@@ -69,56 +65,57 @@ struct SpinSystemVMCPEPS : public testing::Test {
       std::vector<size_t>(2, N / 2),
       Ly, Lx);
 
-  boost::mpi::communicator world;
-
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
   void SetUp(void) {
     ::testing::TestEventListeners &listeners =
         ::testing::UnitTest::GetInstance()->listeners();
-    if (world.rank() != 0) {
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
       delete listeners.Release(listeners.default_result_printer());
     }
 
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-
     mc_measurement_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
   }
 };
 
-TEST_F(SpinSystemVMCPEPS, TriHeisenbergD4) {
-  using Model = SpinOneHalfTriHeisenbergSqrPEPS<QLTEN_Complex, U1QN>;
-  MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+TEST_F(SpinSystemMCPEPS, TriHeisenbergD4) {
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, U1QN>;
+  MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
   mc_measurement_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
 
-  executor = new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
-                                                                                             Ly,
-                                                                                             Lx,
-                                                                                             world,
-                                                                                             triangle_hei_solver);
+  executor = new MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+                                                                                        Ly, Lx,
+                                                                                        comm, triangle_hei_solver);
 
   executor->Execute();
   delete executor;
 }
 
-TEST_F(SpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
-  using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<QLTEN_Complex, U1QN>;
-  MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+TEST_F(SpinSystemMCPEPS, TriJ1J2HeisenbergD4) {
+  using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, U1QN>;
+  MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);
   mc_measurement_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
-  executor = new MonteCarloMeasurementExecutor<QLTEN_Complex, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
-                                                                                             Ly,
-                                                                                             Lx,
-                                                                                             world,
-                                                                                             trianglej1j2_hei_solver);
+  executor = new MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+                                                                                        Ly,
+                                                                                        Lx,
+                                                                                        comm,
+                                                                                        trianglej1j2_hei_solver);
   executor->Execute();
   delete executor;
 }
 
 int main(int argc, char *argv[]) {
-  boost::mpi::environment env;
+  MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   params_file = argv[1];
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
+  MPI_Finalize();
+  return test_err;
 }
 

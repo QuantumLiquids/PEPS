@@ -175,7 +175,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
 #endif
   for (size_t col = 0; col < this->lx_; col++) {
     for (size_t row = 0; row < this->ly_ - 1; row++) {
-      SiteIdx upper_site({row, col});
+      SiteIdx upper_site{row, col};
       auto proj_res = this->peps_.NearestNeighborSiteProject(vertical_nn_evolve_gate_set_(upper_site),
                                                              upper_site,
                                                              VERTICAL,

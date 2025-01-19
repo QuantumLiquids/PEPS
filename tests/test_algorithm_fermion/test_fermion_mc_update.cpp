@@ -178,9 +178,9 @@ TEST_F(Z2tJModelTools, MonteCarlo3SiteUpdate) {
 }
 
 int main(int argc, char *argv[]) {
-  boost::mpi::environment env;
+  MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   ipeps_data_path = argv[1];
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
 }

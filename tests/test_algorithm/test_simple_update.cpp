@@ -16,9 +16,11 @@
 
 using namespace qlten;
 using namespace qlpeps;
+
 using qlten::special_qn::U1QN;
 using qlten::special_qn::Z2QN;
 
+using TenElemT = TEN_ELEM_TYPE;
 using qlmps::CaseParamsParserBasic;
 
 char *params_file;
@@ -63,7 +65,7 @@ struct TransverseFieldIsing : public testing::Test {
   using IndexT = Index<Z2QN>;
   using QNSctT = QNSector<Z2QN>;
   using QNSctVecT = QNSectorVec<Z2QN>;
-  using DTensor = QLTensor<QLTEN_Double, Z2QN>;
+  using DTensor = QLTensor<TenElemT, Z2QN>;
 
   size_t Ly = 4;
   size_t Lx = 4;
@@ -80,7 +82,7 @@ struct TransverseFieldIsing : public testing::Test {
   //sigma operators
   DTensor xx_term = DTensor({pb_in, pb_out, pb_in, pb_out});
   DTensor z_term = DTensor({pb_in, pb_out});
-  using PEPST = SquareLatticePEPS<QLTEN_Double, Z2QN>;
+  using PEPST = SquareLatticePEPS<TenElemT, Z2QN>;
   PEPST peps0 = PEPST(pb_out, Ly, Lx);
   void SetUp(void) {
     z_term({0, 0}) = 1.0 * h;
@@ -100,8 +102,8 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   // stage 1, D = 2
   SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
-  SimpleUpdateExecutor<QLTEN_Double, Z2QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, Z2QN>(update_para, peps0,
+  SimpleUpdateExecutor<TenElemT, Z2QN>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, Z2QN>(update_para, peps0,
                                                                             xx_term,
                                                                             z_term);
   su_exe->Execute();
@@ -111,7 +113,7 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   su_exe->update_para.Trunc_err = 1e-10;
   su_exe->ResetStepLenth(0.01); // call to re-evaluate the evolution gates
   su_exe->Execute();
-  auto tps_d4 = TPS<QLTEN_Double, Z2QN>(su_exe->GetPEPS());
+  auto tps_d4 = TPS<TenElemT, Z2QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_transverse_field_ising_D4", false);
   tps_d4.Dump("tps_square_transverse_field_ising_D4");
 
@@ -127,7 +129,7 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   su_exe->update_para.steps = 100;
   su_exe->ResetStepLenth(0.0001);
   su_exe->Execute();
-  auto tps_d8 = TPS<QLTEN_Double, Z2QN>(su_exe->GetPEPS());
+  auto tps_d8 = TPS<TenElemT, Z2QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_transverse_field_ising_D8", true);
   tps_d8.Dump("tps_square_transverse_field_ising_D8");
   delete su_exe;
@@ -139,7 +141,7 @@ struct SpinOneHalfSystemSimpleUpdate : public testing::Test {
   using QNSctT = QNSector<U1QN>;
   using QNSctVecT = QNSectorVec<U1QN>;
 
-  using DTensor = QLTensor<QLTEN_Double, U1QN>;
+  using DTensor = QLTensor<TenElemT, U1QN>;
 
   SystemSizeParams params = SystemSizeParams(params_file);
   size_t Lx = params.Lx; //cols
@@ -183,7 +185,7 @@ struct SpinOneHalfSystemSimpleUpdate : public testing::Test {
       // 0.5 * S^-_i * S^+j
       {{1, 0, 0, 1}, 0.5},
   };
-  using PEPST = SquareLatticePEPS<QLTEN_Double, U1QN>;
+  using PEPST = SquareLatticePEPS<TenElemT, U1QN>;
   PEPST peps0 = PEPST(pb_out, Ly, Lx);
   void SetUp(void) {
     for (const auto &element : ham_ising_nn_elements) {
@@ -220,8 +222,8 @@ struct SpinOneHalfSystemSimpleUpdate : public testing::Test {
 TEST_F(SpinOneHalfSystemSimpleUpdate, AFM_ClassicalIsing) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   SimpleUpdatePara update_para(5, 0.01, 1, 1, 1e-5);
-  SimpleUpdateExecutor<QLTEN_Double, U1QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,
+  SimpleUpdateExecutor<TenElemT, U1QN>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
                                                                             dham_ising_nn);
   su_exe->Execute();
   double ex_energy = -0.25 * ((Lx - 1) * Ly + (Ly - 1) * Lx);
@@ -232,8 +234,8 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, AFM_ClassicalIsing) {
 TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
   // stage 1, D = 2
   SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
-  SimpleUpdateExecutor<QLTEN_Double, U1QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,
+  SimpleUpdateExecutor<TenElemT, U1QN>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
                                                                             dham_hei_nn);
   su_exe->Execute();
 
@@ -242,7 +244,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
   su_exe->update_para.Trunc_err = 1e-6;
   su_exe->ResetStepLenth(0.05); // call to re-evaluate the evolution gates
   su_exe->Execute();
-  auto tps_d4 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
+  auto tps_d4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_nn_hei_D4", false);
   tps_d4.Dump("tps_square_nn_hei_D4");
 
@@ -252,7 +254,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
   su_exe->update_para.steps = 100;
   su_exe->ResetStepLenth(0.01);
   su_exe->Execute();
-  auto tps_d8 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
+  auto tps_d8 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_nn_hei_D8", true);
   tps_d8.Dump("tps_square_nn_hei_D8");
   delete su_exe;
@@ -263,8 +265,8 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
 TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
   SimpleUpdatePara update_para(20, 0.1, 1, 2, 1e-5);
 
-  SimpleUpdateExecutor<QLTEN_Double, U1QN> *su_exe
-      = new TriangleNNModelSquarePEPSSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,
+  SimpleUpdateExecutor<TenElemT, U1QN> *su_exe
+      = new TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
                                                                               dham_hei_nn,
                                                                               dham_hei_tri);
   su_exe->Execute();
@@ -274,7 +276,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
   su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
-  auto tps4 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
+  auto tps4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_tri_nn_heisenberg_D4", true);
   tps4.Dump("tps_tri_nn_heisenberg_D4");
   delete su_exe;
@@ -283,8 +285,8 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
 TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
   SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
 
-  SimpleUpdateExecutor<QLTEN_Double, U1QN>
-      *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<QLTEN_Double, U1QN>(update_para, peps0,
+  SimpleUpdateExecutor<TenElemT, U1QN>
+      *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
                                                                              dham_hei_nn,
                                                                              dham_hei_tri_j2);
   su_exe->Execute();
@@ -294,7 +296,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
   su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
-  auto tps4 = TPS<QLTEN_Double, U1QN>(su_exe->GetPEPS());
+  auto tps4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
   su_exe->DumpResult("peps_square_j1j2_hei_D4", true);
   tps4.Dump("tps_square_j1j2_hei_D4");
   delete su_exe;
@@ -304,5 +306,7 @@ int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
   params_file = argv[1];
-  return RUN_ALL_TESTS();
+  auto test_err = RUN_ALL_TESTS();
+  MPI_Finalize();
+  return test_err;
 }
