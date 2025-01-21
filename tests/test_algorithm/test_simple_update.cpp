@@ -7,8 +7,6 @@
 * Description: QuantumLiquids/PEPS project. Unittests for Simple Update in PEPS optimization.
 */
 
-#define PLAIN_TRANSPOSE 1
-
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
@@ -60,6 +58,26 @@ std::vector<MatrixElement<double>> GenerateTriElements(
   return tri_elements;
 }
 
+std::string GenPEPSPath(std::string model_name, size_t Dmax) {
+#if TEN_ELEM_TYPE == QLTEN_Double
+  return "dpeps_" + model_name + "_D" + std::to_string(Dmax);
+#elif TEN_ELEM_TYPE == QLTEN_Double
+  return "zpeps_" + model_name + "_D" + std::to_string(Dmax);
+#else
+#error "Unexpected TEN_ELEM_TYPE"
+#endif
+}
+
+std::string GenTPSPath(std::string model_name, size_t Dmax) {
+#if TEN_ELEM_TYPE == QLTEN_Double
+  return "dtps_" + model_name + "_D" + std::to_string(Dmax);
+#elif TEN_ELEM_TYPE == QLTEN_Double
+  return "ztps_" + model_name + "_D" + std::to_string(Dmax);
+#else
+#error "Unexpected TEN_ELEM_TYPE"
+#endif
+}
+
 // XX + Z
 struct TransverseFieldIsing : public testing::Test {
   using IndexT = Index<Z2QN>;
@@ -99,13 +117,14 @@ struct TransverseFieldIsing : public testing::Test {
 };
 
 TEST_F(TransverseFieldIsing, SimpleUpdate) {
+  std::string model_name = "square_transverse_field_ising";
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   // stage 1, D = 2
   SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
   SimpleUpdateExecutor<TenElemT, Z2QN>
       *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, Z2QN>(update_para, peps0,
-                                                                            xx_term,
-                                                                            z_term);
+                                                                        xx_term,
+                                                                        z_term);
   su_exe->Execute();
 
   // stage 2, D = 4
@@ -114,8 +133,8 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   su_exe->ResetStepLenth(0.01); // call to re-evaluate the evolution gates
   su_exe->Execute();
   auto tps_d4 = TPS<TenElemT, Z2QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("peps_square_transverse_field_ising_D4", false);
-  tps_d4.Dump("tps_square_transverse_field_ising_D4");
+  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
+  tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
   // stage 3, D = 6
   su_exe->update_para.Dmax = 6;
@@ -130,8 +149,8 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   su_exe->ResetStepLenth(0.0001);
   su_exe->Execute();
   auto tps_d8 = TPS<TenElemT, Z2QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("peps_square_transverse_field_ising_D8", true);
-  tps_d8.Dump("tps_square_transverse_field_ising_D8");
+  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
+  tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
   delete su_exe;
 }
 
@@ -224,7 +243,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, AFM_ClassicalIsing) {
   SimpleUpdatePara update_para(5, 0.01, 1, 1, 1e-5);
   SimpleUpdateExecutor<TenElemT, U1QN>
       *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
-                                                                            dham_ising_nn);
+                                                                        dham_ising_nn);
   su_exe->Execute();
   double ex_energy = -0.25 * ((Lx - 1) * Ly + (Ly - 1) * Lx);
   EXPECT_NEAR(ex_energy, su_exe->GetEstimatedEnergy(), 1e-10);
@@ -232,11 +251,13 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, AFM_ClassicalIsing) {
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
+  std::string model_name = "square_nn_hei";
   // stage 1, D = 2
-  SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
+
   SimpleUpdateExecutor<TenElemT, U1QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
-                                                                            dham_hei_nn);
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>(SimpleUpdatePara(50, 0.1, 1, 2, 1e-5),
+                                                                        peps0,
+                                                                        dham_hei_nn);
   su_exe->Execute();
 
   // stage 2, D = 4
@@ -245,8 +266,8 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
   su_exe->ResetStepLenth(0.05); // call to re-evaluate the evolution gates
   su_exe->Execute();
   auto tps_d4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("peps_square_nn_hei_D4", false);
-  tps_d4.Dump("tps_square_nn_hei_D4");
+  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
+  tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
   // stage 3, D = 8
   su_exe->update_para.Dmax = 8;
@@ -255,20 +276,21 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareNNHeisenberg) {
   su_exe->ResetStepLenth(0.01);
   su_exe->Execute();
   auto tps_d8 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("peps_square_nn_hei_D8", true);
-  tps_d8.Dump("tps_square_nn_hei_D8");
+  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
+  tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
   delete su_exe;
 
   // Question: How to check the calculation results?
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
+  std::string model_name = "tri_nn_hei";
   SimpleUpdatePara update_para(20, 0.1, 1, 2, 1e-5);
 
   SimpleUpdateExecutor<TenElemT, U1QN> *su_exe
       = new TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
-                                                                              dham_hei_nn,
-                                                                              dham_hei_tri);
+                                                                          dham_hei_nn,
+                                                                          dham_hei_tri);
   su_exe->Execute();
 
   su_exe->update_para.Dmax = 4;
@@ -277,18 +299,19 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
   su_exe->Execute();
 
   auto tps4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("peps_tri_nn_heisenberg_D4", true);
-  tps4.Dump("tps_tri_nn_heisenberg_D4");
+  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
+  tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
   delete su_exe;
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
+  std::string model_name = "square_j1j2_hei";
   SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
 
   SimpleUpdateExecutor<TenElemT, U1QN>
       *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
-                                                                             dham_hei_nn,
-                                                                             dham_hei_tri_j2);
+                                                                         dham_hei_nn,
+                                                                         dham_hei_tri_j2);
   su_exe->Execute();
 
   su_exe->update_para.Dmax = 4;
@@ -297,16 +320,17 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
   su_exe->Execute();
 
   auto tps4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult("peps_square_j1j2_hei_D4", true);
-  tps4.Dump("tps_square_j1j2_hei_D4");
+  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
+  tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
   delete su_exe;
 }
 
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
-  std::cout << argc << std::endl;
+  if (argc == 1) {
+    std::cout << "No parameter file input." << std::endl;
+    return 1;
+  }
   params_file = argv[1];
-  auto test_err = RUN_ALL_TESTS();
-  MPI_Finalize();
-  return test_err;
+  return RUN_ALL_TESTS();
 }

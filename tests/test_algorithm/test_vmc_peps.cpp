@@ -16,21 +16,22 @@
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
 #include "qlmps/case_params_parser.h"
+#include "../test_mpi_env.h"
 
 using namespace qlten;
 using namespace qlpeps;
 
 using qlten::special_qn::U1QN;
-using IndexT = Index<U1QN>;
-using QNSctT = QNSector<U1QN>;
-using QNSctVecT = QNSectorVec<U1QN>;
 
-using TenElemT = TEN_ELEM_TYPE;
-using Tensor = QLTensor<TenElemT, U1QN>;
-
-using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
-using SquareTPSSample3SiteExchangeT = SquareTPSSample3SiteExchange<TenElemT, U1QN>;
-using SquareTPSSampleFullSpaceNNFlipT = SquareTPSSampleFullSpaceNNFlip<TenElemT, U1QN>;
+std::string GenTPSPath(std::string model_name, size_t Dmax) {
+#if TEN_ELEM_TYPE == QLTEN_Double
+  return "dtps_" + model_name + "_D" + std::to_string(Dmax);
+#elif TEN_ELEM_TYPE == QLTEN_Double
+  return "ztps_" + model_name + "_D" + std::to_string(Dmax);
+#else
+#error "Unexpected TEN_ELEM_TYPE"
+#endif
+}
 
 using qlmps::CaseParamsParserBasic;
 
@@ -70,6 +71,17 @@ struct VMCUpdateParams : public CaseParamsParserBasic {
 
 // Test spin systems
 struct SpinSystemVMCPEPS : public testing::Test {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using QNSctVecT = QNSectorVec<U1QN>;
+
+  using TenElemT = TEN_ELEM_TYPE;
+  using Tensor = QLTensor<TenElemT, U1QN>;
+
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
+  using SquareTPSSample3SiteExchangeT = SquareTPSSample3SiteExchange<TenElemT, U1QN>;
+  using SquareTPSSampleFullSpaceNNFlipT = SquareTPSSampleFullSpaceNNFlip<TenElemT, U1QN>;
+
   VMCUpdateParams params = VMCUpdateParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
@@ -115,7 +127,8 @@ struct SpinSystemVMCPEPS : public testing::Test {
 };
 
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
+  std::string model_name = "square_nn_hei";
+  optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
 
   using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
   VMCPEPSExecutor<TenElemT, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model> *executor(nullptr);
@@ -126,8 +139,10 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
                                                                                            comm);
   } else {
     TPS<TenElemT, U1QN> tps = TPS<TenElemT, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
-      std::cout << "Loading simple updated TPS files is broken." << std::endl;
+    if (!tps.Load(GenTPSPath(model_name, params.D))) {
+      std::cout << "Loading simple updated TPS files "
+                << GenTPSPath(model_name, params.D)
+                << "failed." << std::endl;
       exit(-2);
     };
     executor = new VMCPEPSExecutor<TenElemT, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(optimize_para, tps,
@@ -139,8 +154,9 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
 }
 
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
+  std::string model_name = "square_nn_hei";
   optimize_para.bmps_trunc_para.compress_scheme = CompressMPSScheme::VARIATION1Site;
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
+  optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
@@ -150,7 +166,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
                                                                             comm);
   } else {
     TPS<TenElemT, U1QN> tps = TPS<TenElemT, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+    if (!tps.Load(GenTPSPath(model_name, params.D))) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
@@ -164,7 +180,8 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
 
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
   using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
+  std::string model_name = "square_nn_hei";
+  optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
@@ -175,7 +192,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
                                                                             comm);
   } else {
     TPS<TenElemT, U1QN> tps = TPS<TenElemT, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+    if (!tps.Load(GenTPSPath(model_name, params.D))) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
@@ -189,7 +206,8 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
 
 TEST_F(SpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
   using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
+  std::string model_name = "square_nn_hei";
+  optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   optimize_para.update_scheme = GradientLineSearch;
@@ -199,7 +217,7 @@ TEST_F(SpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
                                                                             comm);
   } else {
     TPS<TenElemT, U1QN> tps = TPS<TenElemT, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+    if (!tps.Load(GenTPSPath(model_name, params.D))) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
@@ -214,7 +232,8 @@ TEST_F(SpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
   using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
+  std::string model_name = "square_nn_hei";
+  optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
   optimize_para.update_scheme = NaturalGradientLineSearch;
   if (params.Continue_from_VMC) {
@@ -223,7 +242,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
                                                                             comm);
   } else {
     TPS<TenElemT, U1QN> tps = TPS<TenElemT, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+    if (!tps.Load(GenTPSPath(model_name, params.D))) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
@@ -237,7 +256,8 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
 
 TEST_F(SpinSystemVMCPEPS, SquareJ1J2D4) {
   using Model = SpinOneHalfJ1J2HeisenbergSquare<TenElemT, U1QN>;
-  optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(params.D);
+  std::string model_name = "square_j1j2_hei";
+  optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   double j2 = 0.2;
   Model j1j2solver(j2);
@@ -247,7 +267,7 @@ TEST_F(SpinSystemVMCPEPS, SquareJ1J2D4) {
                                                                             comm, j1j2solver);
   } else {
     TPS<TenElemT, U1QN> tps = TPS<TenElemT, U1QN>(Ly, Lx);
-    if (!tps.Load("tps_heisenberg_D" + std::to_string(params.D))) {
+    if (!tps.Load(GenTPSPath(model_name, params.D))) {
       std::cout << "Loading simple updated TPS files is broken." << std::endl;
       exit(-2);
     };
@@ -312,7 +332,11 @@ TEST_F(SpinSystemVMCPEPS, TriJ1J2HeisenbergD4) {
 int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
-  std::cout << argc << std::endl;
+  if (argc == 1) {
+    std::cout << "No parameter file input." << std::endl;
+    MPI_Finalize();
+    return 1;
+  }
   params_file = argv[1];
   auto test_err = RUN_ALL_TESTS();
   MPI_Finalize();

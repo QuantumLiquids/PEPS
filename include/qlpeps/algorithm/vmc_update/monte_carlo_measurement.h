@@ -303,6 +303,8 @@ MonteCarloMeasurementExecutor<TenElemT,
     tps_sample_(ly_, lx_),
     u_double_(0, 1), warm_up_(false),
     measurement_solver_(solver) {
+  MPI_Comm_rank(comm, &rank_);
+  MPI_Comm_size(comm, &mpi_size_);
   WaveFunctionComponentType::trun_para = BMPSTruncatePara(measurement_para);
   random_engine.seed(std::random_device{}() + rank_ * 10086);
   InitConfigs_(mc_measure_para.wavefunction_path);

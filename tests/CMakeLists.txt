@@ -91,8 +91,7 @@ macro(add_unittest
     target_link_libraries(${TEST_NAME}
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
-            ${MPI_CXX_LINK_FLAGS}
-            ${MPI_mpi_LIBRARY}
+            MPI::MPI_CXX
             ${LINK_LIBS} "${LINK_LIB_FLAGS}")
 
     add_test(
@@ -122,8 +121,7 @@ macro(add_two_type_unittest
     target_link_libraries(${TEST_NAME}_double
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
-            ${MPI_CXX_LINK_FLAGS}
-            ${MPI_mpi_LIBRARY}
+            MPI::MPI_CXX
             "${LINK_LIB_FLAGS}")
     add_test(NAME ${TEST_NAME}_double
             COMMAND ${TEST_NAME}_double ${INPUT_ARGS}
@@ -145,8 +143,7 @@ macro(add_two_type_unittest
     target_link_libraries(${TEST_NAME}_complex
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
-            ${MPI_CXX_LINK_FLAGS}
-            ${MPI_mpi_LIBRARY}
+            MPI::MPI_CXX
             "${LINK_LIB_FLAGS}")
     add_test(NAME ${TEST_NAME}_complex
             COMMAND ${TEST_NAME}_complex ${INPUT_ARGS}
