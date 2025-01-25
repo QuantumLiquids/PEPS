@@ -8,81 +8,36 @@
 
 option(QLTEN_USE_OPENBLAS "Use openblas rather mkl" OFF)
 
-if (NOT QLTEN_USE_OPENBLAS)
-    if (APPLE)
-        if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-            set(MATH_LIB_COMPILE_FLAGS "-I$ENV{MKLROOT}/include")
-            #Need test
-            set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -liomp5 -lpthread -lm -ldl)
-        endif ()
-        if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-            # May not work
-            set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -L$ENV{MKLROOT}/lib -L$ENV{CMPLR_ROOT}/mac/compiler/lib/ -liomp5 -lpthread -lm -ldl)
-        endif ()
-        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-            # Note as of Intel oneAPI 2021.2, "source /opt/intel/oneapi/compiler/latest/env/vars.sh"
-            set(MATH_LIB_LINK_FLAGS $ENV{MKLROOT}/lib/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/libmkl_intel_thread.a $ENV{MKLROOT}/lib/libmkl_core.a -L$ENV{MKLROOT}/lib -L$ENV{CMPLR_ROOT}/mac/compiler/lib/ -Wl, -rpath $ENV{CMPLR_ROOT}/mac/compiler/lib/libiomp5.dylib -liomp5 -lpthread -lm -ldl)
-        endif ()
-    elseif (UNIX)
-        #UNIX include APPLE, but we except it here
-        if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-            set(MATH_LIB_COMPILE_FLAGS "-I$ENV{MKLROOT}/include")
-            set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -liomp5 -lpthread -lm -ldl)
-        endif ()
-        if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-            # Link the Intel's OpenMP library to avoid performance issue when the library calls the MKL's gesdd function.
-            set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -L$ENV{MKLROOT}/lib/intel64 -liomp5 -lpthread -lm -ldl)
-        endif ()
-        if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            set(MATH_LIB_COMPILE_FLAGS -m64 -I$ENV{MKLROOT}/include)
-            set(MATH_LIB_LINK_FLAGS -Wl,--start-group $ENV{MKLROOT}/lib/intel64/libmkl_intel_lp64.a $ENV{MKLROOT}/lib/intel64/libmkl_intel_thread.a $ENV{MKLROOT}/lib/intel64/libmkl_core.a -Wl,--end-group -L$ENV{MKLROOT}/lib/intel64 -liomp5 -lpthread -lm -ldl)
-        endif ()
-    endif ()
-else ()
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    set(BLA_VENDOR Intel10_64lp_seq)   #FOR VENDOR CHOICE: https://cmake.org/cmake/help/latest/module/FindBLAS.html
+    set(BLAS_INCLUDE_DIR "$ENV{MKLROOT}/include")
+elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64") # (e.g., Apple Silicon)
     add_definitions(-DUSE_OPENBLAS)
     set(BLA_VENDOR OpenBLAS)
-    #        FIND_PACKAGE(BLAS REQUIRED)
-    #        FIND_PACKAGE(LAPACK REQUIRED)
-    set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas/")
+    set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas/") #work for homebrew installed openblas in MacOSX
     set(Lapack_ROOT "/opt/homebrew/opt/lapack")
-    message(${OpenBLAS_ROOT})
-    set(OpenBLAS_INCLUDE_DIRS "${OpenBLAS_ROOT}/include")
-    set(OpenBLAS_LIBRARIES "${OpenBLAS_ROOT}/lib/libblas.dylib")
-    message(${OpenBLAS_LIBRARIES})
-    set(MATH_LIB_COMPILE_FLAGS -I${OpenBLAS_INCLUDE_DIRS} -pthread)
-    set(MATH_LIB_LINK_FLAGS ${OpenBLAS_LIBRARIES} ${OpenBLAS_ROOT}/lib/liblapack.dylib -lm -lpthread -ldl -fopenmp -lclapack)
+    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${OpenBLAS_ROOT} ${Lapack_ROOT}) # For find
+    set(BLAS_INCLUDE_DIR "${OpenBLAS_ROOT}/include")
 endif ()
 
-
+FIND_PACKAGE(BLAS REQUIRED)
+FIND_PACKAGE(LAPACK REQUIRED)
 find_package(MPI REQUIRED)
+find_package(OpenMP REQUIRED)
 
-#set omp flag
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
-    set(OMP_FLAGS -qopenmp)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set(OMP_FLAGS -fopenmp)
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(OMP_FLAGS -fopenmp)
-endif ()
+set(MATH_LIB_LINK_FLAGS "BLAS::BLAS" "LAPACK::LAPACK")
 
 if (U1SYM)
     add_definitions(-DU1SYM)
 endif ()
 
 macro(add_unittest
-        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
+        TEST_NAME TEST_SRC MATH_HEADER LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
     add_executable(${TEST_NAME}
             ${TEST_SRC})
 
-    target_compile_options(${TEST_NAME}
-            PRIVATE ${CFLAGS}
-            PRIVATE ${OMP_FLAGS}
-    )
-
     target_include_directories(${TEST_NAME}
+            PRIVATE ${MATH_HEADER}
             PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
@@ -91,6 +46,7 @@ macro(add_unittest
     target_link_libraries(${TEST_NAME}
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
+            OpenMP::OpenMP_CXX
             MPI::MPI_CXX
             ${LINK_LIBS} "${LINK_LIB_FLAGS}")
 
@@ -105,13 +61,11 @@ macro(add_unittest
 endmacro()
 
 macro(add_two_type_unittest
-        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
+        TEST_NAME TEST_SRC MATH_HEADER LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
     # Compile for QLTEN_Double
     add_executable(${TEST_NAME}_double ${TEST_SRC})
-    target_compile_options(${TEST_NAME}_double
-            PRIVATE ${CFLAGS}
-            PRIVATE ${OMP_FLAGS})
     target_include_directories(${TEST_NAME}_double
+            PRIVATE ${MATH_HEADER}
             PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
@@ -121,6 +75,7 @@ macro(add_two_type_unittest
     target_link_libraries(${TEST_NAME}_double
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
+            OpenMP::OpenMP_CXX
             MPI::MPI_CXX
             "${LINK_LIB_FLAGS}")
     add_test(NAME ${TEST_NAME}_double
@@ -130,10 +85,8 @@ macro(add_two_type_unittest
 
     # Compile for QLTEN_Complex
     add_executable(${TEST_NAME}_complex ${TEST_SRC})
-    target_compile_options(${TEST_NAME}_complex
-            PRIVATE ${CFLAGS}
-            PRIVATE ${OMP_FLAGS})
     target_include_directories(${TEST_NAME}_complex
+            PRIVATE ${MATH_HEADER}
             PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
@@ -144,6 +97,7 @@ macro(add_two_type_unittest
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
             MPI::MPI_CXX
+            OpenMP::OpenMP_CXX
             "${LINK_LIB_FLAGS}")
     add_test(NAME ${TEST_NAME}_complex
             COMMAND ${TEST_NAME}_complex ${INPUT_ARGS}
@@ -165,15 +119,11 @@ macro(add_mpi_unittest_run
 endmacro()
 
 macro(add_mpi_unittest
-        TEST_NAME TEST_SRC CFLAGS LINK_LIBS LINK_LIB_FLAGS PROCESSOR_NUM INPUT_ARGS)
+        TEST_NAME TEST_SRC MATH_HEADER LINK_LIBS LINK_LIB_FLAGS PROCESSOR_NUM INPUT_ARGS)
     add_executable(${TEST_NAME}
             ${TEST_SRC})
-
-    target_compile_options(${TEST_NAME}
-            PRIVATE ${CFLAGS}
-            PRIVATE ${OMP_FLAGS}
-    )
     target_include_directories(${TEST_NAME}
+            PRIVATE ${MATH_HEADER}
             PRIVATE ${QLPEPS_HEADER_PATH}
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
@@ -182,8 +132,8 @@ macro(add_mpi_unittest
     target_link_libraries(${TEST_NAME}
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
-            ${MPI_CXX_LINK_FLAGS}
-            ${MPI_mpi_LIBRARY}
+            MPI::MPI_CXX
+            OpenMP::OpenMP_CXX
             "${LINK_LIBS}" "${LINK_LIB_FLAGS}"
     )
     add_mpi_unittest_run(${TEST_NAME} ${PROCESSOR_NUM} "${INPUT_ARGS}")
@@ -195,68 +145,68 @@ add_unittest(test_duomatrix test_2d_tn/test_duomatrix.cpp "" "" "" "")
 # Test TenMatrix class
 add_unittest(test_ten_mat
         "test_2d_tn/test_ten_matrix.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 # Test Configuration class
 add_unittest(test_configuration
         "test_2d_tn/test_configuration.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 ## Test 2D tensor networks.
 add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 add_unittest(test_split_index_tps
         "test_2d_tn/test_split_index_tps.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "/Users/wanghaoxin/GitHub/PEPS/tests/test_data/"
 )
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 
 ## Test monte carlo tools
 add_unittest(test_statistics
         "test_monte_carlo_tools/test_statistics.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 add_mpi_unittest(test_statistics_mpi
         "test_monte_carlo_tools/test_statistics_mpi.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
 add_unittest(test_non_detailed_balance_mcmc
         "test_monte_carlo_tools/test_non_detailed_balance_mcmc.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 ## Test algorithms
 # Test simple update
 add_two_type_unittest(test_simple_update
         "test_algorithm/test_simple_update.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
 add_unittest(test_fermion_simple_update
         "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
 add_two_type_unittest(test_loop_update
         "test_algorithm/test_loop_update.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
 # Test vmc-peps
 add_two_type_unittest(test_vmc_peps
         "test_algorithm/test_vmc_peps.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
@@ -266,35 +216,35 @@ add_mpi_unittest_run(test_vmc_peps_complex "4" "${CMAKE_CURRENT_LIST_DIR}/test_a
 
 add_unittest(test_fermion_vmc_peps
         "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
 add_unittest(test_fermion_peps_exact_summation
         "test_algorithm_fermion/test_fermion_exact_optimization.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" " "
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 add_unittest(test_square_heisenberg
         "test_algorithm/test_square_heisenberg.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "4"
 )
 
 add_two_type_unittest(test_measure
         "test_algorithm/test_mc_peps_measure.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
 
 add_two_type_unittest(test_fermion_measure
         "test_algorithm_fermion/test_fermion_mc_measure.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 )
 
 add_unittest(test_fermion_mc_update
         "test_algorithm_fermion/test_fermion_mc_update.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_data/"
 )
 
@@ -302,12 +252,12 @@ add_unittest(test_fermion_mc_update
 ## Test utility
 add_unittest(test_conjugate_gradient_solver
         "test_utility/test_conjugate_gradient_solver.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
 add_mpi_unittest(test_conjugate_gradient_mpi_solver
         "test_utility/test_conjugate_gradient_mpi_solver.cpp"
-        "${MATH_LIB_COMPILE_FLAGS}" "" "${MATH_LIB_LINK_FLAGS}" "3"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3"
         ""
 )

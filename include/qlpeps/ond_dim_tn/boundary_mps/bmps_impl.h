@@ -136,12 +136,12 @@ template<typename TenElemT, typename QNT>
 void BMPS<TenElemT, QNT>::RightCanonicalize(const size_t stop_idx) {
   auto mps_tail_idx = this->size() - 1;
   size_t start_idx;
-  for (size_t i = mps_tail_idx; i >= stop_idx; --i) {
+  for (long i = mps_tail_idx; i >= long(stop_idx); --i) {
     start_idx = i;
     if (tens_cano_type_[i] != MPSTenCanoType::RIGHT) { break; }
     if (i == stop_idx) { return; }    // All related tensors are right canonical, do nothing.
   }
-  for (size_t i = start_idx; i >= stop_idx; --i) { RightCanonicalizeTen(i); }
+  for (long i = start_idx; i >= long(stop_idx); --i) { RightCanonicalizeTen(i); }
 }
 
 template<typename TenElemT, typename QNT>
@@ -210,6 +210,9 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t D
       1, qn0_, trunc_err, Dmin, Dmax,
       &u, &s, pvt, &actual_trunc_err, &D
   );
+  assert(!u.HasNan());
+  assert(!s.HasNan());
+  assert(!pvt->HasNan());
 //  std::cout << "Truncate MPS bond " << std::setw(4) << site
 //            << " TruncErr = " << std::setprecision(2) << std::scientific << actual_trunc_err << std::fixed
 //            << " D = " << std::setw(5) << D;
@@ -220,6 +223,7 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t D
 
   Tensor temp_ten;
   Contract(&u, &s, {{1}, {0}}, &temp_ten);
+  assert(!temp_ten.HasNan());
   auto pnext_ten = new Tensor;
   Contract((*this)(site - 1), &temp_ten, {{2}, {0}}, pnext_ten);
   delete (*this)(site - 1);

@@ -89,13 +89,18 @@ TenElemT EvaluateBondEnergyFortJModel(
     }
   } else {
     TenElemT psi = tn.Trace(site1, site2, orient);
+    if (psi == TenElemT(0)) [[unlikely]] {
+      std::cerr << "Error: psi is 0. Division by 0 is not allowed." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
     TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
                                             split_index_tps_on_site1[size_t(config2)],
                                             split_index_tps_on_site2[size_t(config1)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);
     if (is_nan(ratio)) [[unlikely]] {
       std::cerr << "ratio is nan !" << std::endl;
-      exit(-1);
+      exit(EXIT_FAILURE);
     }
     if (config1 == tJSingleSiteState::Empty || config2 == tJSingleSiteState::Empty) {
       // one site empty, the other site filled
