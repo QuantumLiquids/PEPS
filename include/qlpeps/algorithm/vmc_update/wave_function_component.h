@@ -26,6 +26,8 @@ class WaveFunctionComponent {
       config(rows, cols), amplitude(0) {}
   WaveFunctionComponent(const Configuration &config) : config(config), amplitude(0) {}
 
+  bool IsZero() const { return (amplitude == TenElemT(0)); }
+
   virtual void MonteCarloSweepUpdate(const SplitIndexTPS<TenElemT, QNT> &sitps,
                                      std::uniform_real_distribution<double> &u_double,
                                      std::vector<double> &accept_rates) = 0;
@@ -37,6 +39,11 @@ bool IsAmplitudeSquareLegal(const ElemT &amplitude) {
   const double max_positive = std::numeric_limits<double>::max();
   return std::abs(amplitude) > std::sqrt(min_positive)
       && std::abs(amplitude) < std::sqrt(max_positive);
+}
+
+template<typename WaveFunctionComponentType>
+bool CheckWaveFunctionAmplitude(const WaveFunctionComponentType &tps_sample) {
+  return !tps_sample.IsZero();
 }
 
 template<typename TenElemT, typename QNT>

@@ -258,6 +258,15 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Wa
               << std::endl;
     warm_up_ = true;
   }
+  bool psi_legal = CheckWaveFunctionAmplitude(tps_sample_);
+  if (!psi_legal) {
+    std::cout << "Proc " << std::setw(4) << rank_
+              << ", psi : " << tps_sample_.amplitude
+              << " Amplitude is still not legal after warm up. "
+              << " Terminate the program"
+              << std::endl;
+    MPI_Abort(comm_, EXIT_FAILURE);
+  }
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
