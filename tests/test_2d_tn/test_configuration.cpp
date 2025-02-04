@@ -55,3 +55,10 @@ TEST(ConfigurationTest, RandomInitWithOccupancy) {
   }
   EXPECT_EQ(config.Sum(), sum);
 }
+
+TEST(ConfigurationTest, Showable) {
+  Configuration config(5, 6);
+  std::map<size_t, size_t> occupancy_num = {{0, 10}, {2, 15}, {8, 5}};
+  config.Random(occupancy_num);
+  config.Show(3);
+}

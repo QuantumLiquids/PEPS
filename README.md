@@ -6,7 +6,6 @@ for two-dimension quantum many-body problems. It is still under building.
 ## To-Do List
 
 - [ ] PESS
-- [ ] Fermionic PEPS
 
 ## Dependence
 Please note that the project requires the following dependencies to be installed 

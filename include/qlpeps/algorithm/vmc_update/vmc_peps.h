@@ -13,7 +13,8 @@
 #include "qlpeps/two_dim_tn/tps/tps.h"              // TPS
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
 
-#include "qlpeps/algorithm/vmc_update/vmc_optimize_para.h"  //VMCOptimizePara
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  //VMCOptimizePara
+#include "monte_carlo_peps_base.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -27,12 +28,21 @@ using namespace qlten;
  * @tparam EnergySolver Energy solver, define evaluation of the model energy and holes in PEPS
  */
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-class VMCPEPSExecutor : public Executor {
- public:
+class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType> {
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::comm_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::mpi_size_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::rank_;
+
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::split_index_tps_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::tps_sample_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::ly_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::lx_;
+
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using IndexT = Index<QNT>;
+ public:
 
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
                   const TPST &tps_init,
@@ -53,11 +63,6 @@ class VMCPEPSExecutor : public Executor {
   void Execute(void) override;
 
   const SITPST &GetState(void) const { return split_index_tps_; }
-  void LoadTenData(void);
-
-  void LoadTenData(const std::string &tps_path);
-
-  void InitConfigs_(const std::string &path);
 
   void DumpData(const bool release_mem = false);
 
@@ -66,7 +71,6 @@ class VMCPEPSExecutor : public Executor {
   VMCOptimizePara optimize_para;
  protected:
   // Level 1 Member Functions
-  void WarmUp_(void);
 
   void LineSearchOptimizeTPS_(void);
   void IterativeOptimizeTPS_(void);
@@ -100,24 +104,12 @@ class VMCPEPSExecutor : public Executor {
   void GradientRandElementSign_();
   size_t CalcNaturalGradient_(const VMCPEPSExecutor::SITPST &grad, const SITPST &init_guess);
 
-  std::vector<double> MCSweep_(void);
-
   bool AcceptanceRateCheck(const std::vector<double> &) const;
-  // Input Data Region
-  const MPI_Comm comm_;
-  int rank_;
-  int mpi_size_;
-
-  size_t lx_; //cols
-  size_t ly_; //rows
 
   EnergySolver energy_solver_;
 
   //Runtime Data Region
-  SITPST split_index_tps_;  //also can be input/output
-  bool warm_up_;
   bool stochastic_reconfiguration_update_class_;
-  WaveFunctionComponentType tps_sample_;
 
   std::vector<TenElemT> energy_samples_;
   ///<outside vector indices corresponding to the local hilbert space basis

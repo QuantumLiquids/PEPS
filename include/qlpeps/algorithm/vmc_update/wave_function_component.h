@@ -42,8 +42,9 @@ bool IsAmplitudeSquareLegal(const ElemT &amplitude) {
 }
 
 template<typename WaveFunctionComponentType>
-bool CheckWaveFunctionAmplitude(const WaveFunctionComponentType &tps_sample) {
-  return !tps_sample.IsZero();
+bool CheckWaveFunctionAmplitudeValidity(const WaveFunctionComponentType &tps_sample) {
+  return (std::abs(tps_sample.amplitude) > std::numeric_limits<double>::epsilon()) &&
+      !std::isnan(std::abs(tps_sample.amplitude)) && !std::isinf(std::abs(tps_sample.amplitude));
 }
 
 template<typename TenElemT, typename QNT>

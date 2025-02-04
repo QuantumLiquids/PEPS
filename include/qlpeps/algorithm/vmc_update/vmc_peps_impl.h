@@ -79,14 +79,12 @@ VMCPEPSExecutor<TenElemT,
                                                const SITPST &sitpst_init,
                                                const MPI_Comm &comm,
                                                const EnergySolver &solver) :
+    MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>(sitpst_init,
+                                                                         MonteCarloParams(optimize_para),
+                                                                         PEPSParams(optimize_para),
+                                                                         comm),
     optimize_para(optimize_para),
-    comm_(comm),
-    lx_(sitpst_init.cols()),
-    ly_(sitpst_init.rows()),
     energy_solver_(solver),
-    split_index_tps_(sitpst_init),
-    warm_up_(false),
-    tps_sample_(ly_, lx_),
 //    gten_samples_(ly_, lx_),
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_),
@@ -94,11 +92,7 @@ VMCPEPSExecutor<TenElemT,
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
-  MPI_Comm_rank(comm_, &rank_);
-  MPI_Comm_size(comm_, &mpi_size_);
-  random_engine.seed(std::random_device{}() + 10086 * rank_);
-  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
-  tps_sample_ = WaveFunctionComponentType(sitpst_init, optimize_para.init_config);
+  NormalizeTPS_();
   if (std::find(stochastic_reconfiguration_method.cbegin(),
                 stochastic_reconfiguration_method.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
@@ -106,8 +100,6 @@ VMCPEPSExecutor<TenElemT,
   } else {
     stochastic_reconfiguration_update_class_ = false;
   }
-  NormalizeTPS_();
-  InitConfigs_(optimize_para.wavefunction_path);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -121,22 +113,19 @@ VMCPEPSExecutor<TenElemT,
                                                const size_t ly, const size_t lx,
                                                const MPI_Comm &comm,
                                                const EnergySolver &solver):
+    MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>(ly, lx,
+                                                                         MonteCarloParams(optimize_para),
+                                                                         PEPSParams(optimize_para),
+                                                                         comm),
     optimize_para(optimize_para),
-    comm_(comm), lx_(lx), ly_(ly),
     energy_solver_(solver),
-    split_index_tps_(ly, lx),
-    warm_up_(false),
-    tps_sample_(ly, lx),
 //    gten_samples_(ly_, lx_),
 //    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_), g_times_energy_sum_(ly_, lx_),
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
-  MPI_Comm_rank(comm_, &rank_);
-  MPI_Comm_size(comm_, &mpi_size_);
-  WaveFunctionComponentType::trun_para = BMPSTruncatePara(optimize_para);
-  random_engine.seed(std::random_device{}() + 10086 * rank_);
+
   if (std::find(stochastic_reconfiguration_method.cbegin(),
                 stochastic_reconfiguration_method.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
@@ -144,8 +133,6 @@ VMCPEPSExecutor<TenElemT,
   } else {
     stochastic_reconfiguration_update_class_ = false;
   }
-  LoadTenData();
-  InitConfigs_(optimize_para.wavefunction_path);
   NormalizeTPS_();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
@@ -154,15 +141,15 @@ VMCPEPSExecutor<TenElemT,
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Execute(void) {
-  SetStatus(ExecutorStatus::EXEING);
-  WarmUp_();
+  this->SetStatus(ExecutorStatus::EXEING);
+  this->WarmUp_();
   if (optimize_para.update_scheme == GradientLineSearch || optimize_para.update_scheme == NaturalGradientLineSearch) {
     LineSearchOptimizeTPS_();
   } else {
     IterativeOptimizeTPS_();
   }
   DumpData();
-  SetStatus(ExecutorStatus::FINISH);
+  this->SetStatus(ExecutorStatus::FINISH);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -211,21 +198,9 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Re
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::PrintExecutorInfo_(void) {
+  this->PrintCommonInfo_("VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS");
   if (rank_ == kMPIMasterRank) {
-    const size_t indent = 40;
-    std::cout << std::left;
-    std::cout << "\n";
-    std::cout << "=====> VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS <=====" << "\n";
-    std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
-    std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMinBondDimension() << "/"
-              << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(indent) << "BMPS bond dimension:" << optimize_para.bmps_trunc_para.D_min << "/"
-              << optimize_para.bmps_trunc_para.D_max << "\n";
-    std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
-              << CompressMPSSchemeString(optimize_para.bmps_trunc_para.compress_scheme) << "\n";
-    std::cout << std::setw(indent) << "Sampling numbers:" << optimize_para.mc_samples << "\n";
-    std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << optimize_para.mc_sweeps_between_sample
-              << "\n";
+    size_t indent = 40;
     std::cout << std::setw(indent) << "PEPS update times:" << optimize_para.step_lens.size() << "\n";
     std::cout << std::setw(indent) << "PEPS update strategy:"
               << WavefunctionUpdateSchemeString(optimize_para.update_scheme) << "\n";
@@ -238,35 +213,8 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Pr
                 << optimize_para.cg_params.value().diag_shift
                 << "\n";
     }
-    std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
-    std::cout << std::setw(indent) << "The number of processors (including master):" << mpi_size_ << "\n";
-    std::cout << std::setw(indent) << "The number of threads per processor:"
-              << hp_numeric::GetTensorManipulationThreads()
-              << "\n";
   }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::WarmUp_(void) {
-  if (!warm_up_) {
-    Timer warm_up_timer("warm_up");
-    for (size_t sweep = 0; sweep < optimize_para.mc_warm_up_sweeps; sweep++) {
-      MCSweep_();
-    }
-    double elasp_time = warm_up_timer.Elapsed();
-    std::cout << "Proc " << std::setw(4) << rank_ << " warm up completes T = " << elasp_time << "s."
-              << std::endl;
-    warm_up_ = true;
-  }
-  bool psi_legal = CheckWaveFunctionAmplitude(tps_sample_);
-  if (!psi_legal) {
-    std::cout << "Proc " << std::setw(4) << rank_
-              << ", psi : " << tps_sample_.amplitude
-              << " Amplitude is still not legal after warm up. "
-              << " Terminate the program"
-              << std::endl;
-    MPI_Abort(comm_, EXIT_FAILURE);
-  }
+  this->PrintTechInfo_();
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -276,7 +224,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
 
   Timer grad_calculation_timer("gradient_calculation");
   for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-    std::vector<double> accept_rates = MCSweep_();
+    std::vector<double> accept_rates = this->MCSweep_();
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
     } else {
@@ -357,7 +305,7 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Li
     ClearEnergyAndHoleSamples_();
     std::vector<double> accept_rates_accum;
     for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-      std::vector<double> accept_rates = MCSweep_();
+      std::vector<double> accept_rates = this->MCSweep_();
       if (sweep == 0) {
         accept_rates_accum = accept_rates;
       } else {
@@ -422,7 +370,7 @@ void VMCPEPSExecutor<TenElemT, QNT,
 
   Timer grad_update_timer("gradient_update");
   for (size_t sweep = 0; sweep < optimize_para.mc_samples; sweep++) {
-    std::vector<double> accept_rates = MCSweep_();
+    std::vector<double> accept_rates = this->MCSweep_();
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
     } else {
@@ -759,44 +707,6 @@ void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::Gr
           grad_({row, col})[i].ElementWiseRandSign(unit_even_distribution, random_engine);
       }
     }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-std::vector<double> VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::MCSweep_(void) {
-  std::vector<double> accept_rates;
-  for (size_t i = 0; i < optimize_para.mc_sweeps_between_sample; i++) {
-    tps_sample_.MonteCarloSweepUpdate(split_index_tps_, unit_even_distribution, accept_rates);
-  }
-  return accept_rates;
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::LoadTenData(void) {
-  LoadTenData(optimize_para.wavefunction_path);
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::LoadTenData(const std::string &tps_path) {
-  if (!split_index_tps_.Load(tps_path)) {
-    std::cout << "Loading TPS files fails." << std::endl;
-    exit(-1);
-  }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::InitConfigs_(const std::string &path) {
-  Configuration config(ly_, lx_);
-  bool load_config = config.Load(path, rank_);
-  if (load_config) {
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
-    warm_up_ = true;
-  } else {
-    std::cout << "Loading configuration in rank " << rank_
-              << " fails. Use preset configuration and random warm up."
-              << std::endl;
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, optimize_para.init_config);
-    warm_up_ = false;
-  }
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>

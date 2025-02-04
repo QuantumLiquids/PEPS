@@ -10,9 +10,10 @@
 
 #include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                //SplitIndexTPS
-#include "qlpeps/algorithm/vmc_update/vmc_optimize_para.h"        //MCMeasurementPara
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"        //MCMeasurementPara
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" //ObservablesLocal
 #include "qlpeps/monte_carlo_tools/statistics.h"                  // Mean, Variance, DumpVecData, ...
+#include "monte_carlo_peps_base.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -94,7 +95,13 @@ void PrintProgressBar(size_t progress, size_t total) {
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-class MonteCarloMeasurementExecutor : public Executor {
+class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType> {
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::comm_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::mpi_size_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::rank_;
+
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::split_index_tps_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::tps_sample_;
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
@@ -115,10 +122,6 @@ class MonteCarloMeasurementExecutor : public Executor {
   void Execute(void) override;
 
   void ReplicaTest(std::function<double(const Configuration &, const Configuration &)>); // for check the ergodicity
-
-  void LoadTenData(void);
-
-  void LoadTenData(const std::string &tps_path);
 
   void DumpData();
 
@@ -143,32 +146,11 @@ class MonteCarloMeasurementExecutor : public Executor {
 
   void Measure_(void);
 
-  std::vector<double> MCSweep_(void);
-
-  void WarmUp_(void);
-
-  void InitConfigs_(const std::string &path);
-
   void MeasureSample_(void);
 
   void GatherStatistic_(void);
 
   void SynchronizeConfiguration_(const size_t root = 0); //for the replica test
-
-  const MPI_Comm &comm_;
-  int rank_;
-  int mpi_size_;
-
-  size_t lx_; //cols
-  size_t ly_; //rows
-
-  SITPST split_index_tps_;
-
-  WaveFunctionComponentType tps_sample_;
-
-  std::uniform_real_distribution<double> u_double_;
-
-  bool warm_up_;
 
   MeasurementSolver measurement_solver_;
   struct Result {
@@ -272,16 +254,12 @@ MonteCarloMeasurementExecutor<TenElemT,
     const size_t ly, const size_t lx,
     const MPI_Comm &comm,
     const MeasurementSolver &solver):
-    mc_measure_para(measurement_para), comm_(comm), lx_(lx), ly_(ly),
-    split_index_tps_(ly, lx), tps_sample_(ly, lx),
-    u_double_(0, 1), warm_up_(false),
+    MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>(ly, lx,
+                                                                         MonteCarloParams(measurement_para),
+                                                                         PEPSParams(measurement_para),
+                                                                         comm),
+    mc_measure_para(measurement_para),
     measurement_solver_(solver) {
-  MPI_Comm_rank(comm, &rank_);
-  MPI_Comm_size(comm, &mpi_size_);
-  WaveFunctionComponentType::trun_para = BMPSTruncatePara(measurement_para);
-  random_engine.seed(std::random_device{}() + rank_ * 10086);
-  LoadTenData(mc_measure_para.wavefunction_path);
-  InitConfigs_(mc_measure_para.wavefunction_path);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -296,18 +274,12 @@ MonteCarloMeasurementExecutor<TenElemT,
     const SITPST &sitpst,
     const MPI_Comm &comm,
     const MeasurementSolver &solver):
-    mc_measure_para(measurement_para), comm_(comm),
-    lx_(sitpst.cols()),
-    ly_(sitpst.rows()),
-    split_index_tps_(sitpst),
-    tps_sample_(ly_, lx_),
-    u_double_(0, 1), warm_up_(false),
+    MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>(sitpst,
+                                                                         MonteCarloParams(measurement_para),
+                                                                         PEPSParams(measurement_para),
+                                                                         comm),
+    mc_measure_para(measurement_para),
     measurement_solver_(solver) {
-  MPI_Comm_rank(comm, &rank_);
-  MPI_Comm_size(comm, &mpi_size_);
-  WaveFunctionComponentType::trun_para = BMPSTruncatePara(measurement_para);
-  random_engine.seed(std::random_device{}() + rank_ * 10086);
-  InitConfigs_(mc_measure_para.wavefunction_path);
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -324,7 +296,7 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 //  std::cout << "Random number from worker " << rank_ << " : " << u_double_(random_engine) << std::endl;
   std::vector<double> accept_rates_accum;
   for (size_t sweep = 0; sweep < mc_measure_para.mc_samples; sweep++) {
-    std::vector<double> accept_rates = MCSweep_();
+    std::vector<double> accept_rates = this->MCSweep_();
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
     } else {
@@ -333,7 +305,7 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
       }
     }
     // send-recv configuration
-    Configuration config2(ly_, lx_);
+    Configuration config2(this->ly_, this->lx_);
     size_t dest = (rank_ + 1) % mpi_size_;
     size_t source = (rank_ + mpi_size_ - 1) % mpi_size_;
     MPI_Status status;
@@ -369,11 +341,11 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::Execute(void) {
-  SetStatus(ExecutorStatus::EXEING);
-  WarmUp_();
+  this->SetStatus(ExecutorStatus::EXEING);
+  this->WarmUp_();
   Measure_();
   DumpData();
-  SetStatus(ExecutorStatus::FINISH);
+  this->SetStatus(ExecutorStatus::FINISH);
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
@@ -451,50 +423,8 @@ void MonteCarloMeasurementExecutor<TenElemT,
                                    QNT,
                                    WaveFunctionComponentType,
                                    MeasurementSolver>::PrintExecutorInfo_(void) {
-  if (rank_ == kMPIMasterRank) {
-    const size_t indent = 40;
-    std::cout << std::left;  // Set left alignment for the output
-    std::cout << "\n";
-    std::cout << "=====> MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS <=====" << "\n";
-    std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
-    std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(indent) << "BMPS bond dimension:" << mc_measure_para.bmps_trunc_para.D_min << "/"
-              << mc_measure_para.bmps_trunc_para.D_max << "\n";
-    std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
-              << static_cast<int>(mc_measure_para.bmps_trunc_para.compress_scheme) << "\n";
-    std::cout << std::setw(indent) << "Sampling numbers:" << mc_measure_para.mc_samples << "\n";
-    std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << mc_measure_para.mc_sweeps_between_sample
-              << "\n";
-
-    std::cout << "=====> TECHNICAL PARAMETERS <=====" << "\n";
-    std::cout << std::setw(indent) << "The number of processors (including master):" << mpi_size_ << "\n";
-    std::cout << std::setw(indent) << "The number of threads per processor:"
-              << hp_numeric::GetTensorManipulationThreads()
-              << "\n";
-  }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::WarmUp_(void) {
-  if (!warm_up_) {
-    Timer warm_up_timer("warm_up");
-    for (size_t sweep = 0; sweep < mc_measure_para.mc_warm_up_sweeps; sweep++) {
-      auto accept_rates = MCSweep_();
-    }
-    double elasp_time = warm_up_timer.Elapsed();
-    std::cout << "Proc " << std::setw(4) << rank_ << " warm-up completes T = " << elasp_time << "s."
-              << std::endl;
-    warm_up_ = true;
-  }
-  bool psi_legal = CheckWaveFunctionAmplitude(tps_sample_);
-  if (!psi_legal) {
-    std::cout << "Proc " << std::setw(4) << rank_
-              << ", psi : " << tps_sample_.amplitude
-              << " Amplitude is still not legal after warm up. "
-              << " Terminate the program"
-              << std::endl;
-    MPI_Abort(comm_, EXIT_FAILURE);
-  }
+  this->PrintCommonInfo_("MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS");
+  this->PrintTechInfo_();
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
@@ -511,41 +441,6 @@ void MonteCarloMeasurementExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::LoadTenData(void) {
-  LoadTenData(mc_measure_para.wavefunction_path);
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT,
-                                   QNT,
-                                   WaveFunctionComponentType,
-                                   MeasurementSolver>::LoadTenData(const std::string &tps_path) {
-  if (!split_index_tps_.Load(tps_path)) {
-    std::cout << "Loading TPS files fails." << std::endl;
-    exit(-1);
-  }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT,
-                                   QNT,
-                                   WaveFunctionComponentType,
-                                   MeasurementSolver>::InitConfigs_(const std::string &path) {
-  Configuration config(ly_, lx_);
-  bool load_config = config.Load(path, rank_);
-  if (load_config) {
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
-    warm_up_ = true;
-  } else {
-    std::cout << "Loading configuration in rank " << rank_
-              << " fails. Random generate it and warm up."
-              << std::endl;
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, mc_measure_para.init_config);
-    warm_up_ = false;
-  }
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::DumpData(void) {
   DumpData(mc_measure_para.wavefunction_path);
 }
@@ -555,7 +450,7 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
   std::vector<double> accept_rates_accum;
   const size_t print_bar_length = (mc_measure_para.mc_samples / 10) > 0 ? (mc_measure_para.mc_samples / 10) : 1;
   for (size_t sweep = 0; sweep < mc_measure_para.mc_samples; sweep++) {
-    std::vector<double> accept_rates = MCSweep_();
+    std::vector<double> accept_rates = this->MCSweep_();
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
     } else {
@@ -578,18 +473,6 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
   }
   std::cout << "]";
   GatherStatistic_();
-}
-
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-std::vector<double> MonteCarloMeasurementExecutor<TenElemT,
-                                                  QNT,
-                                                  WaveFunctionComponentType,
-                                                  MeasurementSolver>::MCSweep_(void) {
-  std::vector<double> accept_rates;
-  for (size_t i = 0; i < mc_measure_para.mc_sweeps_between_sample; i++) {
-    tps_sample_.MonteCarloSweepUpdate(split_index_tps_, unit_even_distribution, accept_rates);
-  }
-  return accept_rates;
 }
 }//qlpeps
 

@@ -1,12 +1,10 @@
-#  SPDX-License-Identifier: LGPL-3.0-only
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 # Creation Date: 2023-07-19
 #
-#  Description: QuantumLiquids/PEPS project. CMake file to control unittest.
-# Including the setting for MKL compile flags and link flags.
-
-option(QLTEN_USE_OPENBLAS "Use openblas rather mkl" OFF)
+# Description: QuantumLiquids/PEPS project. CMake file to control unittest.
+# Including the setting for compile flags and link flags for test cases
 
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(BLA_VENDOR Intel10_64lp_seq)   #FOR VENDOR CHOICE: https://cmake.org/cmake/help/latest/module/FindBLAS.html
@@ -23,7 +21,7 @@ endif ()
 FIND_PACKAGE(BLAS REQUIRED)
 FIND_PACKAGE(LAPACK REQUIRED)
 find_package(MPI REQUIRED)
-find_package(OpenMP REQUIRED)
+find_package(OpenMP REQUIRED) # link hptt necessary
 
 set(MATH_LIB_LINK_FLAGS "BLAS::BLAS" "LAPACK::LAPACK")
 
@@ -42,7 +40,7 @@ macro(add_unittest
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${MPI_CXX_HEADER_DIR})
+            PRIVATE MPI::MPI_CXX)
     target_link_libraries(${TEST_NAME}
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
@@ -70,7 +68,7 @@ macro(add_two_type_unittest
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${MPI_CXX_HEADER_DIR})
+            PRIVATE MPI::MPI_CXX)
     target_compile_definitions(${TEST_NAME}_double PRIVATE TEN_ELEM_TYPE=QLTEN_Double)
     target_link_libraries(${TEST_NAME}_double
             GTest::GTest GTest::Main
@@ -91,7 +89,7 @@ macro(add_two_type_unittest
             PRIVATE ${hptt_INCLUDE_DIR}
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
-            PRIVATE ${MPI_CXX_HEADER_DIR})
+            PRIVATE MPI::MPI_CXX)
     target_compile_definitions(${TEST_NAME}_complex PRIVATE TEN_ELEM_TYPE=QLTEN_Complex)
     target_link_libraries(${TEST_NAME}_complex
             GTest::GTest GTest::Main

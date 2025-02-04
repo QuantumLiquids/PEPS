@@ -64,6 +64,20 @@ const std::vector<WAVEFUNCTION_UPDATE_SCHEME> stochastic_reconfiguration_method(
                                                                                  NormalizedStochasticReconfiguration,
                                                                                  NaturalGradientLineSearch});
 
+struct MonteCarloParams {
+  size_t num_samples;                // Number of Monte Carlo samples
+  size_t num_warmup_sweeps;          // Warm-up sweeps before sampling starts
+  size_t sweeps_between_samples;     // Sweeps between successive samples
+
+  std::string config_path;           // Path to load initial warmed-up configuration
+  Configuration alternative_init_config;  // Alternative initial configuration if no warmed-up configuration in disk
+};
+
+struct PEPSParams {
+  BMPSTruncatePara truncate_para;
+  std::string wavefunction_path;
+};
+
 struct VMCOptimizePara {
   VMCOptimizePara(void) = default;
 
@@ -103,6 +117,13 @@ struct VMCOptimizePara {
   operator BMPSTruncatePara() const {
     return bmps_trunc_para;
   }
+  operator MonteCarloParams() const {
+    return {mc_samples, mc_warm_up_sweeps, mc_sweeps_between_sample, wavefunction_path, init_config};
+  }
+  operator PEPSParams() const {
+    return {bmps_trunc_para, wavefunction_path};
+  }
+
 
   BMPSTruncatePara bmps_trunc_para; // Truncation error and bond dimension for compressing boundary MPS
 
@@ -148,6 +169,14 @@ struct MCMeasurementPara {
   operator BMPSTruncatePara() const {
     return bmps_trunc_para;
   }
+
+  operator MonteCarloParams() const {
+    return {mc_samples, mc_warm_up_sweeps, mc_sweeps_between_sample, wavefunction_path, init_config};
+  }
+  operator PEPSParams() const {
+    return {bmps_trunc_para, wavefunction_path};
+  }
+
   BMPSTruncatePara bmps_trunc_para;
 
   size_t mc_samples;
