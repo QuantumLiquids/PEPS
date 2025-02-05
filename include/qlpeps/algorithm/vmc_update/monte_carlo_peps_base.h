@@ -80,6 +80,8 @@ class MonteCarloPEPSBaseExecutor : public Executor {
   std::vector<double> MCSweep_(const size_t);
   std::vector<double> MCSweep_();
 
+  void NormTPSForOrder1Amplitude_(void);
+
   SITPST split_index_tps_;
   size_t lx_; //cols
   size_t ly_; //rows
@@ -123,7 +125,8 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 
     std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
     std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(indent) << "BMPS bond dimension:" << WaveFunctionComponentType::trun_para.value().D_min << "/"
+    std::cout << std::setw(indent) << "BMPS bond dimension:" << WaveFunctionComponentType::trun_para.value().D_min
+              << "/"
               << WaveFunctionComponentType::trun_para.value().D_max << "\n";
     std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
               << static_cast<int>(WaveFunctionComponentType::trun_para.value().compress_scheme) << "\n";
@@ -165,6 +168,7 @@ int MonteCarloPEPSBaseExecutor<TenElemT,
     warm_up_ = false;
   }
   SyncValidConfiguration_();
+  NormTPSForOrder1Amplitude_();
   return 0;
 }
 
@@ -177,6 +181,7 @@ int MonteCarloPEPSBaseExecutor<TenElemT,
   tps_sample_ = WaveFunctionComponentType(split_index_tps_, init_configs);
   warm_up_ = warm_up;
   SyncValidConfiguration_();
+  NormTPSForOrder1Amplitude_();
   return 0;
 }
 
@@ -192,13 +197,15 @@ int MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::WarmUp
   }
   bool psi_legal = CheckWaveFunctionAmplitudeValidity(tps_sample_);
   if (!psi_legal) {
-    std::cout << "Proc " << std::setw(4) << rank_
+    std::cout << "Proc " << std::scientific << rank_
               << ", psi : " << tps_sample_.amplitude
               << " Amplitude is still not legal after warm up. "
               << " Terminate the program"
               << std::endl;
+    MPI_Abort(comm_, MPI_ERR_PROC_FAILED);
     return 1;
   }
+  NormTPSForOrder1Amplitude_();
   return 0;
 }
 
@@ -247,7 +254,8 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
     }
   }
   if (all_valid) {
-    std::cout << "All configurations are valid. " << std::endl;
+    if (rank_ == kMPIMasterRank)
+      std::cout << "All configurations are valid. " << std::endl;
     return;
   }
 
@@ -302,6 +310,43 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 
     MPI_Abort(comm_, EXIT_FAILURE);
   }
+}
+
+///< Normalize TPS tensor so that the amplitude of the wave function is order 1
+template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+void MonteCarloPEPSBaseExecutor<TenElemT,
+                                QNT,
+                                WaveFunctionComponentType>::NormTPSForOrder1Amplitude_() {
+  TenElemT *gather_amplitude;
+  if (rank_ == kMPIMasterRank) {
+    gather_amplitude = new TenElemT[mpi_size_];
+  }
+  HANDLE_MPI_ERROR(::MPI_Gather(&tps_sample_.amplitude,
+                                1,
+                                hp_numeric::GetMPIDataType<TenElemT>(),
+                                (void *) gather_amplitude,
+                                1,
+                                hp_numeric::GetMPIDataType<TenElemT>(),
+                                kMPIMasterRank,
+                                comm_));
+  double scale_factor;
+  if (rank_ == kMPIMasterRank) {
+    std::cout << std::endl;
+    auto max_it = std::max_element(gather_amplitude, gather_amplitude + mpi_size_,
+                                   [](const TenElemT &a, const TenElemT &b) {
+                                     return std::abs(a) < std::abs(b);
+                                   });
+    double max_abs = std::abs(*max_it);
+    scale_factor = 1.0 / max_abs;
+    delete gather_amplitude;
+  }
+  HANDLE_MPI_ERROR(::MPI_Bcast(&scale_factor, 1, MPI_DOUBLE, kMPIMasterRank, comm_));
+  double scale_factor_on_site = std::pow(scale_factor, 1.0 / double(lx_ * ly_));
+  split_index_tps_ *= scale_factor_on_site;
+  Configuration config = tps_sample_.config;
+  tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+//  std::cout << "Rank" << rank_ << "tps_sample_.amplitude : " << tps_sample_.amplitude << std::endl;
+//  tps_sample_.amplitude *= scale_factor;
 }
 }//qlpeps
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_PEPS_BASE_H

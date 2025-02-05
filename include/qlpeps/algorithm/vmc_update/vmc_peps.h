@@ -90,7 +90,6 @@ class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFun
                                                     double step_len,
                                                     const SITPST &init_guess,
                                                     const bool normalize_natural_grad);
-  void NormalizeTPS_(void);
 
   // Lowest Level Member functions who could directly change data
   ///< functions who cloud directly act on sample data

@@ -109,6 +109,7 @@ double SplitIndexTPS<TenElemT, QNT>::NormalizeSite(const SiteIdx &site) {
   return norm;
 }
 
+/// scale the single site tensor on TPS to make the max abs of element equal to `aiming_max_abs`
 template<typename TenElemT, typename QNT>
 double SplitIndexTPS<TenElemT, QNT>::ScaleMaxAbsForSite(const qlpeps::SiteIdx &site, double aiming_max_abs) {
   const size_t phy_dim = PhysicalDim(site);
@@ -137,6 +138,7 @@ void SplitIndexTPS<TenElemT, QNT>::NormalizeAllSite() {
   }
 }
 
+///< Normalize split index tps according to the max abs of tensors in each site
 template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::ScaleMaxAbsForAllSite(double aiming_max_abs) {
   for (size_t row = 0; row < this->rows(); ++row) {

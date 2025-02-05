@@ -92,7 +92,6 @@ VMCPEPSExecutor<TenElemT,
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
-  NormalizeTPS_();
   if (std::find(stochastic_reconfiguration_method.cbegin(),
                 stochastic_reconfiguration_method.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
@@ -133,7 +132,6 @@ VMCPEPSExecutor<TenElemT,
   } else {
     stochastic_reconfiguration_update_class_ = false;
   }
-  NormalizeTPS_();
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -618,11 +616,11 @@ void VMCPEPSExecutor<TenElemT,
                                                                   double step_len) {
   if (rank_ == kMPIMasterRank) {
     split_index_tps_ += (-step_len) * grad;
-    NormalizeTPS_();
   }
   BroadCast(split_index_tps_, comm_);
   Configuration config = tps_sample_.config;
   tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+  this->NormTPSForOrder1Amplitude_();
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -640,9 +638,11 @@ void VMCPEPSExecutor<TenElemT, QNT,
           split_index_tps_({row, col})[compt] += (-step_len) * grad_ten;
         }
       }
-    NormalizeTPS_();
   }
   BroadCast(split_index_tps_, comm_);
+  Configuration config = tps_sample_.config;
+  tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+  this->NormTPSForOrder1Amplitude_();
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
@@ -661,14 +661,6 @@ std::pair<size_t, double> VMCPEPSExecutor<TenElemT,
   return std::make_pair(cgsolver_iter, natural_grad_norm);
 }
 
-///< Normalize split index tps according to the max abs of tensors in each site
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT,
-                     QNT,
-                     WaveFunctionComponentType,
-                     EnergySolver>::NormalizeTPS_() {
-  split_index_tps_.ScaleMaxAbsForAllSite(1.0);
-}
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
 size_t VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::CalcNaturalGradient_(
     const VMCPEPSExecutor<TenElemT, QNT, WaveFunctionComponentType, EnergySolver>::SITPST &grad,

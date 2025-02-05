@@ -45,15 +45,6 @@ struct SpinSystemSimpleUpdate : public testing::Test {
 #endif
   IndexT pb_in = InverseIndex(pb_out);
 
-  DQLTensor did = DQLTensor({pb_in, pb_out});
-  DQLTensor dsz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsp = DQLTensor({pb_in, pb_out});
-  DQLTensor dsm = DQLTensor({pb_in, pb_out});
-
-  ZQLTensor zid = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsz = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
 
   DQLTensor dham_hei_nn = DQLTensor({pb_in, pb_out, pb_in, pb_out});
   DQLTensor dham_hei_tri;  // three-site hamiltonian in triangle lattice
@@ -61,13 +52,6 @@ struct SpinSystemSimpleUpdate : public testing::Test {
   void SetUp(size_t L) {
     Lx = L;
     Ly = L;
-
-    did({0, 0}) = 1;
-    did({1, 1}) = 1;
-    dsz({0, 0}) = 0.5;
-    dsz({1, 1}) = -0.5;
-    dsp({0, 1}) = 1;
-    dsm({1, 0}) = 1;
 
     dham_hei_nn({0, 0, 0, 0}) = 0.25;
     dham_hei_nn({1, 1, 1, 1}) = 0.25;
@@ -108,13 +92,6 @@ struct SpinSystemSimpleUpdate : public testing::Test {
       ham_hei_tri_terms[2]({i, i, 1, 0, 0, 1}) = 0.5;
     }
     dham_hei_tri = ham_hei_tri_terms[0] + ham_hei_tri_terms[1] + ham_hei_tri_terms[2];
-
-    zid({0, 0}) = 1;
-    zid({1, 1}) = 1;
-    zsz({0, 0}) = 0.5;
-    zsz({1, 1}) = -0.5;
-    zsp({0, 1}) = 1;
-    zsm({1, 0}) = 1;
   }
 };
 
@@ -179,15 +156,6 @@ struct SpinSystemVMCPEPS : public testing::Test {
 
   VMCOptimizePara optimize_para;
 
-  DQLTensor did = DQLTensor({pb_in, pb_out});
-  DQLTensor dsz = DQLTensor({pb_in, pb_out});
-  DQLTensor dsp = DQLTensor({pb_in, pb_out});
-  DQLTensor dsm = DQLTensor({pb_in, pb_out});
-
-  ZQLTensor zid = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsz = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsp = ZQLTensor({pb_in, pb_out});
-  ZQLTensor zsm = ZQLTensor({pb_in, pb_out});
 
   const MPI_Comm comm = MPI_COMM_WORLD;
   int rank, mpi_size;
@@ -215,20 +183,6 @@ struct SpinSystemVMCPEPS : public testing::Test {
                         NaturalGradientLineSearch,
                         ConjugateGradientParams(100, 1e-5, 20, 0.01));
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-
-    did({0, 0}) = 1;
-    did({1, 1}) = 1;
-    dsz({0, 0}) = 0.5;
-    dsz({1, 1}) = -0.5;
-    dsp({0, 1}) = 1;
-    dsm({1, 0}) = 1;
-
-    zid({0, 0}) = 1;
-    zid({1, 1}) = 1;
-    zsz({0, 0}) = 0.5;
-    zsz({1, 1}) = -0.5;
-    zsp({0, 1}) = 1;
-    zsm({1, 0}) = 1;
   }
 };
 
