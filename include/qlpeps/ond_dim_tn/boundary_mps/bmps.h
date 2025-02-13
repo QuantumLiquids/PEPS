@@ -99,6 +99,7 @@ template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
+  using DTenT = QLTensor<QLTEN_Double, QNT>;
   using IndexT = Index<QNT>;
   using TransferMPO = std::vector<Tensor *>;
 

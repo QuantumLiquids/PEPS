@@ -16,7 +16,6 @@
 
 namespace qlpeps {
 
-//std::default_random_engine random_engine;
 std::mt19937 random_engine;
 
 enum BondOrientation {

@@ -197,12 +197,12 @@ int MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::WarmUp
   }
   bool psi_legal = CheckWaveFunctionAmplitudeValidity(tps_sample_);
   if (!psi_legal) {
-    std::cout << "Proc " << std::scientific << rank_
-              << ", psi : " << tps_sample_.amplitude
+    std::cout << "Proc " << rank_
+              << ", psi : " << std::scientific << tps_sample_.amplitude
               << " Amplitude is still not legal after warm up. "
               << " Terminate the program"
               << std::endl;
-    MPI_Abort(comm_, MPI_ERR_PROC_FAILED);
+    MPI_Abort(comm_, EXIT_FAILURE);
     return 1;
   }
   NormTPSForOrder1Amplitude_();
@@ -272,7 +272,7 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 
   // Broadcast valid configuration if exists
   if (any_valid) {
-    Configuration config_valid;
+    Configuration config_valid(ly_, lx_);
     if (rank_ == source_rank) {
       config_valid = tps_sample_.config;
     }
@@ -285,28 +285,17 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
     }
   } else {
     // Handle all invalid case
+    if (rank_ == kMPIMasterRank) {
+      std::cerr << "All configurations invalid:\n";
+    }
     std::ostringstream oss;
     oss << "Rank " << rank_ << " invalid configuration:\n";
     oss << tps_sample_.config;
-    oss << "\n";
+    oss << "\n psi : " << tps_sample_.amplitude << "\n";
 
     // Gather all error messages to rank 0 for clean output
     std::string local_msg = oss.str();
-    std::vector<char> global_msgs;
-    if (rank_ == kMPIMasterRank) {
-      global_msgs.resize(local_msg.size() * mpi_size_);
-    }
-
-    MPI_Gather(local_msg.data(), local_msg.size(), MPI_CHAR,
-               global_msgs.data(), local_msg.size(), MPI_CHAR,
-               kMPIMasterRank, comm_);
-
-    if (rank_ == kMPIMasterRank) {
-      std::cerr << "All configurations invalid:\n";
-      for (int r = 0; r < mpi_size_; ++r) {
-        std::cerr << &global_msgs[r * local_msg.size()];
-      }
-    }
+    hp_numeric::GatherAndPrintErrorMessages(local_msg, comm_);
 
     MPI_Abort(comm_, EXIT_FAILURE);
   }

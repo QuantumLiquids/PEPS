@@ -4,13 +4,10 @@
 #include "gtest/gtest.h"
 #include "mpi.h"
 
-class MPIEnvironment : public ::testing::Environment
-{
+class MPIEnvironment : public ::testing::Environment {
  public:
   virtual void SetUp() {
-    char** argv;
-    int argc = 0;
-    int mpi_error = MPI_Init(&argc, &argv);
+    int mpi_error = MPI_Init(nullptr, nullptr);
     ASSERT_FALSE(mpi_error);
   }
   virtual void TearDown() {

@@ -30,9 +30,15 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t 
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config)
     :TensorNetwork2D(tps.rows(), tps.cols()) {
+  assert(config.rows() == tps.rows());
+  assert(config.cols() == tps.cols());
   for (size_t row = 0; row < tps.rows(); row++) {
     for (size_t col = 0; col < tps.cols(); col++) {
+#ifndef NDEBUG
+      (*this)({row, col}) = tps({row, col}).at(config({row, col}));
+#else
       (*this)({row, col}) = tps({row, col})[config({row, col})];
+#endif
     }
   }
 

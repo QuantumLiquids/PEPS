@@ -598,17 +598,12 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           renvs.emplace_back(tmp[5]);
           lenvs.pop_back();
         }
-        if (iter == 0 || s.GetActualDataSize() != s12bond_last.GetActualDataSize()) {
+        if (iter == 0 || s.GetIndex(0) != s12bond_last.GetIndex(0)) {
           s12bond_last = s;
           continue;
         }
-        double diff = 0.0;
-        const double *s_data = s.GetRawDataPtr();
-        const double *s_last_data = s12bond_last.GetRawDataPtr();
-        for (size_t k = 0; k < s.GetActualDataSize(); k++) {
-          diff += std::fabs(*(s_data + k) - *(s_last_data + k));
-        }
-        if (diff < converge_tol) {
+        DTenT diff_ten = s - s12bond_last;
+        if (diff_ten.GetQuasi2Norm() / s.GetQuasi2Norm() < converge_tol) {
           break;
         } else {
           s12bond_last = s;
@@ -756,7 +751,7 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
         ctrct_axes = {0, 2};
       }
       Contract(&tmp2, ctrct_axes, &right_boundary, {0, 1}, res_mps(i));
-      assert(res_mps[i].GetRawDataPtr() != nullptr);
+      assert(res_mps[i].GetActualDataSize() > 0);
       if constexpr (Tensor::IsFermionic()) {
         res_mps(i)->Transpose({1, 2, 3, 0});
         assert(res_mps(i)->GetIndex(3).GetDir() == IN);

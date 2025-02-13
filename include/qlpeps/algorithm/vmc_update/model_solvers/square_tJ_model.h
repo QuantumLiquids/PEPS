@@ -49,6 +49,8 @@ class SquaretJModel : public ModelEnergySolver<TenElemT, QNT>, ModelMeasurementS
   double J_;
   bool has_nn_term_;
   double mu_;
+
+  const double tJ_wave_function_consistent_critical_bias = 1E-3;
 };
 
 double tJConfig2Density(const size_t config) {
@@ -79,16 +81,18 @@ TenElemT EvaluateBondEnergyFortJModel(
     const TensorNetwork2D<TenElemT, QNT> &tn,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
-    double t, double J, bool has_nn_term
+    double t, double J, bool has_nn_term,
+    std::optional<TenElemT> &psi // return value, used for check the accuracy
 ) {
   if (config1 == config2) {
+    psi.reset();
     if (config1 == tJSingleSiteState::Empty) {
       return 0.0;
     } else {
       return J * (0.25 - double(int(has_nn_term)) / 4.0); // sz * sz - 1/4 * n * n
     }
   } else {
-    TenElemT psi = tn.Trace(site1, site2, orient);
+    psi = tn.Trace(site1, site2, orient);
     if (psi == TenElemT(0)) [[unlikely]] {
       std::cerr << "Error: psi is 0. Division by 0 is not allowed." << std::endl;
       exit(EXIT_FAILURE);
@@ -97,7 +101,7 @@ TenElemT EvaluateBondEnergyFortJModel(
     TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
                                             split_index_tps_on_site1[size_t(config2)],
                                             split_index_tps_on_site2[size_t(config1)]);
-    TenElemT ratio = ComplexConjugate(psi_ex / psi);
+    TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
     if (is_nan(ratio)) [[unlikely]] {
       std::cerr << "ratio is nan !" << std::endl;
       exit(EXIT_FAILURE);
@@ -124,11 +128,12 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
   const Configuration &config = tps_sample->config;
   const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
   tn.GenerateBMPSApproach(UP, trunc_para);
-  std::vector<double> psi_abs_gather;
-  psi_abs_gather.reserve(tn.rows() + tn.cols());
+  std::vector<TenElemT> psi_gather;
+  psi_gather.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
+    bool psi_added = false;
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -138,13 +143,19 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
         const SiteIdx site2 = {row, col + 1};
+        std::optional<TenElemT> psi;
         energy += EvaluateBondEnergyFortJModel(site1, site2,
                                                tJSingleSiteState(config(site1)),
                                                tJSingleSiteState(config(site2)),
                                                HORIZONTAL,
                                                tn,
                                                (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                               t_, J_, has_nn_term_);
+                                               t_, J_, has_nn_term_,
+                                               psi);
+        if (!psi_added && psi.has_value()) {
+          psi_gather.push_back(psi.value());
+          psi_added = true;
+        }
         tn.BTenMoveStep(RIGHT);
       }
     }
@@ -157,16 +168,22 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
   for (size_t col = 0; col < tn.cols(); col++) {
     tn.InitBTen(UP, col);
     tn.GrowFullBTen(DOWN, col, 2, true);
+    bool psi_added = false;
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
+      std::optional<TenElemT> psi;
       energy += EvaluateBondEnergyFortJModel(site1, site2,
                                              tJSingleSiteState(config(site1)),
                                              tJSingleSiteState(config(site2)),
                                              VERTICAL,
                                              tn,
                                              (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                             t_, J_, has_nn_term_);
+                                             t_, J_, has_nn_term_, psi);
+      if (!psi_added && psi.has_value()) {
+        psi_gather.push_back(psi.value());
+        psi_added = true;
+      }
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }
@@ -184,6 +201,7 @@ TenElemT SquaretJModel<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_inde
     }
     energy += -mu_ * double(ele_num);
   }
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, tJ_wave_function_consistent_critical_bias);
   return energy;
 }
 
@@ -252,22 +270,30 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
   std::vector<TenElemT> delta_dag, delta;
   delta_dag.reserve(lx * ly * 2); // bond singlet pair
   delta.reserve(lx * ly * 2);  // bond singlet pair
+  std::vector<TenElemT> psi_gather;
+  psi_gather.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
+    bool psi_added = false;
     for (size_t col = 0; col < tn.cols() - 1; col++) {
       //Calculate horizontal bond energy contribution
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row, col + 1};
+      std::optional<TenElemT> psi;
       TenElemT bond_energy = EvaluateBondEnergyFortJModel(site1, site2,
                                                           tJSingleSiteState(config(site1)),
                                                           tJSingleSiteState(config(site2)),
                                                           HORIZONTAL,
                                                           tn,
                                                           (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                                          t_, J_, has_nn_term_);
+                                                          t_, J_, has_nn_term_, psi);
       res.bond_energys_loc.push_back(bond_energy);
       energy += bond_energy;
+      if (!psi_added && psi.has_value()) {
+        psi_gather.push_back(psi.value());
+        psi_added = true;
+      }
       tn.BTenMoveStep(RIGHT);
     }
     //measure correlation along the middle horizontal line
@@ -301,18 +327,24 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
   for (size_t col = 0; col < tn.cols(); col++) {
     tn.InitBTen(UP, col);
     tn.GrowFullBTen(DOWN, col, 2, true);
+    bool psi_added = false;
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
       const SiteIdx site2 = {row + 1, col};
+      std::optional<TenElemT> psi;
       TenElemT bond_energy = EvaluateBondEnergyFortJModel(site1, site2,
                                                           tJSingleSiteState(config(site1)),
                                                           tJSingleSiteState(config(site2)),
                                                           VERTICAL,
                                                           tn,
                                                           (*split_index_tps)(site1), (*split_index_tps)(site2),
-                                                          t_, J_, has_nn_term_);
+                                                          t_, J_, has_nn_term_, psi);
       res.bond_energys_loc.push_back(bond_energy);
       energy += bond_energy;
+      if (!psi_added && psi.has_value()) {
+        psi_gather.push_back(psi.value());
+        psi_added = true;
+      }
       if (row < tn.rows() - 2) {
         tn.BTenMoveStep(DOWN);
       }
@@ -344,6 +376,7 @@ ObservablesLocal<TenElemT> SquaretJModel<TenElemT, QNT>::SampleMeasure(
       res.one_point_functions_loc.push_back(0);   //empty state
     }
   }
+  WaveFunctionAmplitudeConsistencyCheck(psi_gather, tJ_wave_function_consistent_critical_bias);
   return res;
 }
 
