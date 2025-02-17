@@ -230,7 +230,7 @@ add_unittest(test_square_heisenberg
 add_two_type_unittest(test_measure
         "test_algorithm/test_mc_peps_measure.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_data/tps_square_heisenberg4x4D8Double"
 )
 
 

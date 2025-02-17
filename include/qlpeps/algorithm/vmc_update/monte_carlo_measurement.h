@@ -102,6 +102,7 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
 
   using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::split_index_tps_;
   using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::tps_sample_;
+  struct Result;
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
@@ -129,15 +130,26 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
 
   MCMeasurementPara mc_measure_para;
 
-  void OutputEnergy() const {
-    if (this->GetStatus() == ExecutorStatus::FINISH) {
-      std::cout << "Measured energy : " << res.energy
-                << pm_sign << " "
-                << res.en_err
-                << std::endl;
-    } else {
+  std::pair<TenElemT, double> OutputEnergy() const {
+    if (rank_ == kMPIMasterRank) {
+      if (this->GetStatus() == ExecutorStatus::FINISH) {
+        std::cout << "Measured energy : "
+                  << std::setw(8) << res.energy
+                  << pm_sign << " "
+                  << std::scientific << res.en_err
+                  << std::endl;
+      } else {
+        std::cout << "The program didn't complete the measurements. " << std::endl;
+      }
+    }
+    return {res.energy, res.en_err};
+  }
+
+  const Result &GetMeasureResult() const {
+    if (this->GetStatus() != ExecutorStatus::FINISH) {
       std::cout << "The program didn't complete the measurements. " << std::endl;
     }
+    return res;
   }
  private:
   void ReserveSamplesDataSpace_();
@@ -241,8 +253,52 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
       res_thread.one_point_functions_auto_corr = CalSpinAutoCorrelation(one_point_function_samples);
       return res_thread;
     }
+
+    /**
+      * @brief Dumps the two_point_function_samples to a CSV file.
+      *
+      * This function writes the `two_point_function_samples` data to a file in CSV format.
+      * Each row in the output file corresponds to a single sample (outer vector),
+      * and each column within a row corresponds to an element of the inner vector.
+      *
+      * @param filename The name of the output file. Should follow the `.csv` naming convention.
+      *
+      * @details
+      * The output file format is designed for easy reading in MATLAB or Python.
+      *
+      * Example of MATLAB usage:
+      * ```
+      * data = csvread('output.csv');
+      * ```
+      *
+      * Example of Python usage:
+      * ```python
+      * import numpy as np
+      * data = np.loadtxt('output.csv', delimiter=',')
+      * ```
+      *
+      * @throws std::ios_base::failure If the file cannot be opened for writing.
+      */
+    void DumpTwoPointFunctionSamples(const std::string &filename) const {
+      std::ofstream file(filename);
+      if (!file.is_open()) {
+        throw std::ios_base::failure("Failed to open file: " + filename);
+      }
+
+      // Write the two_point_function_samples to the file
+      for (const auto &sample : two_point_function_samples) {
+        for (size_t i = 0; i < sample.size(); ++i) {
+          file << sample[i];
+          if (i + 1 < sample.size()) {
+            file << ","; // Add a comma between elements
+          }
+        }
+        file << "\n"; // Newline for the next sample
+      }
+
+      file.close();
+    }
   } sample_data_;
-  // the lattice site number = Lx * Ly * 3,  first the unit cell, then column idx, then row index.
 };//MonteCarloMeasurementExecutor
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
@@ -400,22 +456,25 @@ MonteCarloMeasurementExecutor<TenElemT,
                               QNT,
                               WaveFunctionComponentType,
                               MeasurementSolver>::DumpData(const std::string &tps_path) {
-
   tps_sample_.config.Dump(tps_path, rank_);
-
-  std::string energy_raw_path = "energy_raw_data/";
-  std::string wf_amplitude_path = "wave_function_amplitudes/";
-  if (rank_ == kMPIMasterRank && !IsPathExist(energy_raw_path))
-    CreatPath(energy_raw_path);
-  if (rank_ == kMPIMasterRank && !IsPathExist(wf_amplitude_path))
-    CreatPath(wf_amplitude_path);
-  MPI_Barrier(comm_);
-  DumpVecData(energy_raw_path + "/energy" + std::to_string(rank_), sample_data_.energy_samples);
-  DumpVecData(wf_amplitude_path + "/psi" + std::to_string(rank_), sample_data_.wave_function_amplitude_samples);
 
   if (rank_ == kMPIMasterRank) {
     res.Dump();
   }
+  //dump sample data
+  std::string energy_raw_path = "energy_sample_data/";
+  std::string wf_amplitude_path = "wave_function_amplitudes/";
+  std::string two_point_function_raw_data_path = "two_point_functions/";
+  if (rank_ == kMPIMasterRank && !IsPathExist(energy_raw_path))
+    CreatPath(energy_raw_path);
+  if (rank_ == kMPIMasterRank && !IsPathExist(wf_amplitude_path))
+    CreatPath(wf_amplitude_path);
+  if (rank_ == kMPIMasterRank && !IsPathExist(two_point_function_raw_data_path))
+    CreatPath(two_point_function_raw_data_path);
+  MPI_Barrier(comm_);
+  DumpVecData(energy_raw_path + "/energy" + std::to_string(rank_), sample_data_.energy_samples);
+  DumpVecData(wf_amplitude_path + "/psi" + std::to_string(rank_), sample_data_.wave_function_amplitude_samples);
+  sample_data_.DumpTwoPointFunctionSamples(two_point_function_raw_data_path + "/sample" + std::to_string(rank_));
 }
 
 template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>

@@ -17,4 +17,18 @@ class MPIEnvironment : public ::testing::Environment {
   virtual ~MPIEnvironment() {}
 };
 
+class MPITest : public testing::Test {
+ public:
+  const MPI_Comm comm = MPI_COMM_WORLD;
+  int rank, mpi_size;
+  void SetUp(void) {
+    ::testing::TestEventListeners &listeners =
+        ::testing::UnitTest::GetInstance()->listeners();
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &mpi_size);
+    if (rank != 0) {
+      delete listeners.Release(listeners.default_result_printer());
+    }
+  }
+};
 #endif //PEPS_TESTS_TEST_MPI_ENV_H

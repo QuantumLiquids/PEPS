@@ -13,20 +13,64 @@
 #include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
 #include "qlmps/case_params_parser.h"
-
+#include "../test_mpi_env.h"
 using namespace qlten;
 using namespace qlpeps;
 
-using qlten::special_qn::U1QN;
-using IndexT = Index<U1QN>;
-using QNSctT = QNSector<U1QN>;
-using QNSctVecT = QNSectorVec<U1QN>;
-using TenElemT = TEN_ELEM_TYPE;
-using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
-
-using qlmps::CaseParamsParserBasic;
-
 char *params_file;
+
+struct SqrHeiMCPEPS : MPITest {
+  using QNT = qlten::special_qn::TrivialRepQN;
+  using IndexT = Index<QNT>;
+  using QNSctT = QNSector<QNT>;
+  using QNSctVecT = QNSectorVec<QNT>;
+  using TenElemT = TEN_ELEM_TYPE;
+  using TPSSampleFlipT = SquareTPSSampleNNExchange<TenElemT, QNT>;
+
+  size_t Lx = 4;
+  size_t Ly = 4;
+  size_t N = Lx * Ly;
+  size_t Dpeps = 8;
+  double E0_ED = -9.189207065192933;
+  double e0_state = -9.18912;
+  MCMeasurementPara para = MCMeasurementPara(
+      BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                       CompressMPSScheme::SVD_COMPRESS,
+                       std::make_optional<double>(1e-14),
+                       std::make_optional<size_t>(10)),
+      1000, 1000, 1,
+      std::vector<size_t>(2, N / 2),
+      Ly, Lx);
+
+  void SetUp(void) {
+    MPITest::SetUp();
+    qlten::hp_numeric::SetTensorManipulationThreads(1);
+    para.wavefunction_path = params_file;
+  }
+};
+
+TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
+  using Model = SpinOneHalfHeisenbergSquare<TenElemT, QNT>;
+  MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model> *executor(nullptr);
+
+  executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model>(para,
+                                                                                     Ly, Lx,
+                                                                                     comm);
+  executor->Execute();
+
+  auto [energy, en_err] = executor->OutputEnergy();
+  auto measure_results = executor->GetMeasureResult();
+
+  if (rank == kMPIMasterRank) {
+    //Justify whether as expected
+    EXPECT_NEAR(Real(energy), e0_state, 1.5 * en_err);
+
+  }
+  delete executor;
+}
+
+/*
+using qlmps::CaseParamsParserBasic;
 
 struct FileParams : public CaseParamsParserBasic {
   FileParams(const char *f) : CaseParamsParserBasic(f) {
@@ -51,6 +95,13 @@ struct FileParams : public CaseParamsParserBasic {
 
 // Test spin systems
 struct SpinSystemMCPEPS : public testing::Test {
+  using U1QN = qlten::special_qn::U1QN;
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using QNSctVecT = QNSectorVec<U1QN>;
+  using TenElemT = TEN_ELEM_TYPE;
+  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
+
   FileParams params = FileParams(params_file);
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
@@ -108,6 +159,7 @@ TEST_F(SpinSystemMCPEPS, TriJ1J2HeisenbergD4) {
   executor->Execute();
   delete executor;
 }
+ */
 
 int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);
