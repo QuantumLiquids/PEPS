@@ -13,51 +13,55 @@
 namespace qlpeps {
 using namespace qlten;
 
-template<typename TenElemT, typename QNT>
-class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<TenElemT, QNT> {
-  using SITPS = SplitIndexTPS<TenElemT, QNT>;
+
+class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS>,
+                                            public ModelMeasurementSolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS> {
  public:
+  using ModelEnergySolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS>::CalEnergyAndHoles;
+  using ModelMeasurementSolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS>::operator();
   SpinOneHalfTriJ1J2HeisenbergSqrPEPS(void) = delete;
 
   SpinOneHalfTriJ1J2HeisenbergSqrPEPS(double j2) : j2_(j2) {}
 
-  template<typename WaveFunctionComponentType, bool calchols = true>
-  TenElemT CalEnergyAndHoles(
-      const SITPS *sitps,
-      WaveFunctionComponentType *tps_sample,
-      TensorNetwork2D<TenElemT, QNT> &hole_res
+  template<typename TenElemT, typename QNT, bool calchols = true>
+  TenElemT CalEnergyAndHolesImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+      TensorNetwork2D<TenElemT, QNT> &hole_res,
+      std::vector<TenElemT> &psi_list
   );
 
-  template<typename WaveFunctionComponentType>
-  ObservablesLocal<TenElemT> SampleMeasure(
-      const SITPS *sitps,
-      WaveFunctionComponentType *tps_sample
+  template<typename TenElemT, typename QNT>
+  ObservablesLocal<TenElemT> SampleMeasureImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+      std::vector<TenElemT> &psi_list
   );
  private:
+  template<typename TenElemT>
   std::vector<TenElemT> CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const;
   double j2_;
 };
 
-template<typename TenElemT, typename QNT>
-template<typename WaveFunctionComponentType, bool calchols>
-TenElemT SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::
-CalEnergyAndHoles(const SITPS *split_index_tps,
-                  WaveFunctionComponentType *tps_sample,
-                  TensorNetwork2D<TenElemT, QNT> &hole_res) {
+template<typename TenElemT, typename QNT, bool calchols>
+TenElemT SpinOneHalfTriJ1J2HeisenbergSqrPEPS::
+CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+                      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+                      TensorNetwork2D<TenElemT, QNT> &hole_res,
+                      std::vector<TenElemT> &psi_list) {
   TenElemT e1(0), e2(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
+  const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
-  std::vector<TenElemT> psi_gather;
-  psi_gather.reserve(tn.rows() + tn.cols());
+  psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
-    psi_gather.push_back(tps_sample->amplitude);
+    psi_list.push_back(tps_sample->amplitude);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -136,7 +140,7 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
     tn.GrowFullBTen(DOWN, col, 2, true);
     tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
     inv_psi = 1.0 / tps_sample->amplitude;
-    psi_gather.push_back(tps_sample->amplitude);
+    psi_list.push_back(tps_sample->amplitude);
     //Calculate vertical bond energy contribution
     for (size_t row = 0; row < tn.rows() - 1; row++) {
       const SiteIdx site1 = {row, col};
@@ -177,15 +181,15 @@ CalEnergyAndHoles(const SITPS *split_index_tps,
       tn.BMPSMoveStep(RIGHT, trunc_para);
     }
   }
-  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.03);
+  WaveFunctionAmplitudeConsistencyCheck(psi_list, 0.03);
   return e1 + j2_ * e2;
 }
 
 template<typename TenElemT, typename QNT>
-template<typename WaveFunctionComponentType>
-ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::SampleMeasure(
-    const SITPS *split_index_tps,
-    WaveFunctionComponentType *tps_sample
+ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS::SampleMeasureImpl(
+    const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+    TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+    std::vector<TenElemT> &psi_list
 ) {
   ObservablesLocal<TenElemT> res;
 
@@ -195,7 +199,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
   res.bond_energys_loc.reserve(tn.rows() * lx * 6);
   res.two_point_functions_loc.reserve(tn.cols() / 2 * 3);
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
+  const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
@@ -384,15 +388,14 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, QNT>::S
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }
 
-  std::vector<TenElemT> all2all_sz_corr = CalculateSzAll2AllCorrelation_(config);
+  std::vector<TenElemT> all2all_sz_corr = this->template CalculateSzAll2AllCorrelation_<TenElemT>(config);
   res.two_point_functions_loc.insert(res.two_point_functions_loc.end(), all2all_sz_corr.begin(), all2all_sz_corr.end());
 
   return res;
 }
 
-template<typename TenElemT, typename QNT>
-std::vector<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT,
-                                                          QNT>::CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const {
+template<typename TenElemT>
+std::vector<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS::CalculateSzAll2AllCorrelation_(const qlpeps::Configuration &config) const {
   std::vector<TenElemT> res;
   size_t N = config.size();
   res.reserve(N * N);

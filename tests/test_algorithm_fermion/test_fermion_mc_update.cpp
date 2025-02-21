@@ -9,9 +9,9 @@
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
-#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
+#include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -25,8 +25,6 @@ struct Z2tJModelTools : public testing::Test {
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
   using Tensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
 
   size_t Lx = 24;
   size_t Ly = 24;
@@ -165,12 +163,24 @@ size_t CountNumOfHole(const Configuration &config) {
   return count;
 }
 
-TEST_F(Z2tJModelTools, MonteCarlo3SiteUpdate) {
-  TPSSampleTNNFlipT::trun_para = BMPSTruncatePara(mc_measurement_para);
-  TPSSampleTNNFlipT tps_sample(split_idx_tps, mc_measurement_para.init_config);
+TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
+  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.init_config, mc_measurement_para.bmps_trunc_para);
   std::vector<double> accept_rate(1);
   for (size_t i = 0; i < 100; i++) {
-    tps_sample.MonteCarloSweepUpdate(split_idx_tps, u_double, accept_rate);
+    MCUpdateSquareNNExchange tnn_flip_updater;
+    tnn_flip_updater(split_idx_tps, tps_sample, accept_rate);
+    EXPECT_EQ(CountNumOfHole(tps_sample.config), hole_num);
+    EXPECT_EQ(CountNumOfSpinDown(tps_sample.config), num_down);
+    EXPECT_EQ(CountNumOfSpinUp(tps_sample.config), num_up);
+  }
+}
+
+TEST_F(Z2tJModelTools, MonteCarlo3SiteUpdate) {
+  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.init_config, mc_measurement_para.bmps_trunc_para);
+  std::vector<double> accept_rate(1);
+  for (size_t i = 0; i < 100; i++) {
+    MCUpdateSquareTNN3SiteExchange tnn_flip_updater;
+    tnn_flip_updater(split_idx_tps, tps_sample, accept_rate);
     EXPECT_EQ(CountNumOfHole(tps_sample.config), hole_num);
     EXPECT_EQ(CountNumOfSpinDown(tps_sample.config), num_down);
     EXPECT_EQ(CountNumOfSpinUp(tps_sample.config), num_up);

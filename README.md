@@ -15,7 +15,6 @@ in order to build and run successfully:
 - CMake (version 3.12 or higher)
 - Intel MKL or OpenBlas
 - MPI
-- Boost::serialization, Boost::mpi (version 1.74 or higher)
 - [QuantumLiquids/TensorToolkit](https://github.com/QuantumLiquids/TensorToolkit)
 - [QuantumLiquids/UltraDMRG](https://github.com/QuantumLiquids/UltraDMRG)
 - GoogleTest (if testing is required)

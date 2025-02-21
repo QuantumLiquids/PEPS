@@ -16,18 +16,34 @@
 namespace qlpeps {
 
 /**
- *
- *  SetUp for Configuration
- *
+ * @brief Base class for Monte Carlo based measurement and variational update on PEPS
+ * 
+ * @tparam TenElemT Tensor element type
+ * @tparam QNT Quantum number type
+ * @tparam MonteCarloSweepUpdater Functor defining Monte Carlo sweep update
+ * 
+ * @details The MonteCarloSweepUpdater functor should have default constructor and operator() signature:
+ * void operator()(const SplitIndexTPS<TenElemT, QNT>&,
+ *                 TPSWaveFunctionComponent<TenElemT, QNT>&,
+ *                 std::vector<double>&)
+ * 
+ * It updates the TPS-based wavefunction component and stores accept ratios in a vector.
+ * 
+ * Built-in updaters in configuration_update_strategies/:
+ * - MCUpdateSquareNNExchange
+ * - MCUpdateSquareNNFullSpaceUpdate  
+ * - MCUpdateSquareTNN3SiteExchange
+ * 
+ * @todo Configuration setup needs to be declared/redesigned
  */
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 class MonteCarloPEPSBaseExecutor : public Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using IndexT = Index<QNT>;
-
+  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
   MonteCarloPEPSBaseExecutor(const SITPST &sitps,
                              const MonteCarloParams &monte_carlo_params,
                              const PEPSParams &peps_params,
@@ -35,14 +51,12 @@ class MonteCarloPEPSBaseExecutor : public Executor {
       split_index_tps_(sitps),
       lx_(sitps.cols()),
       ly_(sitps.rows()),
-      tps_sample_(sitps.rows(), sitps.cols()),
+      tps_sample_(sitps.rows(), sitps.cols(), peps_params.truncate_para),
       monte_carlo_params_(monte_carlo_params),
       u_double_(0, 1),
       warm_up_(false),
       comm_(comm) {
     MPI_SetUp_();
-    WaveFunctionComponentType::trun_para = peps_params.truncate_para;
-    random_engine.seed(std::random_device{}() + rank_ * 10086); // global random engineer
     InitConfigs_(monte_carlo_params.config_path, monte_carlo_params.alternative_init_config);
   }
 
@@ -53,14 +67,13 @@ class MonteCarloPEPSBaseExecutor : public Executor {
       split_index_tps_(ly, lx),
       lx_(lx),
       ly_(ly),
-      tps_sample_(ly, lx),
+      tps_sample_(ly, lx, peps_params.truncate_para),
       monte_carlo_params_(monte_carlo_params),
       u_double_(0, 1),
       warm_up_(false),
       comm_(comm) {
     MPI_SetUp_();
-    WaveFunctionComponentType::trun_para = peps_params.truncate_para;
-    random_engine.seed(std::random_device{}() + rank_ * 10086); // global random engineer
+    WaveFunctionComponentT::trun_para = peps_params.truncate_para;
     LoadTenData_(peps_params.wavefunction_path);
     InitConfigs_(monte_carlo_params.config_path, monte_carlo_params.alternative_init_config);
   }
@@ -86,12 +99,13 @@ class MonteCarloPEPSBaseExecutor : public Executor {
   size_t lx_; //cols
   size_t ly_; //rows
 
-  WaveFunctionComponentType tps_sample_;
+  WaveFunctionComponentT tps_sample_;
 
   const MPI_Comm &comm_;
   int rank_;
   int mpi_size_;
 
+  MonteCarloSweepUpdater mc_sweep_updater_;
   std::uniform_real_distribution<double> u_double_;
 
   MonteCarloParams monte_carlo_params_;
@@ -113,10 +127,10 @@ class MonteCarloPEPSBaseExecutor : public Executor {
 };//MonteCarloPEPSBaseExecutor
 
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                WaveFunctionComponentType>::PrintCommonInfo_(const std::string &header) const {
+                                MonteCarloSweepUpdater>::PrintCommonInfo_(const std::string &header) const {
   if (rank_ == kMPIMasterRank) {
     const size_t indent = 40;
     std::cout << std::left;  // Set left alignment for the output
@@ -125,21 +139,21 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 
     std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
     std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(indent) << "BMPS bond dimension:" << WaveFunctionComponentType::trun_para.value().D_min
+    std::cout << std::setw(indent) << "BMPS bond dimension:" << WaveFunctionComponentT::trun_para.D_min
               << "/"
-              << WaveFunctionComponentType::trun_para.value().D_max << "\n";
+              << WaveFunctionComponentT::trun_para.D_max << "\n";
     std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
-              << static_cast<int>(WaveFunctionComponentType::trun_para.value().compress_scheme) << "\n";
+              << static_cast<int>(WaveFunctionComponentT::trun_para.compress_scheme) << "\n";
     std::cout << std::setw(indent) << "Sampling numbers:" << monte_carlo_params_.num_samples << "\n";
     std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << monte_carlo_params_.sweeps_between_samples
               << "\n";
   }
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                WaveFunctionComponentType>::PrintTechInfo_() const {
+                                MonteCarloSweepUpdater>::PrintTechInfo_() const {
   if (rank_ == kMPIMasterRank) {
     const size_t indent = 40;
     std::cout << std::left;  // Set left alignment for the output
@@ -152,19 +166,19 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
   }
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 int MonteCarloPEPSBaseExecutor<TenElemT,
                                QNT,
-                               WaveFunctionComponentType>::InitConfigs_(const std::string &config_path,
-                                                                        const Configuration &alternative_configs) {
+                               MonteCarloSweepUpdater>::InitConfigs_(const std::string &config_path,
+                                                                     const Configuration &alternative_configs) {
   Configuration config(ly_, lx_);
   bool load_success = config.Load(config_path, rank_);
   if (load_success) {
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+    tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, WaveFunctionComponentT::trun_para);
     warm_up_ = true;
   } else {
     // Fallback to default configuration from parameters
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, alternative_configs);
+    tps_sample_ = WaveFunctionComponentT(split_index_tps_, alternative_configs, WaveFunctionComponentT::trun_para);
     warm_up_ = false;
   }
   SyncValidConfiguration_();
@@ -173,20 +187,20 @@ int MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 ///< Directly initialize with the given configuration
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 int MonteCarloPEPSBaseExecutor<TenElemT,
                                QNT,
-                               WaveFunctionComponentType>::InitConfigs_(const qlpeps::Configuration &init_configs,
-                                                                        bool warm_up) {
-  tps_sample_ = WaveFunctionComponentType(split_index_tps_, init_configs);
+                               MonteCarloSweepUpdater>::InitConfigs_(const qlpeps::Configuration &init_configs,
+                                                                     bool warm_up) {
+  tps_sample_ = WaveFunctionComponentT(split_index_tps_, init_configs);
   warm_up_ = warm_up;
   SyncValidConfiguration_();
   NormTPSForOrder1Amplitude_();
   return 0;
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
-int MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::WarmUp_() {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+int MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::WarmUp_() {
   if (!warm_up_) {
     Timer warm_up_timer("proc " + std::to_string(rank_) + " warm up");
     for (size_t sweep = 0; sweep < monte_carlo_params_.num_warmup_sweeps; sweep++) {
@@ -209,38 +223,38 @@ int MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::WarmUp
   return 0;
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                WaveFunctionComponentType>::LoadTenData_(const std::string &tps_path) {
+                                MonteCarloSweepUpdater>::LoadTenData_(const std::string &tps_path) {
   if (!split_index_tps_.Load(tps_path)) {
     std::cout << "Loading TPS files fails." << std::endl;
     exit(-1);
   }
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
                                                QNT,
-                                               WaveFunctionComponentType>::MCSweep_(const size_t sweeps_between_samples) {
+                                               MonteCarloSweepUpdater>::MCSweep_(const size_t sweeps_between_samples) {
   std::vector<double> accept_rates;
   for (size_t i = 0; i < sweeps_between_samples; i++) {
-    tps_sample_.MonteCarloSweepUpdate(split_index_tps_, unit_even_distribution, accept_rates);
+    mc_sweep_updater_(split_index_tps_, tps_sample_, accept_rates);
   }
   return accept_rates;
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
                                                QNT,
-                                               WaveFunctionComponentType>::MCSweep_() {
+                                               MonteCarloSweepUpdater>::MCSweep_() {
   return MCSweep_(monte_carlo_params_.sweeps_between_samples);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                WaveFunctionComponentType>::SyncValidConfiguration_() {
+                                MonteCarloSweepUpdater>::SyncValidConfiguration_() {
   int local_valid = CheckWaveFunctionAmplitudeValidity(tps_sample_) ? 1 : 0;
   std::vector<int> global_valid(mpi_size_);
   HANDLE_MPI_ERROR(MPI_Allgather(&local_valid, 1, MPI_INT,
@@ -278,7 +292,7 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
     }
     MPI_BCast(config_valid, source_rank, comm_);
     if (!local_valid) {
-      tps_sample_ = WaveFunctionComponentType(split_index_tps_, config_valid);
+      tps_sample_ = WaveFunctionComponentT(split_index_tps_, config_valid, tps_sample_.trun_para);
       std::cout << "Rank" << rank_ << "replace configuration with valid configuration in Rank" << source_rank
                 << std::endl;
       warm_up_ = false;
@@ -302,10 +316,10 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 ///< Normalize TPS tensor so that the amplitude of the wave function is order 1
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                WaveFunctionComponentType>::NormTPSForOrder1Amplitude_() {
+                                MonteCarloSweepUpdater>::NormTPSForOrder1Amplitude_() {
   TenElemT *gather_amplitude;
   if (rank_ == kMPIMasterRank) {
     gather_amplitude = new TenElemT[mpi_size_];
@@ -333,7 +347,7 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
   double scale_factor_on_site = std::pow(scale_factor, 1.0 / double(lx_ * ly_));
   split_index_tps_ *= scale_factor_on_site;
   Configuration config = tps_sample_.config;
-  tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+  tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
 //  std::cout << "Rank" << rank_ << "tps_sample_.amplitude : " << tps_sample_.amplitude << std::endl;
 //  tps_sample_.amplitude *= scale_factor;
 }

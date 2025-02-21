@@ -9,9 +9,9 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_TRANSVERSE_FIELD_ISING_SQUARE_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_TRANSVERSE_FIELD_ISING_SQUARE_H
 
-#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      //ModelEnergySolver
+#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
-#include "qlpeps/utility/helpers.h"                               //ComplexConjugate
+#include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
 namespace qlpeps {
 using namespace qlten;
@@ -20,50 +20,86 @@ using namespace qlten;
  * H = - sum_<i,j> sigma_i^z * sigma_j^z - h sum_i sigma_i^x
  * sigma^z & sigma^x are Pauli matrix with matrix element 1.
  */
-template<typename TenElemT, typename QNT>
-class TransverseIsingSquare : public ModelEnergySolver<TenElemT, QNT>, ModelMeasurementSolver<TenElemT, QNT> {
-  using SITPS = SplitIndexTPS<TenElemT, QNT>;
+
+class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
+                              public ModelMeasurementSolver<TransverseIsingSquare> {
  public:
   TransverseIsingSquare(void) = delete;
 
   TransverseIsingSquare(double h) : h_(h) {}
 
-  template<typename WaveFunctionComponentType, bool calchols = true>
-  TenElemT CalEnergyAndHoles(
-      const SITPS *sitps,
-      WaveFunctionComponentType *tps_sample,
-      TensorNetwork2D<TenElemT, QNT> &hole_res
+  using ModelMeasurementSolver<TransverseIsingSquare>::operator();
+
+  template<typename TenElemT, typename QNT, bool calchols>
+  TenElemT CalEnergyAndHolesImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+      TensorNetwork2D<TenElemT, QNT> &hole_res,
+      std::vector<TenElemT> &psi_list
+  ) {
+    TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
+    const Configuration &sample_config = tps_sample->config;
+    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+    return this->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(split_index_tps,
+                                                                         sample_config,
+                                                                         sample_tn,
+                                                                         trunc_para,
+                                                                         hole_res,
+                                                                         psi_list);
+  }
+
+  template<typename TenElemT, typename QNT>
+  ObservablesLocal<TenElemT> SampleMeasureImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+      std::vector<TenElemT> &psi_list
+  ) {
+    TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
+    const Configuration &sample_config = tps_sample->config;
+    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+    return this->SampleMeasureImpl(split_index_tps, sample_config, sample_tn, trunc_para, psi_list);
+  }
+
+  template<typename TenElemT, typename QNT, bool calchols>
+  TenElemT CalEnergyAndHolesImpl(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      const Configuration &sample_config,
+      TensorNetwork2D<TenElemT, QNT> &sample_tn,
+      const BMPSTruncatePara &trunc_para,
+      TensorNetwork2D<TenElemT, QNT> &hole_res,
+      std::vector<TenElemT> &psi_list
   );
 
-  template<typename WaveFunctionComponentType>
-  ObservablesLocal<TenElemT> SampleMeasure(
-      const SITPS *sitps,
-      WaveFunctionComponentType *tps_sample
+  template<typename TenElemT, typename QNT>
+  ObservablesLocal<TenElemT> SampleMeasureImpl(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      const Configuration &sample_config,
+      TensorNetwork2D<TenElemT, QNT> &sample_tn,
+      const BMPSTruncatePara &trunc_para,
+      std::vector<TenElemT> &psi_list
   );
  private:
   double h_;
 };
 
-template<typename TenElemT, typename QNT>
-template<typename WaveFunctionComponentType, bool calchols>
-TenElemT TransverseIsingSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *split_index_tps,
-                                                                 WaveFunctionComponentType *tps_sample,
-                                                                 TensorNetwork2D<TenElemT, QNT> &hole_res) {
+template<typename TenElemT, typename QNT, bool calchols>
+TenElemT TransverseIsingSquare::CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT,
+                                                                          QNT> *split_index_tps,
+                                                      const qlpeps::Configuration &config,
+                                                      TensorNetwork2D<TenElemT, QNT> &tn,
+                                                      const qlpeps::BMPSTruncatePara &trunc_para,
+                                                      TensorNetwork2D<TenElemT, QNT> &hole_res,
+                                                      std::vector<TenElemT> &psi_list) {
   TenElemT energy(0);
-  TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
-  const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
-  TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
-  std::vector<TenElemT> psi_gather;
-  psi_gather.reserve(tn.rows() + tn.cols());
+  psi_list.reserve(tn.rows() + tn.cols());
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
-    tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
-    inv_psi = 1.0 / tps_sample->amplitude;
-    psi_gather.push_back(tps_sample->amplitude);
+    auto psi = tn.Trace({row, 0}, HORIZONTAL);
+    auto inv_psi = 1.0 / psi;
+    psi_list.push_back(psi);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
@@ -98,35 +134,30 @@ TenElemT TransverseIsingSquare<TenElemT, QNT>::CalEnergyAndHoles(const SITPS *sp
       energy += (config(site1) == config(site2)) ? -1 : 1;
     }
   }
-  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return energy;
 }
 
 template<typename TenElemT, typename QNT>
-template<typename WaveFunctionComponentType>
-ObservablesLocal<TenElemT> TransverseIsingSquare<TenElemT, QNT>::SampleMeasure(
-    const SITPS *split_index_tps,
-    WaveFunctionComponentType *tps_sample
-) {
+ObservablesLocal<TenElemT> TransverseIsingSquare::SampleMeasureImpl(const SplitIndexTPS<TenElemT,
+                                                                                        QNT> *split_index_tps,
+                                                                    const qlpeps::Configuration &config,
+                                                                    TensorNetwork2D<TenElemT, QNT> &tn,
+                                                                    const qlpeps::BMPSTruncatePara &trunc_para,
+                                                                    std::vector<TenElemT> &psi_list) {
   ObservablesLocal<TenElemT> res;
   TenElemT energy(0);
-  TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const size_t lx = tn.cols(), ly = tn.rows();
   res.bond_energys_loc.reserve(lx * ly * 2);
   res.two_point_functions_loc.reserve(lx / 2 * 3);
-  const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = WaveFunctionComponentType::trun_para.value();
-  TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
-  std::vector<TenElemT> psi_gather;
-  psi_gather.reserve(tn.rows() + tn.cols());
+  psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < ly; row++) {
     tn.InitBTen(LEFT, row);
     tn.GrowFullBTen(RIGHT, row, 1, true);
     // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
-    tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
-    inv_psi = 1.0 / tps_sample->amplitude;
-    psi_gather.push_back(tps_sample->amplitude);
+    auto psi = tn.Trace({row, 0}, HORIZONTAL);
+    auto inv_psi = 1.0 / psi;
+    psi_list.push_back(psi);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //transverse-field terms
@@ -173,7 +204,6 @@ ObservablesLocal<TenElemT> TransverseIsingSquare<TenElemT, QNT>::SampleMeasure(
   for (auto &spin_config : config) {
     res.one_point_functions_loc.push_back((double) spin_config - 0.5);
   }
-  WaveFunctionAmplitudeConsistencyCheck(psi_gather, 0.01);
   return res;
 }
 }//qlpeps

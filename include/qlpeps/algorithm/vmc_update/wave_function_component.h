@@ -14,42 +14,87 @@
 
 namespace qlpeps {
 
-template<typename TenElemT, typename QNT>
-class WaveFunctionComponent {
- public:
+///< abstract wave function component, useless up to now.
+template<typename TenElemT>
+struct WaveFunctionComponent {
   Configuration config;
   TenElemT amplitude;
-
-  static std::optional<BMPSTruncatePara> trun_para;
 
   WaveFunctionComponent(const size_t rows, const size_t cols) :
       config(rows, cols), amplitude(0) {}
   WaveFunctionComponent(const Configuration &config) : config(config), amplitude(0) {}
-
-  bool IsZero() const { return (amplitude == TenElemT(0)); }
-
-  virtual void MonteCarloSweepUpdate(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                                     std::uniform_real_distribution<double> &u_double,
-                                     std::vector<double> &accept_rates) = 0;
 };
 
-template<typename ElemT>
-bool IsAmplitudeSquareLegal(const ElemT &amplitude) {
-  const double min_positive = std::numeric_limits<double>::min();
-  const double max_positive = std::numeric_limits<double>::max();
-  return std::abs(amplitude) > std::sqrt(min_positive)
-      && std::abs(amplitude) < std::sqrt(max_positive);
-}
+/**
+ * Wave function component based on tensor product state (TPS)
+ *
+ *
+ *
+ */
+template<typename TenElemT, typename QNT>
+struct TPSWaveFunctionComponent {
+ public:
+  Configuration config;
+  TenElemT amplitude;
+  TensorNetwork2D<TenElemT, QNT> tn;
+  static BMPSTruncatePara trun_para;
 
-template<typename WaveFunctionComponentType>
-bool CheckWaveFunctionAmplitudeValidity(const WaveFunctionComponentType &tps_sample) {
+  ///< No initialized construct. considering to be removed in future.
+  TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncatePara &truncate_para) :
+      config(rows, cols), amplitude(0), tn(rows, cols) { trun_para = truncate_para; }
+
+  TPSWaveFunctionComponent(const SplitIndexTPS<TenElemT, QNT> &sitps,
+                           const Configuration &config,
+                           const BMPSTruncatePara &truncate_para)
+      : config(config), tn(config.rows(), config.cols()) {
+    trun_para = truncate_para;
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
+    tn.GrowBMPSForRow(0, this->trun_para);
+    tn.GrowFullBTen(RIGHT, 0, 2, true);
+    tn.InitBTen(LEFT, 0);
+    this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
+    if (!IsAmplitudeSquareLegal()) {
+      std::cout << "warning : wavefunction amplitude = "
+                << this->amplitude
+                << ", square of amplitude will be illegal! "
+                << std::endl;
+    }
+  }
+
+  /**
+   * @param sitps
+   * @param occupancy_num
+   */
+  void RandomInit(const SplitIndexTPS<TenElemT, QNT> &sitps,
+                  const std::vector<size_t> &occupancy_num) {
+    this->config.Random(occupancy_num);
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, this->config);
+    tn.GrowBMPSForRow(0, this->trun_para);
+    tn.GrowFullBTen(RIGHT, 0, 2, true);
+    tn.InitBTen(LEFT, 0);
+    this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
+  }
+
+  bool IsAmplitudeSquareLegal() const {
+    const double min_positive = std::numeric_limits<double>::min();
+    const double max_positive = std::numeric_limits<double>::max();
+    return !std::isnan(std::abs(amplitude))
+        && std::abs(amplitude) > std::sqrt(min_positive)
+        && std::abs(amplitude) < std::sqrt(max_positive);
+  }
+
+  [[nodiscard]] bool IsZero() const { return (amplitude == TenElemT(0)); }
+};
+
+template<typename MonteCarloSweepUpdater>
+bool CheckWaveFunctionAmplitudeValidity(const MonteCarloSweepUpdater &tps_sample) {
   return (std::abs(tps_sample.amplitude) > std::numeric_limits<double>::min()) &&
       (std::abs(tps_sample.amplitude) < std::numeric_limits<double>::max()) &&
       !std::isnan(std::abs(tps_sample.amplitude)) && !std::isinf(std::abs(tps_sample.amplitude));
 }
 
 template<typename TenElemT, typename QNT>
-std::optional<BMPSTruncatePara> WaveFunctionComponent<TenElemT, QNT>::trun_para;
+BMPSTruncatePara TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
 }//qlpeps
 
 

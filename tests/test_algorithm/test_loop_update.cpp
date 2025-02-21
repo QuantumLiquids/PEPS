@@ -13,10 +13,10 @@
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 #include "qlpeps/algorithm/loop_update/loop_update.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
-#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
+#include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -263,8 +263,8 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   //measure the energy
   auto tps = TPS<TenElemT, U1QN>(peps4);
   auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
-  using Model = TransverseIsingSquare<TenElemT, U1QN>;
-  using SquareTPSSampleFullSpaceNNFlipT = SquareTPSSampleFullSpaceNNFlip<TenElemT, U1QN>;
+  using Model = TransverseIsingSquare;
+  using MCUpdateSquareNNFullSpaceUpdateT = MCUpdateSquareNNFullSpaceUpdate;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_TransverseIsing" + std::to_string(Lx) + "x" + std::to_string(Ly);
@@ -278,10 +278,10 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
       Ly, Lx,
       tps_path);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, U1QN, SquareTPSSampleFullSpaceNNFlipT, Model>(mc_measure_para,
-                                                                                                sitps,
-                                                                                                comm,
-                                                                                                Model(h));
+      new MonteCarloMeasurementExecutor<TenElemT, U1QN, MCUpdateSquareNNFullSpaceUpdateT, Model>(mc_measure_para,
+                                                                                                 sitps,
+                                                                                                 comm,
+                                                                                                 Model(h));
   measure_executor->Execute();
   measure_executor->OutputEnergy();
   delete measure_executor;
@@ -482,8 +482,8 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   delete loop_exe;
 
   //measure simple update state energy
-  using Model = SpinOneHalfHeisenbergSquare<TenElemT, U1QN>;
-  using WaveFunctionT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
+  using Model = SpinOneHalfHeisenbergSquare;
+  using WaveFunctionT = MCUpdateSquareNNExchange;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_Heisenberg" + std::to_string(Lx) + "x" + std::to_string(Ly);
@@ -793,8 +793,8 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
 
   //measure simple update state energy
 
-  using Model = SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, U1QN>;
-  using WaveFunctionT = SquareTPSSample3SiteExchange<TenElemT, U1QN>;
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
+  using WaveFunctionT = MCUpdateSquareTNN3SiteExchange;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   MCMeasurementPara mc_measure_para = MCMeasurementPara(

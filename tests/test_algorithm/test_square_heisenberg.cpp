@@ -194,9 +194,8 @@ TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(Dpeps);
   optimize_para.step_lens = {0.0};
   optimize_para.update_scheme = StochasticReconfiguration;
-  using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
-  using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
-  VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model> *executor(nullptr);
+  using Model = SpinOneHalfHeisenbergSquare;
+  VMCPEPSExecutor<QLTEN_Double, U1QN, MCUpdateSquareNNExchange, Model> *executor(nullptr);
   TPS<QLTEN_Double, U1QN> tps = TPS<QLTEN_Double, U1QN>(Ly, Lx);
   std::string tps_path = "Hei_TPS" + std::to_string(Ly) + "x"
       + std::to_string(Lx) + "D" + std::to_string(Dpeps);
@@ -210,7 +209,7 @@ TEST_F(SpinSystemVMCPEPS, ZeroUpdate) {
   SplitIndexTPS<QLTEN_Double, U1QN> init_sitps(tps);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
-  executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model>(optimize_para, tps,
+  executor = new VMCPEPSExecutor<QLTEN_Double, U1QN, MCUpdateSquareNNExchange, Model>(optimize_para, tps,
                                                                            comm);
   executor->Execute();
   size_t end_flop = flop;
@@ -236,8 +235,8 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD6StochasticReconfiguration) {
   SpinSystemVMCPEPS::SetUp(L);
   size_t Dpeps = 6;
   optimize_para.wavefunction_path = "vmc_tps_heisenbergD" + std::to_string(Dpeps);
-  using WaveFunctionT = SquareTPSSampleNNExchange<QLTEN_Double, U1QN>;
-  using Model = SpinOneHalfHeisenbergSquare<QLTEN_Double, U1QN>;
+  using WaveFunctionT = MCUpdateSquareNNExchange;
+  using Model = SpinOneHalfHeisenbergSquare;
   VMCPEPSExecutor<QLTEN_Double, U1QN, WaveFunctionT, Model> *executor(nullptr);
 
   if (qlmps::IsPathExist(optimize_para.wavefunction_path)) {

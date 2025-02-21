@@ -9,9 +9,9 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_measurement.h"
-#include "qlpeps/algorithm/vmc_update/wave_function_component_classes/wave_function_component_all.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
+#include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"
 #include "qlmps/case_params_parser.h"
 #include "../test_mpi_env.h"
 using namespace qlten;
@@ -25,7 +25,7 @@ struct SqrHeiMCPEPS : MPITest {
   using QNSctT = QNSector<QNT>;
   using QNSctVecT = QNSectorVec<QNT>;
   using TenElemT = TEN_ELEM_TYPE;
-  using TPSSampleFlipT = SquareTPSSampleNNExchange<TenElemT, QNT>;
+  using TPSSampleFlipT = MCUpdateSquareNNExchange;
 
   size_t Lx = 4;
   size_t Ly = 4;
@@ -50,12 +50,11 @@ struct SqrHeiMCPEPS : MPITest {
 };
 
 TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
-  using Model = SpinOneHalfHeisenbergSquare<TenElemT, QNT>;
-  MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model> *executor(nullptr);
+  using Model = SpinOneHalfHeisenbergSquare;
 
-  executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model>(para,
-                                                                                     Ly, Lx,
-                                                                                     comm);
+  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model>(para,
+                                                                                          Ly, Lx,
+                                                                                          comm);
   executor->Execute();
 
   auto [energy, en_err] = executor->OutputEnergy();
@@ -100,7 +99,7 @@ struct SpinSystemMCPEPS : public testing::Test {
   using QNSctT = QNSector<U1QN>;
   using QNSctVecT = QNSectorVec<U1QN>;
   using TenElemT = TEN_ELEM_TYPE;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<TenElemT, U1QN>;
+  using TPSSampleNNFlipT = MCUpdateSquareNNExchange;
 
   FileParams params = FileParams(params_file);
   size_t Lx = params.Lx; //cols
@@ -133,7 +132,7 @@ struct SpinSystemMCPEPS : public testing::Test {
 };
 
 TEST_F(SpinSystemMCPEPS, TriHeisenbergD4) {
-  using Model = SpinOneHalfTriHeisenbergSqrPEPS<TenElemT, U1QN>;
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
   MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
   mc_measurement_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);

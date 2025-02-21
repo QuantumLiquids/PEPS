@@ -58,7 +58,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
   using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleNNFlipT = MCUpdateSquareNNExchange;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -104,7 +104,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 };
 
 TEST_F(Z2SpinlessFreeFermionTools, VariationalMonteCarloUpdate) {
-  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  using Model = SquareSpinlessFreeFermion;
   Model spinless_fermion_solver;
 
   VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model> *executor(nullptr);
@@ -138,7 +138,7 @@ struct Z2tJModelTools : public testing::Test {
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
   using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleNNFlipT = MCUpdateSquareNNExchange;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
@@ -184,7 +184,7 @@ struct Z2tJModelTools : public testing::Test {
 };
 
 TEST_F(Z2tJModelTools, VariationalMonteCarloUpdate) {
-  using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
+  using Model = SquaretJModel;
   Model tj_solver(t, J, false, 0);
 
   VMCPEPSExecutor<QLTEN_Double, fZ2QN, TPSSampleNNFlipT, Model> *executor(nullptr);

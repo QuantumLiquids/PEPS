@@ -38,7 +38,7 @@ option(TEST_BUILD_USE_EXTERNAL_QLMPS "Use external qlmps library when building u
 
 
 # Compilation and linking control.
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20) #keyword "requires"
 add_definitions(-g)
 
 

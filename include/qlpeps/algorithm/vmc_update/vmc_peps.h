@@ -10,11 +10,10 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
 
-#include "qlpeps/two_dim_tn/tps/tps.h"              // TPS
-#include "qlpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
-
+#include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS
+#include "qlpeps/two_dim_tn/tps/split_index_tps.h"                //SplitIndexTPS
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  //VMCOptimizePara
-#include "monte_carlo_peps_base.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_base.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -24,24 +23,49 @@ using namespace qlten;
  *
  * @tparam TenElemT wavefunctional elementary type, real or complex
  * @tparam QNT quantum number type
- * @tparam WaveFunctionComponentType the derived class of WaveFunctionComponent, defines the monte carlo sweep method
- * @tparam EnergySolver Energy solver, define evaluation of the model energy and holes in PEPS
+ * @tparam MonteCarloSweepUpdater functor to define the monte carlo sweep update strategies, find more info in MonteCarloPEPSBaseExecutor
+ * @tparam EnergySolver functor to define the evaluation of the model energy and holes upon wave function component of PEPS
+ * 
+ * @details The EnergySolver functor should inherit from ModelEnergySolver and implement CalEnergyAndHolesImpl method with signature:
+ * template<typename TenElemT, typename QNT, bool calchols>
+ * TenElemT CalEnergyAndHolesImpl(
+ *     const SplitIndexTPS<TenElemT, QNT>*,
+ *     TPSWaveFunctionComponent<TenElemT, QNT>*,
+ *     TensorNetwork2D<TenElemT, QNT>&,
+ *     std::vector<TenElemT>&
+ * )
+ * 
+ * Built-in energy solvers in model_solvers/:
+ * - TransverseIsingSquare: Transverse field Ising model on square lattice
+ * - SpinOneHalfHeisenbergSquare: Spin-1/2 AFM Heisenberg model on square lattice
+ * - SpinOneHalfJ1J2HeisenbergSquare: Spin-1/2 J1-J2 Heisenberg model on square lattice
+ * - SpinOneHalfTriHeisenbergSqrPEPS: Triangular Spin-1/2 AFM Heisenberg model on square lattice PEPS
+ * - SpinOneHalfTriJ1J2HeisenbergSqrPEPS: Triangular Spin-1/2 J1-J2 Heisenberg model on square lattice PEPS
+ * - SquaretJModel: t-J model on square lattice
+ * - SquareSpinlessFreeFermion: Spinless free fermion model on square lattice
+ * - SquareHubbardModel: Hubbard model on square lattice
+ * 
+ * Below class may be helpful for the implementation of the EnergySolver:
+ * - SquareNNFermionModelEnergySolver: Base class for nearest-neighbor fermion models on square lattice
+ * 
  */
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename EnergySolver>
-class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType> {
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::comm_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::mpi_size_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::rank_;
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::comm_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::mpi_size_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::rank_;
 
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::split_index_tps_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::tps_sample_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::ly_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::lx_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::split_index_tps_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::tps_sample_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::ly_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::lx_;
 
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using IndexT = Index<QNT>;
+  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
+
  public:
 
   VMCPEPSExecutor(const VMCOptimizePara &optimize_para,
@@ -132,6 +156,8 @@ class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFun
   SITPST tps_lowest_; //lowest energy tps
   std::vector<TenElemT> energy_trajectory_;
   std::vector<double> energy_error_traj_;
+
+  std::mt19937 random_engine_{std::random_device{}()};
 };
 
 }//qlpeps;

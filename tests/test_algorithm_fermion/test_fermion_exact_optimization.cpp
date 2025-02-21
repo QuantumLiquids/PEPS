@@ -122,18 +122,17 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSummation) {
   std::vector<double> e_loc_set;
   SplitIndexTPS<QLTEN_Double, fZ2QN> g_weighted_sum(Ly, Lx, 2);
   SplitIndexTPS<QLTEN_Double, fZ2QN> g_times_e_weighted_sum(Ly, Lx, 2);
-  using WaveFunctionComponentT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  WaveFunctionComponentT::trun_para =
+  auto trun_para =
       BMPSTruncatePara(1, 4, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
-  using Model = SquareSpinlessFreeFermion<QLTEN_Double, fZ2QN>;
+  using Model = SquareSpinlessFreeFermion;
   Model spin_less_fermion;
   for (auto &config : all_configs) {
-    WaveFunctionComponentT tps_sample(split_index_tps, config);
+    TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_index_tps, config, trun_para);
     weights.push_back(std::norm(tps_sample.amplitude));
     TensorNetwork2D<QLTEN_Double, fZ2QN> holes_dag(Ly, Lx);
-    double e_loc = spin_less_fermion.template CalEnergyAndHoles<WaveFunctionComponentT, true>(&split_index_tps,
-                                                                                              &tps_sample,
-                                                                                              holes_dag);
+    double e_loc = spin_less_fermion.template CalEnergyAndHoles<QLTEN_Double, fZ2QN, true>(&split_index_tps,
+                                                                                           &tps_sample,
+                                                                                           holes_dag);
     e_loc_set.push_back(e_loc);
 
     SplitIndexTPS<QLTEN_Double, fZ2QN> gradient_sample(Ly, Lx, 2);
@@ -167,13 +166,13 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSummation) {
     SplitIndexTPS<QLTEN_Double, fZ2QN> updated_split_index_tps = split_index_tps - step_len * gradient;
 
     for (auto &config : all_configs) {
-      WaveFunctionComponentT tps_sample(updated_split_index_tps, config);
+      TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_index_tps, config, trun_para);
       weights.push_back(std::norm(tps_sample.amplitude));
       TensorNetwork2D<QLTEN_Double, fZ2QN> holes_dag(Ly, Lx);
       double
-          e_loc = spin_less_fermion.template CalEnergyAndHoles<WaveFunctionComponentT, true>(&updated_split_index_tps,
-                                                                                             &tps_sample,
-                                                                                             holes_dag);
+          e_loc = spin_less_fermion.template CalEnergyAndHoles<QLTEN_Double, fZ2QN, true>(&updated_split_index_tps,
+                                                                                          &tps_sample,
+                                                                                          holes_dag);
       e_loc_set.push_back(e_loc);
     }
     weight_sum = 0.0;  // wave-function overlap
@@ -266,8 +265,7 @@ struct Z2tJTools : public testing::Test {
 };
 
 TEST_F(Z2tJTools, ExactSummation) {
-  using WaveFunctionComponentT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  WaveFunctionComponentT::trun_para =
+  auto trun_para =
       BMPSTruncatePara(1, Db, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
   double energy;
   for (size_t i = 0; i < 100; i++) {
@@ -275,15 +273,15 @@ TEST_F(Z2tJTools, ExactSummation) {
     std::vector<double> e_loc_set;
     SplitIndexTPS<QLTEN_Double, fZ2QN> g_weighted_sum(Ly, Lx, 3);
     SplitIndexTPS<QLTEN_Double, fZ2QN> g_times_e_weighted_sum(Ly, Lx, 3);
-    using Model = SquaretJModel<QLTEN_Double, fZ2QN>;
+    using Model = SquaretJModel;
     Model tj_model(t, J, false, mu);
     for (auto &config : all_configs) {
-      WaveFunctionComponentT tps_sample(split_index_tps, config);
+      TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_index_tps, config, trun_para);
       weights.push_back(std::norm(tps_sample.amplitude));
       TensorNetwork2D<QLTEN_Double, fZ2QN> holes_dag(Ly, Lx);
-      double e_loc = tj_model.template CalEnergyAndHoles<WaveFunctionComponentT, true>(&split_index_tps,
-                                                                                       &tps_sample,
-                                                                                       holes_dag);
+      double e_loc = tj_model.template CalEnergyAndHoles<QLTEN_Double, fZ2QN, true>(&split_index_tps,
+                                                                                    &tps_sample,
+                                                                                    holes_dag);
       e_loc_set.push_back(e_loc);
 
       SplitIndexTPS<QLTEN_Double, fZ2QN> gradient_sample(Ly, Lx, 3);

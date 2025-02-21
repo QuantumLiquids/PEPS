@@ -9,48 +9,19 @@
 #ifndef QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_FULL_SPACE_NN_FLIP_H
 #define QLPEPS_VMC_PEPS_SQUARE_TPS_SAMPLE_FULL_SPACE_NN_FLIP_H
 
-#include "qlpeps/algorithm/vmc_update/wave_function_component.h"    //WaveFunctionComponent
+#include "qlpeps/algorithm/vmc_update/wave_function_component.h"    //TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 
 namespace qlpeps {
 template<typename TenElemT, typename QNT>
-class SquareTPSSampleFullSpaceNNFlip : public WaveFunctionComponent<TenElemT, QNT> {
-  using WaveFunctionComponentT = WaveFunctionComponent<TenElemT, QNT>;
+class MCUpdateSquareNNFullSpaceUpdate : public TPSWaveFunctionComponent<TenElemT, QNT> {
+  using TPSWaveFunctionComponent<TenElemT, QNT>::tn;
  public:
-  TensorNetwork2D<TenElemT, QNT> tn;
-
-  SquareTPSSampleFullSpaceNNFlip(const size_t rows, const size_t cols) : WaveFunctionComponentT(rows, cols),
-                                                                         tn(rows, cols) {}
-
-  SquareTPSSampleFullSpaceNNFlip(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config)
-      : WaveFunctionComponentT(config), tn(config.rows(), config.cols()) {
-    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
-    tn.GrowBMPSForRow(0, this->trun_para.value());
-    tn.GrowFullBTen(RIGHT, 0, 2, true);
-    tn.InitBTen(LEFT, 0);
-    this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
-  }
-
-  /**
-   * @param sitps
-   * @param occupancy_num
-   */
-  void RandomInit(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                  const std::vector<size_t> &occupancy_num) {
-    this->config.Random(occupancy_num);
-    tn = TensorNetwork2D<TenElemT, QNT>(sitps, this->config);
-    tn.GrowBMPSForRow(0, this->trun_para.value());
-    tn.GrowFullBTen(RIGHT, 0, 2, true);
-    tn.InitBTen(LEFT, 0);
-    this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
-  }
-
   void MonteCarloSweepUpdate(const SplitIndexTPS<TenElemT, QNT> &sitps,
                              std::uniform_real_distribution<double> &u_double,
                              std::vector<double> &accept_rates) {
     size_t flip_accept_num = 0;
-    tn.GenerateBMPSApproach(UP, this->trun_para.value());
+    tn.GenerateBMPSApproach(UP, this->trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
       tn.InitBTen(LEFT, row);
       tn.GrowFullBTen(RIGHT, row, 2, true);
@@ -61,14 +32,14 @@ class SquareTPSSampleFullSpaceNNFlip : public WaveFunctionComponent<TenElemT, QN
         }
       }
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN, this->trun_para.value());
+        tn.BMPSMoveStep(DOWN, this->trun_para);
       }
     }
 
     tn.DeleteInnerBMPS(LEFT);
     tn.DeleteInnerBMPS(RIGHT);
 
-    tn.GenerateBMPSApproach(LEFT, this->trun_para.value());
+    tn.GenerateBMPSApproach(LEFT, this->trun_para);
     for (size_t col = 0; col < tn.cols(); col++) {
       tn.InitBTen(UP, col);
       tn.GrowFullBTen(DOWN, col, 2, true);
@@ -79,7 +50,7 @@ class SquareTPSSampleFullSpaceNNFlip : public WaveFunctionComponent<TenElemT, QN
         }
       }
       if (col < tn.cols() - 1) {
-        tn.BMPSMoveStep(RIGHT, this->trun_para.value());
+        tn.BMPSMoveStep(RIGHT, this->trun_para);
       }
     }
 
@@ -123,7 +94,7 @@ class SquareTPSSampleFullSpaceNNFlip : public WaveFunctionComponent<TenElemT, QN
     tn.UpdateSiteConfig(site2, this->config(site2), sitps);
     return true;
   }
-}; //SquareTPSSampleFullSpaceNNFlip
+}; //MCUpdateSquareNNFullSpaceUpdate
 
 }//qlpeps
 

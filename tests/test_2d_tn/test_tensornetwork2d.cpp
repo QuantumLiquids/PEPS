@@ -250,6 +250,7 @@ struct OBCIsing2DTenNetWithoutZ2 : public testing::Test {
     dtn2d({Ly - 1, Lx - 1}) = core_ten_right_lower;
     dtn2d({0, Lx - 1}) = core_ten_right_upper;
 
+    std::default_random_engine random_engine;
     random_engine.seed(std::random_device{}());
     double rand_phase_sum(0.0);
     for (size_t row = 0; row < Ly; row++) {
@@ -528,6 +529,7 @@ struct OBCIsing2DZ2TenNet : public testing::Test {
     dtn2d({Ly - 1, Lx - 1}) = core_ten_right_lower;
     dtn2d({0, Lx - 1}) = core_ten_right_upper;
 
+    std::default_random_engine random_engine;
     random_engine.seed(std::random_device{}());
     double rand_phase_sum(0.0);
     for (size_t row = 0; row < Ly; row++) {
@@ -611,8 +613,8 @@ struct ProjectedtJTensorNetwork : public testing::Test {
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
   using Tensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using TPSSampleNNFlipT = SquareTPSSampleNNExchange<QLTEN_Double, fZ2QN>;
-  using TPSSampleTNNFlipT = SquareTPSSample3SiteExchange<QLTEN_Double, fZ2QN>;
+  using TPSSampleNNFlipT = MCUpdateSquareNNExchange;
+  using TPSSampleTNNFlipT = MCUpdateSquareTNN3SiteExchange;
 
   size_t Lx = 24;
   size_t Ly = 20;
@@ -641,18 +643,18 @@ struct ProjectedtJTensorNetwork : public testing::Test {
     qlten::hp_numeric::SetTensorManipulationThreads(1);
     SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps = CreateFiniteSizeOBCTPS();
 
-    WaveFunctionComponent<QLTEN_Double, fZ2QN>::trun_para = BMPSTruncatePara(Db_min, Db_max, 1e-10,
-                                                                             CompressMPSScheme::SVD_COMPRESS,
-                                                                             std::make_optional<double>(
-                                                                                 1e-14),
-                                                                             std::make_optional<size_t>(10));
+    auto trun_para = BMPSTruncatePara(Db_min, Db_max, 1e-10,
+                                      CompressMPSScheme::SVD_COMPRESS,
+                                      std::make_optional<double>(1e-14),
+                                      std::make_optional<size_t>(10));
     Configuration config(Ly, Lx);
     config.Random({N * 7 / 16, N * 7 / 16, N / 8});
-    TPSSampleTNNFlipT tps_sample(split_idx_tps, config);
+    TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, config, trun_para);
     std::uniform_real_distribution<double> u_double = std::uniform_real_distribution<double>(0, 1);
     std::vector<double> accept_rate(1);
+    MCUpdateSquareTNN3SiteExchange mc_updater;
     for (size_t i = 0; i < 20; i++) {
-      tps_sample.MonteCarloSweepUpdate(split_idx_tps, u_double, accept_rate);
+      mc_updater(split_idx_tps, tps_sample, accept_rate);
     }
     std::cout << "Monte-Carlo warmed up." << std::endl;
     dtn2d = tps_sample.tn;

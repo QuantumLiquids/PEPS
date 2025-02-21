@@ -94,14 +94,14 @@ void PrintProgressBar(size_t progress, size_t total) {
   std::cout << "] " << int((double) progress * 100.0 / (double) total) << " %" << std::endl;
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType> {
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::comm_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::mpi_size_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::rank_;
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::comm_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::mpi_size_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::rank_;
 
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::split_index_tps_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>::tps_sample_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::split_index_tps_;
+  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::tps_sample_;
   struct Result;
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
@@ -301,19 +301,19 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
   } sample_data_;
 };//MonteCarloMeasurementExecutor
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 MonteCarloMeasurementExecutor<TenElemT,
                               QNT,
-                              WaveFunctionComponentType,
+                              MonteCarloSweepUpdater,
                               MeasurementSolver>::MonteCarloMeasurementExecutor(
     const MCMeasurementPara &measurement_para,
     const size_t ly, const size_t lx,
     const MPI_Comm &comm,
     const MeasurementSolver &solver):
-    MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>(ly, lx,
-                                                                         MonteCarloParams(measurement_para),
-                                                                         PEPSParams(measurement_para),
-                                                                         comm),
+    MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>(ly, lx,
+                                                                      MonteCarloParams(measurement_para),
+                                                                      PEPSParams(measurement_para),
+                                                                      comm),
     mc_measure_para(measurement_para),
     measurement_solver_(solver) {
   ReserveSamplesDataSpace_();
@@ -321,19 +321,19 @@ MonteCarloMeasurementExecutor<TenElemT,
   this->SetStatus(ExecutorStatus::INITED);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 MonteCarloMeasurementExecutor<TenElemT,
                               QNT,
-                              WaveFunctionComponentType,
+                              MonteCarloSweepUpdater,
                               MeasurementSolver>::MonteCarloMeasurementExecutor(
     const MCMeasurementPara &measurement_para,
     const SITPST &sitpst,
     const MPI_Comm &comm,
     const MeasurementSolver &solver):
-    MonteCarloPEPSBaseExecutor<TenElemT, QNT, WaveFunctionComponentType>(sitpst,
-                                                                         MonteCarloParams(measurement_para),
-                                                                         PEPSParams(measurement_para),
-                                                                         comm),
+    MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>(sitpst,
+                                                                      MonteCarloParams(measurement_para),
+                                                                      PEPSParams(measurement_para),
+                                                                      comm),
     mc_measure_para(measurement_para),
     measurement_solver_(solver) {
   ReserveSamplesDataSpace_();
@@ -341,8 +341,8 @@ MonteCarloMeasurementExecutor<TenElemT,
   this->SetStatus(ExecutorStatus::INITED);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::ReplicaTest(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::ReplicaTest(
     std::function<double(const Configuration &,
                          const Configuration &)> overlap_func // calculate overlap like, 1/N * sum (sz1 * sz2)
 ) {
@@ -395,8 +395,8 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
   tps_sample_.config.Dump(mc_measure_para.wavefunction_path, rank_);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::Execute(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Execute(void) {
   this->SetStatus(ExecutorStatus::EXEING);
   this->WarmUp_();
   Measure_();
@@ -404,23 +404,23 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
   this->SetStatus(ExecutorStatus::FINISH);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
                                    QNT,
-                                   WaveFunctionComponentType,
+                                   MonteCarloSweepUpdater,
                                    MeasurementSolver>::ReserveSamplesDataSpace_(
     void) {
   sample_data_.Reserve(mc_measure_para.mc_samples);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::MeasureSample_() {
-  ObservablesLocal<TenElemT> observables_local = measurement_solver_.SampleMeasure(&split_index_tps_, &tps_sample_);
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::MeasureSample_() {
+  ObservablesLocal<TenElemT> observables_local = measurement_solver_(&split_index_tps_, &tps_sample_);
   sample_data_.PushBack(tps_sample_.amplitude, std::move(observables_local));
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::GatherStatistic_() {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::GatherStatistic_() {
   Result res_thread = sample_data_.Statistic();
   std::cout << "Rank " << rank_ << ": statistic data finished." << std::endl;
 
@@ -450,11 +450,11 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, Mea
 
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void
 MonteCarloMeasurementExecutor<TenElemT,
                               QNT,
-                              WaveFunctionComponentType,
+                              MonteCarloSweepUpdater,
                               MeasurementSolver>::DumpData(const std::string &tps_path) {
   tps_sample_.config.Dump(tps_path, rank_);
 
@@ -464,7 +464,7 @@ MonteCarloMeasurementExecutor<TenElemT,
   //dump sample data
   std::string energy_raw_path = "energy_sample_data/";
   std::string wf_amplitude_path = "wave_function_amplitudes/";
-  std::string two_point_function_raw_data_path = "two_point_functions/";
+  std::string two_point_function_raw_data_path = "two_point_function_samples/";
   if (rank_ == kMPIMasterRank && !IsPathExist(energy_raw_path))
     CreatPath(energy_raw_path);
   if (rank_ == kMPIMasterRank && !IsPathExist(wf_amplitude_path))
@@ -474,38 +474,39 @@ MonteCarloMeasurementExecutor<TenElemT,
   MPI_Barrier(comm_);
   DumpVecData(energy_raw_path + "/energy" + std::to_string(rank_), sample_data_.energy_samples);
   DumpVecData(wf_amplitude_path + "/psi" + std::to_string(rank_), sample_data_.wave_function_amplitude_samples);
-  sample_data_.DumpTwoPointFunctionSamples(two_point_function_raw_data_path + "/sample" + std::to_string(rank_));
+  sample_data_.DumpTwoPointFunctionSamples(
+      two_point_function_raw_data_path + "/sample" + std::to_string(rank_) + ".csv");
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
                                    QNT,
-                                   WaveFunctionComponentType,
+                                   MonteCarloSweepUpdater,
                                    MeasurementSolver>::PrintExecutorInfo_(void) {
   this->PrintCommonInfo_("MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS");
   this->PrintTechInfo_();
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT,
                                    QNT,
-                                   WaveFunctionComponentType,
+                                   MonteCarloSweepUpdater,
                                    MeasurementSolver>::SynchronizeConfiguration_(
     const size_t root) {
   Configuration config(tps_sample_.config);
   MPI_BCast(config, root, MPI_Comm(comm_));
   if (rank_ != root) {
-    tps_sample_ = WaveFunctionComponentType(split_index_tps_, config);
+    tps_sample_ = MonteCarloSweepUpdater(split_index_tps_, config);
   }
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::DumpData(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpData(void) {
   DumpData(mc_measure_para.wavefunction_path);
 }
 
-template<typename TenElemT, typename QNT, typename WaveFunctionComponentType, typename MeasurementSolver>
-void MonteCarloMeasurementExecutor<TenElemT, QNT, WaveFunctionComponentType, MeasurementSolver>::Measure_(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Measure_(void) {
   std::vector<double> accept_rates_accum;
   const size_t print_bar_length = (mc_measure_para.mc_samples / 10) > 0 ? (mc_measure_para.mc_samples / 10) : 1;
   for (size_t sweep = 0; sweep < mc_measure_para.mc_samples; sweep++) {

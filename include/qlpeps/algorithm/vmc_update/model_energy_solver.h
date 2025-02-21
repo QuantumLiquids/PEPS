@@ -9,27 +9,9 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
 
 #include "qlten/qlten.h"
-#include "qlpeps/two_dim_tn/tps/split_index_tps.h"      //SplitIndexTPS
+#include "qlpeps/algorithm/vmc_update/wave_function_component.h"  //TPSWaveFunctionComponent
 
 namespace qlpeps {
-
-template<typename TenElemT, typename QNT>
-class ModelEnergySolver {
-  using SITPS = SplitIndexTPS<TenElemT, QNT>;
- public:
-  ModelEnergySolver(void) = default;
-
-  template<typename WaveFunctionComponentType, bool calchols = true>
-  TenElemT CalEnergyAndHoles(
-      const SITPS *sitps,
-      WaveFunctionComponentType *tps_sample,
-      TensorNetwork2D<TenElemT, QNT> &hole_res  // the return value
-  ) {
-    TenElemT energy(0);
-    return energy;
-  }
- protected:
-};
 
 //helper
 template<typename ElemT>
@@ -37,6 +19,9 @@ bool WaveFunctionAmplitudeConsistencyCheck(
     const std::vector<ElemT> &psi_list,
     const double critical_bias
 ) {
+  if (psi_list.empty()) {
+    return true;
+  }
   std::vector<double> abs_psi(psi_list.size());
   std::transform(psi_list.begin(), psi_list.end(), abs_psi.begin(), [](const ElemT &value) {
     return std::abs(value);
@@ -54,6 +39,70 @@ bool WaveFunctionAmplitudeConsistencyCheck(
   }
   return true;
 }
+
+/**
+ * @brief ModelEnergySolver is a base class used for calculating the energy and gradient hole
+ *        during the optimization of the Tensor Product State (TPS).
+ *        The class rewrite the operator() so that it works as a functor which calculate
+ *        the energy and gradient info upon specific Monte-Carlo samples
+ *        It uses CRTP (Curiously Recurring Template Pattern).
+ *
+ * In the inherited class, the function CalEnergyAndHolesImpl should be defined to evaluate
+ * the energy and holes of 2D tensor-network (without additional divide on psi).
+ * @tparam ConcreteModelSolver the derived class
+ */
+template<typename ConcreteModelSolver>
+class ModelEnergySolver {
+ public:
+  ModelEnergySolver(void) = default;
+  ModelEnergySolver(const double wave_function_component_accuracy) : wave_function_component_accuracy(
+      wave_function_component_accuracy) {}
+  /**
+   *
+   * @tparam calchols   whether calculate the gradient hole sample data and return in hole_res
+   * @param sitps       the TPS wave function
+   * @param tps_sample  the wave function component
+   * @param hole_res    the gradient hole sample data, valid only when calchols==true
+   * @return  evaluated total energy in current Monte Carlo samples
+   */
+  template<typename TenElemT, typename QNT, bool calchols>
+  TenElemT CalEnergyAndHoles(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+      TensorNetwork2D<TenElemT, QNT> &hole_res  // the return value
+  ) {
+    std::vector<TenElemT> psi_list;
+
+//    TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
+//    const Configuration &sample_config = tps_sample->config;
+//    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+//    TenElemT energy = static_cast<ConcreteModelSolver *>(this)->template CalEnergyAndHolesImpl<calchols>(sitps,
+//                                                                                                         sample_config,
+//                                                                                                         sample_tn,
+//                                                                                                         trunc_para,
+//                                                                                                         hole_res,
+//                                                                                                         psi_list);
+    TenElemT energy =
+        static_cast<ConcreteModelSolver *>(this)->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(sitps,
+                                                                                                          tps_sample,
+                                                                                                          hole_res,
+                                                                                                          psi_list);
+
+    WaveFunctionAmplitudeConsistencyCheck(psi_list, wave_function_component_accuracy);
+    return energy;
+  }
+
+  template<typename TenElemT, typename QNT>
+  TenElemT CalEnergy(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample
+  ) {
+    TensorNetwork2D<TenElemT, QNT> hole_res(1, 1);
+    return CalEnergyAndHoles<TenElemT, QNT, false>(sitps, tps_sample, hole_res);
+  }
+
+  const double wave_function_component_accuracy = 1E-3;
+};
 
 }//qlpeps
 
