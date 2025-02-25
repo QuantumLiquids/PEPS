@@ -9,12 +9,13 @@
 
 #define PLAIN_TRANSPOSE 1
 
-#include <qlpeps_bk/two_dim_tn/tps/split_index_tps.h>
+
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 #include "qlpeps/algorithm/loop_update/loop_update.h"
+#include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 
 using namespace qlten;
 using namespace qlpeps;

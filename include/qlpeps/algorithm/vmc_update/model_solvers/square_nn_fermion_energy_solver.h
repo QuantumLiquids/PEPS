@@ -74,7 +74,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
           psi_list.push_back(psi.value());
           psi_added = true;
         }
-        if (col < tn.cols() - 2) {
+        if (col < tn.cols() - 1) { // need to calculate the hole
           tn.BTenMoveStep(RIGHT);
         }
       }

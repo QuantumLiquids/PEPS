@@ -161,7 +161,7 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 
 // Check if the TPS doesn't change by setting step length = 0
 TEST_F(HeisenbergSystem, ZeroUpdate) {
-
+  MPI_Barrier(comm);
   optimize_para.step_lens = {0.0};
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);
@@ -184,7 +184,7 @@ TEST_F(HeisenbergSystem, ZeroUpdate) {
 }
 
 TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
-  size_t Dpeps = 6;
+  MPI_Barrier(comm);
 
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);

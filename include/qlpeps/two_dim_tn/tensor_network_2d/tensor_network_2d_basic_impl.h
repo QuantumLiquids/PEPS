@@ -248,6 +248,19 @@ QLTensor<TenElemT, QNT> TensorNetwork2D<TenElemT, QNT>::PunchHole(const qlpeps::
   const Tensor *left_ten, *down_ten, *right_ten, *up_ten;
   const size_t row = site[0];
   const size_t col = site[1];
+#ifndef NDEBUG
+  if (mps_orient == HORIZONTAL) {
+    up_ten = &(bmps_set_.at(UP).at(row)[this->cols() - col - 1]);
+    down_ten = &(bmps_set_.at(DOWN).at(this->rows() - row - 1)[col]);
+    left_ten = &(bten_set_.at(LEFT).at(col));
+    right_ten = &(bten_set_.at(RIGHT).at(this->cols() - col - 1));
+  } else {
+    up_ten = &(bten_set_.at(UP).at(row));
+    down_ten = &(bten_set_.at(DOWN).at(this->rows() - row - 1));
+    left_ten = &(bmps_set_.at(LEFT).at(col)[row]);
+    right_ten = &(bmps_set_.at(RIGHT).at(this->cols() - col - 1)[this->rows() - row - 1]);
+  }
+#else
   if (mps_orient == HORIZONTAL) {
     up_ten = &(bmps_set_.at(UP)[row][this->cols() - col - 1]);
     down_ten = &(bmps_set_.at(DOWN)[this->rows() - row - 1][col]);
@@ -259,6 +272,7 @@ QLTensor<TenElemT, QNT> TensorNetwork2D<TenElemT, QNT>::PunchHole(const qlpeps::
     left_ten = &(bmps_set_.at(LEFT)[col][row]);
     right_ten = &(bmps_set_.at(RIGHT)[this->cols() - col - 1][this->rows() - row - 1]);
   }
+#endif
   Tensor tmp1, tmp2, res_ten;
   if constexpr (Tensor::IsFermionic()) {
     Contract<TenElemT, QNT, false, true>(*left_ten, *down_ten, 2, 0, 1, tmp1);

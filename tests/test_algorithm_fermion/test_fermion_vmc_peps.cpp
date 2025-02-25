@@ -86,8 +86,8 @@ struct Z2SpinlessFreeFermionTools : public MPITest {
                                        1e-15, CompressMPSScheme::SVD_COMPRESS,
                                        std::make_optional<double>(1e-14),
                                        std::make_optional<size_t>(10)),
-                      1000, 1000, 1,
-                      std::vector<size_t>{8, 4},
+                      100, 100, 1,
+                      std::vector<size_t>{4, 8},
                       Ly, Lx,
                       std::vector<double>(40, 0.2),
                       StochasticReconfiguration,
@@ -108,19 +108,18 @@ TEST_F(Z2SpinlessFreeFermionTools, VariationalMonteCarloUpdate) {
   Model spinless_fermion_solver;
 
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
-  tps.Load(tps_path);
+  if (!tps.Load(tps_path)) {
+    std::cerr << "Error in load the TPS data." << std::endl;
+    exit(1);
+  };
 
-  VMCPEPSExecutor<QLTEN_Double, QNT, TPSSampleNNFlipT, Model> *executor(nullptr);
-
-  executor =
+  auto executor =
       new VMCPEPSExecutor<QLTEN_Double, QNT, TPSSampleNNFlipT, Model>(optimize_para,
                                                                       tps,
                                                                       comm,
                                                                       spinless_fermion_solver);
 
   executor->Execute();
-
-
 
   delete executor;
 }
