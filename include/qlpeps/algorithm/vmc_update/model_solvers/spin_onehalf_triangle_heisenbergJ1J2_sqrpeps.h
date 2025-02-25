@@ -52,7 +52,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
   TenElemT e1(0), e2(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   psi_list.reserve(tn.rows() + tn.cols());
@@ -199,7 +199,7 @@ ObservablesLocal<TenElemT> SpinOneHalfTriJ1J2HeisenbergSqrPEPS::SampleMeasureImp
   res.bond_energys_loc.reserve(tn.rows() * lx * 6);
   res.two_point_functions_loc.reserve(tn.cols() / 2 * 3);
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {

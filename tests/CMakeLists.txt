@@ -221,11 +221,15 @@ add_unittest(test_fermion_peps_exact_summation
         "test_algorithm_fermion/test_fermion_exact_optimization.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
-add_unittest(test_square_heisenberg
+
+add_two_type_unittest(test_square_heisenberg
         "test_algorithm/test_square_heisenberg.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "4"
+        " "
 )
+
+add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
+add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
 
 add_two_type_unittest(test_measure
         "test_algorithm/test_mc_peps_measure.cpp"

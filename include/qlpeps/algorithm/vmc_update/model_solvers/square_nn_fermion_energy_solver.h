@@ -44,7 +44,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
   TenElemT energy(0);
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+  const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
   tn.GenerateBMPSApproach(UP, trunc_para);
   psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {

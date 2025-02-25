@@ -37,7 +37,7 @@ struct TPSWaveFunctionComponent {
   Configuration config;
   TenElemT amplitude;
   TensorNetwork2D<TenElemT, QNT> tn;
-  static BMPSTruncatePara trun_para;
+  BMPSTruncatePara trun_para;
 
   ///< No initialized construct. considering to be removed in future.
   TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncatePara &truncate_para) :
@@ -47,7 +47,7 @@ struct TPSWaveFunctionComponent {
                            const Configuration &config,
                            const BMPSTruncatePara &truncate_para)
       : config(config), tn(config.rows(), config.cols()) {
-    trun_para = truncate_para;
+    TPSWaveFunctionComponent::trun_para = truncate_para;
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
     tn.GrowBMPSForRow(0, this->trun_para);
     tn.GrowFullBTen(RIGHT, 0, 2, true);
@@ -84,6 +84,46 @@ struct TPSWaveFunctionComponent {
   }
 
   [[nodiscard]] bool IsZero() const { return (amplitude == TenElemT(0)); }
+
+  /**
+   * @brief Updates local configuration and amplitude for arbitrary number of sites
+   * 
+   * @param sitps Split-index TPS containing the wavefunction
+   * @param new_amplitude New wavefunction amplitude after update
+   * @param site_configs Pairs of (site, new_config)
+   * 
+   * Usage examples:
+   * @code
+   *   // Single site update
+   *   component.UpdateLocal(sitps, new_amplitude, {site1, config1});
+   *   
+   *   // Two sites update
+   *   component.UpdateLocal(sitps, new_amplitude, 
+   *                        {site1, config1}, 
+   *                        {site2, config2});
+   *   
+   *   // Multiple sites update
+   *   component.UpdateLocal(sitps, new_amplitude,
+   *                        {site1, config1},
+   *                        {site2, config2},
+   *                        {site3, config3});
+   * @endcode
+   */
+  template<typename... Args>
+  void UpdateLocal(const SplitIndexTPS<TenElemT, QNT> &sitps,
+                   const TenElemT new_amplitude,
+                   const Args... site_configs) {
+    (UpdateSingleSite_(site_configs.first, site_configs.second, sitps), ...);
+    amplitude = new_amplitude;
+  }
+
+ private:
+  void UpdateSingleSite_(const SiteIdx &site,
+                         const size_t new_config,
+                         const SplitIndexTPS<TenElemT, QNT> &sitps) {
+    config(site) = new_config;
+    tn.UpdateSiteTensor(site, new_config, sitps);
+  }
 };
 
 template<typename MonteCarloSweepUpdater>
@@ -93,8 +133,6 @@ bool CheckWaveFunctionAmplitudeValidity(const MonteCarloSweepUpdater &tps_sample
       !std::isnan(std::abs(tps_sample.amplitude)) && !std::isinf(std::abs(tps_sample.amplitude));
 }
 
-template<typename TenElemT, typename QNT>
-BMPSTruncatePara TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
 }//qlpeps
 
 

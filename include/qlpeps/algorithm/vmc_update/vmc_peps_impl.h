@@ -520,8 +520,8 @@ template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typen
 void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergyAndHols_(void) {
   TensorNetwork2D<TenElemT, QNT> holes(ly_, lx_);
   TenElemT energy_loc = energy_solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(&split_index_tps_,
-                                                                                &tps_sample_,
-                                                                                holes);
+                                                                                       &tps_sample_,
+                                                                                       holes);
   TenElemT energy_loc_conj = ComplexConjugate(energy_loc);
   TenElemT inv_psi = ComplexConjugate(1.0 / tps_sample_.amplitude); //to divide the holes.
   energy_samples_.push_back(energy_loc);
@@ -557,8 +557,8 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Sampl
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 TenElemT VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergy_(void) {
   TenElemT energy_loc = energy_solver_.CalEnergy(&split_index_tps_,
-                                                                                 &tps_sample_
-                                                              );
+                                                 &tps_sample_
+  );
   energy_samples_.push_back(energy_loc);
   return energy_loc;
 }
@@ -618,7 +618,7 @@ void VMCPEPSExecutor<TenElemT,
   }
   BroadCast(split_index_tps_, comm_);
   Configuration config = tps_sample_.config;
-  tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, TPSWaveFunctionComponent<TenElemT, QNT>::trun_para);
+  tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
   this->NormTPSForOrder1Amplitude_();
 }
 
@@ -640,7 +640,7 @@ void VMCPEPSExecutor<TenElemT, QNT,
   }
   BroadCast(split_index_tps_, comm_);
   Configuration config = tps_sample_.config;
-  tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, TPSWaveFunctionComponent<TenElemT, QNT>::trun_para);
+  tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
   this->NormTPSForOrder1Amplitude_();
 }
 

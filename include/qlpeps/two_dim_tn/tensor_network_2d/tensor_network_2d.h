@@ -26,10 +26,15 @@ class SplitIndexTPS;
 
 using BTenPOSITION = BMPSPOSITION;
 
-/**  2-dimensional finite-size tensor network and its environments (boundary MPS and so on)
- *
- *  For boson tensor network, the index order of the tensors is
- *
+/**
+ * @brief 2-dimensional finite-size tensor network with environment tensors
+ * 
+ * This class implements a 2D tensor network with the following features:
+ * - Open Boundary Condition (OBC)
+ * - Network contraction using Boundary MPS (BMPS) method
+ * - Support for both bosonic and fermionic systems
+ * 
+ * For bosonic systems, each tensor has 4 physical indices with ordering:
  *         3
  *         |
  *      0--t--2
@@ -54,14 +59,36 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   using BMPST = BMPS<TenElemT, QNT>;
   using SITPS = SplitIndexTPS<TenElemT, QNT>;
  public:
-  //constructor
-  //without initialization of the data of boundary mps
+  /**
+   * @brief Constructs empty tensor network with specified dimensions
+   * 
+   * @param rows Number of rows in the network
+   * @param cols Number of columns in the network
+   * @note Boundary MPS data is not initialized
+   */
   TensorNetwork2D(const size_t rows, const size_t cols);
 
-  //with initialization of the data of boundary mps
+  /**
+   * @brief Constructs tensor network by projecting the state from split-index TPS with specific configuration
+   * 
+   * @param tps Source split-index TPS
+   * @param config Network configuration parameters
+   * @note Initializes both network tensors and boundary MPS
+   */
   TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config);
 
   TensorNetwork2D<TenElemT, QNT> &operator=(const TensorNetwork2D<TenElemT, QNT> &tn);
+
+  /**
+   * @brief Updates one site tensor by projecting from wavefunction (in form of split-index TPS) and new local configuration
+   * 
+   * @param site Target site index
+   * @param new_config New configuration
+   * @param tps The global wave-function (in form of split-index TPS)
+   * @param check_envs Whether to check and delete incompatibility environment tensors
+   */
+  void UpdateSiteTensor(const SiteIdx &site, const size_t new_config, const SITPS &tps,
+                        bool check_envs = true);
 
   const std::vector<BMPS<TenElemT, QNT>> &GetBMPS(const BMPSPOSITION position) const {
     return bmps_set_[position];
@@ -71,6 +98,17 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
 
   void InitBMPS(const BMPSPOSITION post);
 
+  /**
+   * @brief Generates BMPS approach to specified position
+   * 
+   * Grows boundary MPS towards the given boundary of the bulk:
+   * - Iteratively absorbs MPO layers
+   * - Applies truncation according to truncation parameters
+   * 
+   * @param post Starting position for BMPS growth
+   * @param trunc_para Truncation parameters controlling accuracy
+   * @return Map of position to vector of boundary MPS
+   */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
   GenerateBMPSApproach(BMPSPOSITION post, const BMPSTruncatePara &trunc_para);
 
@@ -139,15 +177,15 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   void TruncateBTen(const BTenPOSITION position, const size_t length);
   void BTen2MoveStep(const BTenPOSITION position, const size_t slice_num1);
 
-  void UpdateSiteConfig(const SiteIdx &site, const size_t update_config, const SITPS &tps,
-                        bool check_envs = true);
-
   /**
-   * Calculate the trace by contracting the environment tensors around a NN bond
-   * We assume we have gotten all of the environment tensors
-   * @param site_a
-   * @param bond_dir
-   * @return
+   * @brief Calculates trace by contracting environment tensors around NN bond
+   * 
+   * Assumes all required environment tensors are available.
+   * For fermionic systems, users should carefully consider the implicit ordering.
+   * 
+   * @param site_a First site index
+   * @param bond_dir Bond direction
+   * @return Trace value
    */
   TenElemT Trace(const SiteIdx &site_a, const BondOrientation bond_dir) const;
 

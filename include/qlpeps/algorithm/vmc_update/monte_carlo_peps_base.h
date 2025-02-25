@@ -73,7 +73,6 @@ class MonteCarloPEPSBaseExecutor : public Executor {
       warm_up_(false),
       comm_(comm) {
     MPI_SetUp_();
-    WaveFunctionComponentT::trun_para = peps_params.truncate_para;
     LoadTenData_(peps_params.wavefunction_path);
     InitConfigs_(monte_carlo_params.config_path, monte_carlo_params.alternative_init_config);
   }
@@ -139,11 +138,11 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 
     std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
     std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
-    std::cout << std::setw(indent) << "BMPS bond dimension:" << WaveFunctionComponentT::trun_para.D_min
+    std::cout << std::setw(indent) << "BMPS bond dimension:" << tps_sample_.trun_para.D_min
               << "/"
-              << WaveFunctionComponentT::trun_para.D_max << "\n";
+              << tps_sample_.trun_para.D_max << "\n";
     std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
-              << static_cast<int>(WaveFunctionComponentT::trun_para.compress_scheme) << "\n";
+              << static_cast<int>(tps_sample_.trun_para.compress_scheme) << "\n";
     std::cout << std::setw(indent) << "Sampling numbers:" << monte_carlo_params_.num_samples << "\n";
     std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << monte_carlo_params_.sweeps_between_samples
               << "\n";
@@ -174,11 +173,11 @@ int MonteCarloPEPSBaseExecutor<TenElemT,
   Configuration config(ly_, lx_);
   bool load_success = config.Load(config_path, rank_);
   if (load_success) {
-    tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, WaveFunctionComponentT::trun_para);
+    tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
     warm_up_ = true;
   } else {
     // Fallback to default configuration from parameters
-    tps_sample_ = WaveFunctionComponentT(split_index_tps_, alternative_configs, WaveFunctionComponentT::trun_para);
+    tps_sample_ = WaveFunctionComponentT(split_index_tps_, alternative_configs, tps_sample_.trun_para);
     warm_up_ = false;
   }
   SyncValidConfiguration_();

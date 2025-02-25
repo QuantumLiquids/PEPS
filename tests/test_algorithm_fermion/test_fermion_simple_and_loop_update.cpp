@@ -9,6 +9,7 @@
 
 #define PLAIN_TRANSPOSE 1
 
+#include <qlpeps_bk/two_dim_tn/tps/split_index_tps.h>
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
@@ -18,62 +19,15 @@
 using namespace qlten;
 using namespace qlpeps;
 
-using qlmps::CaseParamsParserBasic;
-char *params_file;
-
-using qlten::special_qn::fZ2QN;
-
-struct SimpleUpdateTestParams : public CaseParamsParserBasic {
-  SimpleUpdateTestParams(const char *f) : CaseParamsParserBasic(f) {
-    Lx = ParseInt("Lx");
-    Ly = ParseInt("Ly");
-    D = ParseInt("D");
-    Tau0 = ParseDouble("Tau0");
-    Steps = ParseInt("Steps");
-  }
-
-  size_t Ly;
-  size_t Lx;
-  size_t D;
-  double Tau0;
-  size_t Steps;
-};
-
-struct Z2SpinlessFreeFermionTools : public testing::Test {
-  using IndexT = Index<fZ2QN>;
-  using QNSctT = QNSector<fZ2QN>;
-  using QNSctVecT = QNSectorVec<fZ2QN>;
-
-  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  SimpleUpdateTestParams params = SimpleUpdateTestParams(params_file);
-  size_t Lx = params.Lx; //cols
-  size_t Ly = params.Ly;
-
-  double t = 1.0;
-  fZ2QN qn0 = fZ2QN(0);
-  // |ket>
-  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 1),  // |1> occupied
-                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
-                              TenIndexDirType::IN
-  );
-  // <bra|
-  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
-
-  DTensor c = DTensor({loc_phy_ket, loc_phy_bra});   // annihilation operator
-  DTensor cdag = DTensor({loc_phy_ket, loc_phy_bra});// creation operator
-  DTensor n = DTensor({loc_phy_ket, loc_phy_bra});   // density operator
-
-  DTensor ham_nn = DTensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra});//site: i-j-j-i (i<j)
-  void SetUp(void) {
-    n({0, 0}) = 1.0;
-    c({1, 0}) = 1;
-    cdag({0, 1}) = 1;
-
-    ham_nn({1, 0, 1, 0}) = -t;
-    ham_nn({0, 1, 0, 1}) = -t;
-    ham_nn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
-  }
-};
+std::string GenTPSPath(std::string model_name, size_t Dmax, size_t Lx, size_t Ly) {
+#if TEN_ELEM_TYPE == QLTEN_Double
+  return "dtps_" + model_name + "_D" + std::to_string(Dmax) + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
+#elif TEN_ELEM_TYPE == QLTEN_Double
+  return "ztps_" + model_name + "_D" + std::to_string(Dmax)  + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
+#else
+#error "Unexpected TEN_ELEM_TYPE"
+#endif
+}
 
 double CalGroundStateEnergyForSpinlessNNFreeFermionOBC(
     const size_t Lx,
@@ -105,9 +59,55 @@ double CalGroundStateEnergyForSpinlessNNFreeFermionOBC(
   return ground_state_energy;
 }
 
+struct Z2SpinlessFreeFermionTools : public testing::Test {
+  using QNT = qlten::special_qn::fZ2QN;
+  using IndexT = Index<QNT>;
+  using QNSctT = QNSector<QNT>;
+  using QNSctVecT = QNSectorVec<QNT>;
+  using TenElemT = QLTEN_Double;
+  using Tensor = QLTensor<TenElemT, QNT>;
+  size_t Lx = 4; //cols
+  size_t Ly = 3;
+  size_t Dmax = 4;  // hope it can be easy
+
+  size_t ele_num = 4;
+  double t = 1.0;
+  double mu; //chemical potential
+
+  QNT qn0 = QNT(0);
+  // |ket>
+  IndexT loc_phy_ket = IndexT({QNSctT(QNT(1), 1),  // |1> occupied
+                               QNSctT(QNT(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
+  );
+  // <bra|
+  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
+
+  Tensor c = Tensor({loc_phy_ket, loc_phy_bra});   // annihilation operator
+  Tensor cdag = Tensor({loc_phy_ket, loc_phy_bra});// creation operator
+  Tensor n = Tensor({loc_phy_ket, loc_phy_bra});   // density operator
+
+  Tensor ham_nn = Tensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra});//site: i-j-j-i (i<j)
+  std::string model_name = "spinless_free_fermion";
+  std::string tps_path = GenTPSPath(model_name, Dmax, Lx, Ly);
+  void SetUp(void) {
+    n({0, 0}) = 1.0;
+    n.Transpose({1, 0});
+    c({1, 0}) = 1;
+    cdag({0, 1}) = 1;
+
+    ham_nn({1, 0, 1, 0}) = -t;
+    ham_nn({0, 1, 0, 1}) = -t;
+    ham_nn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
+    mu = (CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, ele_num + 1)
+        - CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, ele_num - 1)) / 2.0;
+    std::cout << "mu : " << mu << std::endl; // -0.707107
+  }
+};
+
 TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
 
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   //half-filling
@@ -120,25 +120,33 @@ TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
   }
   peps0.Initial(activates);
 
-  SimpleUpdatePara update_para(params.Steps, params.Tau0, 1, params.D, 1e-10);
-  SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
-                                                                             ham_nn);
+  SimpleUpdatePara update_para(1000, 0.1, 1, Dmax, 1e-10);
+  SimpleUpdateExecutor<TenElemT, QNT>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(update_para, peps0,
+                                                                       ham_nn,
+                                                                       -mu * n);
+  su_exe->Execute();
+  su_exe->ResetStepLenth(0.01);
+  su_exe->Execute();
+  su_exe->ResetStepLenth(0.001);
   su_exe->Execute();
   auto peps = su_exe->GetPEPS();
-  delete su_exe;
-  peps.Dump("peps_spinless_free_fermion_half_filling");
-  double exact_gs_energy = CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, Lx * Ly / 2);
+  auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+  SplitIndexTPS<TenElemT, QNT> sitps = tps;
+  sitps.Dump(tps_path);
+
+  double exact_gs_energy = CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, ele_num);
   std::cout << "Exact ground state energy : " << exact_gs_energy << std::endl;
 }
 
+/*
 struct Z2tJModelTools : public testing::Test {
-  using IndexT = Index<fZ2QN>;
-  using QNSctT = QNSector<fZ2QN>;
-  using QNSctVecT = QNSectorVec<fZ2QN>;
+  using IndexT = Index<QNT>;
+  using QNSctT = QNSector<QNT>;
+  using QNSctVecT = QNSectorVec<QNT>;
 
-  using DTensor = QLTensor<QLTEN_Double, fZ2QN>;
-  using ZTensor = QLTensor<QLTEN_Complex, fZ2QN>;
+  using Tensor = QLTensor<TenElemT, QNT>;
+  using ZTensor = QLTensor<QLTEN_Complex, QNT>;
 
   SimpleUpdateTestParams params = SimpleUpdateTestParams(params_file);
   size_t Lx = params.Lx; //cols
@@ -146,24 +154,24 @@ struct Z2tJModelTools : public testing::Test {
   double t = 1.0;
   double J = 0.3;
   double doping = 0.125;
-  fZ2QN qn0 = fZ2QN(0);
-  IndexT loc_phy_ket = IndexT({QNSctT(fZ2QN(1), 2), // |up>, |down>
-                               QNSctT(fZ2QN(0), 1)}, // |0> empty state
+  QNT qn0 = QNT(0);
+  IndexT loc_phy_ket = IndexT({QNSctT(QNT(1), 2), // |up>, |down>
+                               QNSctT(QNT(0), 1)}, // |0> empty state
                               TenIndexDirType::IN
   );
   IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
 
   // nearest-neighbor Hamiltonian term, for the construction of evolve gates
-  DTensor dham_tj_nn = DTensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra}); //i-j-j-i (i < j)
+  Tensor dham_tj_nn = Tensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra}); //i-j-j-i (i < j)
   // loop update data
-  IndexT vb_out = IndexT({QNSctT(fZ2QN(0), 4),
-                          QNSctT(fZ2QN(1), 4)},
+  IndexT vb_out = IndexT({QNSctT(QNT(0), 4),
+                          QNSctT(QNT(1), 4)},
                          TenIndexDirType::OUT
   );
   IndexT vb_in = InverseIndex(vb_out);
 
   double loop_tau = 0.01;
-  using LoopGateT = LoopGates<DTensor>;
+  using LoopGateT = LoopGates<Tensor>;
   DuoMatrix<LoopGateT> evolve_gates = DuoMatrix<LoopGateT>(Ly - 1, Lx - 1);
 
   void SetUp(void) {
@@ -234,8 +242,8 @@ struct Z2tJModelTools : public testing::Test {
     LoopGateT gates;
     for (size_t i = 0; i < 4; i++) {
 
-      gates[i] = DTensor({vb_in, loc_phy_bra, loc_phy_ket, vb_out});
-      DTensor &gate = gates[i];
+      gates[i] = Tensor({vb_in, loc_phy_bra, loc_phy_ket, vb_out});
+      Tensor &gate = gates[i];
       //Id
       gate({0, 0, 0, 0}) = 1.0;
       gate({0, 1, 1, 0}) = 1.0;
@@ -278,7 +286,7 @@ struct Z2tJModelTools : public testing::Test {
 TEST_F(Z2tJModelTools, tJModelHalfFillingSimpleUpdate) {
   // ED ground state energy in 4x4 = -9.189207065192949 * J
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
 
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
   //half-filling
@@ -291,9 +299,9 @@ TEST_F(Z2tJModelTools, tJModelHalfFillingSimpleUpdate) {
   peps0.Initial(activates);
 
   SimpleUpdatePara update_para(params.Steps, params.Tau0, 1, params.D, 1e-10);
-  SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
-                                                                             dham_tj_nn);
+  SimpleUpdateExecutor<TenElemT, QNT>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(update_para, peps0,
+                                                                           dham_tj_nn);
   su_exe->Execute();
   auto peps = su_exe->GetPEPS();
   delete su_exe;
@@ -311,7 +319,7 @@ TEST_F(Z2tJModelTools, tJModelHalfFillingSimpleUpdate) {
 TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   // ED ground state energy in 4x4 -6.65535490684301
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
   std::string peps_path = "peps_tj_doping0.125";
   if (IsPathExist(peps_path)) {
     peps0.Load(peps_path);
@@ -334,9 +342,9 @@ TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   }
 
   SimpleUpdatePara update_para(params.Steps, params.Tau0, 1, params.D, 1e-10);
-  SimpleUpdateExecutor<QLTEN_Double, fZ2QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, fZ2QN>(update_para, peps0,
-                                                                             dham_tj_nn);
+  SimpleUpdateExecutor<TenElemT, QNT>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(update_para, peps0,
+                                                                           dham_tj_nn);
   su_exe->Execute();
   auto peps = su_exe->GetPEPS();
   delete su_exe;
@@ -346,7 +354,7 @@ TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
 TEST_F(Z2tJModelTools, tJModelDopingLoopUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   omp_set_num_threads(1);
-  SquareLatticePEPS<QLTEN_Double, fZ2QN> peps0(loc_phy_ket, Ly, Lx);
+  SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
   peps0.Load("peps_tj_doping0.125");
   peps0.NormalizeAllTensor();
 
@@ -359,26 +367,24 @@ TEST_F(Z2tJModelTools, tJModelDopingLoopUpdate) {
                                            fet_tol, fet_max_iter,
                                            cg_params);
 
-  auto *loop_exe = new LoopUpdateExecutor<QLTEN_Double, fZ2QN>(LoopUpdateTruncatePara(
-                                                                   arnoldi_params,
-                                                                   1e-6,
-                                                                   fet_params),
-                                                               150,
-                                                               loop_tau,
-                                                               evolve_gates,
-                                                               peps0);
+  auto *loop_exe = new LoopUpdateExecutor<TenElemT, QNT>(LoopUpdateTruncatePara(
+                                                                 arnoldi_params,
+                                                                 1e-6,
+                                                                 fet_params),
+                                                             150,
+                                                             loop_tau,
+                                                             evolve_gates,
+                                                             peps0);
 
   loop_exe->Execute();
   auto peps = loop_exe->GetPEPS();
   delete loop_exe;
   peps.Dump("peps_tj_doping0.125");
 }
-
+*/
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
-  params_file = argv[1];
   auto test_err = RUN_ALL_TESTS();
-MPI_Finalize();
-return test_err;
+  return test_err;
 }

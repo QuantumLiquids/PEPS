@@ -107,9 +107,9 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
                  == sitps(site1)[tps_component.config(site2)].GetIndexes());
     }
 
-    TenElemT
-        psi_b = tps_component.tn.ReplaceNNSiteTrace(site1, site2, bond_dir, sitps(site1)[tps_component.config(site2)],
-                                                    sitps(site2)[tps_component.config(site1)]);
+    TenElemT psi_b = tps_component.tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
+                                                         sitps(site1)[tps_component.config(site2)],
+                                                         sitps(site2)[tps_component.config(site1)]);
     bool exchange;
     TenElemT &psi_a = tps_component.amplitude;
     if (std::abs(psi_b) >= std::abs(psi_a)) {
@@ -125,10 +125,11 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
       }
     }
 
-    std::swap(tps_component.config(site1), tps_component.config(site2));
-    tps_component.tn.UpdateSiteConfig(site1, tps_component.config(site1), sitps);
-    tps_component.tn.UpdateSiteConfig(site2, tps_component.config(site2), sitps);
-    tps_component.amplitude = psi_b;
+    size_t temp_config1 = tps_component.config(site2);
+    size_t temp_config2 = tps_component.config(site1);
+    tps_component.UpdateLocal(sitps, psi_b,
+                              std::make_pair(site1, temp_config1),
+                              std::make_pair(site2, temp_config2));
     return exchange;
   }
 };
@@ -172,11 +173,10 @@ class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpda
     if (final_state == init_config) {
       return false;
     }
-    tps_component.config(site1) = final_state / dim;
-    tps_component.config(site2) = final_state % dim;
-    tps_component.amplitude = alternative_psi[final_state];
-    tn.UpdateSiteConfig(site1, tps_component.config(site1), sitps);
-    tn.UpdateSiteConfig(site2, tps_component.config(site2), sitps);
+
+    tps_component.UpdateLocal(sitps, alternative_psi[final_state],
+                              std::make_pair(site1, final_state / dim),
+                              std::make_pair(site2, final_state % dim));
     return true;
   }
 };

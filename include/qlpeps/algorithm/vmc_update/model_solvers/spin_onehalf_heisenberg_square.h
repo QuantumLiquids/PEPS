@@ -30,7 +30,7 @@ class SpinOneHalfHeisenbergSquare : public ModelEnergySolver<SpinOneHalfHeisenbe
   ) {
     TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
     const Configuration &sample_config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
     return this->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(split_index_tps,
                                                                          sample_config,
                                                                          sample_tn,
@@ -57,7 +57,7 @@ class SpinOneHalfHeisenbergSquare : public ModelEnergySolver<SpinOneHalfHeisenbe
   ) {
     TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
     const Configuration &sample_config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
     return this->SampleMeasureImpl(split_index_tps, sample_config, sample_tn, trunc_para, psi_list);
   }
 

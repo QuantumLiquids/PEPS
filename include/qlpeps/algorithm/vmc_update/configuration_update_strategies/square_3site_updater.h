@@ -125,13 +125,10 @@ class MCUpdateSquareTNN3SiteExchange : public MonteCarloSweepUpdaterBase {
     if (final_state == init_state) {
       return false;
     }
-    tps_component.config(site1) = permutations[final_state][0];
-    tps_component.config(site2) = permutations[final_state][1];
-    tps_component.config(site3) = permutations[final_state][2];
-    tps_component.amplitude = psis[final_state];
-    tn.UpdateSiteConfig(site1, tps_component.config(site1), sitps);
-    tn.UpdateSiteConfig(site2, tps_component.config(site2), sitps);
-    tn.UpdateSiteConfig(site3, tps_component.config(site3), sitps);
+    tps_component.UpdateLocal(sitps, psis[final_state],
+                              std::make_pair(site1, permutations[final_state][0]),
+                              std::make_pair(site2, permutations[final_state][1]),
+                              std::make_pair(site3, permutations[final_state][2]));
     return true;
   }
 }; //MCUpdateSquareTNN3SiteExchange

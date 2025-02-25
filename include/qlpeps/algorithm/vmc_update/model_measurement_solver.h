@@ -47,7 +47,7 @@ class ModelMeasurementSolver {
     std::vector<TenElemT> psi_list;
 //    TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
 //    const Configuration &sample_config = tps_sample->config;
-//    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+//    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
 //    /**  Evaluate total energy, bond energy, and correlation functions from current MC sample  **/
 //    ObservablesLocal<TenElemT> res_loc = static_cast<ConcreteModelSolver *>(this)->SampleMeasureImpl(sitps,
 //                                                                                                     sample_config,

@@ -67,7 +67,7 @@ class SquareNNFermionMeasureSolver : public ModelMeasurementSolver<SquareNNFermi
 
 
     // Measure hopping terms using BMPS
-    const BMPSTruncatePara &trunc_para = TPSWaveFunctionComponent<TenElemT, QNT>::trun_para;
+    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
     TenElemT inv_psi = 1.0 / tps_sample->amplitude;
     TenElemT energy(0);
 

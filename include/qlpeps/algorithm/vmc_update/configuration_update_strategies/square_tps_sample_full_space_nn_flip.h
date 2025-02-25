@@ -90,8 +90,8 @@ class MCUpdateSquareNNFullSpaceUpdate : public TPSWaveFunctionComponent<TenElemT
     this->config(site1) = final_state / dim;
     this->config(site2) = final_state % dim;
     this->amplitude = alternative_psi[final_state];
-    tn.UpdateSiteConfig(site1, this->config(site1), sitps);
-    tn.UpdateSiteConfig(site2, this->config(site2), sitps);
+    tn.UpdateSiteTensor(site1, this->config(site1), sitps);
+    tn.UpdateSiteTensor(site2, this->config(site2), sitps);
     return true;
   }
 }; //MCUpdateSquareNNFullSpaceUpdate
