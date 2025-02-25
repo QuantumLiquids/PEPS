@@ -9,7 +9,6 @@
 
 #define PLAIN_TRANSPOSE 1
 
-
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
@@ -137,7 +136,7 @@ TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
   sitps.Dump(tps_path);
 
   double exact_gs_energy = CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, ele_num);
-  std::cout << "Exact ground state energy : " << exact_gs_energy << std::endl;
+  std::cout << "Exact ground state energy : " << std::setprecision(10) << exact_gs_energy << std::endl;
 }
 
 /*

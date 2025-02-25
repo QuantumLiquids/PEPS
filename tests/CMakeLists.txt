@@ -190,11 +190,11 @@ add_two_type_unittest(test_simple_update
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
 )
 
-add_unittest(test_fermion_simple_update
-        "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
-)
+#add_unittest(test_fermion_simple_update
+#        "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
+#        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+#        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
+#)
 add_two_type_unittest(test_loop_update
         "test_algorithm/test_loop_update.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
@@ -212,11 +212,11 @@ add_mpi_unittest_run(test_vmc_peps_double "4" "${CMAKE_CURRENT_LIST_DIR}/test_al
 add_mpi_unittest_run(test_vmc_peps_complex "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json")
 
 
-add_unittest(test_fermion_vmc_peps
-        "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
-)
+#add_unittest(test_fermion_vmc_peps
+#        "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
+#        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+#        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
+#)
 add_unittest(test_fermion_peps_exact_summation
         "test_algorithm_fermion/test_fermion_exact_optimization.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
@@ -250,6 +250,14 @@ add_unittest(test_fermion_mc_update
         "${CMAKE_CURRENT_LIST_DIR}/test_data/"
 )
 
+add_two_type_unittest(test_square_nn_spinless_free_fermion
+        "test_algorithm_fermion/test_square_nn_spinless_free_fermion.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_mpi_unittest_run(test_square_nn_spinless_free_fermion_double "56" " ")
+add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "56" " ")
 
 ## Test utility
 add_unittest(test_conjugate_gradient_solver

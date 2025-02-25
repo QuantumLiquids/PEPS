@@ -70,7 +70,7 @@ struct Z2SpinlessFreeFermionTools : public MPITest {
   size_t Ly = 3;
   size_t Dpeps = 4;  // hope it can be easy
   size_t ele_num = 4;
-
+  double energy_ED = -7.478708665;
   size_t N = Lx * Ly;
   double t = 1.0;
   double mu = -0.707107;
