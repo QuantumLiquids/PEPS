@@ -38,7 +38,7 @@ using namespace qlten;
  * Built-in energy solvers in model_solvers/:
  * - TransverseIsingSquare: Transverse field Ising model on square lattice
  * - SquareSpinOneHalfXXZModel: Spin-1/2 AFM Heisenberg model on square lattice
- * - SpinOneHalfJ1J2HeisenbergSquare: Spin-1/2 J1-J2 Heisenberg model on square lattice
+ * - SquareSpinOneHalfJ1J2XXZModel: Spin-1/2 J1-J2 Heisenberg model on square lattice
  * - SpinOneHalfTriHeisenbergSqrPEPS: Triangular Spin-1/2 AFM Heisenberg model on square lattice PEPS
  * - SpinOneHalfTriJ1J2HeisenbergSqrPEPS: Triangular Spin-1/2 J1-J2 Heisenberg model on square lattice PEPS
  * - SquaretJModel: t-J model on square lattice

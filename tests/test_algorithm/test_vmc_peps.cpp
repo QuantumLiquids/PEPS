@@ -252,7 +252,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
 }
 
 TEST_F(SpinSystemVMCPEPS, SquareJ1J2D4) {
-  using Model = SpinOneHalfJ1J2HeisenbergSquare;
+  using Model = SquareSpinOneHalfJ1J2XXZModel;
   std::string model_name = "square_j1j2_hei";
   optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);

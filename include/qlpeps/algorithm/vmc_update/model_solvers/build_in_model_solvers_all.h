@@ -10,7 +10,7 @@
 //boson & spin models
 #include "transverse_field_ising_square.h"
 #include "square_spin_onehalf_xxz_model.h"
-#include "spin_onehalf_squareJ1J2.h"
+#include "square_spin_onehalf_j1j2_xxz_model.h"
 #include "spin_onehalf_triangle_heisenberg_sqrpeps.h"
 #include "spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
 
