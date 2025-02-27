@@ -9,7 +9,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_NN_FERMION_MEASURE_SOLVER_H
 
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
 
 namespace qlpeps {
 

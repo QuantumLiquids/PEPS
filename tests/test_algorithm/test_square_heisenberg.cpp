@@ -21,7 +21,7 @@ using namespace qlpeps;
 std::string GenTPSPath(std::string model_name, size_t Dmax, size_t Lx, size_t Ly) {
 #if TEN_ELEM_TYPE == QLTEN_Double
   return "dtps_" + model_name + "_D" + std::to_string(Dmax) + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
-#elif TEN_ELEM_TYPE == QLTEN_Double
+#elif TEN_ELEM_TYPE == QLTEN_Complex
   return "ztps_" + model_name + "_D" + std::to_string(Dmax)  + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
 #else
 #error "Unexpected TEN_ELEM_TYPE"
@@ -167,8 +167,8 @@ TEST_F(HeisenbergSystem, ZeroUpdate) {
   tps.Load(tps_path);
   auto init_tps = tps;
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SpinOneHalfHeisenbergSquare>(optimize_para, tps,
-                                                                                                comm);
+      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(optimize_para, tps,
+                                                                                              comm);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
   executor->Execute();
@@ -191,8 +191,8 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //VMC
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SpinOneHalfHeisenbergSquare>(optimize_para, tps,
-                                                                                                comm);
+      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(optimize_para, tps,
+                                                                                              comm);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 
@@ -208,7 +208,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SpinOneHalfHeisenbergSquare>(
+      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
           measure_para,
           tps,
           comm);

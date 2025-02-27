@@ -61,7 +61,7 @@ std::vector<MatrixElement<double>> GenerateTriElements(
 std::string GenPEPSPath(std::string model_name, size_t Dmax) {
 #if TEN_ELEM_TYPE == QLTEN_Double
   return "dpeps_" + model_name + "_D" + std::to_string(Dmax);
-#elif TEN_ELEM_TYPE == QLTEN_Double
+#elif TEN_ELEM_TYPE == QLTEN_Complex
   return "zpeps_" + model_name + "_D" + std::to_string(Dmax);
 #else
 #error "Unexpected TEN_ELEM_TYPE"
@@ -71,7 +71,7 @@ std::string GenPEPSPath(std::string model_name, size_t Dmax) {
 std::string GenTPSPath(std::string model_name, size_t Dmax) {
 #if TEN_ELEM_TYPE == QLTEN_Double
   return "dtps_" + model_name + "_D" + std::to_string(Dmax);
-#elif TEN_ELEM_TYPE == QLTEN_Double
+#elif TEN_ELEM_TYPE == QLTEN_Complex
   return "ztps_" + model_name + "_D" + std::to_string(Dmax);
 #else
 #error "Unexpected TEN_ELEM_TYPE"

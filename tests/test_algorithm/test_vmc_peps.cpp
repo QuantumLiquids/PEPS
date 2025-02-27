@@ -26,7 +26,7 @@ using qlten::special_qn::U1QN;
 std::string GenTPSPath(std::string model_name, size_t Dmax) {
 #if TEN_ELEM_TYPE == QLTEN_Double
   return "dtps_" + model_name + "_D" + std::to_string(Dmax);
-#elif TEN_ELEM_TYPE == QLTEN_Double
+#elif TEN_ELEM_TYPE == QLTEN_Complex
   return "ztps_" + model_name + "_D" + std::to_string(Dmax);
 #else
 #error "Unexpected TEN_ELEM_TYPE"
@@ -127,7 +127,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticGradient) {
   std::string model_name = "square_nn_hei";
   optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
 
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
   VMCPEPSExecutor<TenElemT, U1QN, MCUpdateSquareNNFullSpaceUpdate, Model> *executor(nullptr);
 
   if (params.Continue_from_VMC) {
@@ -154,7 +154,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
   std::string model_name = "square_nn_hei";
   optimize_para.bmps_trunc_para.compress_scheme = CompressMPSScheme::VARIATION1Site;
   optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
 
   if (params.Continue_from_VMC) {
@@ -176,7 +176,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4BMPSSingleSiteVariational) {
 }
 
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
   std::string model_name = "square_nn_hei";
   optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
@@ -202,7 +202,7 @@ TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4StochasticReconfigration) {
 }
 
 TEST_F(SpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
   std::string model_name = "square_nn_hei";
   optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
@@ -227,7 +227,7 @@ TEST_F(SpinSystemVMCPEPS, HeisenbergD4GradientLineSearch) {
 }
 
 TEST_F(SpinSystemVMCPEPS, SquareHeisenbergD4NaturalGradientLineSearch) {
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
   VMCPEPSExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   std::string model_name = "square_nn_hei";
   optimize_para.wavefunction_path = "vmc_tps_" + model_name + "D" + std::to_string(params.D);

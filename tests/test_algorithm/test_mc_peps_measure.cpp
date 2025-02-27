@@ -11,7 +11,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
 #include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
 #include "qlmps/case_params_parser.h"
 #include "../test_mpi_env.h"
 using namespace qlten;
@@ -50,7 +50,7 @@ struct SqrHeiMCPEPS : MPITest {
 };
 
 TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
 
   auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model>(para,
                                                                                           Ly, Lx,

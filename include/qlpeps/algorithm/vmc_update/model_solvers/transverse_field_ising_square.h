@@ -27,7 +27,7 @@ class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
   TransverseIsingSquare(void) = delete;
 
   TransverseIsingSquare(double h) : h_(h) {}
-
+  using ModelEnergySolver::CalEnergyAndHoles;
   using ModelMeasurementSolver<TransverseIsingSquare>::operator();
 
   template<typename TenElemT, typename QNT, bool calchols>
@@ -40,12 +40,12 @@ class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
     TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
     const Configuration &sample_config = tps_sample->config;
     const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
-    return this->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(split_index_tps,
-                                                                         sample_config,
-                                                                         sample_tn,
-                                                                         trunc_para,
-                                                                         hole_res,
-                                                                         psi_list);
+    return this->template CalEnergyAndHolesImplParsed<TenElemT, QNT, calchols>(split_index_tps,
+                                                                               sample_config,
+                                                                               sample_tn,
+                                                                               trunc_para,
+                                                                               hole_res,
+                                                                               psi_list);
   }
 
   template<typename TenElemT, typename QNT>
@@ -61,7 +61,7 @@ class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
   }
 
   template<typename TenElemT, typename QNT, bool calchols>
-  TenElemT CalEnergyAndHolesImpl(
+  TenElemT CalEnergyAndHolesImplParsed(
       const SplitIndexTPS<TenElemT, QNT> *sitps,
       const Configuration &sample_config,
       TensorNetwork2D<TenElemT, QNT> &sample_tn,
@@ -83,13 +83,12 @@ class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
 };
 
 template<typename TenElemT, typename QNT, bool calchols>
-TenElemT TransverseIsingSquare::CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT,
-                                                                          QNT> *split_index_tps,
-                                                      const qlpeps::Configuration &config,
-                                                      TensorNetwork2D<TenElemT, QNT> &tn,
-                                                      const qlpeps::BMPSTruncatePara &trunc_para,
-                                                      TensorNetwork2D<TenElemT, QNT> &hole_res,
-                                                      std::vector<TenElemT> &psi_list) {
+TenElemT TransverseIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+                                                            const qlpeps::Configuration &config,
+                                                            TensorNetwork2D<TenElemT, QNT> &tn,
+                                                            const qlpeps::BMPSTruncatePara &trunc_para,
+                                                            TensorNetwork2D<TenElemT, QNT> &hole_res,
+                                                            std::vector<TenElemT> &psi_list) {
   TenElemT energy(0);
   psi_list.reserve(tn.rows() + tn.cols());
   tn.GenerateBMPSApproach(UP, trunc_para);

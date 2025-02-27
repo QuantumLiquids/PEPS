@@ -7,7 +7,7 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_SPINLESS_FREE_FERMION
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_SPINLESS_FREE_FERMION
 
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_measure_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
@@ -22,7 +22,7 @@ using namespace qlten;
  * 0 for filled, 1 for empty
  */
 
-class SquareSpinlessFreeFermion : public SquareNNFermionModelEnergySolver<SquareSpinlessFreeFermion>,
+class SquareSpinlessFreeFermion : public SquareNNModelEnergySolver<SquareSpinlessFreeFermion>,
                                   public SquareNNFermionMeasureSolver<SquareSpinlessFreeFermion> {
 
  public:

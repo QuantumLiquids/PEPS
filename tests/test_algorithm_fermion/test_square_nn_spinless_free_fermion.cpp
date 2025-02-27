@@ -19,7 +19,7 @@ using namespace qlpeps;
 std::string GenTPSPath(std::string model_name, size_t Dmax, size_t Lx, size_t Ly) {
 #if TEN_ELEM_TYPE == QLTEN_Double
   return "dtps_" + model_name + "_D" + std::to_string(Dmax) + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
-#elif TEN_ELEM_TYPE == QLTEN_Double
+#elif TEN_ELEM_TYPE == QLTEN_Complex
   return "ztps_" + model_name + "_D" + std::to_string(Dmax)  + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
 #else
 #error "Unexpected TEN_ELEM_TYPE"
@@ -98,7 +98,7 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
                       100, 100, 1,
                       std::vector<size_t>{4, 8},
                       Ly, Lx,
-                      std::vector<double>(40, 0.2),
+                      std::vector<double>(60, 0.2),
                       StochasticReconfiguration,
                       ConjugateGradientParams(100, 1e-4, 20, 0.01));
 

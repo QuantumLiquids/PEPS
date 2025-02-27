@@ -12,7 +12,7 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_measure_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
@@ -25,17 +25,17 @@ enum class tJSingleSiteState {
   Empty             // 2
 };
 
-class SquaretJModel : public SquareNNFermionModelEnergySolver<SquaretJModel>,
+class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
                       public SquareNNFermionMeasureSolver<SquaretJModel> {
  public:
   SquaretJModel(void) = delete;
 
   explicit SquaretJModel(double t, double J, bool has_nn_term, double mu)
       : t_(t), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
-  using SquareNNFermionModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
+  using SquareNNModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
   using SquareNNFermionMeasureSolver<SquaretJModel>::operator();
 
-  ///< requirement from SquareNNFermionModelEnergySolver
+  ///< requirement from SquareNNModelEnergySolver
   template<typename TenElemT, typename QNT>
   TenElemT EvaluateBondEnergy(
       const SiteIdx site1, const SiteIdx site2,
@@ -47,7 +47,7 @@ class SquaretJModel : public SquareNNFermionModelEnergySolver<SquaretJModel>,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
   );
 
-  ///< requirement from SquareNNFermionModelEnergySolver
+  ///< requirement from SquareNNModelEnergySolver
   double EvaluateTotalOnsiteEnergy(const Configuration &config) {
     double energy = 0;
     if (mu_ != 0) {

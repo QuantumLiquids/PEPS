@@ -14,7 +14,7 @@
 #include "qlpeps/algorithm/loop_update/loop_update.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_heisenberg_square.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
 #include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 
@@ -482,7 +482,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   delete loop_exe;
 
   //measure simple update state energy
-  using Model = SpinOneHalfHeisenbergSquare;
+  using Model = SquareSpinOneHalfXXZModel;
   using WaveFunctionT = MCUpdateSquareNNExchange;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;

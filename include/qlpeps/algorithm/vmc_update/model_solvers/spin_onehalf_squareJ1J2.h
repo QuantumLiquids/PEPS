@@ -11,7 +11,7 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
-#include "spin_onehalf_heisenberg_square.h"                       // EvaluateNNBondEnergyForAFMHeisenbergModel
+#include "square_spin_onehalf_xxz_model.h"                       // EvaluateNNBondEnergyForAFMHeisenbergModel
 namespace qlpeps {
 using namespace qlten;
 
@@ -41,6 +41,27 @@ class SpinOneHalfJ1J2HeisenbergSquare : public ModelEnergySolver<SpinOneHalfJ1J2
   );
 
  private:
+  template<typename TenElemT, typename QNT>
+  TenElemT EvaluateNNBondEnergyForAFMHeisenbergModel(
+      const SiteIdx site1, const SiteIdx site2,
+      const size_t config1, const size_t config2,
+      const BondOrientation orient,
+      const TensorNetwork2D<TenElemT, QNT> &tn,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+      const TenElemT inv_psi
+  ) {
+    if (config1 == config2) {
+      return 0.25;
+    } else {
+      TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+                                              split_index_tps_on_site1[config2],
+                                              split_index_tps_on_site2[config1]);
+      TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
+      return (-0.25 + ratio * 0.5);
+    }
+  }
+
   double j2_;
 };
 

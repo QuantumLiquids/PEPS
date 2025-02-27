@@ -7,7 +7,7 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_HUBBARD_MODEL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_HUBBARD_MODEL_H
 
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_measure_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
@@ -52,15 +52,15 @@ double HubbardConfig2Spinz(const size_t config) {
  * 3: empty
  */
 
-class SquareHubbardModel : public SquareNNFermionModelEnergySolver<SquareHubbardModel>,
+class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
                           public SquareNNFermionMeasureSolver<SquareHubbardModel> {
  public:
-  using SquareNNFermionModelEnergySolver<SquareHubbardModel>::CalEnergyAndHoles;
+  using SquareNNModelEnergySolver<SquareHubbardModel>::CalEnergyAndHoles;
   using SquareNNFermionMeasureSolver<SquareHubbardModel>::operator();
   SquareHubbardModel(void) = delete;
   SquareHubbardModel(double t, double U, double mu) : t_(t), U_(U), mu_(mu) {}
 
-  ///< requirement from SquareNNFermionModelEnergySolver
+  ///< requirement from SquareNNModelEnergySolver
   template<typename TenElemT, typename QNT>
   TenElemT EvaluateBondEnergy(
       const SiteIdx site1, const SiteIdx site2,
@@ -72,7 +72,7 @@ class SquareHubbardModel : public SquareNNFermionModelEnergySolver<SquareHubbard
       std::optional<TenElemT> &psi // return value, used for check the accuracy
   );
 
-  ///< requirement from SquareNNFermionModelEnergySolver
+  ///< requirement from SquareNNModelEnergySolver
   ///< on-site repulsion and chemical potential terms
   double EvaluateTotalOnsiteEnergy(const Configuration &config) {
     double energy(0);

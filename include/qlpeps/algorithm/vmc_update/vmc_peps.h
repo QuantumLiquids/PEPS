@@ -37,7 +37,7 @@ using namespace qlten;
  * 
  * Built-in energy solvers in model_solvers/:
  * - TransverseIsingSquare: Transverse field Ising model on square lattice
- * - SpinOneHalfHeisenbergSquare: Spin-1/2 AFM Heisenberg model on square lattice
+ * - SquareSpinOneHalfXXZModel: Spin-1/2 AFM Heisenberg model on square lattice
  * - SpinOneHalfJ1J2HeisenbergSquare: Spin-1/2 J1-J2 Heisenberg model on square lattice
  * - SpinOneHalfTriHeisenbergSqrPEPS: Triangular Spin-1/2 AFM Heisenberg model on square lattice PEPS
  * - SpinOneHalfTriJ1J2HeisenbergSqrPEPS: Triangular Spin-1/2 J1-J2 Heisenberg model on square lattice PEPS
@@ -46,7 +46,7 @@ using namespace qlten;
  * - SquareHubbardModel: Hubbard model on square lattice
  * 
  * Below class may be helpful for the implementation of the EnergySolver:
- * - SquareNNFermionModelEnergySolver: Base class for nearest-neighbor fermion models on square lattice
+ * - SquareNNModelEnergySolver: Base class for nearest-neighbor fermion models on square lattice
  * 
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
