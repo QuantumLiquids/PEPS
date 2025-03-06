@@ -16,7 +16,7 @@ namespace qlpeps {
 
 template<typename ElemT>
 struct ObservablesLocal {
-  ElemT energy_loc;
+  ElemT energy_loc = 0;
   std::vector<ElemT> bond_energys_loc;
   std::vector<ElemT> one_point_functions_loc;
   std::vector<ElemT> two_point_functions_loc;

@@ -15,6 +15,16 @@
 
 namespace qlpeps {
 
+template<typename T, typename TenElemT, typename QNT>
+concept MonteCarloSweepUpdaterConcept = requires(
+    T updater,
+    const SplitIndexTPS<TenElemT, QNT> &sitps,
+    TPSWaveFunctionComponent<TenElemT, QNT> &component,
+    std::vector<double> &accept_ratios
+) {
+  { updater(sitps, component, accept_ratios) } -> std::same_as<void>;
+};
+
 /**
  * @brief Base class for Monte Carlo based measurement and variational update on PEPS
  * 
@@ -36,7 +46,8 @@ namespace qlpeps {
  * 
  * @todo Configuration setup needs to be declared/redesigned
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater> requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 class MonteCarloPEPSBaseExecutor : public Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
@@ -127,6 +138,8 @@ class MonteCarloPEPSBaseExecutor : public Executor {
 
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
                                 MonteCarloSweepUpdater>::PrintCommonInfo_(const std::string &header) const {
@@ -150,6 +163,8 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
                                 MonteCarloSweepUpdater>::PrintTechInfo_() const {
@@ -166,6 +181,8 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 int MonteCarloPEPSBaseExecutor<TenElemT,
                                QNT,
                                MonteCarloSweepUpdater>::InitConfigs_(const std::string &config_path,
@@ -187,6 +204,8 @@ int MonteCarloPEPSBaseExecutor<TenElemT,
 
 ///< Directly initialize with the given configuration
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 int MonteCarloPEPSBaseExecutor<TenElemT,
                                QNT,
                                MonteCarloSweepUpdater>::InitConfigs_(const qlpeps::Configuration &init_configs,
@@ -199,6 +218,8 @@ int MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 int MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::WarmUp_() {
   if (!warm_up_) {
     Timer warm_up_timer("proc " + std::to_string(rank_) + " warm up");
@@ -223,6 +244,8 @@ int MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::WarmUp_()
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
                                 MonteCarloSweepUpdater>::LoadTenData_(const std::string &tps_path) {
@@ -233,6 +256,8 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
                                                QNT,
                                                MonteCarloSweepUpdater>::MCSweep_(const size_t sweeps_between_samples) {
@@ -244,6 +269,8 @@ std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
                                                QNT,
                                                MonteCarloSweepUpdater>::MCSweep_() {
@@ -251,6 +278,8 @@ std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
                                 MonteCarloSweepUpdater>::SyncValidConfiguration_() {
@@ -316,6 +345,8 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
 
 ///< Normalize TPS tensor so that the amplitude of the wave function is order 1
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires
+MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
                                 MonteCarloSweepUpdater>::NormTPSForOrder1Amplitude_() {

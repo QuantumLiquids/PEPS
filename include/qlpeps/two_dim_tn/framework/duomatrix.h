@@ -64,6 +64,7 @@ class DuoMatrix {
    * @param rhs A DuoMatrix instance.
    */
   DuoMatrix<ElemT> &operator=(const DuoMatrix<ElemT> &rhs) {
+    assert(this != &rhs);
     for (auto &row : raw_data_) {
       for (auto &elem : row) {
         if (elem != nullptr) {

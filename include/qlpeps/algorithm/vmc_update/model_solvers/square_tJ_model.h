@@ -13,7 +13,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_measure_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_solver_base.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
 namespace qlpeps {
@@ -25,15 +25,14 @@ enum class tJSingleSiteState {
   Empty             // 2
 };
 
-class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
-                      public SquareNNFermionMeasureSolver<SquaretJModel> {
+class SquaretJModel : public SquareNNModelSolverBase<SquaretJModel> {
  public:
   SquaretJModel(void) = delete;
 
   explicit SquaretJModel(double t, double J, bool has_nn_term, double mu)
       : t_(t), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
   using SquareNNModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
-  using SquareNNFermionMeasureSolver<SquaretJModel>::operator();
+  using SquareNNModelSolverBase<SquaretJModel>::operator();
 
   ///< requirement from SquareNNModelEnergySolver
   template<typename TenElemT, typename QNT>
@@ -67,7 +66,8 @@ class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
   }
 
   double CalSpinSzImpl(const size_t config) const {
-    return (config == static_cast<size_t>(tJSingleSiteState::Empty)) ? 0.0 : (config == static_cast<size_t>(tJSingleSiteState::SpinUp)) ? 0.5 : -0.5;
+    return (config == static_cast<size_t>(tJSingleSiteState::Empty)) ? 0.0 : (config
+        == static_cast<size_t>(tJSingleSiteState::SpinUp)) ? 0.5 : -0.5;
   }
 
  private:
@@ -76,7 +76,6 @@ class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
   bool has_nn_term_;
   double mu_;
 };
-
 
 template<typename TenElemT, typename QNT>
 TenElemT SquaretJModel::EvaluateBondEnergy(

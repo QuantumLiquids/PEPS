@@ -41,24 +41,14 @@ struct TPSWaveFunctionComponent {
 
   ///< No initialized construct. considering to be removed in future.
   TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncatePara &truncate_para) :
-      config(rows, cols), amplitude(0), tn(rows, cols) { trun_para = truncate_para; }
+      config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para) {}
 
   TPSWaveFunctionComponent(const SplitIndexTPS<TenElemT, QNT> &sitps,
                            const Configuration &config,
                            const BMPSTruncatePara &truncate_para)
-      : config(config), tn(config.rows(), config.cols()) {
-    TPSWaveFunctionComponent::trun_para = truncate_para;
-    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
-    tn.GrowBMPSForRow(0, this->trun_para);
-    tn.GrowFullBTen(RIGHT, 0, 2, true);
-    tn.InitBTen(LEFT, 0);
-    this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
-    if (!IsAmplitudeSquareLegal()) {
-      std::cout << "warning : wavefunction amplitude = "
-                << this->amplitude
-                << ", square of amplitude will be illegal! "
-                << std::endl;
-    }
+      : config(config), tn(config.rows(), config.cols()), trun_para(truncate_para) {
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config); // projection
+    EvaluateAmplitude();
   }
 
   /**
@@ -69,10 +59,27 @@ struct TPSWaveFunctionComponent {
                   const std::vector<size_t> &occupancy_num) {
     this->config.Random(occupancy_num);
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, this->config);
+    EvaluateAmplitude();
+  }
+
+  void ReplaceGlobalConfig(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config_new) {
+    this->config = config_new;
+    tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
+    EvaluateAmplitude();
+  }
+
+  TenElemT EvaluateAmplitude() {
     tn.GrowBMPSForRow(0, this->trun_para);
     tn.GrowFullBTen(RIGHT, 0, 2, true);
     tn.InitBTen(LEFT, 0);
     this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
+    if (!IsAmplitudeSquareLegal()) {
+      std::cout << "warning : wavefunction amplitude = "
+                << this->amplitude
+                << ", square of amplitude will be illegal! "
+                << std::endl;
+    }
+    return this->amplitude;
   }
 
   bool IsAmplitudeSquareLegal() const {

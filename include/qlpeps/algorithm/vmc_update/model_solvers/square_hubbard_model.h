@@ -8,7 +8,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_HUBBARD_MODEL_H
 
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_fermion_measure_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_solver_base.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
 namespace qlpeps {
@@ -52,11 +52,10 @@ double HubbardConfig2Spinz(const size_t config) {
  * 3: empty
  */
 
-class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
-                          public SquareNNFermionMeasureSolver<SquareHubbardModel> {
+class SquareHubbardModel : public SquareNNModelSolverBase<SquareHubbardModel> {
  public:
   using SquareNNModelEnergySolver<SquareHubbardModel>::CalEnergyAndHoles;
-  using SquareNNFermionMeasureSolver<SquareHubbardModel>::operator();
+  using SquareNNModelSolverBase<SquareHubbardModel>::operator();
   SquareHubbardModel(void) = delete;
   SquareHubbardModel(double t, double U, double mu) : t_(t), U_(U), mu_(mu) {}
 
@@ -105,7 +104,6 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
   double U_;
   double mu_;
 };
-
 
 template<typename TenElemT, typename QNT>
 TenElemT SquareHubbardModel::EvaluateBondEnergy(
