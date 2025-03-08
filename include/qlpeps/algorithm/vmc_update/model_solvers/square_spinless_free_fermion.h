@@ -25,6 +25,8 @@ using namespace qlten;
 class SquareSpinlessFreeFermion : public SquareNNModelSolverBase<SquareSpinlessFreeFermion> {
 
  public:
+  static constexpr bool requires_density_measurement = true;
+  static constexpr bool requires_spin_sz_measurement = false;
   SquareSpinlessFreeFermion(void) = default;
 
   template<typename TenElemT, typename QNT>

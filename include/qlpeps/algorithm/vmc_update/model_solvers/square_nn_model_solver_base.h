@@ -41,6 +41,7 @@ class SquareNNModelSolverBase : public ModelMeasurementSolver<SquareNNModelSolve
                                 public SquareNNModelEnergySolver<ModelType> {
  public:
   using ModelMeasurementSolver<SquareNNModelSolverBase<ModelType>>::operator();
+
   template<typename TenElemT, typename QNT>
   ObservablesLocal<TenElemT> SampleMeasureImpl(
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
@@ -97,25 +98,40 @@ class SquareNNModelSolverBase : public ModelMeasurementSolver<SquareNNModelSolve
   //like Spin Sz & Charge order
   template<typename TenElemT>
   void MeasureDiagonalOrder(const Configuration &config, ObservablesLocal<TenElemT> &res) {
+    static_assert(
+        !ModelType::requires_density_measurement
+            || requires(ModelType m,
+                        size_t config) {{ m.CalDensityImpl(config) } -> std::convertible_to<QLTEN_Complex>; },
+        "If requires_density_measurement is true, ModelType must implement CalDensityImpl correctly."
+    );
+
+    static_assert(
+        !ModelType::requires_spin_sz_measurement
+            || requires(ModelType m,
+                        size_t config) {{ m.CalSpinSzImpl(config) } -> std::convertible_to<QLTEN_Complex>; },
+        "If requires_density_measurement is true, ModelType must implement CalDensityImpl correctly."
+
+    );
     const size_t N = config.size();
 
     // Reserve space for measurements
-    res.one_point_functions_loc.reserve(N);
-    res.two_point_functions_loc.reserve(N * N);
+    int num_measure_item = int(ModelType::requires_spin_sz_measurement) + int(ModelType::requires_density_measurement);
+    res.one_point_functions_loc.reserve(N * num_measure_item);
+    res.two_point_functions_loc.reserve(N * N * num_measure_item);
 
     auto *derived = static_cast<ModelType *>(this);
 
     // Calculate density and density correlation, diagonal orders
     // usually invalid for spin model
-    if constexpr (requires { derived->CalDensity(config({0, 0})); }) {
+    if constexpr (ModelType::requires_density_measurement) {
       for (auto &local_config : config) {
-        res.one_point_functions_loc.push_back(derived->CalDensity(local_config));
+        res.one_point_functions_loc.push_back(derived->CalDensityImpl(local_config));
       }
       // Calculate density-density correlations
       for (auto &config_i : config) {
         for (auto &config_j : config) {
           res.two_point_functions_loc.push_back(
-              derived->CalDensity(config_i) * derived->CalDensity(config_j)
+              derived->CalDensityImpl(config_i) * derived->CalDensityImpl(config_j)
           );
         }
       }
@@ -123,29 +139,19 @@ class SquareNNModelSolverBase : public ModelMeasurementSolver<SquareNNModelSolve
 
     // Calculate spin-spin correlations if derived class has CalSpinSz
     // usually invalid for, like spinless fermion
-    if constexpr (requires { derived->CalSpinSz(config({0, 0})); }) {
+    if constexpr (ModelType::requires_spin_sz_measurement) {
       // Calculate spin Sz for each site
       for (auto &local_config : config) {
-        res.one_point_functions_loc.push_back(derived->CalSpinSz(local_config));
+        res.one_point_functions_loc.push_back(derived->CalSpinSzImpl(local_config));
       }
       for (auto &config_i : config) {
         for (auto &config_j : config) {
           res.two_point_functions_loc.push_back(
-              derived->CalSpinSz(config_i) * derived->CalSpinSz(config_j)
+              derived->CalSpinSzImpl(config_i) * derived->CalSpinSzImpl(config_j)
           );
         }
       }
     }
-  }
-
-  double CalDensity(const size_t config) const requires requires(ModelType m) { m.CalDensityImpl(config); } {
-    auto *derived = static_cast<const ModelType *>(this);
-    return derived->CalDensityImpl(config);
-  }
-
-  double CalSpinSz(const size_t config) const requires requires(ModelType m) { m.CalSpinSzImpl(config); } {
-    auto *derived = static_cast<const ModelType *>(this);
-    return derived->CalSpinSzImpl(config);
   }
 
 };

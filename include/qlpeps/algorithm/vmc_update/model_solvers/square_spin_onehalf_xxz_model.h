@@ -57,6 +57,9 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
  */
 class SquareSpinOneHalfXXZModel : public SquareNNModelSolverBase<SquareSpinOneHalfXXZModel> {
  public:
+  static constexpr bool requires_density_measurement = false;
+  static constexpr bool requires_spin_sz_measurement = true;
+
   SquareSpinOneHalfXXZModel(void) : jz_(1), jxy_(1), pinning00_(0) {};
   SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning_field_00)
       : jz_(jz), jxy_(jxy), pinning00_(pinning_field_00) {};

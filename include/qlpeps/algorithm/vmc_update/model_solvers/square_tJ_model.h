@@ -27,6 +27,8 @@ enum class tJSingleSiteState {
 
 class SquaretJModel : public SquareNNModelSolverBase<SquaretJModel> {
  public:
+  static constexpr bool requires_density_measurement = true;
+  static constexpr bool requires_spin_sz_measurement = true;
   SquaretJModel(void) = delete;
 
   explicit SquaretJModel(double t, double J, bool has_nn_term, double mu)

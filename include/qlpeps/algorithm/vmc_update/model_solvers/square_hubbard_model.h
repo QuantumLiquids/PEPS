@@ -56,6 +56,9 @@ class SquareHubbardModel : public SquareNNModelSolverBase<SquareHubbardModel> {
  public:
   using SquareNNModelEnergySolver<SquareHubbardModel>::CalEnergyAndHoles;
   using SquareNNModelSolverBase<SquareHubbardModel>::operator();
+  static constexpr bool requires_density_measurement = true;
+  static constexpr bool requires_spin_sz_measurement = true;
+
   SquareHubbardModel(void) = delete;
   SquareHubbardModel(double t, double U, double mu) : t_(t), U_(U), mu_(mu) {}
 
