@@ -11,7 +11,7 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_solver_base.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -55,7 +55,8 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
  *  $$H = sum_<i,j> (J_z * S^z_i \cdot S^z_j + J_{xy} * ( S^x_i \cdot S^x_j  +  S^y_i \cdot S^y_j ))- h_{00} * S^z_{00}$$
  * $S^{\alpha}_i$ are spin-1/2 operator, h_{00} is the pinning field in corner.
  */
-class SquareSpinOneHalfXXZModel : public SquareNNModelSolverBase<SquareSpinOneHalfXXZModel> {
+class SquareSpinOneHalfXXZModel : public SquareNNModelEnergySolver<SquareSpinOneHalfXXZModel>,
+                                  public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel> {
  public:
   static constexpr bool requires_density_measurement = false;
   static constexpr bool requires_spin_sz_measurement = true;

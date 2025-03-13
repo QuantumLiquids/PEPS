@@ -10,15 +10,17 @@
 
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/bond_traversal_mixin.h"
 
 namespace qlpeps {
 
 /**
- * SquareNNModelSolverBase is the base class to define general nearest-neighbor models on the square lattices,
- * work for both energy & gradient evaluation and the order measurements.
+ * SquareNNModelMeasurementSolver is the base class to define general nearest-neighbor
+ * model measurement solver on the square lattices,
+ * work for the energy and order parameter measurements.
  * The CRTP technique is used to realize the Polymorphism.
  *
- * To defined the concrete model which inherit from SquareNNModelSolverBase,
+ * To defined the concrete model which inherit from SquareNNModelMeasurementSolver,
  * the following member function with specific signature must to be defined:
  * template<typename TenElemT, typename QNT>
   [[nodiscard]] TenElemT EvaluateBondEnergy(
@@ -34,13 +36,13 @@ namespace qlpeps {
    - CalDensityImpl (work for, like fermion models)
    - CalSpinSz (work for, like t-J, Hubbard, and spin models)
    - EvaluateOffDiagOrderInRow (to evaluate the off-diagonal orders in specific row)
+   - EvaluateBondSC (optional)
  *
  */
 template<typename ModelType>
-class SquareNNModelSolverBase : public ModelMeasurementSolver<SquareNNModelSolverBase<ModelType>>,
-                                public SquareNNModelEnergySolver<ModelType> {
+class SquareNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNModelMeasurementSolver<ModelType>> {
  public:
-  using ModelMeasurementSolver<SquareNNModelSolverBase<ModelType>>::operator();
+  using ModelMeasurementSolver<SquareNNModelMeasurementSolver<ModelType>>::operator();
 
   template<typename TenElemT, typename QNT>
   ObservablesLocal<TenElemT> SampleMeasureImpl(
@@ -63,31 +65,72 @@ class SquareNNModelSolverBase : public ModelMeasurementSolver<SquareNNModelSolve
 
     res.bond_energys_loc.reserve(2 * N); // horizontal and vertical bonds
     psi_list.reserve(tn.rows() + tn.cols());
-    TensorNetwork2D<TenElemT, QNT> hole_res(1, 1); //useless variable.
-    for (size_t row = 0; row < tn.rows(); row++) {
-      this->template CalHorizontalBondEnergyAndHolesSweepRowImpl<TenElemT, QNT, false>(row,
-                                                                                       split_index_tps,
-                                                                                       tps_sample,
-                                                                                       hole_res,
-                                                                                       res.bond_energys_loc,
-                                                                                       psi_list);
-      // Measure off-diagonal correlation, now only design the interface for boson/spin models
-      if constexpr (requires {
-        derived->EvaluateOffDiagOrderInRow(split_index_tps,
-                                           tn, res.two_point_functions_loc,
-                                           1.0 / psi_list.back(), config, row);
-      }) {
-        derived->EvaluateOffDiagOrderInRow(split_index_tps,
-                                           tn, res.two_point_functions_loc,
-                                           1.0 / psi_list.back(), config, row);
-      }
 
-      if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN, trunc_para);
-      }
+    if constexpr (requires { ModelType::enable_sc_measurement; }) {
+      res.two_point_functions_loc.reserve(4 * N);
     }
 
-    this->CalVerticalBondEnergyImpl(split_index_tps, tps_sample, res.bond_energys_loc, psi_list);
+    BondTraversalMixin::TraverseAllBonds(
+        tps_sample->tn,
+        tps_sample->trun_para,
+        [&, split_index_tps](const SiteIdx &site1,
+                             const SiteIdx &site2,
+                             const BondOrientation bond_orient,
+                             const TenElemT &inv_psi) {
+          TenElemT bond_energy;
+          std::optional<TenElemT> fermion_psi;
+          if constexpr (Index<QNT>::IsFermionic()) {
+            bond_energy =
+                static_cast<ModelType *>(this)->EvaluateBondEnergy(site1,
+                                                                   site2,
+                                                                   (config(site1)),
+                                                                   (config(site2)),
+                                                                   bond_orient,
+                                                                   tn,
+                                                                   (*split_index_tps)(site1),
+                                                                   (*split_index_tps)(site2),
+                                                                   fermion_psi);
+          } else {
+            bond_energy =
+                static_cast<ModelType *>(this)->EvaluateBondEnergy(site1,
+                                                                   site2,
+                                                                   (config(site1)),
+                                                                   (config(site2)),
+                                                                   bond_orient,
+                                                                   tn,
+                                                                   (*split_index_tps)(site1),
+                                                                   (*split_index_tps)(site2),
+                                                                   inv_psi);
+          }
+          res.bond_energys_loc.push_back(bond_energy);
+          if constexpr (requires { ModelType::enable_sc_measurement; }) {
+            auto sc_val = static_cast<ModelType *>(this)->EvaluateBondSC(site1,
+                                                                         site2,
+                                                                         (config(site1)),
+                                                                         (config(site2)),
+                                                                         bond_orient,
+                                                                         tn,
+                                                                         (*split_index_tps)(site1),
+                                                                         (*split_index_tps)(site2),
+                                                                         fermion_psi);
+            res.two_point_functions_loc.emplace_back(sc_val.first);
+            res.two_point_functions_loc.emplace_back(sc_val.second);
+          }
+        },
+        [&, split_index_tps](const size_t row, const TenElemT &inv_psi) {
+          if constexpr (requires {
+            derived->EvaluateOffDiagOrderInRow(split_index_tps,
+                                               tn, res.two_point_functions_loc,
+                                               inv_psi, config, row);
+          }) {
+            derived->EvaluateOffDiagOrderInRow(split_index_tps,
+                                               tn, res.two_point_functions_loc,
+                                               inv_psi, config, row);
+          }
+        },
+        psi_list
+    );
+
     TenElemT energy_bond_total = std::reduce(res.bond_energys_loc.begin(), res.bond_energys_loc.end());
 
     TenElemT energy_onsite = static_cast<ModelType *>(this)->EvaluateTotalOnsiteEnergy(config);
@@ -153,8 +196,7 @@ class SquareNNModelSolverBase : public ModelMeasurementSolver<SquareNNModelSolve
       }
     }
   }
-
-};
+};//SquareNNModelMeasurementSolver
 
 } // namespace qlpeps
 

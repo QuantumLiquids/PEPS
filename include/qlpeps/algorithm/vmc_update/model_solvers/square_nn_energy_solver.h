@@ -20,7 +20,17 @@
 
 namespace qlpeps {
 
-///< CRTP Base class
+/**
+ * SquareNNModelEnergySolver is the base class to define generic
+ * nearest-neighbor model energy solver on the square lattices,
+ * work for both energy & gradient evaluation.
+ * The CRTP technique is used to realize the Polymorphism.
+ *
+ * To be implemented by derived classes:
+ * - EvaluateBondEnergy: Computes energy contribution for a bond between site1 and site2.
+ *   Fermionic models should also optionally return the wavefunction amplitude (psi).
+ * - EvaluateTotalOnsiteEnergy: Sums all on-site energy terms (e.g., chemical potential, Hubbard U).
+ */
 template<class ExplicitlyModel>
 class SquareNNModelEnergySolver : public ModelEnergySolver<SquareNNModelEnergySolver<ExplicitlyModel>> {
  public:
@@ -69,6 +79,11 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                       TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
                       TensorNetwork2D<TenElemT, QNT> &hole_res,
                       std::vector<TenElemT> &psi_list) {
+  static_assert(
+      std::is_base_of_v<SquareNNModelEnergySolver<ExplicitlyModel>, ExplicitlyModel>,
+      "ExplicitlyModel must inherit from SquareNNModelEnergySolver<ExplicitlyModel>"
+  );
+
   std::vector<TenElemT> bond_energy_set;
   bond_energy_set.reserve(2 * split_index_tps->size());
   this->template CalHorizontalBondEnergyAndHolesImpl<TenElemT, QNT, calchols>(
@@ -123,6 +138,9 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
   TenElemT inv_psi; // only useful for Bosonic case
   if constexpr (!Index<QNT>::IsFermionic()) {
     auto psi = tn.Trace({row, 0}, HORIZONTAL);
+    if (psi == TenElemT(0)) [[unlikely]] {
+      throw std::runtime_error("Wavefunction amplitude is near zero, causing division by zero.");
+    }
     inv_psi = 1.0 / psi;
     psi_list.push_back(psi);
   }

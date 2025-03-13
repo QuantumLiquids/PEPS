@@ -8,7 +8,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_HUBBARD_MODEL_H
 
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_solver_base.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
 namespace qlpeps {
@@ -52,10 +52,11 @@ double HubbardConfig2Spinz(const size_t config) {
  * 3: empty
  */
 
-class SquareHubbardModel : public SquareNNModelSolverBase<SquareHubbardModel> {
+class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
+                           public SquareNNModelMeasurementSolver<SquareHubbardModel> {
  public:
   using SquareNNModelEnergySolver<SquareHubbardModel>::CalEnergyAndHoles;
-  using SquareNNModelSolverBase<SquareHubbardModel>::operator();
+  using SquareNNModelMeasurementSolver<SquareHubbardModel>::operator();
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
 

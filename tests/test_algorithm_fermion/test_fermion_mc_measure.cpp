@@ -130,6 +130,7 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
   delete measure_executor;
 }
 
+const bool SquaretJModel::enable_sc_measurement = false;
 struct Z2tJModelTools : public testing::Test {
   using IndexT = Index<fZ2QN>;
   using QNSctT = QNSector<fZ2QN>;

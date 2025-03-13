@@ -13,7 +13,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_solver_base.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
 namespace qlpeps {
@@ -25,16 +25,18 @@ enum class tJSingleSiteState {
   Empty             // 2
 };
 
-class SquaretJModel : public SquareNNModelSolverBase<SquaretJModel> {
+class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
+                      public SquareNNModelMeasurementSolver<SquaretJModel> {
  public:
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
+  static const bool enable_sc_measurement;
   SquaretJModel(void) = delete;
 
   explicit SquaretJModel(double t, double J, bool has_nn_term, double mu)
       : t_(t), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
   using SquareNNModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
-  using SquareNNModelSolverBase<SquaretJModel>::operator();
+  using SquareNNModelMeasurementSolver<SquaretJModel>::operator();
 
   ///< requirement from SquareNNModelEnergySolver
   template<typename TenElemT, typename QNT>
@@ -47,6 +49,22 @@ class SquaretJModel : public SquareNNModelSolverBase<SquaretJModel> {
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
   );
+
+  template<typename TenElemT, typename QNT>
+  std::pair<TenElemT, TenElemT> EvaluateBondSC(
+      const SiteIdx site1, const SiteIdx site2,
+      const size_t config1, const size_t config2,
+      const BondOrientation orient,
+      const TensorNetwork2D<TenElemT, QNT> &tn,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+      std::optional<TenElemT> &psi
+  ) {
+    return EvaluateBondSingletPairFortJModel(site1, site2,
+                                             tJSingleSiteState(config1),
+                                             tJSingleSiteState(config2),
+                                             orient, tn, split_index_tps_on_site1, split_index_tps_on_site2);
+  }
 
   ///< requirement from SquareNNModelEnergySolver
   double EvaluateTotalOnsiteEnergy(const Configuration &config) {
@@ -140,11 +158,11 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
   if (config1 == tJSingleSiteState::Empty && config2 == tJSingleSiteState::Empty) {
     TenElemT psi = tn.Trace(site1, site2, orient);
     TenElemT psi_ex1 = tn.ReplaceNNSiteTrace(site1, site2, orient,
-                                             split_index_tps_on_site1[tJSingleSiteState::SpinUp],
-                                             split_index_tps_on_site2[tJSingleSiteState::SpinDown]);
+                                             split_index_tps_on_site1[size_t(tJSingleSiteState::SpinUp)],
+                                             split_index_tps_on_site2[size_t(tJSingleSiteState::SpinDown)]);
     TenElemT psi_ex2 = tn.ReplaceNNSiteTrace(site1, site2, orient,
-                                             split_index_tps_on_site1[tJSingleSiteState::SpinDown],
-                                             split_index_tps_on_site2[tJSingleSiteState::SpinUp]);
+                                             split_index_tps_on_site1[size_t(tJSingleSiteState::SpinDown)],
+                                             split_index_tps_on_site2[size_t(tJSingleSiteState::SpinUp)]);
     TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi);
     TenElemT ratio2 = ComplexConjugate(psi_ex2 / psi);
     delta_dag = (ratio1 - ratio2) / std::sqrt(2);
@@ -154,8 +172,8 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
     delta_dag = 0;
     TenElemT psi = tn.Trace(site1, site2, orient);
     TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
-                                            split_index_tps_on_site1[tJSingleSiteState::Empty],
-                                            split_index_tps_on_site2[tJSingleSiteState::Empty]);
+                                            split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
+                                            split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);
     delta = -ratio / std::sqrt(2);
     return std::make_pair(delta_dag, delta);
@@ -163,8 +181,8 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
     delta_dag = 0;
     TenElemT psi = tn.Trace(site1, site2, orient);
     TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
-                                            split_index_tps_on_site1[tJSingleSiteState::Empty],
-                                            split_index_tps_on_site2[tJSingleSiteState::Empty]);
+                                            split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
+                                            split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);
     delta = ratio / std::sqrt(2);
     return std::make_pair(delta_dag, delta);
