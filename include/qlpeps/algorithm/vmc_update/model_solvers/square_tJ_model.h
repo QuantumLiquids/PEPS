@@ -175,7 +175,7 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
                                             split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
                                             split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);
-    delta = -ratio / std::sqrt(2);
+    delta = ratio / std::sqrt(2);
     return std::make_pair(delta_dag, delta);
   } else if (config1 == tJSingleSiteState::SpinDown && config2 == tJSingleSiteState::SpinUp) {
     delta_dag = 0;
@@ -184,7 +184,7 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
                                             split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
                                             split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);
-    delta = ratio / std::sqrt(2);
+    delta = -ratio / std::sqrt(2);
     return std::make_pair(delta_dag, delta);
   } else {
     return std::make_pair(TenElemT(0), TenElemT(0));
