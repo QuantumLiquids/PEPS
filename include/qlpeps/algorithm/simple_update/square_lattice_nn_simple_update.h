@@ -4,9 +4,10 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-09-28
 *
-* Description: QuantumLiquids/VMC-SquareLatticePEPS project.
+* Description: QuantumLiquids/PEPS project.
 *              Simple update implementation for
- *             uniform nearest-neighbor interaction models in square lattice
+ *             nearest-neighbor interaction models in square lattice,
+ *             allowed additional on-site terms.
 */
 
 #ifndef QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
@@ -38,40 +39,61 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
                                       const Tensor &ham_nn,
                                       const Tensor &ham_onsite = Tensor()) :
       SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_two_site_term_(ham_nn),
-      ham_one_site_term_(ham_onsite),
+      ham_on_site_terms_(this->ly_, this->lx_),
       horizontal_nn_ham_set_(this->ly_, this->lx_ - 1),
       vertical_nn_ham_set_(this->ly_ - 1, this->lx_),
       horizontal_nn_evolve_gate_set_(this->ly_, this->lx_ - 1),
-      vertical_nn_evolve_gate_set_(this->ly_ - 1, this->lx_) {}
-
+      vertical_nn_evolve_gate_set_(this->ly_ - 1, this->lx_) {
+    if (!ham_onsite.IsDefault())
+      for (auto &ten : ham_on_site_terms_) {
+        ten = ham_onsite;
+      }
+  }
+  /**
+   * The case containing non-uniform on-site terms, like pinning field.
+   */
+  SquareLatticeNNSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
+                                      const PEPST &peps_initial,
+                                      const Tensor &ham_nn,
+                                      const TenMatrix<Tensor> &ham_onsite_terms) :
+      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_two_site_term_(ham_nn),
+      ham_on_site_terms_(ham_onsite_terms),
+      horizontal_nn_ham_set_(this->ly_, this->lx_ - 1),
+      vertical_nn_ham_set_(this->ly_ - 1, this->lx_),
+      horizontal_nn_evolve_gate_set_(this->ly_, this->lx_ - 1),
+      vertical_nn_evolve_gate_set_(this->ly_ - 1, this->lx_) {
+    assert(ham_on_site_terms_.rows() == this->ly_);
+    assert(ham_on_site_terms_.cols() == this->lx_);
+  }
  private:
   void SetEvolveGate_(void) override;
 
   /**
    * @return h_ij = ham_two_site_term_ + h1 * ham_one_site_term_ * id + h2 * id * ham_one_site_term_
    */
-  Tensor ConstructBondHamiltonian(const TenElemT h1,
-                                  const TenElemT h2,
+  Tensor ConstructBondHamiltonian(const TenElemT h1, const Tensor &on_site_term1,
+                                  const TenElemT h2, const Tensor &on_site_term2,
                                   const Tensor &id) const {
-    Tensor left, right;
-    Contract(&ham_one_site_term_, {}, &id, {}, &left);
-    left *= h1;
-    Contract(&id, {}, &ham_one_site_term_, {}, &right);
-    right *= h2;
-    return ham_two_site_term_ + left + right;
+    Tensor term1, term2;
+    Contract(&on_site_term1, {}, &id, {}, &term1);
+    term1 *= h1;
+    Contract(&id, {}, &on_site_term2, {}, &term2);
+    term2 *= h2;
+    return ham_two_site_term_ + term1 + term2;
   }
 
-  Tensor ConstructEvolveOperator(const TenElemT h1,
-                                 const TenElemT h2,
+  Tensor ConstructEvolveOperator(const TenElemT h1, const Tensor &on_site_term1,
+                                 const TenElemT h2, const Tensor &on_site_term2,
                                  const Tensor &id) const {
     return TaylorExpMatrix(this->update_para.tau,
-                           ConstructBondHamiltonian(h1, h2, id));
+                           ConstructBondHamiltonian(h1, on_site_term1, h2, on_site_term2, id));
   }
 
   double SimpleUpdateSweep_(void) override;
 
-  Tensor ham_two_site_term_; //bond term
-  Tensor ham_one_site_term_;  // on-site term
+  Tensor ham_two_site_term_; //uniform bond term
+
+  TenMatrix<Tensor> ham_on_site_terms_;  // on-site terms
 
   TenMatrix<Tensor> horizontal_nn_ham_set_;
   TenMatrix<Tensor> vertical_nn_ham_set_;
@@ -82,7 +104,7 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
 
 template<typename TenElemT, typename QNT>
 void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
-  if (ham_one_site_term_.IsDefault()) {
+  if (ham_on_site_terms_(0, 0) == nullptr || ham_on_site_terms_(0, 0)->IsDefault()) {
     Tensor evolve_gate_nn = TaylorExpMatrix(this->update_para.tau, ham_two_site_term_);
     for (auto &ten : horizontal_nn_ham_set_) {
       ten = ham_two_site_term_;
@@ -98,7 +120,7 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
     }
   } else {// transverse-field Ising, Hubbard model, t-J + chemical potential
     //construct the on-site identity operator
-    Tensor id(ham_one_site_term_.GetIndexes());
+    Tensor id(ham_on_site_terms_(0, 0)->GetIndexes()); // assume uniform hilbert space.
     if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() != OUT) {
       std::cerr << "Index direction of on-site hamiltonian is unexpected." << std::endl;
     }
@@ -108,58 +130,112 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
     if (Tensor::IsFermionic()) {
       id.ActFermionPOps();
     }
-    Tensor middle_ham = ConstructBondHamiltonian(0.25, 0.25, id);
-    Tensor middle_evolve_gate = ConstructEvolveOperator(0.25, 0.25, id);
+
     for (size_t col = 0; col < this->lx_ - 1; col++) {
       for (size_t row = 1; row < this->ly_ - 1; row++) {
-        horizontal_nn_evolve_gate_set_({row, col}) = middle_evolve_gate;
-        horizontal_nn_ham_set_({row, col}) = middle_ham;
+        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(0.25, ham_on_site_terms_({row, col}),
+                                                                      0.25, ham_on_site_terms_({row, col + 1}),
+                                                                      id);
+        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(0.25, ham_on_site_terms_({row, col}),
+                                                                             0.25, ham_on_site_terms_({row, col + 1}),
+                                                                             id);
       }
     }
     for (size_t col = 1; col < this->lx_ - 1; col++) {
       for (size_t row = 0; row < this->ly_ - 1; row++) {
-        vertical_nn_evolve_gate_set_({row, col}) = middle_evolve_gate;
-        vertical_nn_ham_set_({row, col}) = middle_ham;
+        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(0.25, ham_on_site_terms_({row, col}),
+                                                                    0.25, ham_on_site_terms_({row + 1, col}),
+                                                                    id);
+        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(0.25, ham_on_site_terms_({row, col}),
+                                                                           0.25, ham_on_site_terms_({row + 1, col}),
+                                                                           id);
       }
     }
-    Tensor edge_ham = ConstructBondHamiltonian(0.375, 0.375, id);
-    Tensor edge_evolve_gate = ConstructEvolveOperator(0.375, 0.375, id);
+
     for (size_t col = 1; col < this->lx_ - 2; col++) {
-      horizontal_nn_evolve_gate_set_({0, col}) = edge_evolve_gate;
-      horizontal_nn_evolve_gate_set_({this->ly_ - 1, col}) = edge_evolve_gate;
+      horizontal_nn_evolve_gate_set_({0, col}) = ConstructEvolveOperator(0.375, ham_on_site_terms_({0, col}),
+                                                                         0.375, ham_on_site_terms_({0, col + 1}), id);
+      horizontal_nn_evolve_gate_set_({this->ly_ - 1, col}) =
+          ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 1, col}),
+                                  0.375, ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
 
-      horizontal_nn_ham_set_({0, col}) = edge_ham;
-      horizontal_nn_ham_set_({this->ly_ - 1, col}) = edge_ham;
+      horizontal_nn_ham_set_({0, col}) = ConstructBondHamiltonian(0.375, ham_on_site_terms_({0, col}),
+                                                                  0.375, ham_on_site_terms_({0, col + 1}), id);
+      horizontal_nn_ham_set_({this->ly_ - 1, col}) =
+          ConstructBondHamiltonian(0.375, ham_on_site_terms_({this->ly_ - 1, col}),
+                                   0.375, ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
     }
+
     for (size_t row = 1; row < this->ly_ - 2; row++) {
-      vertical_nn_evolve_gate_set_({row, 0}) = edge_evolve_gate;
-      vertical_nn_evolve_gate_set_({row, this->lx_ - 1}) = edge_evolve_gate;
+      vertical_nn_evolve_gate_set_({row, 0}) = ConstructEvolveOperator(0.375, ham_on_site_terms_({row, 0}),
+                                                                       0.375, ham_on_site_terms_({row + 1, 0}), id);
+      vertical_nn_evolve_gate_set_({row, this->lx_ - 1}) =
+          ConstructEvolveOperator(0.375, ham_on_site_terms_({row, this->lx_ - 1}),
+                                  0.375, ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
 
-      vertical_nn_ham_set_({row, 0}) = edge_ham;
-      vertical_nn_ham_set_({row, this->lx_ - 1}) = edge_ham;
+      vertical_nn_ham_set_({row, 0}) = ConstructBondHamiltonian(0.375, ham_on_site_terms_({row, 0}),
+                                                                0.375, ham_on_site_terms_({row + 1, 0}), id);
+      vertical_nn_ham_set_({row, this->lx_ - 1}) =
+          ConstructBondHamiltonian(0.375, ham_on_site_terms_({row, this->lx_ - 1}),
+                                   0.375, ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
     }
 
-    Tensor corner_ham = ConstructBondHamiltonian(0.5, 0.375, id);
-    Tensor corner_evolve_gate = ConstructEvolveOperator(0.5, 0.375, id);
-    horizontal_nn_evolve_gate_set_({0, 0}) = corner_evolve_gate;
-    vertical_nn_evolve_gate_set_({0, 0}) = corner_evolve_gate;
-    vertical_nn_evolve_gate_set_({0, this->lx_ - 1}) = corner_evolve_gate;
-    horizontal_nn_evolve_gate_set_({this->ly_ - 1, 0}) = corner_evolve_gate;
-    horizontal_nn_ham_set_({0, 0}) = corner_ham;
-    vertical_nn_ham_set_({0, 0}) = corner_ham;
-    vertical_nn_ham_set_({0, this->lx_ - 1}) = corner_ham;
-    horizontal_nn_ham_set_({this->ly_ - 1, 0}) = corner_ham;
+    //corner terms
+    horizontal_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(0.5, ham_on_site_terms_({0, 0}),
+                                                                     0.375, ham_on_site_terms_({0, 1}), id);
+    horizontal_nn_evolve_gate_set_({this->ly_ - 1, 0}) =
+        ConstructEvolveOperator(0.5, ham_on_site_terms_({this->ly_ - 1, 0}),
+                                0.375, ham_on_site_terms_({this->ly_ - 1, 1}), id);
+    vertical_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(0.5, ham_on_site_terms_({0, 0}),
+                                                                   0.375, ham_on_site_terms_({1, 0}), id);
+    vertical_nn_evolve_gate_set_({0, this->lx_ - 1}) =
+        ConstructEvolveOperator(0.5, ham_on_site_terms_({0, this->lx_ - 1}),
+                                0.375, ham_on_site_terms_({1, this->lx_ - 1}), id);
 
-    corner_ham = ConstructBondHamiltonian(0.375, 0.5, id);
-    corner_evolve_gate = ConstructEvolveOperator(0.375, 0.5, id);
-    horizontal_nn_evolve_gate_set_({0, this->lx_ - 2}) = corner_evolve_gate;
-    vertical_nn_evolve_gate_set_({this->ly_ - 2, 0}) = corner_evolve_gate;
-    horizontal_nn_evolve_gate_set_({this->ly_ - 1, this->lx_ - 2}) = corner_evolve_gate;
-    vertical_nn_evolve_gate_set_({this->ly_ - 2, this->lx_ - 1}) = corner_evolve_gate;
-    horizontal_nn_ham_set_({0, this->lx_ - 2}) = corner_ham;
-    vertical_nn_ham_set_({this->ly_ - 2, 0}) = corner_ham;
-    horizontal_nn_ham_set_({this->ly_ - 1, this->lx_ - 2}) = corner_ham;
-    vertical_nn_ham_set_({this->ly_ - 2, this->lx_ - 1}) = corner_ham;
+    horizontal_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(0.5, ham_on_site_terms_({0, 0}),
+                                                              0.375, ham_on_site_terms_({0, 1}), id);
+    horizontal_nn_ham_set_({this->ly_ - 1, 0}) = ConstructBondHamiltonian(0.5,
+                                                                          ham_on_site_terms_({this->ly_ - 1, 0}),
+                                                                          0.375,
+                                                                          ham_on_site_terms_({this->ly_ - 1, 1}),
+                                                                          id);
+    vertical_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(0.5, ham_on_site_terms_({0, 0}),
+                                                            0.375, ham_on_site_terms_({1, 0}), id);
+    vertical_nn_ham_set_({0, this->lx_ - 1}) = ConstructBondHamiltonian(0.5,
+                                                                        ham_on_site_terms_({0, this->lx_ - 1}),
+                                                                        0.375,
+                                                                        ham_on_site_terms_({1, this->lx_ - 1}),
+                                                                        id);
+
+    horizontal_nn_evolve_gate_set_({0, this->lx_ - 2}) =
+        ConstructEvolveOperator(0.375, ham_on_site_terms_({0, this->lx_ - 2}),
+                                0.5, ham_on_site_terms_({0, this->lx_ - 1}), id);
+    vertical_nn_evolve_gate_set_({this->ly_ - 2, 0}) =
+        ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 2, 0}),
+                                0.5, ham_on_site_terms_({this->ly_ - 1, 0}), id);
+    horizontal_nn_evolve_gate_set_({this->ly_ - 1, this->lx_ - 2}) =
+        ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
+                                0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+    vertical_nn_evolve_gate_set_({this->ly_ - 2, this->lx_ - 1}) =
+        ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
+                                0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+
+    horizontal_nn_ham_set_({0, this->lx_ - 2}) = ConstructBondHamiltonian(0.375,
+                                                                          ham_on_site_terms_({0, this->lx_ - 2}),
+                                                                          0.5,
+                                                                          ham_on_site_terms_({0, this->lx_ - 1}),
+                                                                          id);
+    vertical_nn_ham_set_({this->ly_ - 2, 0}) = ConstructBondHamiltonian(0.375,
+                                                                        ham_on_site_terms_({this->ly_ - 2, 0}),
+                                                                        0.5,
+                                                                        ham_on_site_terms_({this->ly_ - 1, 0}),
+                                                                        id);
+    horizontal_nn_ham_set_({this->ly_ - 1, this->lx_ - 2}) =
+        ConstructBondHamiltonian(0.375, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
+                                 0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+    vertical_nn_ham_set_({this->ly_ - 2, this->lx_ - 1}) =
+        ConstructBondHamiltonian(0.375, ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
+                                 0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
   }
 }
 

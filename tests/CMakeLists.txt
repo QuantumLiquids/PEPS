@@ -182,12 +182,20 @@ add_unittest(test_non_detailed_balance_mcmc
         "test_monte_carlo_tools/test_non_detailed_balance_mcmc.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+
+## Test model solvers
+add_unittest(test_tJ_model_solver
+        "test_model_solvers/test_tJ_model_solver.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
 ## Test algorithms
 # Test simple update
 add_two_type_unittest(test_simple_update
-        "test_algorithm/test_simple_update.cpp"
+        "test_algorithm_boson/test_simple_update.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
 )
 
 #add_unittest(test_fermion_simple_update
@@ -196,20 +204,20 @@ add_two_type_unittest(test_simple_update
 #        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 #)
 add_two_type_unittest(test_loop_update
-        "test_algorithm/test_loop_update.cpp"
+        "test_algorithm_boson/test_loop_update.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
 )
 
 # Test vmc-peps
 add_two_type_unittest(test_vmc_peps
-        "test_algorithm/test_vmc_peps.cpp"
+        "test_algorithm_boson/test_vmc_peps.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json"
+        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
 )
 
-add_mpi_unittest_run(test_vmc_peps_double "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json")
-add_mpi_unittest_run(test_vmc_peps_complex "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm/test_params.json")
+add_mpi_unittest_run(test_vmc_peps_double "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json")
+add_mpi_unittest_run(test_vmc_peps_complex "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json")
 
 
 #add_unittest(test_fermion_vmc_peps
@@ -223,7 +231,7 @@ add_unittest(test_fermion_peps_exact_summation
 )
 
 add_two_type_unittest(test_square_heisenberg
-        "test_algorithm/test_square_heisenberg.cpp"
+        "test_algorithm_boson/test_square_heisenberg.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
@@ -232,7 +240,7 @@ add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
 add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
 
 add_two_type_unittest(test_measure
-        "test_algorithm/test_mc_peps_measure.cpp"
+        "test_algorithm_boson/test_mc_peps_measure.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_data/tps_square_heisenberg4x4D8Double"
 )

@@ -61,7 +61,6 @@ class SquareNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNMod
     auto *derived = static_cast<ModelType *>(this);
     // Measure Energy
     const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
-    tn.GenerateBMPSApproach(UP, trunc_para);
 
     res.bond_energys_loc.reserve(2 * N); // horizontal and vertical bonds
     psi_list.reserve(tn.rows() + tn.cols());
