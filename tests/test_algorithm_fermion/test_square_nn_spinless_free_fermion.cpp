@@ -4,7 +4,9 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2025-02-25
 *
-* Description: QuantumLiquids/PEPS project. Unittests for PEPS Simple Update in fermion model.
+* Description: QuantumLiquids/PEPS project. Unittests for spinless free fermion model.
+ * The test include three parts: Simple Update, SR optimization, and Measurement.
+ * For complex case, more MPI processes are required to stabilize the optimization.
 */
 
 

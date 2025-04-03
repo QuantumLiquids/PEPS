@@ -97,7 +97,7 @@ template<typename TenElemT, typename QNT>
 class SquareLatticePEPS {
  public:
   using TenT = QLTensor<TenElemT, QNT>;
-  using DTensor = QLTensor<QLTEN_Double, QNT>;
+  using DTenT = QLTensor<QLTEN_Double, QNT>;
 
 //  // Constructor with size
 //  SquareLatticePEPS(size_t rows, size_t cols) : rows_(rows), cols_(cols), Gamma(rows, cols), lambda_vert(rows + 1, cols),
@@ -154,6 +154,9 @@ class SquareLatticePEPS {
 
   double NormalizeAllTensor(void);
 
+  /// useful when in debug.
+  IndexVec<QNT> GatherAllIndices(void) const;
+
   ///< first two indexes of gate_ten are connected to PEPS's physical indexes
   ProjectionRes<TenElemT> NearestNeighborSiteProject(
       const TenT &gate_ten,
@@ -187,6 +190,10 @@ class SquareLatticePEPS {
       const SiteIdx &upper_left_site,
       const SimpleUpdateTruncatePara &trunc_para
   );
+
+  // from left to right, from up to down. This convention of index diretion may be broken after loop update.
+  void RegularizeIndexDir();
+
   using LocalSquareLoopGateT = std::array<TenT, 4>;
   std::pair<double, double> LocalSquareLoopProject(
       const LocalSquareLoopGateT &gate_tens,
@@ -204,8 +211,8 @@ class SquareLatticePEPS {
   operator TPS<TenElemT, QNT>(void) const;
 
   TenMatrix<TenT> Gamma; // The rank-5 projection tensors;
-  TenMatrix<DTensor> lambda_vert; // vertical singular value tensors;
-  TenMatrix<DTensor> lambda_horiz; // horizontal singular value tensors;
+  TenMatrix<DTenT> lambda_vert; // vertical singular value tensors;
+  TenMatrix<DTenT> lambda_horiz; // horizontal singular value tensors;
 
  private:
   //Helper For Projecting Gate

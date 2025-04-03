@@ -99,7 +99,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
         e_loc = EvaluateTwoSiteEnergy(ham, *state);
       }
       tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_horiz({row, rcol}) = DTensor();
+      lambda_horiz({row, rcol}) = DTenT();
       SVD(tmp_ten + 4, 2, qn0_,
           trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
           &u, lambda_horiz(row, rcol), &vt,
@@ -162,7 +162,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
         e_loc = EvaluateTwoSiteEnergy(ham, *state);
       }
       tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_vert({row + 1, col}) = DTensor();
+      lambda_vert({row + 1, col}) = DTenT();
       SVD(tmp_ten + 4, 2, qn0_,
           trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
           &u, lambda_vert(row + 1, col), &vt,
@@ -287,7 +287,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
 
   tmp_ten[5].Transpose({0, 4, 5, 1, 2, 6, 3});
   TenT u1, vt1, u2, vt2;
-  DTensor s1, s2;
+  DTenT s1, s2;
   double trunc_err1, trunc_err2;
   size_t D1, D2;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
@@ -384,7 +384,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
    */
   tmp_ten[5].Transpose({6, 3, 0, 1, 5, 4, 2});
   TenT u1, vt1, u2, vt2;
-  DTensor s1, s2;
+  DTenT s1, s2;
   double trunc_err1, trunc_err2;
   size_t D1, D2;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
@@ -487,7 +487,7 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
    */
   tmp_ten[5].Transpose({0, 4, 5, 1, 2, 6, 3}); //(0,4) for upper site, (5,1,2) for left-lower site, (6,3) for right site
   TenT u1, vt1, u2, vt2;
-  DTensor s1, s2;
+  DTenT s1, s2;
   double trunc_err;
   size_t D;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),

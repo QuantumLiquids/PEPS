@@ -39,16 +39,16 @@ SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces):
 
   for (size_t row = 0; row < lambda_vert.rows(); row++) {
     for (size_t col = 0; col < lambda_vert.cols(); col++) {
-      DTensor &the_lambda = lambda_vert({row, col});
-      the_lambda = DTensor({index0_in, index0_out});
+      DTenT &the_lambda = lambda_vert({row, col});
+      the_lambda = DTenT({index0_in, index0_out});
       the_lambda({0, 0}) = (1.0);
     }
   }
 
   for (size_t row = 0; row < lambda_horiz.rows(); row++) {
     for (size_t col = 0; col < lambda_horiz.cols(); col++) {
-      DTensor &the_lambda = lambda_horiz({row, col});
-      the_lambda = DTensor({index0_in, index0_out});
+      DTenT &the_lambda = lambda_horiz({row, col});
+      the_lambda = DTenT({index0_in, index0_out});
       the_lambda({0, 0}) = (1.0);
     }
   }
@@ -100,7 +100,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
   Index<QNT> virtual_index0_in({QNSector(qn0_, 1)}, IN),
       virtual_index0_out({QNSector(qn0_, 1)}, OUT);
   // The lambda tensors surrounding the PEPS
-  DTensor surrounding_lam = DTensor({virtual_index0_in, virtual_index0_out});
+  DTenT surrounding_lam = DTenT({virtual_index0_in, virtual_index0_out});
   surrounding_lam({0, 0}) = 1.0;
   // upper vertical lambda
   for (size_t col = 0; col < cols_; col++) {
@@ -157,8 +157,8 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
   for (size_t row = 1; row < rows_ - 1; row++) {
     // set a layer of lambda_vert
     for (size_t col = 0; col < cols_; col++) {
-      lambda_vert({row, col}) = DTensor({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
-                                         Gamma({row - 1, col}).GetIndex(1)});
+      lambda_vert({row, col}) = DTenT({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
+                                       Gamma({row - 1, col}).GetIndex(1)});
       lambda_vert({row, col})({0, 0}) = 1.0;
     }
     //set a layer of gamma tensors
@@ -184,8 +184,8 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
 
   for (size_t col = 0; col < cols_; col++) {
     const size_t row = rows_ - 1;
-    lambda_vert({row, col}) = DTensor({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
-                                       Gamma({row - 1, col}).GetIndex(1)});
+    lambda_vert({row, col}) = DTenT({InverseIndex(Gamma({row - 1, col}).GetIndex(1)),
+                                     Gamma({row - 1, col}).GetIndex(1)});
     lambda_vert({row, col})({0, 0}) = 1.0;
   }
 
@@ -208,7 +208,7 @@ void SquareLatticePEPS<TenElemT, QNT>::Initial(std::vector<std::vector<size_t>> 
     Gamma({row, col}) = TenT({index0, index1, index2, index3, phy_idx});
     Gamma({row, col})({0, 0, 0, 0, activates[row][col]}) = 1.0;
 
-    lambda_horiz({row, col + 1}) = DTensor({InverseIndex(index2), index2});
+    lambda_horiz({row, col + 1}) = DTenT({InverseIndex(index2), index2});
     lambda_horiz({row, col + 1})({0, 0}) = 1.0;
   }
   if constexpr (Index<QNT>::IsFermionic()) {
@@ -437,47 +437,128 @@ bool SquareLatticePEPS<TenElemT, QNT>::Load(const std::string path) {
   return true; // Successfully loaded all tensors
 }
 
+template<typename QNT>
+QLTensor<QLTEN_Double, QNT> SquareRootDiagMat(
+    const QLTensor<QLTEN_Double, QNT> &positive_diag_mat
+) {
+  if (!QLTensor<QLTEN_Double, QNT>::IsFermionic() || positive_diag_mat.GetIndex(0).GetDir() == IN) {
+    QLTensor<QLTEN_Double, QNT> sqrt = positive_diag_mat;
+    for (size_t i = 0; i < sqrt.GetShape()[0]; i++) {
+      double elem = sqrt({i, i});
+      if (elem > 0) {
+        sqrt({i, i}) = std::sqrt(elem);
+      } else if (elem < 0) {
+        std::cout << "error: trying to find square root of " << std::scientific << elem << std::endl;
+        exit(1);
+      }
+    }
+    return sqrt;
+  } else {
+    std::cout << "Square Root for fermion tensor with first index OUT is not well defined." << std::endl;
+    exit(1);
+  }
+}
+
+template<typename TenElemT, typename QNT>
+IndexVec<QNT> SquareLatticePEPS<TenElemT, QNT>::GatherAllIndices() const {
+  IndexVec<QNT> index_vec;
+  index_vec.reserve(rows_ * cols_ * 9);
+  for (auto &gamma : Gamma) {
+    for (size_t i = 0; i < gamma.Rank(); i++) {
+      index_vec.push_back(gamma.GetIndex(i));
+    }
+  }
+  for (auto &lambda : lambda_vert) {
+    for (size_t i = 0; i < lambda.Rank(); i++) {
+      index_vec.push_back(lambda.GetIndex(i));
+    }
+  }
+  for (auto &lambda : lambda_horiz) {
+    for (size_t i = 0; i < lambda.Rank(); i++) {
+      index_vec.push_back(lambda.GetIndex(i));
+    }
+  }
+  return index_vec;
+}
+
+template<typename TenElemT, typename QNT>
+void SquareLatticePEPS<TenElemT, QNT>::RegularizeIndexDir() {
+  for (size_t col = 0; col < this->cols_; col++) {
+    assert(lambda_vert({0, col}).GetIndex(0).GetDir() == IN);
+    assert(lambda_vert({rows_, col}).GetIndex(0).GetDir() == IN);
+  }
+  for (size_t row = 0; row < this->rows_; row++) {
+    assert(lambda_horiz({row, 0}).GetIndex(0).GetDir() == IN);
+    assert(lambda_horiz({row, cols_}).GetIndex(0).GetDir() == IN);
+  }
+
+  for (size_t row = 1; row < this->rows_; row++) {
+    for (size_t col = 0; col < this->cols_; col++) {
+      if (lambda_vert({row, col}).GetIndex(0).GetDir() != IN) {
+        DTenT u, vt;
+        DTenT s;
+        qlmps::mock_qlten::SVD<QLTEN_Double, QNT>(&lambda_vert({row, col}), 1, qn0_, &u, &s, &vt);
+        lambda_vert({row, col}) = std::move(s);
+        TenT tmp0, tmp1;
+        Contract(&Gamma({row - 1, col}), {1}, &u, {0}, &tmp0);
+        Gamma({row - 1, col}) = tmp0;
+        Gamma({row - 1, col}).Transpose({0, 4, 1, 2, 3});
+
+        Contract(&vt, {1}, &Gamma({row, col}), {3}, &tmp1);
+        Gamma({row, col}) = tmp1;
+        Gamma({row, col}).Transpose({1, 2, 3, 0, 4});
+      } else {
+        continue;
+      }
+    }
+  }
+
+  for (size_t row = 0; row < this->rows_; row++) {
+    for (size_t col = 1; col < this->cols_; col++) {
+      if (lambda_horiz({row, col}).GetIndex(0).GetDir() != IN) {
+        DTenT u, vt;
+        DTenT s;
+        qlmps::mock_qlten::SVD(&lambda_horiz({row, col}), 1, qn0_, &u, &s, &vt);
+        lambda_horiz({row, col}) = std::move(s);
+        TenT tmp0, tmp1;
+        Contract(&Gamma({row, col - 1}), {2}, &u, {0}, &tmp0);
+        Gamma({row, col - 1}) = tmp0;
+        Gamma({row, col - 1}).Transpose({0, 1, 4, 2, 3});
+
+        Contract(&vt, {1}, &Gamma({row, col}), {0}, &tmp1);
+        Gamma({row, col}) = tmp1;
+      } else {
+        continue;
+      }
+    }
+  }
+
+}
+
 template<typename TenElemT, typename QNT>
 SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
   auto tps = TPS<TenElemT, QNT>(rows_, cols_);
+  SquareLatticePEPS peps_copy = (*this);
   if constexpr (TenT::IsFermionic()) {
-    tps({0, 0}) = Gamma({0, 0});
-    // first row
-    for (size_t col = 1; col < this->cols_; col++) {
-      Contract(&lambda_horiz({0, col}), {1}, &Gamma({0, col}), {0}, &tps({0, col}));
-    }
-    // first column
-    for (size_t row = 1; row < this->rows_; row++) {
-      Contract(&lambda_vert({row, 0}), {1}, &Gamma({row, 0}), {3}, &tps({row, 0}));
-      tps({row, 0}).Transpose({1, 2, 3, 0, 4});
-    }
-    for (size_t col = 1; col < this->cols_; col++) {
-      for (size_t row = 1; row < this->rows_; row++) {
-        TenT temp;
-        Contract(&lambda_horiz({row, col}), {1}, &Gamma({row, col}), {0}, &temp);
-        Contract(&lambda_vert({row, col}), {1}, &temp, {3}, &tps({row, col}));
-        tps({row, col}).Transpose({1, 2, 3, 0, 4});
-      }
-    }
-  } else {
-    for (size_t row = 0; row < rows_; row++) {
-      for (size_t col = 0; col < cols_; col++) {
-        tps.alloc(row, col);
-        const DTensor lam_left_sqrt = ElementWiseSqrt(lambda_horiz({row, col}));
-        const DTensor lam_right_sqrt = ElementWiseSqrt(lambda_horiz({row, col + 1}));
-        const DTensor lam_up_sqrt = ElementWiseSqrt(lambda_vert({row, col}));
-        const DTensor lam_down_sqrt = ElementWiseSqrt(lambda_vert({row + 1, col}));
+    peps_copy.RegularizeIndexDir();
+  }
+  for (size_t row = 0; row < rows_; row++) {
+    for (size_t col = 0; col < cols_; col++) {
+      tps.alloc(row, col);
+      const DTenT lam_left_sqrt = SquareRootDiagMat(peps_copy.lambda_horiz({row, col}));
+      const DTenT lam_right_sqrt = SquareRootDiagMat(peps_copy.lambda_horiz({row, col + 1}));
+      const DTenT lam_up_sqrt = SquareRootDiagMat(peps_copy.lambda_vert({row, col}));
+      const DTenT lam_down_sqrt = SquareRootDiagMat(peps_copy.lambda_vert({row + 1, col}));
 
-        TenT tmp[3];
-        Contract<TenElemT, QNT, true, true>(lam_up_sqrt, Gamma({row, col}), 1, 3, 1, tmp[0]);
-        Contract<TenElemT, QNT, false, true>(lam_right_sqrt, tmp[0], 0, 4, 1, tmp[1]);
-        Contract<TenElemT, QNT, false, true>(lam_down_sqrt, tmp[1], 0, 4, 1, tmp[2]);
-        Contract<TenElemT, QNT, true, true>(lam_left_sqrt, tmp[2], 1, 4, 1, tps({row, col}));
+      TenT tmp[3];
+      Contract<TenElemT, QNT, true, true>(lam_up_sqrt, peps_copy.Gamma({row, col}), 1, 3, 1, tmp[0]);
+      Contract<TenElemT, QNT, false, true>(lam_right_sqrt, tmp[0], 0, 4, 1, tmp[1]);
+      Contract<TenElemT, QNT, false, true>(lam_down_sqrt, tmp[1], 0, 4, 1, tmp[2]);
+      Contract<TenElemT, QNT, true, true>(lam_left_sqrt, tmp[2], 1, 4, 1, tps({row, col}));
 #ifndef NDEBUG
-        auto physical_index = Gamma(row, col)->GetIndex(4);
-        assert(physical_index == tps(row, col)->GetIndex(4));
+      auto physical_index = peps_copy.Gamma(row, col)->GetIndex(4);
+      assert(physical_index == tps(row, col)->GetIndex(4));
 #endif
-      }
     }
   }
   return tps;
@@ -580,7 +661,7 @@ SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, 
                                                        const BTenPOSITION remaining_idx,
                                                        double inv_tolerance) const {
   TenT tmp_ten[2], res;
-  DTensor inv_lambda;
+  DTenT inv_lambda;
   const size_t row = site[0], col = site[1];
   switch (remaining_idx) {
     case RIGHT: {

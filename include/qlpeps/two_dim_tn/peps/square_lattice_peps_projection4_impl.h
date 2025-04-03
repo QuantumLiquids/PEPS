@@ -434,7 +434,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
 
 
   //Update Gamma Tensors
-  TenT &Gamma0 = Gamma(upper_left_site);
+  TenT & Gamma0 = Gamma(upper_left_site);
   TenT tmp[12], q[4], r[4], u[4], vt[4];
   DTenT s[4];
   Contract(&Gamma0, {4}, &gate_tens[0], {1}, tmp);
@@ -445,7 +445,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   Contract(q, {5}, u, {0}, tmp + 2);  // tmp + 2 is gamma0
   *lambdas[0] = std::move(s[0]);
 
-  TenT &Gamma1 = Gamma({row, col + 1});
+  TenT & Gamma1 = Gamma({row, col + 1});
   Contract(&Gamma1, {4}, &gate_tens[1], {1}, tmp + 3);
   Contract(vt, {1, 2}, tmp + 3, {4, 0}, tmp + 4);
   tmp[4].Transpose({0, 2, 3, 4, 1, 5});
@@ -457,7 +457,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   Gamma1.Transpose({0, 4, 1, 2, 3});
   *lambdas[1] = std::move(s[1]);
 
-  TenT &Gamma2 = Gamma({row + 1, col + 1});
+  TenT & Gamma2 = Gamma({row + 1, col + 1});
   Contract(&Gamma2, {4}, &gate_tens[2], {1}, tmp + 6);
   Contract(vt + 1, {1, 2}, tmp + 6, {4, 3}, tmp + 7);
   tmp[7].Transpose({0, 2, 3, 4, 1, 5});
@@ -470,7 +470,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   s[2].Transpose({1, 0});
   *lambdas[2] = std::move(s[2]);
 
-  TenT &Gamma3 = Gamma({row + 1, col});
+  TenT & Gamma3 = Gamma({row + 1, col});
   Contract(&Gamma3, {4}, &gate_tens[3], {1}, tmp + 9);
   Contract(vt + 2, {1, 2}, tmp + 9, {4, 2}, tmp + 10);
   tmp[10].Transpose({0, 1, 2, 4, 3, 5});
@@ -501,6 +501,9 @@ QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
     const QLTensor<QLTEN_Double, QNT> &quasi_positive_mat,
     const double tolerance = 1e-15
 ) {
+  if constexpr (QLTensor<QLTEN_Double, QNT>::IsFermionic()) {
+    assert(quasi_positive_mat.GetIndex(0).GetDir() == IN);
+  }
   QLTensor<QLTEN_Double, QNT> sqrt = quasi_positive_mat;
   for (size_t i = 0; i < sqrt.GetShape()[0]; i++) {
     double elem = sqrt({i, i});

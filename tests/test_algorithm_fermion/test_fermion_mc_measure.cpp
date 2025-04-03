@@ -50,7 +50,6 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
   using QNSctVecT = QNSectorVec<fZ2QN>;
 
   using DTensor = QLTensor<TenElemT, fZ2QN>;
-  using MCUpdateSquareNNExchange = MCUpdateSquareNNExchange;
 
   FileParams file_params = FileParams(params_file);
   size_t Lx = file_params.Lx; //cols
