@@ -12,7 +12,7 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
@@ -25,7 +25,7 @@ enum class tJSingleSiteState {
   Empty             // 2
 };
 
-class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
+class SquaretJModel : public SquareNNNModelEnergySolver<SquaretJModel>,
                       public SquareNNModelMeasurementSolver<SquaretJModel> {
  public:
   static constexpr bool requires_density_measurement = true;
@@ -34,16 +34,29 @@ class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
   SquaretJModel(void) = delete;
 
   explicit SquaretJModel(double t, double J, bool has_nn_term, double mu)
-      : t_(t), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
-  using SquareNNModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
+      : t_(t), t2_(0), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
+  explicit SquaretJModel(double t, double t2, double J, bool has_nn_term, double mu)
+      : t_(t), t2_(t2), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
+  using SquareNNNModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
   using SquareNNModelMeasurementSolver<SquaretJModel>::operator();
 
-  ///< requirement from SquareNNModelEnergySolver
+  ///< requirement from SquareNNNModelEnergySolver
   template<typename TenElemT, typename QNT>
   TenElemT EvaluateBondEnergy(
       const SiteIdx site1, const SiteIdx site2,
       const size_t config1, const size_t config2,
       const BondOrientation orient,
+      const TensorNetwork2D<TenElemT, QNT> &tn,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+      std::optional<TenElemT> &psi // return value, used for check the accuracy
+  );
+
+  template<typename TenElemT, typename QNT>
+  TenElemT EvaluateNNNEnergy(
+      const SiteIdx site1, const SiteIdx site2,
+      const size_t config1, const size_t config2,
+      const DIAGONAL_DIR diagonal_dir,
       const TensorNetwork2D<TenElemT, QNT> &tn,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
@@ -66,7 +79,7 @@ class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
                                              orient, tn, split_index_tps_on_site1, split_index_tps_on_site2);
   }
 
-  ///< requirement from SquareNNModelEnergySolver
+  ///< requirement from SquareNNNModelEnergySolver
   double EvaluateTotalOnsiteEnergy(const Configuration &config) {
     double energy = 0;
     if (mu_ != 0) {
@@ -92,6 +105,7 @@ class SquaretJModel : public SquareNNModelEnergySolver<SquaretJModel>,
 
  private:
   double t_;
+  double t2_;
   double J_;
   bool has_nn_term_;
   double mu_;
@@ -142,6 +156,57 @@ TenElemT SquaretJModel::EvaluateBondEnergy(
   }
 }
 
+/**
+ * t2 hopping energy
+ *
+ * @param psi  if containing value, we assume it is the correct value; if not, calculate it and store into it.
+ */
+template<typename TenElemT, typename QNT>
+TenElemT SquaretJModel::EvaluateNNNEnergy(
+    const SiteIdx site1, const SiteIdx site2,
+    const size_t config1, const size_t config2,
+    const DIAGONAL_DIR diagonal_dir,
+    const TensorNetwork2D<TenElemT, QNT> &tn,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+    std::optional<TenElemT> &psi // return value, used for check the accuracy
+) {
+  if (t2_ == 0) {
+    return 0;
+  }
+  if (config1 == config2 ||
+      (tJSingleSiteState(config1) != tJSingleSiteState::Empty
+          && tJSingleSiteState(config2) != tJSingleSiteState::Empty)
+      ) {
+    return 0;
+  }
+  SiteIdx left_up_site;
+  if (diagonal_dir == LEFTUP_TO_RIGHTDOWN) {
+    left_up_site = site1;
+  } else {
+    left_up_site = {site2.row(), site1.col()};
+  }
+  if (!psi.has_value()) {
+    psi = tn.ReplaceNNNSiteTrace(left_up_site,
+                                 diagonal_dir,
+                                 HORIZONTAL,
+                                 split_index_tps_on_site1[size_t(config1)],
+                                 split_index_tps_on_site2[size_t(config2)]);
+  }
+  TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+                                           diagonal_dir,
+                                           HORIZONTAL,
+                                           split_index_tps_on_site1[size_t(config2)],
+                                           split_index_tps_on_site2[size_t(config1)]);
+  TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
+  return -t2_ * ratio;
+}
+
+/**
+ * Evaluate the singlet pair operators (\Delta^\dagger, \Delta) for the t-J model.
+ * \Delta^\dagger = \langle c_{i,\uparrow}^\dagger c_{j,\downarrow}^dagger - c_{i,\downarrow}^\dagger c_{j,\uparrow}^\dagger \rangle / \sqrt{2}
+ * \Delta = \langle -c_{i,\uparrow} c_{j,\downarrow} + c_{i,\downarrow} c_{j,\uparrow} \rangle / \sqrt{2}
+ */
 template<typename TenElemT, typename QNT>
 std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx site1,
                                                                 const SiteIdx site2,

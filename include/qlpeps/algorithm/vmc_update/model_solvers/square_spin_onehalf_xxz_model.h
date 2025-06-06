@@ -11,6 +11,7 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
 
 namespace qlpeps {
@@ -64,8 +65,6 @@ class SquareSpinOneHalfXXZModel : public SquareNNModelEnergySolver<SquareSpinOne
   SquareSpinOneHalfXXZModel(void) : jz_(1), jxy_(1), pinning00_(0) {};
   SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning_field_00)
       : jz_(jz), jxy_(jxy), pinning00_(pinning_field_00) {};
-  using SquareNNModelEnergySolver::CalEnergyAndHoles;
-  using SquareNNModelEnergySolver::CalEnergyAndHolesImpl;
 
   template<typename TenElemT, typename QNT>
   [[nodiscard]] TenElemT EvaluateBondEnergy(
