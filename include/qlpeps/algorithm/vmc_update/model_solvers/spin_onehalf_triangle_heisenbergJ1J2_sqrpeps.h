@@ -13,7 +13,9 @@
 namespace qlpeps {
 using namespace qlten;
 
-
+/**
+ * The J_1-J_2 Heisenberg Model on triangle lattice.
+ */
 class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS>,
                                             public ModelMeasurementSolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS> {
  public:

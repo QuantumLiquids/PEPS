@@ -16,13 +16,12 @@
 
 namespace qlpeps {
 
-
 enum BondOrientation {
   HORIZONTAL = 0,
   VERTICAL
 };
 
-BondOrientation Rotate(BondOrientation orient) {
+inline BondOrientation Rotate(BondOrientation orient) {
   return BondOrientation(1 - (size_t) orient);
 }
 
@@ -31,17 +30,31 @@ BondOrientation Rotate(BondOrientation orient) {
  *
  * UP:   MPS tensors are numbered from right to left
                2--t--0
-                 |
-                 1
+                  |
+                  1
 
  * DOWN: MPS tensors are numbered from left to right
                    1
                    |
                 0--t--2
 
- * LEFT: MPS tensors are numbered from up to down;
+ * LEFT: MPS tensors are numbered from up to down
+ *               0
+ *               |
+ *               t--1
+ *               |
+ * *             2
+ * RIGHT: MPS tensors are numbered from down to up
+ *             2
+ *             |
+ *          1--t
+ *             |
+ *             0
  *
+ * For fermionic case, a 1-dimensional 3-th indices are added to the MPS tensors. 
+ * 
  * the order, left, down, right, up, follow the MPO/single layer tps indexes order
+ * 
  */
 enum BMPSPOSITION {
   LEFT = 0,
@@ -56,15 +69,15 @@ enum BMPSPOSITION {
  * @param post
  * @return
  */
-BondOrientation Orientation(const BMPSPOSITION post) {
+inline BondOrientation Orientation(const BMPSPOSITION post) {
   return static_cast<enum BondOrientation>((static_cast<size_t>(post) % 2));
 }
 
-size_t MPOIndex(const BMPSPOSITION post) {
+inline size_t MPOIndex(const BMPSPOSITION post) {
   return static_cast<size_t>(post);
 }
 
-BMPSPOSITION Opposite(const BMPSPOSITION post) {
+inline BMPSPOSITION Opposite(const BMPSPOSITION post) {
   return static_cast<BMPSPOSITION>((static_cast<size_t>(post) + 2) % 4);
   switch (post) {
     case DOWN:return UP;

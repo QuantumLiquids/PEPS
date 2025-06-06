@@ -238,13 +238,22 @@ TensorNetwork2D<TenElemT, QNT>::ReplaceNNSiteTrace(const SiteIdx &site_a, const 
   }
 } //ReplaceNNSiteTrace
 
+/**
+ * Trace the 2 by 2 cluster of tensors by replacing two next-nearest neighbor tensors with another two given tensors.
+ * 
+ * @param left_up_site  defines the left-up site of the 2 by 2 cluster.
+ * @param nnn_dir       defines the direction of the next-nearest neighbor tensors (LEFTUP_TO_RIGHTDOWN or LEFTDOWN_TO_RIGHTUP).
+ * @param mps_orient    defines the orientation of the MPS (HORIZONTAL or VERTICAL).
+ * @param ten_left      the tensor to replace the left-up or left-down tensor in the cluster.
+ * @param ten_right     the tensor to replace the right-up or right-down tensor in the cluster.
+ * @return  trace
+ */
 template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left_up_site,
                                                              const DIAGONAL_DIR nnn_dir,
                                                              const BondOrientation mps_orient,
                                                              const TensorNetwork2D::Tensor &ten_left,
                                                              const TensorNetwork2D::Tensor &ten_right) const {
-  assert(!Tensor::IsFermionic());
   const size_t row1 = left_up_site[0];
   const size_t row2 = row1 + 1;
   const size_t col1 = left_up_site[1];
@@ -252,7 +261,7 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
   Tensor tmp[9];
   if (mps_orient == HORIZONTAL) {
     /*
-     *       BTEN-LEFT                       BTEN-RIGHT
+     *      BTEN2-LEFT                      BTEN2-RIGHT
      * MPS UP    ++-----mps_ten1--mps_ten4------++
      *           ||        |         |          ||
      *           ||        |         |          ||
@@ -277,35 +286,66 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
     const Tensor &mps_ten4 = bmps_set_.at(UP)[row1][this->cols() - col2 - 1];
 #endif
 
-    Tensor mpo_ten1, mpo_ten3;
-    const Tensor *mpo_ten2, *mpo_ten4;
+    Tensor *mpo_ten0, *mpo_ten2;
+    Tensor *mpo_ten1, *mpo_ten3;
     const Tensor &left_bten = bten_set2_.at(LEFT)[col1];
     const Tensor &right_bten = bten_set2_.at(RIGHT)[this->cols() - col2 - 1];
     if (nnn_dir == LEFTUP_TO_RIGHTDOWN) {
-      mpo_ten1 = ten_left;
-      mpo_ten2 = (*this)(row2, col1);
-      mpo_ten3 = ten_right;
-      mpo_ten4 = (*this)(row1, col2);
+      mpo_ten0 = new Tensor(ten_left);
+      mpo_ten2 = new Tensor(ten_right);
+      if (Tensor::IsFermionic()) {
+        mpo_ten1 = new Tensor((*this)({row2, col1}));
+        mpo_ten3 = new Tensor((*this)({row1, col2}));
+      } else {
+        mpo_ten1 = const_cast<Tensor *>((*this)(row2, col1));
+        mpo_ten3 = const_cast<Tensor *>((*this)(row1, col2));
+      }
     } else { //LEFTDOWN_TO_RIGHTUP
-      mpo_ten1 = (*this)({row1, col1});
-      mpo_ten2 = &ten_left;
-      mpo_ten3 = (*this)({row2, col2});
-      mpo_ten4 = &ten_right;
+      mpo_ten0 = new Tensor((*this)({row1, col1}));
+      mpo_ten2 = new Tensor((*this)({row2, col2}));
+      if (Tensor::IsFermionic()) {
+        mpo_ten1 = new Tensor(ten_left);
+        mpo_ten3 = new Tensor(ten_right);
+      } else {
+        mpo_ten1 = const_cast<Tensor *>(&ten_left);
+        mpo_ten3 = const_cast<Tensor *>(&ten_right);
+      }
     }
-    mpo_ten1.Transpose({3, 0, 2, 1});
-    mpo_ten3.Transpose({1, 2, 0, 3});
+    if (Tensor::IsFermionic()) {
+      mpo_ten0->Transpose({3, 0, 2, 1, 4});
+      mpo_ten2->Transpose({1, 2, 0, 3, 4});
+      mpo_ten1->Transpose(GenMpoTen2TransposeAxesForFermionGrowBTen2(LEFT));
+      mpo_ten3->Transpose(GenMpoTen2TransposeAxesForFermionGrowBTen2(RIGHT));
+      auto tmp0 = GrowBTen2StepAfterTransposedMPOTens(left_bten,
+                                                      mps_ten1,
+                                                      mps_ten2,
+                                                      *mpo_ten0,
+                                                      *mpo_ten1,
+                                                      0);//last parameter is irrelevant
+      auto tmp1 = GrowBTen2StepAfterTransposedMPOTens(right_bten,
+                                                      mps_ten3,
+                                                      mps_ten4,
+                                                      *mpo_ten2,
+                                                      *mpo_ten3,
+                                                      0);//last parameter is irrelevant
+      Contract(&tmp0, {0, 1, 2, 3}, &tmp1, {3, 2, 1, 0}, &tmp[8]);
+      return tmp[8]({0, 0});
+    } else {
+      mpo_ten0->Transpose({3, 0, 2, 1});
+      mpo_ten2->Transpose({1, 2, 0, 3});
 
-    Contract<TenElemT, QNT, true, true>(mps_ten1, left_bten, 2, 0, 1, tmp[0]);
-    Contract<TenElemT, QNT, false, false>(tmp[0], mpo_ten1, 1, 0, 2, tmp[1]);
-    Contract<TenElemT, QNT, false, false>(tmp[1], *mpo_ten2, 4, 3, 2, tmp[2]);
-    Contract(&tmp[2], {0, 3}, &mps_ten2, {0, 1}, &tmp[3]);
+      Contract<TenElemT, QNT, true, true>(mps_ten1, left_bten, 2, 0, 1, tmp[0]);
+      Contract<TenElemT, QNT, false, false>(tmp[0], *mpo_ten0, 1, 0, 2, tmp[1]);
+      Contract<TenElemT, QNT, false, false>(tmp[1], *mpo_ten1, 4, 3, 2, tmp[2]);
+      Contract(&tmp[2], {0, 3}, &mps_ten2, {0, 1}, &tmp[3]);
 
-    Contract<TenElemT, QNT, true, true>(mps_ten3, right_bten, 2, 0, 1, tmp[4]);
-    Contract<TenElemT, QNT, false, false>(tmp[4], mpo_ten3, 1, 0, 2, tmp[5]);
-    Contract<TenElemT, QNT, false, false>(tmp[5], *mpo_ten4, 4, 1, 2, tmp[6]);
-    Contract(&tmp[6], {0, 3}, &mps_ten4, {0, 1}, &tmp[7]);
-    Contract(&tmp[3], {0, 1, 2, 3}, &tmp[7], {3, 2, 1, 0}, &tmp[8]);
-    return tmp[8]();
+      Contract<TenElemT, QNT, true, true>(mps_ten3, right_bten, 2, 0, 1, tmp[4]);
+      Contract<TenElemT, QNT, false, false>(tmp[4], *mpo_ten2, 1, 0, 2, tmp[5]);
+      Contract<TenElemT, QNT, false, false>(tmp[5], *mpo_ten3, 4, 1, 2, tmp[6]);
+      Contract(&tmp[6], {0, 3}, &mps_ten4, {0, 1}, &tmp[7]);
+      Contract(&tmp[3], {0, 1, 2, 3}, &tmp[7], {3, 2, 1, 0}, &tmp[8]);
+      return tmp[8]();
+    }
   } else { //mps_orient == VERTICAL
     /*
      *        MPS-LEFT                  MPS-RIGHT
@@ -321,6 +361,7 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
      * BTEN-DOWN ++=========================++
      *
     */
+    assert(!Tensor::IsFermionic());
     Tensor mpo_ten[4];
     Tensor tmp[9];
     const size_t row1 = left_up_site[0];

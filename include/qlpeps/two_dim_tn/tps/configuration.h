@@ -32,6 +32,15 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
   using DuoMatrix<size_t>::operator();
   using DuoMatrix<size_t>::operator==;
 
+  Configuration(std::vector<std::vector<size_t>> config_data) : DuoMatrix<size_t>(config_data.size(),
+                                                                                  config_data[0].size()) {
+    for (size_t row = 0; row < this->rows(); row++) {
+      for (size_t col = 0; col < this->cols(); col++) {
+        (*this)({row, col}) = config_data.at(row).at(col);
+      }
+    }
+  }
+
   /**
    * Random generate a configuration
    *

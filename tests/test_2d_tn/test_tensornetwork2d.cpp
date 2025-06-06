@@ -307,10 +307,7 @@ std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
                                                 tn2d({tn2d.rows() - 3, 1}),
                                                 tn2d({tn2d.rows() - 2, 1}),
                                                 tn2d({tn2d.rows() - 1, 1})));
-  if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
-    //since the code for NNN Trace and Sqrt5 Trace are not implemented.
-    return amplitudes;
-  }
+
   /***** HORIZONTAL MPS *****/
   tn2d.GrowBMPSForRow(1, trunc_para);
   tn2d.InitBTen2(BTenPOSITION::LEFT, 1);
@@ -319,6 +316,7 @@ std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
   amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
                                                 HORIZONTAL,
                                                 tn2d({2, 0}), tn2d({1, 1}))); // trace original tn
+
   amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 0}, LEFTUP_TO_RIGHTDOWN,
                                                 HORIZONTAL,
                                                 tn2d({1, 0}), tn2d({2, 1}))); // trace original tn
@@ -331,6 +329,10 @@ std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
   amplitudes.push_back(tn2d.ReplaceNNNSiteTrace({1, 1}, LEFTUP_TO_RIGHTDOWN,
                                                 HORIZONTAL,
                                                 tn2d({1, 1}), tn2d({2, 2}))); // trace original tn
+  if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
+    //since the code for VERTICAL NNN Trace and Sqrt5 Trace are not implemented.
+    return amplitudes;
+  }
   amplitudes.push_back(tn2d.ReplaceSqrt5DistTwoSiteTrace({1, 0}, LEFTDOWN_TO_RIGHTUP,
                                                          HORIZONTAL,
                                                          tn2d({2, 0}), tn2d({1, 2}))); // trace original tn
@@ -647,16 +649,37 @@ struct ProjectedtJTensorNetwork : public testing::Test {
                                       CompressMPSScheme::SVD_COMPRESS,
                                       std::make_optional<double>(1e-14),
                                       std::make_optional<size_t>(10));
-    Configuration config(Ly, Lx);
-    config.Random({N * 7 / 16, N * 7 / 16, N / 8});
+    Configuration config({
+                             {1, 0, 1, 2, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
+                             {0, 1, 1, 0, 0, 2, 1, 2, 0, 2, 0, 0, 2, 1, 0, 2, 0, 1, 0, 2, 0, 0, 2, 1},
+                             {1, 2, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 2, 0, 2, 1, 1, 0, 1, 0, 1, 0, 1, 0},
+                             {1, 0, 0, 1, 1, 2, 0, 1, 0, 2, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 2, 0, 1},
+                             {1, 1, 2, 0, 1, 1, 1, 0, 2, 1, 2, 2, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0},
+                             {2, 0, 0, 1, 2, 0, 0, 1, 1, 0, 2, 1, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1},
+                             {1, 0, 1, 0, 1, 0, 1, 2, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 2, 1, 0, 1, 0},
+                             {0, 1, 0, 1, 1, 1, 0, 1, 0, 2, 2, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1},
+                             {1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 1, 1, 2, 0},
+                             {0, 1, 0, 1, 1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1},
+                             {1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 2, 1, 0, 1, 0, 2, 1, 0, 1, 2, 1, 2, 0, 2},
+                             {0, 1, 0, 1, 2, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 2, 1, 2, 0, 0, 0, 1, 2, 1},
+                             {1, 0, 1, 0, 1, 0, 1, 0, 1, 2, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 2, 2, 1},
+                             {0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 0, 0, 0, 2, 1, 0, 2, 1, 0, 2, 1, 0, 0},
+                             {1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 2, 1, 0, 2},
+                             {0, 1, 0, 1, 0, 2, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 2, 2, 1, 0, 1, 2, 1},
+                             {1, 0, 1, 0, 1, 0, 1, 0, 2, 0, 1, 0, 1, 0, 1, 0, 2, 1, 1, 2, 1, 0, 0, 0},
+                             {0, 1, 1, 2, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1},
+                             {1, 0, 2, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 2, 1, 0, 0, 0},
+                             {0, 1, 0, 1, 2, 0, 0, 2, 1, 2, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 2}
+                         });
+//    config.Random({N * 7 / 16, N * 7 / 16, N / 8});
     TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, config, trun_para);
-    std::uniform_real_distribution<double> u_double = std::uniform_real_distribution<double>(0, 1);
-    std::vector<double> accept_rate(1);
-    MCUpdateSquareTNN3SiteExchange mc_updater;
-    for (size_t i = 0; i < 20; i++) {
-      mc_updater(split_idx_tps, tps_sample, accept_rate);
-    }
-    std::cout << "Monte-Carlo warmed up." << std::endl;
+//    std::uniform_real_distribution<double> u_double = std::uniform_real_distribution<double>(0, 1);
+//    std::vector<double> accept_rate(1);
+//    MCUpdateSquareTNN3SiteExchange mc_updater;
+//    for (size_t i = 0; i < 20; i++) {
+//      mc_updater(split_idx_tps, tps_sample, accept_rate);
+//    }
+//    std::cout << "Monte-Carlo warmed up." << std::endl;
     dtn2d = tps_sample.tn;
     dtn2d.DeleteInnerBMPS(qlpeps::UP);
     dtn2d.DeleteInnerBMPS(qlpeps::DOWN);
