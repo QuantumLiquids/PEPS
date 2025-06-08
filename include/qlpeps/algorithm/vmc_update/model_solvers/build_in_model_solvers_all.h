@@ -15,7 +15,7 @@
 #include "spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
 
 //fermion models
-#include "square_spinless_free_fermion.h"
+#include "square_spinless_fermion.h"
 #include "square_tJ_model.h"
 #include "square_hubbard_model.h"
 

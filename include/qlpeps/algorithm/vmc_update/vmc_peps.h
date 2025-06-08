@@ -42,7 +42,7 @@ using namespace qlten;
  * - SpinOneHalfTriHeisenbergSqrPEPS: Triangular Spin-1/2 AFM Heisenberg model on square lattice PEPS
  * - SpinOneHalfTriJ1J2HeisenbergSqrPEPS: Triangular Spin-1/2 J1-J2 Heisenberg model on square lattice PEPS
  * - SquaretJModel: t-J model on square lattice
- * - SquareSpinlessFreeFermion: Spinless free fermion model on square lattice
+ * - SquareSpinlessFermion: Spinless free fermion model on square lattice
  * - SquareHubbardModel: Hubbard model on square lattice
  * 
  * Below class may be helpful for the implementation of the EnergySolver:

@@ -92,14 +92,14 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 };
 
 TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
-  SquareSpinlessFreeFermion spinless_fermion_solver;
+  SquareSpinlessFermion spinless_fermion_solver(1, 0, 0);
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load(simple_update_peps_path);
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquareSpinlessFreeFermion>(
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
           mc_measurement_para,
           sitps,
           comm,
@@ -111,8 +111,8 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
 }
 
 TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
-  using Model = SquareSpinlessFreeFermion;
-  Model spinless_fermion_solver;
+  using Model = SquareSpinlessFermion;
+  Model spinless_fermion_solver(1, 0, 0);
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load(simple_update_peps_path);

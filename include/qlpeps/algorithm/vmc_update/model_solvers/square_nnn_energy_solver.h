@@ -200,7 +200,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
         SiteIdx site2 = {row + 1, col + 1};
         // inv_psi may be updated accordingly to improve accuracy
         std::optional<TenElemT> psi; // only used for fermion model
-        if (!Index<QNT>::IsFermionic()) {
+        if constexpr (!Index<QNT>::IsFermionic()) { //boson code
           nnn_energy = static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(site1, site2,
                                                                                tps_sample->config(site1),
                                                                                tps_sample->config(site2),
@@ -222,7 +222,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
 
         site1 = {row + 1, col}; //left-down
         site2 = {row, col + 1}; //right-up
-        if (!Index<QNT>::IsFermionic()) {
+        if constexpr (!Index<QNT>::IsFermionic()) {
           nnn_energy += static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(site1, site2,
                                                                                 tps_sample->config(site1),
                                                                                 tps_sample->config(site2),
@@ -233,19 +233,19 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                 inv_psi);
         } else {
           nnn_energy += static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(site1, site2,
-                                                                               (tps_sample->config(site1)),
-                                                                               (tps_sample->config(site2)),
-                                                                               LEFTDOWN_TO_RIGHTUP,
-                                                                               tn,
-                                                                               (*split_index_tps)(site1),
-                                                                               (*split_index_tps)(site2),
-                                                                               psi);
+                                                                                (tps_sample->config(site1)),
+                                                                                (tps_sample->config(site2)),
+                                                                                LEFTDOWN_TO_RIGHTUP,
+                                                                                tn,
+                                                                                (*split_index_tps)(site1),
+                                                                                (*split_index_tps)(site2),
+                                                                                psi);
         }
         tn.BTen2MoveStep(RIGHT, row);
         bond_energy_set.push_back(nnn_energy);
       }
     }
-  }
+  } // evaluate NNN energy.
 }
 
 template<class ExplicitlyModel, bool has_nnn_interaction>
@@ -256,7 +256,7 @@ CalVerticalBondEnergyImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                           std::vector<TenElemT> &bond_energy_set,
                           std::vector<TenElemT> &psi_list) {
   const Configuration &config = tps_sample->config;
-  BondTraversalMixin::TraverseAllBonds(
+  BondTraversalMixin::TraverseVerticalBonds(
       tps_sample->tn,
       tps_sample->trun_para,
       [&, split_index_tps](const SiteIdx &site1,
@@ -290,7 +290,6 @@ CalVerticalBondEnergyImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         }
         bond_energy_set.push_back(bond_energy);
       },
-      nullptr,
       psi_list
   );
 }

@@ -172,9 +172,12 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   };
 
   //VMC
+  SquareSpinlessFermion spinless_fermion_model_solver(1, 0, 0);
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFreeFermion>(optimize_para, tps,
-                                                                                                    comm);
+      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(optimize_para,
+                                                                                                tps,
+                                                                                                comm,
+                                                                                                spinless_fermion_model_solver);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 
@@ -190,10 +193,11 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFreeFermion>(
+      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(
           measure_para,
           tps,
-          comm);
+          comm,
+          spinless_fermion_model_solver);
   start_flop = flop;
 
   measure_exe->Execute();
@@ -209,10 +213,11 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   //Measure2
 
   auto measure_exe2 =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFreeFermion>(
+      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
           measure_para,
           tps,
-          comm);
+          comm,
+          spinless_fermion_model_solver);
   measure_exe2->Execute();
   auto [energy2, en_err2] = measure_exe2->OutputEnergy();
   EXPECT_NEAR(Real(energy), Real(energy2), en_err + en_err2);

@@ -240,7 +240,14 @@ TensorNetwork2D<TenElemT, QNT>::ReplaceNNSiteTrace(const SiteIdx &site_a, const 
 
 /**
  * Trace the 2 by 2 cluster of tensors by replacing two next-nearest neighbor tensors with another two given tensors.
- * 
+ *
+ * For fermion, the trivial indices of the two diagonal tensors are moved to continuous.
+ * More explicitly, the order of the trivial indices of the traced tensor is:
+ * (environment, site 1, site 3, site 0, site 2)
+ * (As for the definition of the site position of site 0,1,2,3, please refer to the mpo tensor figures inside the function).
+ * This make sure the operators like NNN hopping acts on continuous fermion operators.
+ *
+ *
  * @param left_up_site  defines the left-up site of the 2 by 2 cluster.
  * @param nnn_dir       defines the direction of the next-nearest neighbor tensors (LEFTUP_TO_RIGHTDOWN or LEFTDOWN_TO_RIGHTUP).
  * @param mps_orient    defines the orientation of the MPS (HORIZONTAL or VERTICAL).
@@ -287,49 +294,48 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
 #endif
 
     Tensor *mpo_ten0, *mpo_ten2;
-    Tensor *mpo_ten1, *mpo_ten3;
+    const Tensor *mpo_ten1, *mpo_ten3;
     const Tensor &left_bten = bten_set2_.at(LEFT)[col1];
     const Tensor &right_bten = bten_set2_.at(RIGHT)[this->cols() - col2 - 1];
     if (nnn_dir == LEFTUP_TO_RIGHTDOWN) {
-      mpo_ten0 = new Tensor(ten_left);
-      mpo_ten2 = new Tensor(ten_right);
       if (Tensor::IsFermionic()) {
-        mpo_ten1 = new Tensor((*this)({row2, col1}));
-        mpo_ten3 = new Tensor((*this)({row1, col2}));
+        mpo_ten0 = const_cast<Tensor *>(&ten_left);
+        mpo_ten2 = const_cast<Tensor *>(&ten_right);
       } else {
-        mpo_ten1 = const_cast<Tensor *>((*this)(row2, col1));
-        mpo_ten3 = const_cast<Tensor *>((*this)(row1, col2));
+        mpo_ten0 = new Tensor(ten_left);
+        mpo_ten2 = new Tensor(ten_right);
       }
+      mpo_ten1 = ((*this)(row2, col1));
+      mpo_ten3 = ((*this)(row1, col2));
     } else { //LEFTDOWN_TO_RIGHTUP
-      mpo_ten0 = new Tensor((*this)({row1, col1}));
-      mpo_ten2 = new Tensor((*this)({row2, col2}));
       if (Tensor::IsFermionic()) {
-        mpo_ten1 = new Tensor(ten_left);
-        mpo_ten3 = new Tensor(ten_right);
+        mpo_ten0 = const_cast<Tensor *>((*this)(row1, col1));
+        mpo_ten2 = const_cast<Tensor *>((*this)(row2, col2));
       } else {
-        mpo_ten1 = const_cast<Tensor *>(&ten_left);
-        mpo_ten3 = const_cast<Tensor *>(&ten_right);
+        mpo_ten0 = new Tensor((*this)({row1, col1}));
+        mpo_ten2 = new Tensor((*this)({row2, col2}));
       }
+      mpo_ten1 = (&ten_left);
+      mpo_ten3 = (&ten_right);
     }
     if (Tensor::IsFermionic()) {
-      mpo_ten0->Transpose({3, 0, 2, 1, 4});
-      mpo_ten2->Transpose({1, 2, 0, 3, 4});
-      mpo_ten1->Transpose(GenMpoTen2TransposeAxesForFermionGrowBTen2(LEFT));
-      mpo_ten3->Transpose(GenMpoTen2TransposeAxesForFermionGrowBTen2(RIGHT));
-      auto tmp0 = GrowBTen2StepAfterTransposedMPOTens(left_bten,
-                                                      mps_ten1,
-                                                      mps_ten2,
-                                                      *mpo_ten0,
-                                                      *mpo_ten1,
-                                                      0);//last parameter is irrelevant
-      auto tmp1 = GrowBTen2StepAfterTransposedMPOTens(right_bten,
-                                                      mps_ten3,
-                                                      mps_ten4,
-                                                      *mpo_ten2,
-                                                      *mpo_ten3,
-                                                      0);//last parameter is irrelevant
-      Contract(&tmp0, {0, 1, 2, 3}, &tmp1, {3, 2, 1, 0}, &tmp[8]);
-      return tmp[8]({0, 0});
+      Contract<TenElemT, QNT, true, true>(mps_ten1, left_bten, 2, 0, 1, tmp[0]);
+      tmp[0].FuseIndex(0, 6);
+      Contract(tmp, {2, 3}, mpo_ten0, {3, 0}, tmp + 1);
+      Contract(tmp + 1, {2, 4}, mpo_ten1, {0, 3}, tmp + 2);
+      Contract(tmp + 2, {2, 5}, &mps_ten2, {0, 1}, tmp + 3);
+      tmp[3].FuseIndex(0, 7);
+
+      Contract<TenElemT, QNT, true, true>(mps_ten3, right_bten, 2, 0, 1, tmp[4]);
+      tmp[4].FuseIndex(0, 6);
+      Contract(tmp + 4, {2, 3}, mpo_ten2, {1, 2}, tmp + 5);
+      Contract(tmp + 5, {5, 2}, mpo_ten3, {1, 2}, tmp + 6);
+      Contract(tmp + 6, {2, 6}, &mps_ten4, {0, 1}, tmp + 7);
+      tmp[7].FuseIndex(0, 7);
+
+      Contract(tmp + 3, {1, 2, 4, 6}, tmp + 7, {6, 4, 2, 1}, &tmp[8]);
+      tmp[8].Transpose({0, 3, 2, 5, 1, 4});
+      return tmp[8]({0, 0, 0, 0, 0, 0});
     } else {
       mpo_ten0->Transpose({3, 0, 2, 1});
       mpo_ten2->Transpose({1, 2, 0, 3});
