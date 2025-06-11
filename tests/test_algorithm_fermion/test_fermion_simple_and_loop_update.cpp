@@ -5,6 +5,7 @@
 * Creation Date: 2024-08-16
 *
 * Description: QuantumLiquids/PEPS project. Unittests for PEPS Simple Update in fermion model.
+ * Abandoned
 */
 
 #define PLAIN_TRANSPOSE 1

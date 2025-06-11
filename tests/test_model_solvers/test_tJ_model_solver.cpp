@@ -13,7 +13,7 @@
 using namespace qlten;
 using namespace qlpeps;
 
-const bool  SquaretJModel::enable_sc_measurement = false;
+const bool  SquaretJModelMixIn::enable_sc_measurement = false;
 TEST(tJModelSolverTest, HandlesMeasureDiagonalOrder) {
   const double t = 1.0, J = 0.3;
   const size_t Lx = 4, Ly = 6;
@@ -30,16 +30,15 @@ TEST(tJModelSolverTest, HandlesMeasureDiagonalOrder) {
     { size_t(tJSingleSiteState::SpinDown), num_down }
   }));
 
-  SquaretJModel model_solver(t, J, true, 0);
+  SquaretJNNModel model_solver(t, J, true, 0);
   ObservablesLocal<QLTEN_Double> d_obs_loc;
-  model_solver.MeasureDiagonalOrder(configuration, d_obs_loc);
+  model_solver.MeasureDiagonalOneAndTwoPointFunctions(configuration, d_obs_loc);
   EXPECT_EQ(d_obs_loc.one_point_functions_loc.size(), 2 * N);
   EXPECT_EQ(d_obs_loc.two_point_functions_loc.size(), 2 * N * N);
   // TODO: test the content of d_obs_loc
 
   ObservablesLocal<QLTEN_Complex> z_obs_loc;
-  model_solver.MeasureDiagonalOrder(configuration, z_obs_loc);
+  model_solver.MeasureDiagonalOneAndTwoPointFunctions(configuration, z_obs_loc);
   EXPECT_EQ(z_obs_loc.one_point_functions_loc.size(), 2 * N);
   EXPECT_EQ(z_obs_loc.two_point_functions_loc.size(), 2 * N * N);
-
 }

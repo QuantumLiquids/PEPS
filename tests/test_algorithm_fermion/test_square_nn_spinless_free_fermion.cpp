@@ -7,6 +7,8 @@
 * Description: QuantumLiquids/PEPS project. Unittests for spinless free fermion model.
  * The test include three parts: Simple Update, SR optimization, and Measurement.
  * For complex case, more MPI processes are required to stabilize the optimization.
+ *
+ * TODO: add measure correlation or bond energy assertion.
 */
 
 

@@ -1,6 +1,6 @@
 /*
  * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
- * Creation Date: 2025-02-27
+ * Creation Date: 2025-06-05
  *
  * Description: QuantumLiquids/PEPS project.
  * Model Energy Solver for in square lattice models, with NN & NNN bond energy contributions.
@@ -18,7 +18,7 @@
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
-#include "qlpeps/algorithm/vmc_update/model_solvers/bond_traversal_mixin.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/bond_traversal_mixin.h"
 
 namespace qlpeps {
 
@@ -30,7 +30,8 @@ namespace qlpeps {
  *
  * To be implemented by derived classes:
  * - EvaluateBondEnergy: Computes energy contribution for a bond between site1 and site2.
- *   Fermionic models should also optionally return the wavefunction amplitude (psi).
+ *   Fermion models should also optionally return the wavefunction amplitude (psi).
+ * - EvaluateNNNEnergy : Computes energy contribution for the link between NNN sites.
  * - EvaluateTotalOnsiteEnergy: Sums all on-site energy terms (e.g., chemical potential, Hubbard U).
  */
 template<class ExplicitlyModel, bool has_nnn_interaction = true>
@@ -195,9 +196,10 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
       tn.InitBTen2(LEFT, row);
       tn.GrowFullBTen2(RIGHT, row, 2, true);
       for (size_t col = 0; col < tn.cols() - 1; col++) {
-        TenElemT nnn_energy(0);
         SiteIdx site1 = {row, col};
         SiteIdx site2 = {row + 1, col + 1};
+
+        TenElemT nnn_energy(0);
         // inv_psi may be updated accordingly to improve accuracy
         std::optional<TenElemT> psi; // only used for fermion model
         if constexpr (!Index<QNT>::IsFermionic()) { //boson code
@@ -241,8 +243,9 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                 (*split_index_tps)(site2),
                                                                                 psi);
         }
-        tn.BTen2MoveStep(RIGHT, row);
         bond_energy_set.push_back(nnn_energy);
+
+        tn.BTen2MoveStep(RIGHT, row);
       }
     }
   } // evaluate NNN energy.

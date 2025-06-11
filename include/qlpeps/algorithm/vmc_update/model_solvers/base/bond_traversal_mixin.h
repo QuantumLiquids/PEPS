@@ -28,30 +28,34 @@ class BondTraversalMixin {
    * @param bond_measure_func functor to measure bond energy or order parameters
    * @param off_diag_long_range_measure_func functor to measure off-diagonal long-range order parameters along horizontal direction. Set to nullptr if not needed.
    */
-  template<typename TenElemT, typename QNT, typename BondMeasureFunc, typename OffDiagLongRangeMeasureFunc>
+  template<typename TenElemT, typename QNT, typename BondMeasureFunc, typename NNNLinkMeasureFunc, typename OffDiagLongRangeMeasureFunc>
   static void TraverseAllBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
       const BMPSTruncatePara &trunc_para,
       BondMeasureFunc &&bond_measure_func,
+      NNNLinkMeasureFunc &&nnn_link_measure_func,
       OffDiagLongRangeMeasureFunc &&off_diag_long_range_measure_func,
       std::vector<TenElemT> &psi_list // gather the wave function amplitudes
   ) {
+    psi_list.reserve(tn.rows() + tn.cols());
     TraverseHorizontalBonds(tn, trunc_para, std::forward<BondMeasureFunc>(bond_measure_func),
+                            std::forward<NNNLinkMeasureFunc>(nnn_link_measure_func),
                             std::forward<OffDiagLongRangeMeasureFunc>(off_diag_long_range_measure_func), psi_list);
     TraverseVerticalBonds(tn, trunc_para, std::forward<BondMeasureFunc>(bond_measure_func), psi_list);
   }
 
   /**
-   * Traverse all horizontal NN bonds in the 2D tensor network, and evaluate the bond energy and some order parameters.
+   * Traverse all horizontal NN bonds and NNN links by horizontal MPS in the 2D tensor network, and evaluate the bond energy and some order parameters.
    * 
    * @tparam BondMeasureFunc : measure energy or some order parameter
    * @tparam OffDiagLongRangeMeasureFunc
    */
-  template<typename TenElemT, typename QNT, typename BondMeasureFunc, typename OffDiagLongRangeMeasureFunc>
+  template<typename TenElemT, typename QNT, typename BondMeasureFunc, typename NNNLinkMeasureFunc, typename OffDiagLongRangeMeasureFunc>
   static void TraverseHorizontalBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
       const BMPSTruncatePara &trunc_para,
       BondMeasureFunc &&bond_measure_func,
+      NNNLinkMeasureFunc &&nnn_link_measure_func,
       OffDiagLongRangeMeasureFunc &&off_diag_long_range_measure_func,
       std::vector<TenElemT> &psi_list // gather the wave function amplitudes
   ) {
@@ -72,6 +76,23 @@ class BondTraversalMixin {
         const SiteIdx site2{row, col + 1};
         bond_measure_func(site1, site2, HORIZONTAL, inv_psi);
         tn.BTenMoveStep(RIGHT);
+      }
+      if constexpr (!std::is_same_v<NNNLinkMeasureFunc, std::nullptr_t>) {
+        if (row < tn.rows() - 1) {
+          tn.InitBTen2(LEFT, row);
+          tn.GrowFullBTen2(RIGHT, row, 2, true);
+          for (size_t col = 0; col < tn.cols() - 1; col++) {
+            std::optional<TenElemT> fermion_psi; // only used for fermion model
+            SiteIdx site1 = {row, col};
+            SiteIdx site2 = {row + 1, col + 1};
+            nnn_link_measure_func(site1, site2, LEFTUP_TO_RIGHTDOWN, inv_psi, fermion_psi);
+
+            site1 = {row + 1, col}; //left-down
+            site2 = {row, col + 1}; //right-up
+            nnn_link_measure_func(site1, site2, LEFTDOWN_TO_RIGHTUP, inv_psi, fermion_psi);
+            tn.BTen2MoveStep(RIGHT, row);
+          }
+        }
       }
       if constexpr (!std::is_same_v<OffDiagLongRangeMeasureFunc, std::nullptr_t>) {
         off_diag_long_range_measure_func(row, inv_psi);

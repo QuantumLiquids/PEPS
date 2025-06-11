@@ -11,8 +11,8 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_energy_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -52,19 +52,15 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
 
 }
 
-/**
- *  $$H = sum_<i,j> (J_z * S^z_i \cdot S^z_j + J_{xy} * ( S^x_i \cdot S^x_j  +  S^y_i \cdot S^y_j ))- h_{00} * S^z_{00}$$
- * $S^{\alpha}_i$ are spin-1/2 operator, h_{00} is the pinning field in corner.
- */
-class SquareSpinOneHalfXXZModel : public SquareNNModelEnergySolver<SquareSpinOneHalfXXZModel>,
-                                  public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel> {
+///< h_nn = jz * Sz * Sz + jxy * (Sx * Sx + Sy * Sy),
+///< h_nnn = jz2 * Sz * Sz + jxy2 * (Sx * Sx + Sy * Sy)
+class SquareSpinOneHalfXXZModelMixIn {
  public:
   static constexpr bool requires_density_measurement = false;
   static constexpr bool requires_spin_sz_measurement = true;
 
-  SquareSpinOneHalfXXZModel(void) : jz_(1), jxy_(1), pinning00_(0) {};
-  SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning_field_00)
-      : jz_(jz), jxy_(jxy), pinning00_(pinning_field_00) {};
+  SquareSpinOneHalfXXZModelMixIn(double jz, double jxy, double jz2, double jxy2, double pinning_field_00)
+      : jz_(jz), jxy_(jxy), jz2_(jz2), jxy2_(jxy2), pinning00_(pinning_field_00) {};
 
   template<typename TenElemT, typename QNT>
   [[nodiscard]] TenElemT EvaluateBondEnergy(
@@ -87,6 +83,35 @@ class SquareSpinOneHalfXXZModel : public SquareNNModelEnergySolver<SquareSpinOne
     }
   }
 
+  template<typename TenElemT, typename QNT>
+  [[nodiscard]] TenElemT EvaluateNNNEnergy(
+      const SiteIdx site1, const SiteIdx site2,
+      const size_t config1, const size_t config2,
+      const DIAGONAL_DIR diagonal_dir,
+      const TensorNetwork2D<TenElemT, QNT> &tn,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+      const TenElemT inv_psi
+  ) {
+    if (config1 == config2) {
+      return 0.25 * jz2_;
+    } else {
+      SiteIdx left_up_site;
+      if (diagonal_dir == LEFTUP_TO_RIGHTDOWN) {
+        left_up_site = site1;
+      } else {
+        left_up_site = {site2.row(), site1.col()};
+      }
+      TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+                                               diagonal_dir,
+                                               HORIZONTAL,
+                                               split_index_tps_on_site1[config2],
+                                               split_index_tps_on_site2[config1]);
+      TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
+      return (-0.25 * jz2_ + ratio * 0.5 * jxy2_);
+    }
+  }
+
   [[nodiscard]] inline double CalSpinSzImpl(const size_t config) const { return double(config) - 0.5; }
 
   [[nodiscard]] inline double EvaluateTotalOnsiteEnergy(const Configuration &config) const {
@@ -104,9 +129,27 @@ class SquareSpinOneHalfXXZModel : public SquareNNModelEnergySolver<SquareSpinOne
   }
 
  private:
-  const double jz_;
-  const double jxy_;
+  const double jz_; // NN zz coupling,
+  const double jxy_; // NN xx and yy coupling
+  const double jz2_;  // NNN zz coupling
+  const double jxy2_; // NNN xy coupling
   const double pinning00_;
+};
+
+/**
+ *  $$H = sum_<i,j> (J_z * S^z_i \cdot S^z_j + J_{xy} * ( S^x_i \cdot S^x_j  +  S^y_i \cdot S^y_j ))- h_{00} * S^z_{00}$$
+ * $S^{\alpha}_i$ are spin-1/2 operator, h_{00} is the pinning field in corner.
+ */
+class SquareSpinOneHalfXXZModel
+    : public SquareNNModelEnergySolver<SquareSpinOneHalfXXZModel>,
+      public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>,
+      public SquareSpinOneHalfXXZModelMixIn {
+ public:
+  ///< Isotropic Heisenberg model with J = 1 and no pinning field
+  SquareSpinOneHalfXXZModel(void) : SquareSpinOneHalfXXZModelMixIn(1.0, 1.0, 0.0, 0.0, 0.0) {}
+
+  SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning00) :
+      SquareSpinOneHalfXXZModelMixIn(jz, jxy, 0.0, 0.0, pinning00) {}
 };
 
 }//qlpeps

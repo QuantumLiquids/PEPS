@@ -4,7 +4,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-02-21
 *
-* Description: QuantumLiquids/PEPS project. Unittests for Square Heisenberg model.
+* Description: QuantumLiquids/PEPS project. Integration testing for Square Heisenberg model.
 */
 
 #define QLTEN_COUNT_FLOPS 1

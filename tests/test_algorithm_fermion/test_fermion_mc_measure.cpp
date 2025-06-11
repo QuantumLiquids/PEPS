@@ -129,7 +129,7 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
   delete measure_executor;
 }
 
-const bool SquaretJModel::enable_sc_measurement = false;
+const bool SquaretJModelMixIn::enable_sc_measurement = false;
 struct Z2tJModelTools : public testing::Test {
   using IndexT = Index<fZ2QN>;
   using QNSctT = QNSector<fZ2QN>;
@@ -178,17 +178,17 @@ struct Z2tJModelTools : public testing::Test {
 };
 
 TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
-  SquaretJModel tj_solver(t, J, false, 0);
+  SquaretJNNModel tj_solver(t, J, false, 0);
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJModel>(mc_measurement_para,
-                                                                                                  sitps,
-                                                                                                  comm,
-                                                                                                  tj_solver);
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJNNModel>(mc_measurement_para,
+                                                                                                    sitps,
+                                                                                                    comm,
+                                                                                                    tj_solver);
 
   measure_executor->Execute();
   measure_executor->OutputEnergy();
@@ -196,7 +196,7 @@ TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
 }
 
 TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
-  using Model = SquaretJModel;
+  using Model = SquaretJNNModel;
   Model tj_solver(t, J, false, 0);
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);

@@ -17,7 +17,7 @@
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nnn_energy_solver.h"
+#include "square_nnn_energy_solver.h"
 
 namespace qlpeps {
 

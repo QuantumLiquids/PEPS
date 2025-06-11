@@ -2,15 +2,14 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-10-14
 *
-* Description: QuantumLiquids/PEPS project. Unittests for PEPS Monte-Carlo Update in Fermion model.
+* Description: QuantumLiquids/PEPS project. Unittests for PEPS Monte-Carlo Updater for fermion tensor networks.
 */
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
+#include "qlpeps/algorithm/vmc_update/wave_function_component.h"
 #include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 
 using namespace qlten;

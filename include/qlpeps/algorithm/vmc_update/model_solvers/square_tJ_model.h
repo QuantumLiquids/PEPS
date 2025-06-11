@@ -5,42 +5,44 @@
 * Description: QuantumLiquids/PEPS project. Model Energy Solver for the t-J model in square lattice
 *
 * Hamiltonian :
- * H = \sum_{<i,j>,sigma} (c_{i,\sigma}^dag c_{j,\sigma} + h.c.)
- *    +\sum_{<i,j>} S_i \cdot S_j
- *    - \mu N
+ * H = -t\sum_{<i,j>,sigma} (c_{i,\sigma}^dag c_{j,\sigma} + h.c.)
+ *     -t2\sum_{<<i,j>>,sigma} (c_{i,\sigma}^dag c_{j,\sigma} + h.c.)
+ *     +J \sum_{<i,j>} (S_i \cdot S_j - 1/4 n_i \cdot n_j )
+ *     - \mu N
+ *
+ * with bool value  has_nn_term_  defining whether include  - 1/4 n_i \cdot n_j term
 */
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nnn_energy_solver.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_nn_model_measurement_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 
 namespace qlpeps {
 using namespace qlten;
 
+/*
+ *  */
 enum class tJSingleSiteState {
   SpinUp,           // 0
   SpinDown,         // 1
   Empty             // 2
 };
 
-class SquaretJModel : public SquareNNNModelEnergySolver<SquaretJModel>,
-                      public SquareNNModelMeasurementSolver<SquaretJModel> {
+class SquaretJModelMixIn {
  public:
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
   static const bool enable_sc_measurement;
-  SquaretJModel(void) = delete;
+  SquaretJModelMixIn(void) = delete;
 
-  explicit SquaretJModel(double t, double J, bool has_nn_term, double mu)
-      : t_(t), t2_(0), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
-  explicit SquaretJModel(double t, double t2, double J, bool has_nn_term, double mu)
+  explicit SquaretJModelMixIn(double t, double t2, double J, bool has_nn_term, double mu)
       : t_(t), t2_(t2), J_(J), has_nn_term_(has_nn_term), mu_(mu) {}
-  using SquareNNNModelEnergySolver<SquaretJModel>::CalEnergyAndHoles;
-  using SquareNNModelMeasurementSolver<SquaretJModel>::operator();
 
-  ///< requirement from SquareNNNModelEnergySolver
+  ///< requirement from SquareNNNModelEnergySolver and SquareNNModelEnergySolver
   template<typename TenElemT, typename QNT>
   TenElemT EvaluateBondEnergy(
       const SiteIdx site1, const SiteIdx site2,
@@ -52,6 +54,7 @@ class SquaretJModel : public SquareNNNModelEnergySolver<SquaretJModel>,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
   );
 
+  ///< requirement from SquareNNNModelEnergySolver
   template<typename TenElemT, typename QNT>
   TenElemT EvaluateNNNEnergy(
       const SiteIdx site1, const SiteIdx site2,
@@ -112,7 +115,7 @@ class SquaretJModel : public SquareNNNModelEnergySolver<SquaretJModel>,
 };
 
 template<typename TenElemT, typename QNT>
-TenElemT SquaretJModel::EvaluateBondEnergy(
+TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     const SiteIdx site1, const SiteIdx site2,
     const size_t config1, const size_t config2,
     const BondOrientation orient,
@@ -162,7 +165,7 @@ TenElemT SquaretJModel::EvaluateBondEnergy(
  * @param psi  if containing value, we assume it is the correct value; if not, calculate it and store into it.
  */
 template<typename TenElemT, typename QNT>
-TenElemT SquaretJModel::EvaluateNNNEnergy(
+TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
     const SiteIdx site1, const SiteIdx site2,
     const size_t config1, const size_t config2,
     const DIAGONAL_DIR diagonal_dir,
@@ -255,6 +258,29 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
     return std::make_pair(TenElemT(0), TenElemT(0));
   }
 }
+
+class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
+                        public SquareNNModelMeasurementSolver<SquaretJNNModel>,
+                        public SquaretJModelMixIn {
+ public:
+  explicit SquaretJNNModel(double t, double J, bool has_nn_term, double mu) : SquaretJModelMixIn(t,
+                                                                                                 0,
+                                                                                                 J,
+                                                                                                 has_nn_term,
+                                                                                                 mu) {};
+};
+
+class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
+                         public SquareNNNModelMeasurementSolver<SquaretJNNNModel>,
+                         public SquaretJModelMixIn {
+ public:
+  explicit SquaretJNNNModel(double t, double t2, double J, bool has_nn_term, double mu) : SquaretJModelMixIn(t,
+                                                                                                             t2,
+                                                                                                             J,
+                                                                                                             has_nn_term,
+                                                                                                             mu) {};
+};
+
 }//qlpeps
 
 #endif //QLPEPS_ALGORITHM_VMC_PEPS_MODEL_SOLVERS_SQUARE_TJ_MODEL_H

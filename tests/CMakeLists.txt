@@ -253,7 +253,7 @@ add_two_type_unittest(test_fermion_measure
 )
 
 add_unittest(test_fermion_mc_update
-        "test_algorithm_fermion/test_fermion_mc_update.cpp"
+        "test_algorithm_fermion/test_fermion_mc_updater.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_data/"
 )
