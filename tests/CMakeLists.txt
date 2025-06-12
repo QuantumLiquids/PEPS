@@ -236,6 +236,12 @@ add_two_type_unittest(test_square_heisenberg
         " "
 )
 
+add_two_type_unittest(test_square_j1j2_xxz
+        "test_algorithm_boson/test_square_j1_j2_xxz.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
 add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
 add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
 

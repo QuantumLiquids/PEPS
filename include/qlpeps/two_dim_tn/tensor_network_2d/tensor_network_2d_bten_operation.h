@@ -691,6 +691,9 @@ void TensorNetwork2D<TenElemT, QNT>::GrowBTen2Step_(const BTenPOSITION post, con
                                                        mpo_ten1,
                                                        *mpo_ten2,
                                                        ctrct_mpo_start_idx);
+  if constexpr (Tensor::IsFermionic()) {
+    delete mpo_ten2;
+  }
   bten_set2_[post].emplace_back(next_bten);
 }
 }//qlpeps

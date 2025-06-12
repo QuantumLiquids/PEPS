@@ -345,26 +345,27 @@ TEST_F(SpinOneHalfSystemSimpleUpdate, TriangleNNHeisenberg) {
   delete su_exe;
 }
 
-TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
-  std::string model_name = "square_j1j2_hei";
-  SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
-
-  SimpleUpdateExecutor<TenElemT, U1QN>
-      *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
-                                                                         ham_hei_nn,
-                                                                         ham_hei_tri_j2);
-  su_exe->Execute();
-
-  su_exe->update_para.Dmax = 4;
-  su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->ResetStepLenth(0.05);
-  su_exe->Execute();
-
-  auto tps4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
-  tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
-  delete su_exe;
-}
+// Test move to test_square_j1_j2_xxz.cpp
+//TEST_F(SpinOneHalfSystemSimpleUpdate, SquareJ1J2Heisenberg) {
+//  std::string model_name = "square_j1j2_hei";
+//  SimpleUpdatePara update_para(10, 0.1, 1, 2, 1e-5);
+//
+//  SimpleUpdateExecutor<TenElemT, U1QN>
+//      *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<TenElemT, U1QN>(update_para, peps0,
+//                                                                         ham_hei_nn,
+//                                                                         ham_hei_tri_j2);
+//  su_exe->Execute();
+//
+//  su_exe->update_para.Dmax = 4;
+//  su_exe->update_para.Trunc_err = 1e-6;
+//  su_exe->ResetStepLenth(0.05);
+//  su_exe->Execute();
+//
+//  auto tps4 = TPS<TenElemT, U1QN>(su_exe->GetPEPS());
+//  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
+//  tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
+//  delete su_exe;
+//}
 
 int main(int argc, char *argv[]) {
   testing::InitGoogleTest(&argc, argv);

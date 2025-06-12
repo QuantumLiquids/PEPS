@@ -350,6 +350,9 @@ TenElemT TensorNetwork2D<TenElemT, QNT>::ReplaceNNNSiteTrace(const SiteIdx &left
       Contract<TenElemT, QNT, false, false>(tmp[5], *mpo_ten3, 4, 1, 2, tmp[6]);
       Contract(&tmp[6], {0, 3}, &mps_ten4, {0, 1}, &tmp[7]);
       Contract(&tmp[3], {0, 1, 2, 3}, &tmp[7], {3, 2, 1, 0}, &tmp[8]);
+
+      delete mpo_ten0;
+      delete mpo_ten2;
       return tmp[8]();
     }
   } else { //mps_orient == VERTICAL

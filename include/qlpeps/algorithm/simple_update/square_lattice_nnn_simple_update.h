@@ -17,17 +17,50 @@ namespace qlpeps {
 
 using namespace qlten;
 
+/**
+ * Simple update for square lattice model with uniform NN and NNN interaction.
+ */
 template<typename TenElemT, typename QNT>
 class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
  public:
+  /**
+   *
+   * @param ham_nn Hamiltonian term on NN bond, rank-4 tensor
+   * @param ham_nnn Hamiltonian term on NNN link, rank-4 tensor
+   */
   SquareLatticeNNNSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
                                        const PEPST &peps_initial,
                                        const Tensor &ham_nn,
-                                       const Tensor &ham_tri) :
+                                       const Tensor &ham_nnn) :
       SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), \
-          ham_nn_(ham_nn), ham_tri_(ham_tri) {}
+                                           ham_nn_(ham_nn) {
+    /*      1             3
+            |             |
+            v             v
+            |---ham_nnn---|
+            v             v
+            |             |
+            0             2
+     */
+    Tensor id = Eye<TenElemT>(ham_nn.GetIndex(0));
+    if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() == OUT) { //should be
+      id.ActFermionPOps();
+    }
+    Tensor extend_ham_nnn, extend_ham_nn_left, extend_ham_nn_right;
+    Contract(&ham_nnn, {}, &id, {}, &extend_ham_nnn);
+    extend_ham_nnn.Transpose({0, 1, 4, 5, 2, 3});
+    Contract(&ham_nn, {}, &id, {}, &extend_ham_nn_left);
+    Contract(&id, {}, &ham_nn, {}, &extend_ham_nn_right);
+    ham_tri_ = extend_ham_nnn + 0.5 * extend_ham_nn_right + 0.5 * extend_ham_nn_left;
+  }
+//  SquareLatticeNNNSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
+//                                       const PEPST &peps_initial,
+//                                       const Tensor &ham_nn,
+//                                       const Tensor &ham_tri) :
+//      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), \
+//          ham_nn_(ham_nn), ham_tri_(ham_tri) {}
 
  private:
   void SetEvolveGate_(void) override {

@@ -2,12 +2,10 @@
 
 /*
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
-* Creation Date: 2024-02-21
+* Creation Date: 2025-06-11
 *
-* Description: QuantumLiquids/PEPS project. Integration testing for Square Heisenberg model.
+* Description: QuantumLiquids/PEPS project. Integration testing for J1-J2 XXZ Model.
 */
-
-#define QLTEN_COUNT_FLOPS 1
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
@@ -25,20 +23,24 @@ using IndexT = Index<QNT>;
 using QNSctT = QNSector<QNT>;
 using Tensor = QLTensor<TenElemT, QNT>;
 
-// Test spin systems
-struct HeisenbergSystem : public MPITest {
+struct SpinOneHalfSystem : public MPITest {
   size_t Lx = 3;
   size_t Ly = 4;
+  double jz1 = 0.5;
+  double jxy1 = 1;
+  double jz2 = -0.2; // no frustration
+  double jxy2 = -0.3;
+
+  double energy_ed = -6.523925897312232;
 
   size_t Dpeps = 6;
   QNT qn0 = QNT();
-  double energy_ed = -6.691680193514947;
+
   IndexT pb_out = IndexT({QNSctT(QNT(), 2)}, TenIndexDirType::OUT);
   IndexT pb_in = InverseIndex(pb_out);
 
   Tensor ham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
-  Tensor ham_hei_tri;  // three-site hamiltonian in triangle lattice
-
+  Tensor ham_hei_nnn = Tensor({pb_in, pb_out, pb_in, pb_out});
   VMCOptimizePara optimize_para =
       VMCOptimizePara(BMPSTruncatePara(6, 12, 1e-15,
                                        CompressMPSScheme::SVD_COMPRESS,
@@ -60,23 +62,32 @@ struct HeisenbergSystem : public MPITest {
       std::vector<size_t>(2, Lx * Ly / 2),
       Ly, Lx);
 
-  std::string model_name = "square_afm_heisenberg";
+  std::string model_name = "square_j1j2_xxz";
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
+
   void SetUp() {
     MPITest::SetUp();
-    ham_hei_nn({0, 0, 0, 0}) = 0.25;
-    ham_hei_nn({1, 1, 1, 1}) = 0.25;
-    ham_hei_nn({1, 1, 0, 0}) = -0.25;
-    ham_hei_nn({0, 0, 1, 1}) = -0.25;
-    ham_hei_nn({0, 1, 1, 0}) = 0.5;
-    ham_hei_nn({1, 0, 0, 1}) = 0.5;
-    
+    ham_hei_nn({0, 0, 0, 0}) = 0.25 * jz1;
+    ham_hei_nn({1, 1, 1, 1}) = 0.25 * jz1;
+    ham_hei_nn({1, 1, 0, 0}) = -0.25 * jz1;
+    ham_hei_nn({0, 0, 1, 1}) = -0.25 * jz1;
+    ham_hei_nn({0, 1, 1, 0}) = 0.5 * jxy1;
+    ham_hei_nn({1, 0, 0, 1}) = 0.5 * jxy1;
+
+    ham_hei_nnn({0, 0, 0, 0}) = 0.25 * jz2;
+    ham_hei_nnn({1, 1, 1, 1}) = 0.25 * jz2;
+    ham_hei_nnn({1, 1, 0, 0}) = -0.25 * jz2;
+    ham_hei_nnn({0, 0, 1, 1}) = -0.25 * jz2;
+    ham_hei_nnn({0, 1, 1, 0}) = 0.5 * jxy2;
+    ham_hei_nnn({1, 0, 0, 1}) = 0.5 * jxy2;
+
     optimize_para.wavefunction_path = tps_path;
     measure_para.wavefunction_path = tps_path;
   }
+
 };
 
-TEST_F(HeisenbergSystem, SimpleUpdate) {
+TEST_F(SpinOneHalfSystem, SimpleUpdate) {
   if (rank == kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(pb_out, Ly, Lx);
     std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
@@ -90,8 +101,9 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 
     SimpleUpdatePara update_para(1000, 0.1, 1, 4, 1e-15);
     SimpleUpdateExecutor<TenElemT, QNT>
-        *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(update_para, peps0,
-                                                                         ham_hei_nn);
+        *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>(update_para, peps0,
+                                                                          ham_hei_nn,
+                                                                          ham_hei_nnn);
     su_exe->Execute();
 
     su_exe->update_para.Dmax = 6;
@@ -99,11 +111,13 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
     su_exe->ResetStepLenth(0.01);
     su_exe->Execute();
 
-    su_exe->update_para.Dmax = 6;
+    su_exe->update_para.Dmax = Dpeps;
     su_exe->update_para.Trunc_err = 1e-15;
     su_exe->ResetStepLenth(0.001);
     su_exe->Execute();
 
+    double estimated_energy = su_exe->GetEstimatedEnergy();
+    EXPECT_NEAR(estimated_energy / energy_ed, 1, 0.1);
     auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
 //  std::string peps_path = "Hei_PEPS" + std::to_string(Ly) + "x"
 //      + std::to_string(Lx) + "D" + std::to_string(su_exe->update_para.Dmax);
@@ -117,40 +131,19 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
   }
 }
 
-// Check if the TPS doesn't change by setting step length = 0
-TEST_F(HeisenbergSystem, ZeroUpdate) {
-  MPI_Barrier(comm);
-  optimize_para.step_lens = {0.0};
-  SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
-  tps.Load(tps_path);
-  auto init_tps = tps;
-  auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(optimize_para, tps,
-                                                                                              comm);
-  size_t start_flop = flop;
-  Timer vmc_timer("vmc");
-  executor->Execute();
-  size_t end_flop = flop;
-  double elapsed_time = vmc_timer.Elapsed();
-  double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
-  std::cout << "flop = " << end_flop - start_flop << std::endl;
-  std::cout << "Gflops = " << Gflops << std::endl;
-  SplitIndexTPS<TenElemT, QNT> result_sitps = executor->GetState();
-  auto diff = init_tps + (-result_sitps);
-  EXPECT_NE(diff.NormSquare(), 1e-14);
-  delete executor;
-}
-
-TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
+TEST_F(SpinOneHalfSystem, StochasticReconfigurationOpt) {
   MPI_Barrier(comm);
 
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);
 
+  using Model = SquareSpinOneHalfJ1J2XXZModel;
+  Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
   //VMC
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(optimize_para, tps,
-                                                                                              comm);
+      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, Model>(optimize_para, tps,
+                                                                                 comm,
+                                                                                 j1j2_model);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 
@@ -166,10 +159,11 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
+      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, Model>(
           measure_para,
           tps,
-          comm);
+          comm,
+          j1j2_model);
   start_flop = flop;
 
   measure_exe->Execute();
