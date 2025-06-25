@@ -518,6 +518,9 @@ QLTensor<TenElemT, QNT> CalGTenForFermionicTensors(
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergyAndHols_(void) {
+#ifdef QLPEPS_TIMING_MODE
+  Timer cal_e_loc_and_holes_timer("cal_e_loc_and_holes (rank " + std::to_string(rank_) + ")");
+#endif
   TensorNetwork2D<TenElemT, QNT> holes(ly_, lx_);
   TenElemT energy_loc = energy_solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(&split_index_tps_,
                                                                                        &tps_sample_,
@@ -552,6 +555,9 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Sampl
   if (stochastic_reconfiguration_update_class_) {
     gten_samples_.emplace_back(gten_sample);
   }
+#ifdef QLPEPS_TIMING_MODE
+  cal_e_loc_and_holes_timer.PrintElapsed();
+#endif
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>

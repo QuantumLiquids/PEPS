@@ -415,8 +415,14 @@ void MonteCarloMeasurementExecutor<TenElemT,
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::MeasureSample_() {
+#ifdef QLPEPS_TIMING_MODE
+  Timer evaluate_sample_obsrvb_timer("evaluate_sample_observable (rank " + std::to_string(rank_) + ")");
+#endif
   ObservablesLocal<TenElemT> observables_local = measurement_solver_(&split_index_tps_, &tps_sample_);
   sample_data_.PushBack(tps_sample_.amplitude, std::move(observables_local));
+#ifdef QLPEPS_TIMING_MODE
+  evaluate_sample_obsrvb_timer.PrintElapsed();
+#endif
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>

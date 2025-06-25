@@ -261,10 +261,16 @@ MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 std::vector<double> MonteCarloPEPSBaseExecutor<TenElemT,
                                                QNT,
                                                MonteCarloSweepUpdater>::MCSweep_(const size_t sweeps_between_samples) {
+#ifdef QLPEPS_TIMING_MODE
+  Timer mc_sweep_timer("monte_carlo_sweep (rank " + std::to_string(rank_) + ")");
+#endif
   std::vector<double> accept_rates;
   for (size_t i = 0; i < sweeps_between_samples; i++) {
     mc_sweep_updater_(split_index_tps_, tps_sample_, accept_rates);
   }
+#ifdef QLPEPS_TIMING_MODE
+  mc_sweep_timer.PrintElapsed();
+#endif
   return accept_rates;
 }
 
