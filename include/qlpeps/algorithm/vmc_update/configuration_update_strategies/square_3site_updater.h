@@ -13,17 +13,15 @@
 #include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 
 namespace qlpeps {
+
 /**
- * Explicit class define the Monte-Carlo update strategy.
- *
- * Monte Carlo sweep defined by exchanging the configurations on TNN 3 sites,
- * work for both fermion and boson since the MC weight is defined by abs square of the wave function amplitude.
- *
- * Suitable application example cases:
- *    - spin-1/2 Heisenberg model with U1 symmetry constrain;
- *    - t-J model.
+ * base class for 3-site update, inherit by CRTP
+ * @tparam MCUpdater should define function TNN3SiteUpdateImpl
+ * e.g. MCUpdateSquareTNN3SiteExchange
  */
-class MCUpdateSquareTNN3SiteExchange : public MonteCarloSweepUpdaterBase {
+template<typename MCUpdater>
+class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase {
+  using MonteCarloSweepUpdaterBase::MonteCarloSweepUpdaterBase;
  public:
   template<typename TenElemT, typename QNT>
   void operator()(const SplitIndexTPS<TenElemT, QNT> &sitps,
@@ -41,7 +39,12 @@ class MCUpdateSquareTNN3SiteExchange : public MonteCarloSweepUpdaterBase {
                                                        sitps({row, 2})[tps_component.config({row, 2})]);
       for (size_t col = 0; col < tn.cols() - 2; col++) {
         flip_accept_num +=
-            Exchange3SiteUpdate_({row, col}, {row, col + 1}, {row, col + 2}, HORIZONTAL, sitps, tps_component);
+            static_cast<MCUpdater *>(this)->TNN3SiteUpdateImpl({row, col},
+                                                               {row, col + 1},
+                                                               {row, col + 2},
+                                                               HORIZONTAL,
+                                                               sitps,
+                                                               tps_component);
         if (col < tn.cols() - 3) {
           tn.BTenMoveStep(RIGHT);
         }
@@ -64,7 +67,12 @@ class MCUpdateSquareTNN3SiteExchange : public MonteCarloSweepUpdaterBase {
                                                        sitps({2, col})[tps_component.config({2, col})]);
       for (size_t row = 0; row < tn.rows() - 2; row++) {
         flip_accept_num +=
-            Exchange3SiteUpdate_({row, col}, {row + 1, col}, {row + 2, col}, VERTICAL, sitps, tps_component);
+            static_cast<MCUpdater *>(this)->TNN3SiteUpdateImpl({row, col},
+                                                               {row + 1, col},
+                                                               {row + 2, col},
+                                                               VERTICAL,
+                                                               sitps,
+                                                               tps_component);
         if (row < tn.rows() - 3) {
           tn.BTenMoveStep(DOWN);
         }
@@ -79,12 +87,26 @@ class MCUpdateSquareTNN3SiteExchange : public MonteCarloSweepUpdaterBase {
     accept_rates = {double(flip_accept_num) / total_flip_num};
   }
 
- private:
+};
+
+/**
+ * Explicit class define the Monte-Carlo update strategy.
+ *
+ * Monte Carlo sweep defined by exchanging the configurations on TNN 3 sites,
+ * work for both fermion and boson since the MC weight is defined by abs square of the wave function amplitude.
+ *
+ * Suitable application example cases:
+ *    - spin-1/2 Heisenberg model with U1 symmetry constrain;
+ *    - t-J model.
+ */
+class MCUpdateSquareTNN3SiteExchange :
+    public MCUpdateSquareTNN3SiteUpdateBase<MCUpdateSquareTNN3SiteExchange> {
+ public:
   template<typename TenElemT, typename QNT>
-  bool Exchange3SiteUpdate_(const SiteIdx &site1, const SiteIdx &site2, const SiteIdx &site3,
-                            BondOrientation bond_dir,
-                            const SplitIndexTPS<TenElemT, QNT> &sitps,
-                            TPSWaveFunctionComponent<TenElemT, QNT> &tps_component) {
+  bool TNN3SiteUpdateImpl(const SiteIdx &site1, const SiteIdx &site2, const SiteIdx &site3,
+                          BondOrientation bond_dir,
+                          const SplitIndexTPS<TenElemT, QNT> &sitps,
+                          TPSWaveFunctionComponent<TenElemT, QNT> &tps_component) {
     auto &tn = tps_component.tn;
     size_t spin1 = tps_component.config(site1);
     size_t spin2 = tps_component.config(site2);
