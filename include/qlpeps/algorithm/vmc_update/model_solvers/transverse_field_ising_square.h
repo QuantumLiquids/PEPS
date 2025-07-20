@@ -70,6 +70,52 @@ class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
       std::vector<TenElemT> &psi_list
   );
 
+  /** Diagonal terms, - sum_<i,j> sigma_i^z * sigma_j^z   **/
+  template<typename TenElemT>
+  TenElemT CalDiagTermEnergy(const Configuration &config) {
+    double energy(0);
+
+    //horizontal bond energy contribution
+    for (size_t row = 0; row < config.rows(); row++) {
+      for (size_t col = 0; col < config.cols() - 1; col++) {
+        const SiteIdx site1 = {row, col};
+        const SiteIdx site2 = {row, col + 1};
+        energy += (config(site1) == config(site2)) ? -1 : 1;
+      }
+    }
+
+    //vertical bond energy contribution
+    for (size_t col = 0; col < config.cols(); col++) {
+      for (size_t row = 0; row < config.rows() - 1; row++) {
+        const SiteIdx site1 = {row, col};
+        const SiteIdx site2 = {row + 1, col};
+        energy += (config(site1) == config(site2)) ? -1 : 1;
+      }
+    }
+    return TenElemT(energy);
+  }
+
+  /**
+   * - h sigma_i^x
+   * Assume the environment tensors for the site are
+   * ready, with BMPS BondOrientation horizontal.
+   *
+   * @return
+   */
+  template<typename TenElemT, typename QNT>
+  [[nodiscard]] TenElemT EvaluateOnSiteOffDiagEnergy(
+      const SiteIdx site, const size_t config,
+      const TensorNetwork2D<TenElemT, QNT> &tn, // environment info
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site,
+      TenElemT inv_psi
+  ) {
+    TenElemT psi_ex = tn.ReplaceOneSiteTrace(site,
+                                             split_index_tps_on_site[1 - config],
+                                             HORIZONTAL);
+    TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
+    return (-h_) * ratio;
+  }
+
   template<typename TenElemT, typename QNT>
   ObservablesLocal<TenElemT> SampleMeasureImpl(
       const SplitIndexTPS<TenElemT, QNT> *sitps,
@@ -100,22 +146,14 @@ TenElemT TransverseIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<
     auto inv_psi = 1.0 / psi;
     psi_list.push_back(psi);
     for (size_t col = 0; col < tn.cols(); col++) {
-      const SiteIdx site1 = {row, col};
+      const SiteIdx site = {row, col};
       //Calculate the holes
       if constexpr (calchols) {
-        hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL)); // natural match to complex number wave-function case.
+        hole_res(site) = Dag(tn.PunchHole(site, HORIZONTAL)); // natural match to complex number wave-function case.
       }
       //transverse-field terms
-      TenElemT psi_ex = tn.ReplaceOneSiteTrace(site1,
-                                               (*split_index_tps)(site1)[1 - config(site1)],
-                                               HORIZONTAL);
-      TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
-      energy += (-h_) * ratio;
-      //zz terms
+      energy += EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*split_index_tps)(site), inv_psi);
       if (col < tn.cols() - 1) {
-        //Calculate horizontal bond energy contribution
-        const SiteIdx site2 = {row, col + 1};
-        energy += (config(site1) == config(site2)) ? -1 : 1;
         tn.BTenMoveStep(RIGHT);
       }
     }
@@ -123,16 +161,8 @@ TenElemT TransverseIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<
       tn.BMPSMoveStep(DOWN, trunc_para);
     }
   }
+  energy += CalDiagTermEnergy<TenElemT>(config);
 
-  //vertical bond energy contribution
-  tn.GenerateBMPSApproach(LEFT, trunc_para);
-  for (size_t col = 0; col < tn.cols(); col++) {
-    for (size_t row = 0; row < tn.rows() - 1; row++) {
-      const SiteIdx site1 = {row, col};
-      const SiteIdx site2 = {row + 1, col};
-      energy += (config(site1) == config(site2)) ? -1 : 1;
-    }
-  }
   return energy;
 }
 
@@ -158,18 +188,11 @@ ObservablesLocal<TenElemT> TransverseIsingSquare::SampleMeasureImpl(const SplitI
     auto inv_psi = 1.0 / psi;
     psi_list.push_back(psi);
     for (size_t col = 0; col < tn.cols(); col++) {
-      const SiteIdx site1 = {row, col};
+      const SiteIdx site = {row, col};
       //transverse-field terms
-      TenElemT psi_ex = tn.ReplaceOneSiteTrace(site1,
-                                               (*split_index_tps)(site1)[1 - config(site1)],
-                                               HORIZONTAL);
-      TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
-      energy += (-h_) * ratio;
+      energy += EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*split_index_tps)(site), inv_psi);
       //zz terms
       if (col < tn.cols() - 1) {
-        //Calculate horizontal bond energy contribution
-        const SiteIdx site2 = {row, col + 1};
-        energy += (config(site1) == config(site2)) ? -1 : 1;
         tn.BTenMoveStep(RIGHT);
       }
     }
@@ -189,15 +212,7 @@ ObservablesLocal<TenElemT> TransverseIsingSquare::SampleMeasureImpl(const SplitI
     }
   }
 
-  //vertical bond energy contribution
-  tn.GenerateBMPSApproach(LEFT, trunc_para);
-  for (size_t col = 0; col < tn.cols(); col++) {
-    for (size_t row = 0; row < tn.rows() - 1; row++) {
-      const SiteIdx site1 = {row, col};
-      const SiteIdx site2 = {row + 1, col};
-      energy += (config(site1) == config(site2)) ? -1 : 1;
-    }
-  }
+  energy += CalDiagTermEnergy<TenElemT>(config);
   res.energy_loc = energy;
   res.one_point_functions_loc.reserve(tn.rows() * tn.cols());
   for (auto &spin_config : config) {

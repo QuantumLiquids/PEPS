@@ -2,11 +2,11 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-01-06
 *
-* Description: QuantumLiquids/PEPS project. Vector data operations.
+* Description: QuantumLiquids/PEPS project. Mean, Variance, etc.
 */
 
-#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_VEC_DATA_OPERATIONS_H
-#define QLPEPS_ALGORITHM_VMC_UPDATE_VEC_DATA_OPERATIONS_H
+#ifndef QLPEPS_MONTE_CARLO_TOOLS_STATISTICS_H
+#define QLPEPS_MONTE_CARLO_TOOLS_STATISTICS_H
 
 #include <vector>
 #include <fstream>
@@ -198,4 +198,4 @@ void GatherStatisticListOfData(
 }
 
 }//qlpeps
-#endif //QLPEPS_ALGORITHM_VMC_UPDATE_VEC_DATA_OPERATIONS_H
+#endif //QLPEPS_MONTE_CARLO_TOOLS_STATISTICS_H

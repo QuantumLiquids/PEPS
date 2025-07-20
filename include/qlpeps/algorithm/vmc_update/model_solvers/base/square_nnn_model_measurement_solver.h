@@ -205,6 +205,8 @@ class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNM
         res.one_point_functions_loc.push_back(derived->CalDensityImpl(local_config));
       }
       // Calculate density-density correlations
+      // move to postprocess to save memory. All the one-point function will be dumped
+      /*
       for (auto &config_i : config) {
         for (auto &config_j : config) {
           res.two_point_functions_loc.push_back(
@@ -212,6 +214,7 @@ class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNM
           );
         }
       }
+       */
     }
 
     // Calculate spin-spin correlations if derived class has CalSpinSz
@@ -221,13 +224,13 @@ class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNM
       for (auto &local_config : config) {
         res.one_point_functions_loc.push_back(derived->CalSpinSzImpl(local_config));
       }
-      for (auto &config_i : config) {
-        for (auto &config_j : config) {
-          res.two_point_functions_loc.push_back(
-              derived->CalSpinSzImpl(config_i) * derived->CalSpinSzImpl(config_j)
-          );
-        }
-      }
+//      for (auto &config_i : config) {
+//        for (auto &config_j : config) {
+//          res.two_point_functions_loc.push_back(
+//              derived->CalSpinSzImpl(config_i) * derived->CalSpinSzImpl(config_j)
+//          );
+//        }
+//      }
     }
   }
 };//SquareNNNModelMeasurementSolver
