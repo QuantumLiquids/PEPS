@@ -141,7 +141,7 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
  * all the possible configurations without limitation on any symmetry constrain.
  * work for both fermion and boson since the MC weight is defined by abs square of the wave function amplitude.
  */
-class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange> {
+class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpdateSquareNNFullSpaceUpdate> {
  public:
   template<typename TenElemT, typename QNT>
   bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,

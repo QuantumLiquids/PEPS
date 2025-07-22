@@ -55,12 +55,6 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
     Contract(&id, {}, &ham_nn, {}, &extend_ham_nn_right);
     ham_tri_ = extend_ham_nnn + 0.5 * extend_ham_nn_right + 0.5 * extend_ham_nn_left;
   }
-//  SquareLatticeNNNSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
-//                                       const PEPST &peps_initial,
-//                                       const Tensor &ham_nn,
-//                                       const Tensor &ham_tri) :
-//      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), \
-//          ham_nn_(ham_nn), ham_tri_(ham_tri) {}
 
  private:
   void SetEvolveGate_(void) override {

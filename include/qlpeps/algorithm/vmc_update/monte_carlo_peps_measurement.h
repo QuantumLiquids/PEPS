@@ -14,6 +14,7 @@
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" //ObservablesLocal
 #include "qlpeps/monte_carlo_tools/statistics.h"                  // Mean, Variance, DumpVecData, ...
 #include "monte_carlo_peps_base.h"
+#include "qlpeps/base/mpi_signal_guard.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -92,6 +93,52 @@ void PrintProgressBar(size_t progress, size_t total) {
     else std::cout << " ";
   }
   std::cout << "] " << int((double) progress * 100.0 / (double) total) << " %" << std::endl;
+}
+
+/**
+      * @brief Dumps the sample_data to a CSV file.
+      *
+      * This function writes the `sample_data` data to a file in CSV format.
+      * Each row in the output file corresponds to a single sample (outer vector),
+      * and each column within a row corresponds to an element of the inner vector  (e.g. for one point function, corresponding to site index).
+      *
+      * @param filename The name of the output file. Should follow the `.csv` naming convention.
+      *
+      * @details
+      * The output file format is designed for easy reading in MATLAB or Python.
+      *
+      * Example of MATLAB usage:
+      * ```
+      * data = csvread('output.csv');
+      * ```
+      *
+      * Example of Python usage:
+      * ```python
+      * import numpy as np
+      * data = np.loadtxt('output.csv', delimiter=',')
+      * ```
+      *
+      * @throws std::ios_base::failure If the file cannot be opened for writing.
+      */
+template<typename TenElemT>
+void DumpSampleData(const std::vector<std::vector<TenElemT>> sample_data, const std::string &filename) {
+  std::ofstream file(filename);
+  if (!file.is_open()) {
+    throw std::ios_base::failure("Failed to open file: " + filename);
+  }
+
+  // Write the two_point_function_samples to the file
+  for (const auto &sample : sample_data) {
+    for (size_t i = 0; i < sample.size(); ++i) {
+      file << sample[i];
+      if (i + 1 < sample.size()) {
+        file << ","; // Add a comma between elements
+      }
+    }
+    file << "\n"; // Newline for the next sample
+  }
+
+  file.close();
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
@@ -213,6 +260,75 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
       ofs << std::endl;
       ofs.close();
     }
+    void DumpCSV() const {
+      // Dump energy and error
+      {
+        std::ofstream ofs("energy_statistics.csv");
+        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open energy_statistics.csv");
+        ofs << "energy,en_err\n";
+        ofs << energy << "," << en_err << "\n";
+        ofs.close();
+      }
+
+      // Dump bond energies and errors
+      {
+        std::ofstream ofs("bond_energys.csv");
+        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open bond_energys.csv");
+        ofs << "bond_energy,bond_energy_err\n";
+        for (size_t i = 0; i < bond_energys.size(); ++i) {
+          ofs << bond_energys[i] << "," << (i < bond_energy_errs.size() ? bond_energy_errs[i] : 0.0) << "\n";
+        }
+        ofs.close();
+      }
+
+      // Dump one point functions and errors
+      {
+        std::ofstream ofs("one_point_functions.csv");
+        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open one_point_functions.csv");
+        ofs << "one_point_function,one_point_function_err\n";
+        for (size_t i = 0; i < one_point_functions.size(); ++i) {
+          ofs << one_point_functions[i] << ","
+              << (i < one_point_function_errs.size() ? one_point_function_errs[i] : 0.0) << "\n";
+        }
+        ofs.close();
+      }
+
+      // Dump two point functions and errors
+      {
+        std::ofstream ofs("two_point_functions.csv");
+        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open two_point_functions.csv");
+        ofs << "two_point_function,two_point_function_err\n";
+        for (size_t i = 0; i < two_point_functions.size(); ++i) {
+          ofs << two_point_functions[i] << ","
+              << (i < two_point_function_errs.size() ? two_point_function_errs[i] : 0.0) << "\n";
+        }
+        ofs.close();
+      }
+
+      // Dump energy auto correlation
+      {
+        std::ofstream ofs("energy_auto_corr.csv");
+        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open energy_auto_corr.csv");
+        ofs << "energy_auto_corr,energy_auto_corr_err\n";
+        for (size_t i = 0; i < energy_auto_corr.size(); ++i) {
+          ofs << energy_auto_corr[i] << "," << (i < energy_auto_corr_err.size() ? energy_auto_corr_err[i] : 0.0)
+              << "\n";
+        }
+        ofs.close();
+      }
+
+      // Dump one point function auto correlation
+      {
+        std::ofstream ofs("one_point_functions_auto_corr.csv");
+        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open one_point_functions_auto_corr.csv");
+        ofs << "one_point_functions_auto_corr,one_point_functions_auto_corr_err\n";
+        for (size_t i = 0; i < one_point_functions_auto_corr.size(); ++i) {
+          ofs << one_point_functions_auto_corr[i] << ","
+              << (i < one_point_functions_auto_corr_err.size() ? one_point_functions_auto_corr_err[i] : 0.0) << "\n";
+        }
+        ofs.close();
+      }
+    }
   } res;
 
   // observable
@@ -233,6 +349,14 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
       two_point_function_samples.reserve(sample_num);
     }
 
+    void Clear() {
+      wave_function_amplitude_samples.clear();
+      energy_samples.clear();
+      bond_energy_samples.clear();
+      one_point_function_samples.clear();
+      two_point_function_samples.clear();
+    }
+
     void PushBack(TenElemT wave_function_amplitude, ObservablesLocal<TenElemT> &&observables_sample) {
       wave_function_amplitude_samples.push_back(wave_function_amplitude);
       energy_samples.push_back(observables_sample.energy_loc);
@@ -241,6 +365,10 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
       two_point_function_samples.push_back(std::move(observables_sample.two_point_functions_loc));
     }
 
+    /**
+     * Average, Standard error, auto correlation inside one MPI process
+     * @return
+     */
     Result Statistic(void) const {
       Result res_thread;
       res_thread.energy = Mean(energy_samples);
@@ -254,6 +382,9 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
       return res_thread;
     }
 
+    void DumpOnePointFunctionSamples(const std::string &filename) const {
+      DumpSampleData(one_point_function_samples, filename);
+    }
     /**
       * @brief Dumps the two_point_function_samples to a CSV file.
       *
@@ -280,23 +411,7 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
       * @throws std::ios_base::failure If the file cannot be opened for writing.
       */
     void DumpTwoPointFunctionSamples(const std::string &filename) const {
-      std::ofstream file(filename);
-      if (!file.is_open()) {
-        throw std::ios_base::failure("Failed to open file: " + filename);
-      }
-
-      // Write the two_point_function_samples to the file
-      for (const auto &sample : two_point_function_samples) {
-        for (size_t i = 0; i < sample.size(); ++i) {
-          file << sample[i];
-          if (i + 1 < sample.size()) {
-            file << ","; // Add a comma between elements
-          }
-        }
-        file << "\n"; // Newline for the next sample
-      }
-
-      file.close();
+      DumpSampleData(two_point_function_samples, filename);
     }
   } sample_data_;
 };//MonteCarloMeasurementExecutor
@@ -318,6 +433,7 @@ MonteCarloMeasurementExecutor<TenElemT,
     measurement_solver_(solver) {
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
+  qlpeps::MPISignalGuard::Register();
   this->SetStatus(ExecutorStatus::INITED);
 }
 
@@ -338,6 +454,7 @@ MonteCarloMeasurementExecutor<TenElemT,
     measurement_solver_(solver) {
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
+  qlpeps::MPISignalGuard::Register();
   this->SetStatus(ExecutorStatus::INITED);
 }
 
@@ -466,20 +583,26 @@ MonteCarloMeasurementExecutor<TenElemT,
 
   if (rank_ == kMPIMasterRank) {
     res.Dump();
+    res.DumpCSV(); // Dump data in two forms
   }
   //dump sample data
-  std::string energy_raw_path = "energy_sample_data/";
-  std::string wf_amplitude_path = "wave_function_amplitudes/";
-  std::string two_point_function_raw_data_path = "two_point_function_samples/";
+  const std::string energy_raw_path = "energy_sample_data/";
+  const std::string wf_amplitude_path = "wave_function_amplitudes/";
+  const std::string one_point_function_raw_data_path = "one_point_function_samples/";
+  const std::string two_point_function_raw_data_path = "two_point_function_samples/";
   if (rank_ == kMPIMasterRank && !IsPathExist(energy_raw_path))
     CreatPath(energy_raw_path);
   if (rank_ == kMPIMasterRank && !IsPathExist(wf_amplitude_path))
     CreatPath(wf_amplitude_path);
+  if (rank_ == kMPIMasterRank && !IsPathExist(one_point_function_raw_data_path))
+    CreatPath(one_point_function_raw_data_path);
   if (rank_ == kMPIMasterRank && !IsPathExist(two_point_function_raw_data_path))
     CreatPath(two_point_function_raw_data_path);
   MPI_Barrier(comm_);
   DumpVecData(energy_raw_path + "/energy" + std::to_string(rank_), sample_data_.energy_samples);
   DumpVecData(wf_amplitude_path + "/psi" + std::to_string(rank_), sample_data_.wave_function_amplitude_samples);
+  sample_data_.DumpOnePointFunctionSamples(
+      one_point_function_raw_data_path + "/sample" + std::to_string(rank_) + ".csv");
   sample_data_.DumpTwoPointFunctionSamples(
       two_point_function_raw_data_path + "/sample" + std::to_string(rank_) + ".csv");
 }
@@ -516,7 +639,16 @@ void MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, Measur
   std::vector<double> accept_rates_accum;
   const size_t print_bar_length = (mc_measure_para.mc_samples / 10) > 0 ? (mc_measure_para.mc_samples / 10) : 1;
   for (size_t sweep = 0; sweep < mc_measure_para.mc_samples; sweep++) {
+    // Emergency stop check (MPI-aware)
+    if (qlpeps::MPISignalGuard::EmergencyStopRequested(comm_)) {
+      if (rank_ == kMPIMasterRank) {
+        std::cout << "\n[Emergency Stop] Signal received. Dumping current results and exiting gracefully.\n";
+      }
+      break;
+    }
+
     std::vector<double> accept_rates = this->MCSweep_();
+    // Accept rates accumulation
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
     } else {
