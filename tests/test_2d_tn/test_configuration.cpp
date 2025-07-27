@@ -7,7 +7,7 @@
 * Description: QuantumLiquids/PEPS project. Unittests for Configuration
 */
 #include "gtest/gtest.h"
-#include "qlpeps/two_dim_tn/tps/configuration.h"
+#include "qlpeps/vmc_basic/configuration.h"
 
 using namespace qlpeps;
 

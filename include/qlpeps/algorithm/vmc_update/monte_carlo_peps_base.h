@@ -10,7 +10,7 @@
 
 #include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                // SplitIndexTPS
-#include "wave_function_component.h"                              // CheckWaveFunctionAmplitudeValidity
+#include "qlpeps/vmc_basic/wave_function_component.h"                              // CheckWaveFunctionAmplitudeValidity
 #include "monte_carlo_peps_params.h"                              // MonteCarloUpdateParams
 
 namespace qlpeps {

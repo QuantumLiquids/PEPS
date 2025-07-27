@@ -127,7 +127,7 @@ void DumpSampleData(const std::vector<std::vector<TenElemT>> sample_data, const 
     throw std::ios_base::failure("Failed to open file: " + filename);
   }
 
-  // Write the two_point_function_samples to the file
+  // Write the sample_data to the file
   for (const auto &sample : sample_data) {
     for (size_t i = 0; i < sample.size(); ++i) {
       file << sample[i];
@@ -335,6 +335,7 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
   struct SampleData {
     std::vector<TenElemT> wave_function_amplitude_samples;
     std::vector<TenElemT> energy_samples;
+
     std::vector<std::vector<TenElemT>> bond_energy_samples;
     std::vector<std::vector<TenElemT>>
         one_point_function_samples; // outside is the sample index, inner side is the lattice index.

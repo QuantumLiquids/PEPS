@@ -30,15 +30,15 @@ TEST(tJModelSolverTest, HandlesMeasureDiagonalOrder) {
     { size_t(tJSingleSiteState::SpinDown), num_down }
   }));
 
-  SquaretJNNModel model_solver(t, J, true, 0);
+  SquaretJNNModel model_solver(t, J, 0);
   ObservablesLocal<QLTEN_Double> d_obs_loc;
   model_solver.MeasureDiagonalOneAndTwoPointFunctions(configuration, d_obs_loc);
   EXPECT_EQ(d_obs_loc.one_point_functions_loc.size(), 2 * N);
-  EXPECT_EQ(d_obs_loc.two_point_functions_loc.size(), 2 * N * N);
+  EXPECT_EQ(d_obs_loc.two_point_functions_loc.size(), 0);
   // TODO: test the content of d_obs_loc
 
   ObservablesLocal<QLTEN_Complex> z_obs_loc;
   model_solver.MeasureDiagonalOneAndTwoPointFunctions(configuration, z_obs_loc);
   EXPECT_EQ(z_obs_loc.one_point_functions_loc.size(), 2 * N);
-  EXPECT_EQ(z_obs_loc.two_point_functions_loc.size(), 2 * N * N);
+  EXPECT_EQ(z_obs_loc.two_point_functions_loc.size(), 0);
 }

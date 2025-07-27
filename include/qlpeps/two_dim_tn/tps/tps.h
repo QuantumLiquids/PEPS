@@ -20,7 +20,7 @@
 #include "qlmps/utilities.h"                           // CreatPath
 #include "qlpeps/consts.h"                              // kTpsPath
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/two_dim_tn/tps/configuration.h"
+#include "qlpeps/vmc_basic/configuration.h"
 
 namespace qlpeps {
 using namespace qlten;

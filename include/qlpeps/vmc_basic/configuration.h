@@ -4,8 +4,8 @@
 *
 * Description: QuantumLiquids/PEPS project. Configuration Class.
 */
-#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_H
-#define QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_H
+#ifndef QLPEPS_VMC_BASIC_CONFIGURATION_H
+#define QLPEPS_VMC_BASIC_CONFIGURATION_H
 
 #include <random>
 #include "mpi.h"                // MPI BroadCast
@@ -146,7 +146,10 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
 void Configuration::StreamRead(std::istream &is) {
   for (size_t row = 0; row < this->rows(); row++) {
     for (size_t col = 0; col < this->cols(); col++) {
-      is >> (*this)({row, col});
+      if (!(is >> (*this)({row, col}))) {
+        throw std::runtime_error("Configuration::StreamRead: Failed to read data from stream (row " +
+                                 std::to_string(row) + ", col " + std::to_string(col) + ")");
+      }
     }
   }
 }
@@ -271,4 +274,4 @@ inline void MPI_BCast(
 }
 
 }//qlpeps
-#endif //QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_H
+#endif //QLPEPS_VMC_BASIC_CONFIGURATION_H

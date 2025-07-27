@@ -253,8 +253,8 @@ struct Z2tJTools : public testing::Test {
 TEST_F(Z2tJTools, ExactSumGradientOpt) {
   auto trun_para =
       BMPSTruncatePara(1, Db, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
-  using Model = SquaretJNNModel;
-  Model tj_model(t, J, false, mu);
+  using Model = SquaretJVModel;
+  Model tj_model(t, 0, J, J / 4, mu);
   RunExactSumGradientOpt(tj_model, split_index_tps,
                          all_configs, trun_para, Ly, Lx,
                          energy_exact, 100, 0.5);

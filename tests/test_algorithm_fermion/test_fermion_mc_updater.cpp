@@ -9,7 +9,7 @@
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
-#include "qlpeps/algorithm/vmc_update/wave_function_component.h"
+#include "qlpeps/vmc_basic/wave_function_component.h"
 #include "qlpeps/algorithm/vmc_update/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 
 using namespace qlten;

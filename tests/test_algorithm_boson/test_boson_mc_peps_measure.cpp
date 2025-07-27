@@ -17,7 +17,15 @@
 using namespace qlten;
 using namespace qlpeps;
 
-char *params_file;
+#if TEN_ELEM_TYPE == QLTEN_Double
+std::string data_type_in_file_name = "Double";
+#elif TEN_ELEM_TYPE == QLTEN_Complex
+std::string data_type_in_file_name = "Complex";
+#else
+#error "Unexpected TEN_ELEM_TYPE"
+#endif
+
+#include <filesystem>
 
 struct SqrHeiMCPEPS : MPITest {
   using QNT = qlten::special_qn::TrivialRepQN;
@@ -45,7 +53,9 @@ struct SqrHeiMCPEPS : MPITest {
   void SetUp(void) {
     MPITest::SetUp();
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-    para.wavefunction_path = params_file;
+
+   para.wavefunction_path =
+    (std::filesystem::current_path() / ("test_data/tps_square_hsenberg4x4D8" + data_type_in_file_name)).string();
   }
 };
 
@@ -164,7 +174,6 @@ int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
-  params_file = argv[1];
   auto test_err = RUN_ALL_TESTS();
   MPI_Finalize();
   return test_err;

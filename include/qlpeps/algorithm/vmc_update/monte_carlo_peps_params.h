@@ -13,7 +13,7 @@
 
 #include <vector>
 #include "qlpeps/consts.h"                        //kTpsPath
-#include "qlpeps/two_dim_tn/tps/configuration.h"  //Configuration
+#include "qlpeps/vmc_basic/configuration.h"  //Configuration
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  //BMPSTruncatePara
 
 namespace qlpeps {

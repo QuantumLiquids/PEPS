@@ -16,47 +16,10 @@
 #include "qlpeps/utility/helpers.h"                                         //ComplexConjugate
 #include "qlpeps/algorithm/vmc_update/axis_update.h"
 #include "qlpeps/monte_carlo_tools/statistics.h"
+#include "qlpeps/vmc_basic/statistics_tensor.h"
 
 namespace qlpeps {
 using namespace qlten;
-
-//helper
-template<typename TenElemT, typename QNT>
-QLTensor<TenElemT, QNT> Mean(const std::vector<QLTensor<TenElemT, QNT> *> &tensor_list,
-                             const size_t length) {
-  std::vector<TenElemT> coefs(tensor_list.size(), TenElemT(1.0));
-  QLTensor<TenElemT, QNT> sum;
-  LinearCombine(coefs, tensor_list, TenElemT(0.0), &sum);
-  return sum * (1.0 / double(length));
-}
-
-template<typename TenElemT, typename QNT>
-QLTensor<TenElemT, QNT> MPIMeanTensor(const QLTensor<TenElemT, QNT> &tensor,
-                                      const MPI_Comm &comm) {
-  using Tensor = QLTensor<TenElemT, QNT>;
-  int rank, mpi_size;
-  MPI_Comm_rank(comm, &rank);
-  MPI_Comm_size(comm, &mpi_size);
-  if (rank == kMPIMasterRank) {
-    std::vector<Tensor *> ten_list(mpi_size, nullptr);
-    for (size_t proc = 0; proc < mpi_size; proc++) {
-      if (proc != kMPIMasterRank) {
-        ten_list[proc] = new Tensor();
-        ten_list[proc]->MPI_Recv(proc, 2 * proc, comm);
-      } else {
-        ten_list[proc] = new Tensor(tensor);
-      }
-    }
-    Tensor res = Mean(ten_list, mpi_size);
-    for (auto pten : ten_list) {
-      delete pten;
-    }
-    return res;
-  } else {
-    tensor.MPI_Send(kMPIMasterRank, 2 * rank, comm);
-    return Tensor();
-  }
-}
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 VMCPEPSExecutor<TenElemT,
@@ -85,8 +48,6 @@ VMCPEPSExecutor<TenElemT,
                                                                       comm),
     optimize_para(optimize_para),
     energy_solver_(solver),
-//    gten_samples_(ly_, lx_),
-//    g_times_energy_samples_(ly_, lx_),
     gten_sum_(ly_, lx_),
     g_times_energy_sum_(ly_, lx_),
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
@@ -99,6 +60,7 @@ VMCPEPSExecutor<TenElemT,
   } else {
     stochastic_reconfiguration_update_class_ = false;
   }
+  
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -152,17 +114,21 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Execu
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::ReserveSamplesDataSpace_(void) {
-  energy_samples_.reserve(optimize_para.mc_samples);
+  const size_t mc_samples = optimize_para.mc_samples;
+  if (mc_samples == 0) {
+    throw std::invalid_argument("Monte Carlo samples cannot be zero");
+  }
+  
+  energy_samples_.reserve(mc_samples);
+  
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
-      size_t dim = split_index_tps_({row, col}).size();
+      const size_t dim = split_index_tps_({row, col}).size();
+      if (dim == 0) {
+        throw std::runtime_error("Zero dimension tensor at position (" + 
+                                std::to_string(row) + ", " + std::to_string(col) + ")");
+      }
 
-//      gten_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
-//      g_times_energy_samples_({row, col}) = std::vector(dim, std::vector<Tensor *>());
-//      for (size_t i = 0; i < dim; i++) {
-//        gten_samples_({row, col})[i].reserve(optimize_para.mc_samples);
-//        g_times_energy_samples_({row, col})[i].reserve(optimize_para.mc_samples);
-//      }
       gten_sum_({row, col}) = std::vector<Tensor>(dim);
       for (size_t compt = 0; compt < dim; compt++) {
         gten_sum_({row, col})[compt] = Tensor(split_index_tps_({row, col})[compt].GetIndexes());
@@ -171,26 +137,32 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Reser
       g_times_energy_sum_({row, col}) = gten_sum_({row, col});
     }
   }
-  for (size_t row = 0; row < ly_; row++)
+  
+  for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
-      size_t dim = split_index_tps_({row, col}).size();
+      const size_t dim = split_index_tps_({row, col}).size();
       grad_({row, col}) = std::vector<Tensor>(dim);
     }
+  }
+  
   if (rank_ == 0) {
-    energy_trajectory_.reserve(optimize_para.step_lens.size());
-    energy_error_traj_.reserve(optimize_para.step_lens.size());
+    const size_t step_count = optimize_para.step_lens.size();
+    energy_trajectory_.reserve(step_count);
+    energy_error_traj_.reserve(step_count);
   }
 
-  if (rank_ == kMPIMasterRank)
+  if (rank_ == kMPIMasterRank) {
     grad_norm_.reserve(optimize_para.step_lens.size());
+  }
 
   if (stochastic_reconfiguration_update_class_) {
-    gten_samples_.reserve(optimize_para.mc_samples);
-    for (size_t row = 0; row < ly_; row++)
+    gten_samples_.reserve(mc_samples);
+    for (size_t row = 0; row < ly_; row++) {
       for (size_t col = 0; col < lx_; col++) {
-        size_t dim = split_index_tps_({row, col}).size();
+        const size_t dim = split_index_tps_({row, col}).size();
         natural_grad_({row, col}) = std::vector<Tensor>(dim);
       }
+    }
   }
 }
 
@@ -205,7 +177,7 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Print
     if (stochastic_reconfiguration_update_class_) {
       if (!optimize_para.cg_params.has_value()) {
         std::cout << "Conjugate gradient parameters have not been set!" << std::endl;
-        exit(1);
+        throw std::runtime_error("Conjugate gradient parameters have not been set!");
       }
       std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:"
                 << optimize_para.cg_params.value().diag_shift
@@ -258,7 +230,7 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::LineS
     }
     default: {
       std::cerr << "update scheme is not line search scheme." << std::endl;
-      exit(1);
+      throw std::runtime_error("update scheme is not line search scheme.");
     }
   }
 
@@ -433,8 +405,8 @@ void VMCPEPSExecutor<TenElemT, QNT,
     }
     case BoundGradientElement:BoundGradElementUpdateTPS_(grad_, step_len);
       break;
-    default:std::cout << "update method does not support!" << std::endl;
-      exit(2);
+    default:std::cout << "iterative optimization update method is not support!" << std::endl;
+      throw std::runtime_error("iterative optimization update method is not support!");
   }
 
   double tps_update_time = tps_update_timer.Elapsed();
@@ -521,40 +493,48 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Sampl
 #ifdef QLPEPS_TIMING_MODE
   Timer cal_e_loc_and_holes_timer("cal_e_loc_and_holes (rank " + std::to_string(rank_) + ")");
 #endif
+  
+  // Calculate local energy and holes for current configuration
   TensorNetwork2D<TenElemT, QNT> holes(ly_, lx_);
-  TenElemT energy_loc = energy_solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(&split_index_tps_,
-                                                                                       &tps_sample_,
-                                                                                       holes);
-  TenElemT energy_loc_conj = ComplexConjugate(energy_loc);
-  TenElemT inv_psi = ComplexConjugate(1.0 / tps_sample_.amplitude); //to divide the holes.
-  energy_samples_.push_back(energy_loc);
-  SITPST gten_sample(ly_, lx_, split_index_tps_.PhysicalDim());// only useful for Stochastic Reconfiguration
+  TenElemT local_energy = energy_solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(
+      &split_index_tps_, &tps_sample_, holes);
+  
+  TenElemT local_energy_conjugate = ComplexConjugate(local_energy);
+  TenElemT inverse_amplitude = ComplexConjugate(1.0 / tps_sample_.GetAmplitude());
+  
+  energy_samples_.push_back(local_energy);
+  
+  // Prepare gradient tensor sample for stochastic reconfiguration
+  SITPST gradient_tensor_sample(ly_, lx_, split_index_tps_.PhysicalDim());
+  
   for (size_t row = 0; row < ly_; row++) {
     for (size_t col = 0; col < lx_; col++) {
-      size_t basis = tps_sample_.config({row, col});
-//      Tensor *g_ten = new Tensor(), *gten_times_energy = new Tensor();
-//      *g_ten = inv_psi * holes({row, col});
-//      *gten_times_energy = energy_loc * (*g_ten);
-//      gten_samples_({row, col})[basis].push_back(g_ten);
-//      g_times_energy_samples_({row, col})[basis].push_back(gten_times_energy);
-      Tensor gten;
+      const size_t basis_index = tps_sample_.GetConfiguration({row, col});
+      
+      Tensor gradient_tensor;
       if constexpr (Tensor::IsFermionic()) {
-        gten = CalGTenForFermionicTensors(holes({row, col}), tps_sample_.tn({row, col}));
-        // tps_sample_.tn({row, col})  is  split_index_tps_({row, col})[basis];
+        // For fermionic systems, use specialized gradient calculation
+        gradient_tensor = CalGTenForFermionicTensors(holes({row, col}), tps_sample_.tn({row, col}));
       } else {
-        gten = inv_psi * holes({row, col});  //holes should be dag in CalEnergyAndHoles function
+        // For bosonic systems, use standard gradient calculation
+        gradient_tensor = inverse_amplitude * holes({row, col});
       }
-      gten_sum_({row, col})[basis] += gten;
-      g_times_energy_sum_({row, col})[basis] += energy_loc_conj * gten;
-      //? when samples become large, does the summation reliable as the small number are added to large number.
+      
+      // Accumulate gradient tensors
+      gten_sum_({row, col})[basis_index] += gradient_tensor;
+      g_times_energy_sum_({row, col})[basis_index] += local_energy_conjugate * gradient_tensor;
+      
+      // Store for stochastic reconfiguration if needed
       if (stochastic_reconfiguration_update_class_) {
-        gten_sample({row, col})[basis] = gten;
+        gradient_tensor_sample({row, col})[basis_index] = gradient_tensor;
       }
     }
   }
+  
   if (stochastic_reconfiguration_update_class_) {
-    gten_samples_.emplace_back(gten_sample);
+    gten_samples_.emplace_back(gradient_tensor_sample);
   }
+  
 #ifdef QLPEPS_TIMING_MODE
   cal_e_loc_and_holes_timer.PrintElapsed();
 #endif

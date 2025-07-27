@@ -86,11 +86,22 @@ class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCa
 
   void Execute(void) override;
 
-  const SITPST &GetState(void) const { return split_index_tps_; }
+  const SITPST &GetState(void) const noexcept { return split_index_tps_; }
 
   void DumpData(const bool release_mem = false);
-
   void DumpData(const std::string &tps_path, const bool release_mem = false);
+
+  // Add getter for optimization parameters
+  const VMCOptimizePara& GetOptimizePara() const noexcept { return optimize_para; }
+  
+  // Add getter for current energy
+  double GetCurrentEnergy() const noexcept { 
+    return energy_trajectory_.empty() ? std::numeric_limits<double>::max() : 
+           static_cast<double>(energy_trajectory_.back()); 
+  }
+  
+  // Add getter for minimum energy
+  double GetMinEnergy() const noexcept { return en_min_; }
 
   VMCOptimizePara optimize_para;
  protected:

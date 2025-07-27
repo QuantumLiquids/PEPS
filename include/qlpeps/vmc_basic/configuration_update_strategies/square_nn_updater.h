@@ -9,21 +9,22 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_UPDATE_STRATEGIES_SQUARE_TPS_SAMPLE_NN_EXCHANGE_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_UPDATE_STRATEGIES_SQUARE_TPS_SAMPLE_NN_EXCHANGE_H
 
-#include "qlpeps/algorithm/vmc_update/wave_function_component.h"    // TPSWaveFunctionComponent
+#include "qlpeps/vmc_basic/wave_function_component.h"               // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 #include "monte_carlo_sweep_updater_all.h"                          // MonteCarloSweepUpdaterBase
+#include "qlpeps/vmc_basic/tj_single_site_state.h"
 
 namespace qlpeps {
 
 ///< base class for CRTP
-template<typename MCUpdater>
-class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase {
+template<typename MCUpdater, typename WaveFunctionDress = qlpeps::NoDress>
+class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctionDress> {
   using MonteCarloSweepUpdaterBase::MonteCarloSweepUpdaterBase;
  public:
   template<typename TenElemT, typename QNT>
   void operator()(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                  TPSWaveFunctionComponent<TenElemT, QNT> &tps_component,
+                  TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress> &tps_component,
                   std::vector<double> &accept_rates) {
     size_t flip_accept_num = 0;
     auto &tn = tps_component.tn;
@@ -96,6 +97,7 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
     if (tps_component.config(site1) == tps_component.config(site2)) {
       return false;
     }
+#ifndef NDEBUG
     if constexpr (Index<QNT>::IsFermionic()) {
       std::vector<Index<QNT>> index1 = sitps(site1)[tps_component.config(site1)].GetIndexes();
       std::vector<Index<QNT>> index2 = sitps(site1)[tps_component.config(site2)].GetIndexes();
@@ -106,7 +108,7 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
       assert(sitps(site1)[tps_component.config(site1)].GetIndexes()
                  == sitps(site1)[tps_component.config(site2)].GetIndexes());
     }
-
+#endif
     TenElemT psi_b = tps_component.tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
                                                          sitps(site1)[tps_component.config(site2)],
                                                          sitps(site2)[tps_component.config(site1)]);
@@ -178,6 +180,70 @@ class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpda
                               std::make_pair(site1, final_state / dim),
                               std::make_pair(site2, final_state % dim));
     return true;
+  }
+};
+
+/**
+ * Monte Carlo update strategy for t-J model with Jastrow factor dressed wave function.
+ * Local configuration: 0 = spin up, 1 = spin down, 2 = empty (hole).
+ */
+class MCUpdateSquareNNExchangeJastrowDressedTJ : public MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange,
+                                                                                   JastrowDress> {
+ public:
+  using MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange, JastrowDress>::MCUpdateSquareNNUpdateBase;
+
+  template<typename TenElemT, typename QNT>
+  bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
+                                const SplitIndexTPS<TenElemT, QNT> &sitps,
+                                TPSWaveFunctionComponent<TenElemT, QNT, JastrowDress> &tps_component) {
+    size_t config1 = tps_component.config(site1);
+    size_t config2 = tps_component.config(site2);
+
+    if (config1 == config2) {
+      return false;
+    }
+
+    // Compute new amplitude (PEPS part)
+    TenElemT psi_b = tps_component.tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
+                                                         sitps(site1)[config2],
+                                                         sitps(site2)[config1]);
+
+    // Compute Jastrow factor change
+    double jastrow_ratio(0); //new divide old.
+    auto &jastrow = tps_component.dress.jastrow;
+    auto &density_config = tps_component.dress.density_config;
+    if (density_config(site1) == density_config(site2)) {
+      jastrow_ratio = 1.0;
+    } else {
+      // For t-J model, we know here one empty, one filled.
+      double field_site1 = jastrow.JastrowFieldAtSite(density_config, site1);
+      double field_site2 = jastrow.JastrowFieldAtSite(density_config, site2);
+      if (density_config(site1) == 0 && density_config(site2) == 1) {
+        jastrow_ratio = std::exp(field_site1 - field_site2);
+      } else if (density_config(site1) == 1 && density_config(site2) == 0) {
+        jastrow_ratio = std::exp(field_site2 - field_site1);
+      } else {
+        std::cerr << "Error: Invalid density configuration for t-J model." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+
+    // Metropolis-Hastings acceptance
+    TenElemT &psi_a = tps_component.amplitude;
+    double abs_ratio = std::abs(psi_b * jastrow_ratio) / std::abs(psi_a);
+    double P = abs_ratio * abs_ratio;
+    bool exchange = false;
+    if (abs_ratio >= 1.0 || this->u_double_(random_engine_) < P) {
+      exchange = true;
+      size_t temp_config1 = tps_component.config(site2);
+      size_t temp_config2 = tps_component.config(site1);
+      tps_component.UpdateLocal(sitps, psi_b,
+                                std::make_pair(site1, temp_config1),
+                                std::make_pair(site2, temp_config2));
+      tps_component.dress.UpdateLocalDensity(std::make_pair(site1, density_config(site2)),
+                                             std::make_pair(site2, density_config(site1)));
+    }
+    return exchange;
   }
 };
 

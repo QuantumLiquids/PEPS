@@ -110,13 +110,15 @@ std::pair<ElemT, double> GatherStatisticSingleData(
   if (comm_size == 1) {
     return std::make_pair(data, std::numeric_limits<double>::infinity());
   }
+
   ElemT mean(0);
   double standard_err(0);
 
-  ElemT *gather_data;
+  ElemT *gather_data = nullptr;
   if (comm_rank == kMPIMasterRank) {
     gather_data = new ElemT[comm_size];
   }
+
   HANDLE_MPI_ERROR(::MPI_Gather(&data,
                                 1,
                                 hp_numeric::GetMPIDataType<ElemT>(),
@@ -132,6 +134,7 @@ std::pair<ElemT, double> GatherStatisticSingleData(
       sum += gather_data[i];
     }
     mean = sum / static_cast<double>(comm_size);
+    
     if (comm_size > 1) {
       double sum_square = 0.0;
       for (size_t i = 0; i < comm_size; i++) {
@@ -139,8 +142,19 @@ std::pair<ElemT, double> GatherStatisticSingleData(
       }
       double variance = sum_square / (double) comm_size - std::norm(mean);
       standard_err = std::sqrt(variance / (comm_size - 1));
+
+      // Check if standard error is infinite and output warning with data
+      if (std::isinf(standard_err)) {
+        std::cerr << "Warning: Infinite standard error detected with " 
+                  << comm_size << " processes.\n"
+                  << "Gathered data values:\n";
+        for (size_t i = 0; i < comm_size; i++) {
+          std::cerr << "Process " << i << ": " << gather_data[i] << "\n";
+        }
+        std::cerr << "Mean value: " << mean << std::endl;
+      }
     }
-    delete[]gather_data;
+    delete[] gather_data;
   }
   return std::make_pair(mean, standard_err);
 }

@@ -9,7 +9,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
 
 #include "qlten/qlten.h"
-#include "qlpeps/algorithm/vmc_update/wave_function_component.h"  //TPSWaveFunctionComponent
+#include "qlpeps/vmc_basic/wave_function_component.h"  //TPSWaveFunctionComponent
 
 namespace qlpeps {
 

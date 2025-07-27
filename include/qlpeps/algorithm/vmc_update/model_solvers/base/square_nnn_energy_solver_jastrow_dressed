@@ -1,0 +1,248 @@
+/*
+ * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
+ * Creation Date: 2025-07-23
+ *
+ * Description: QuantumLiquids/PEPS project.
+ * Model Energy Solver for square lattice models with NN & NNN bond energy contributions,
+ * supporting TPSWaveFunctionComponent dressed with Jastrow factor.
+ * This is analogous to SquareNNNModelEnergySolver, but all TPSWaveFunctionComponent
+ * parameters are replaced with TPSWaveFunctionComponent<TenElemT, QNT, JastrowDress>.
+ * The JastrowDress is parsed and used in energy calculations as needed.
+ */
+
+#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_NNN_JASTROW_DRESSED_ENERGY_SOLVER_H
+#define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_NNN_JASTROW_DRESSED_ENERGY_SOLVER_H
+
+#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"
+#include "qlpeps/utility/helpers.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/bond_traversal_mixin.h"
+#include "qlpeps/vmc_basic/wave_function_component.h"
+#include "qlpeps/vmc_basic/jastrow_factor.h"
+
+namespace qlpeps {
+
+/**
+ * SquareNNNModelEnergySolverJastrowDressed is the base class to define generic
+ * nearest-neighbor model energy solver on the square lattices,
+ * for TPSWaveFunctionComponent dressed with Jastrow factor.
+ * The CRTP technique is used to realize the Polymorphism.
+ *
+ * To be implemented by derived classes:
+ * - EvaluateBondEnergy: Computes energy contribution for a bond between site1 and site2.
+ *   Fermion models should also optionally return the wavefunction amplitude (psi).
+ * - EvaluateNNNEnergy : Computes energy contribution for the link between NNN sites.
+ * - EvaluateTotalOnsiteEnergy: Sums all on-site energy terms (e.g., chemical potential, Hubbard U).
+ */
+template<class ExplicitlyModel, bool has_nnn_interaction = true>
+class SquareNNNModelEnergySolverJastrowDressed
+    : public ModelEnergySolver<SquareNNNModelEnergySolverJastrowDressed<ExplicitlyModel, has_nnn_interaction>> {
+ public:
+  using ModelEnergySolver<SquareNNNModelEnergySolverJastrowDressed<ExplicitlyModel, has_nnn_interaction>>::CalEnergyAndHoles;
+
+  template<typename TenElemT, typename QNT, bool calchols = true>
+  TenElemT CalEnergyAndHolesImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT, JastrowDress> *tps_sample,
+      TensorNetwork2D<TenElemT, QNT> &hole_res,
+      std::vector<TenElemT> &psi_list
+  ) {
+    std::vector<TenElemT> bond_energy_set;
+    bond_energy_set.reserve(2 * split_index_tps->size());
+    this->template CalHorizontalBondEnergyAndHolesImpl<TenElemT, QNT, calchols>(
+        split_index_tps, tps_sample, hole_res, bond_energy_set, psi_list
+    );
+    this->CalVerticalBondEnergyImpl(split_index_tps, tps_sample, bond_energy_set, psi_list);
+    TenElemT bond_energy_total = std::reduce(bond_energy_set.begin(), bond_energy_set.end());
+
+    // On-site energy can depend on Jastrow-dressed config
+    auto energy_onsite = static_cast<ExplicitlyModel *>(this)->EvaluateTotalOnsiteEnergy(tps_sample->config);
+    return bond_energy_total + energy_onsite;
+  }
+
+  template<typename TenElemT, typename QNT, bool calchols = true>
+  void CalHorizontalBondEnergyAndHolesImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT, JastrowDress> *tps_sample,
+      TensorNetwork2D<TenElemT, QNT> &hole_res,
+      std::vector<TenElemT> &bond_energy_set,
+      std::vector<TenElemT> &psi_list
+  ) {
+    TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
+    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    tn.GenerateBMPSApproach(UP, trunc_para);
+    psi_list.reserve(tn.rows() + tn.cols());
+    for (size_t row = 0; row < tn.rows(); row++) {
+      this->template CalHorizontalBondEnergyAndHolesSweepRowImpl<TenElemT, QNT, calchols>(row,
+                                                                                          split_index_tps,
+                                                                                          tps_sample,
+                                                                                          hole_res,
+                                                                                          bond_energy_set,
+                                                                                          psi_list);
+      if (row < tn.rows() - 1) {
+        tn.BMPSMoveStep(DOWN, trunc_para);
+      }
+    }
+  }
+
+  template<typename TenElemT, typename QNT, bool calchols = true>
+  void CalHorizontalBondEnergyAndHolesSweepRowImpl(
+      const size_t row,
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT, JastrowDress> *tps_sample,
+      TensorNetwork2D<TenElemT, QNT> &hole_res,
+      std::vector<TenElemT> &bond_energy_set,
+      std::vector<TenElemT> &psi_list
+  ) {
+    auto &tn = tps_sample->tn;
+    tn.InitBTen(LEFT, row);
+    tn.GrowFullBTen(RIGHT, row, 1, true);
+    bool psi_added = false;
+    TenElemT inv_psi;
+    if constexpr (!Index<QNT>::IsFermionic()) {
+      auto psi = tn.Trace({row, 0}, HORIZONTAL);
+      if (psi == TenElemT(0)) [[unlikely]] {
+        throw std::runtime_error("Wavefunction amplitude is near zero, causing division by zero.");
+      }
+      inv_psi = 1.0 / psi;
+      psi_list.push_back(psi);
+    }
+    for (size_t col = 0; col < tn.cols(); col++) {
+      const SiteIdx site1 = {row, col};
+      if constexpr (calchols) {
+        hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL));
+      }
+      if (col < tn.cols() - 1) {
+        const SiteIdx site2 = {row, col + 1};
+        TenElemT bond_energy;
+        if constexpr (Index<QNT>::IsFermionic()) {
+          std::optional<TenElemT> psi;
+          bond_energy = static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
+              site1, site2,
+              tps_sample->config(site1), tps_sample->config(site2),
+              HORIZONTAL, tn,
+              (*split_index_tps)(site1), (*split_index_tps)(site2),
+              psi,
+              tps_sample->dress // Pass JastrowDress to parser
+          );
+          if (!psi_added && psi.has_value()) {
+            psi_list.push_back(psi.value());
+            psi_added = true;
+          }
+        } else {
+          bond_energy = static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
+              site1, site2,
+              tps_sample->config(site1), tps_sample->config(site2),
+              HORIZONTAL, tn,
+              (*split_index_tps)(site1), (*split_index_tps)(site2),
+              inv_psi,
+              tps_sample->dress // Pass JastrowDress to parser
+          );
+        }
+        bond_energy_set.push_back(bond_energy);
+        tn.BTenMoveStep(RIGHT);
+      }
+    }
+    if constexpr (has_nnn_interaction) {
+      if (row < tn.rows() - 1) {
+        tn.InitBTen2(LEFT, row);
+        tn.GrowFullBTen2(RIGHT, row, 2, true);
+        for (size_t col = 0; col < tn.cols() - 1; col++) {
+          SiteIdx site1 = {row, col};
+          SiteIdx site2 = {row + 1, col + 1};
+          TenElemT nnn_energy(0);
+          std::optional<TenElemT> psi;
+          if constexpr (!Index<QNT>::IsFermionic()) {
+            nnn_energy = static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
+                site1, site2,
+                tps_sample->config(site1), tps_sample->config(site2),
+                LEFTUP_TO_RIGHTDOWN, tn,
+                (*split_index_tps)(site1), (*split_index_tps)(site2),
+                inv_psi,
+                tps_sample->dress
+            );
+          } else {
+            nnn_energy = static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
+                site1, site2,
+                tps_sample->config(site1), tps_sample->config(site2),
+                LEFTUP_TO_RIGHTDOWN, tn,
+                (*split_index_tps)(site1), (*split_index_tps)(site2),
+                psi,
+                tps_sample->dress
+            );
+          }
+          site1 = {row + 1, col};
+          site2 = {row, col + 1};
+          if constexpr (!Index<QNT>::IsFermionic()) {
+            nnn_energy += static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
+                site1, site2,
+                tps_sample->config(site1), tps_sample->config(site2),
+                LEFTDOWN_TO_RIGHTUP, tn,
+                (*split_index_tps)(site1), (*split_index_tps)(site2),
+                inv_psi,
+                tps_sample->dress
+            );
+          } else {
+            nnn_energy += static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
+                site1, site2,
+                tps_sample->config(site1), tps_sample->config(site2),
+                LEFTDOWN_TO_RIGHTUP, tn,
+                (*split_index_tps)(site1), (*split_index_tps)(site2),
+                psi,
+                tps_sample->dress
+            );
+          }
+          bond_energy_set.push_back(nnn_energy);
+          tn.BTen2MoveStep(RIGHT, row);
+        }
+      }
+    }
+  }
+
+  template<typename TenElemT, typename QNT>
+  void CalVerticalBondEnergyImpl(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT, JastrowDress> *tps_sample,
+      std::vector<TenElemT> &bond_energy_set,
+      std::vector<TenElemT> &psi_list
+  ) {
+    const Configuration &config = tps_sample->config;
+    BondTraversalMixin::TraverseVerticalBonds(
+        tps_sample->tn,
+        tps_sample->trun_para,
+        [&, split_index_tps](const SiteIdx &site1,
+                             const SiteIdx &site2,
+                             const BondOrientation bond_orient,
+                             const TenElemT &inv_psi) {
+          TenElemT bond_energy;
+          std::optional<TenElemT> fermion_psi;
+          if constexpr (Index<QNT>::IsFermionic()) {
+            bond_energy =
+                static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
+                    site1, site2,
+                    config(site1), config(site2),
+                    bond_orient, tps_sample->tn,
+                    (*split_index_tps)(site1), (*split_index_tps)(site2),
+                    fermion_psi,
+                    tps_sample->dress
+                );
+          } else {
+            bond_energy =
+                static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
+                    site1, site2,
+                    config(site1), config(site2),
+                    bond_orient, tps_sample->tn,
+                    (*split_index_tps)(site1), (*split_index_tps)(site2),
+                    inv_psi,
+                    tps_sample->dress
+                );
+          }
+          bond_energy_set.push_back(bond_energy);
+        },
+        psi_list
+    );
+  }
+};
+
+} // namespace qlpeps
+
+#endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_NNN_JASTROW_DRESSED_ENERGY_SOLVER_H

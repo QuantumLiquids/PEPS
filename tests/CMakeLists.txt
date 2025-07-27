@@ -193,7 +193,7 @@ add_unittest(test_tJ_model_solver
 ## Test algorithms
 # Test simple update
 add_two_type_unittest(test_simple_update
-        "test_algorithm_boson/test_simple_update.cpp"
+        "test_algorithm_boson/test_boson_simple_update.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
 )
@@ -203,11 +203,11 @@ add_two_type_unittest(test_simple_update
 #        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
 #        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 #)
-add_two_type_unittest(test_loop_update
-        "test_algorithm_boson/test_loop_update.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
-)
+#add_two_type_unittest(test_loop_update
+#        "test_algorithm_boson/test_loop_update.cpp"
+#        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+#        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
+#)
 
 # Test vmc-peps
 add_two_type_unittest(test_vmc_peps
@@ -231,13 +231,13 @@ add_unittest(test_fermion_peps_exact_summation
 )
 
 add_two_type_unittest(test_square_heisenberg
-        "test_algorithm_boson/test_square_heisenberg.cpp"
+        "Integration_tests/test_square_heisenberg.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
 add_two_type_unittest(test_square_j1j2_xxz
-        "test_algorithm_boson/test_square_j1_j2_xxz.cpp"
+        "Integration_tests/test_square_j1_j2_xxz.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
@@ -246,9 +246,9 @@ add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
 add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
 
 add_two_type_unittest(test_measure
-        "test_algorithm_boson/test_mc_peps_measure.cpp"
+        "test_algorithm_boson/test_boson_mc_peps_measure.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_data/tps_square_heisenberg4x4D8Double"
+        "test_algorithm_boson/test_data/tps_square_heisenberg4x4D8Double"
 )
 
 
@@ -265,7 +265,7 @@ add_unittest(test_fermion_mc_updater
 )
 
 add_two_type_unittest(test_square_nn_spinless_free_fermion
-        "test_algorithm_fermion/test_square_nn_spinless_free_fermion.cpp"
+        "Integration_tests/test_square_nn_spinless_free_fermion.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )

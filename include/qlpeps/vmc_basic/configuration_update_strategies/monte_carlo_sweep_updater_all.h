@@ -7,11 +7,14 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_CLASSES_WAVE_FUNCTION_COMPONENT_ALL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_CLASSES_WAVE_FUNCTION_COMPONENT_ALL_H
 
+#include "qlpeps/vmc_basic/wave_function_component.h" // TPSWaveFunctionComponent
+
 namespace qlpeps {
 /**
  * Base class for different Monte-Carlo sweep update strategies.
  * The derived class can serve as the template parameter MCSweepUpdater in VMC executor and MC measurement executor.
  */
+template<typename WaveFunctionDress = qlpeps::NoDress>
 class MonteCarloSweepUpdaterBase {
  public:
   /**
@@ -25,7 +28,7 @@ class MonteCarloSweepUpdaterBase {
   ///< The following member function should be defined in derived class to define the MC sweep strategies.
   template<typename TenElemT, typename QNT>
   void operator()(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                  TPSWaveFunctionComponent<TenElemT, QNT> &tps_component,
+                  TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress> &tps_component,
                   std::vector<double> &accept_rates) {}
  protected:
   std::uniform_real_distribution<double> u_double_ = std::uniform_real_distribution<double>(0, 1.0);

@@ -8,7 +8,7 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_UPDATE_STRATEGIES_SQUARE_3SITE_UPDATER_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_CONFIGURATION_UPDATE_STRATEGIES_SQUARE_3SITE_UPDATER_H
 
-#include "qlpeps/algorithm/vmc_update/wave_function_component.h"    // TPSWaveFunctionComponent
+#include "qlpeps/vmc_basic/wave_function_component.h"    // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 

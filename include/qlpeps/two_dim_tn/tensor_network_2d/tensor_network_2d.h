@@ -15,7 +15,7 @@
 #include "qlpeps/two_dim_tn/framework/site_idx.h"
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/basic.h"                           //BMPSTruncatePara
-#include "qlpeps/two_dim_tn/tps/configuration.h"    //Configure
+#include "qlpeps/vmc_basic/configuration.h"    //Configure
 
 namespace qlpeps {
 using namespace qlten;

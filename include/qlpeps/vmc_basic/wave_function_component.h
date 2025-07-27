@@ -8,10 +8,10 @@
 #ifndef QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 #define QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 
-#include "qlpeps/two_dim_tn/tps/configuration.h"    //Configuration
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    //BMPSTruncatePara
-#include "qlpeps/two_dim_tn/tps/split_index_tps.h"  //SplitIndexTPS
-
+#include "qlpeps/vmc_basic/configuration.h"         // Configuration
+#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    // BMPSTruncatePara
+#include "qlpeps/two_dim_tn/tps/split_index_tps.h"  // SplitIndexTPS
+#include "qlpeps/vmc_basic/jastrow_factor.h"        // JastrowFactor
 namespace qlpeps {
 
 ///< abstract wave function component, useless up to now.
@@ -25,19 +25,45 @@ struct WaveFunctionComponent {
   WaveFunctionComponent(const Configuration &config) : config(config), amplitude(0) {}
 };
 
+struct NoDress {
+  NoDress() = default;
+};
+
+/**
+ * The absolute value of Jastrow factor is no sense. Only calculate the ratio of Jastrow factor.
+ */
+struct JastrowDress {
+ public:
+  JastrowFactor jastrow;
+  DensityConfig density_config; // number of particle in each site
+
+  JastrowDress(const JastrowFactor &jastrow) : jastrow(jastrow) {}
+
+  template<typename... Args>
+  void UpdateLocalDensity(const Args... site_density_pairs) {
+    (UpdateSingleSiteDensity_(site_density_pairs.first, site_density_pairs.second), ...);
+  }
+ private:
+  void UpdateSingleSiteDensity_(const SiteIdx &site, size_t new_density) {
+    density_config(site) = new_density;
+  }
+};
+
 /**
  * Wave function component based on tensor product state (TPS)
  *
+ * The default wave function type is PEPS
  *
+ * For with Dress = JastrowDress, Jastrow-factor dressed PEPS wave function.
+ * For Jastrow-factor dressed PEPS wave function, note in the implementation,
+ * The member `amplitude` naturally encode the amplitude of PEPS part, rather the overall amplitude.
+ * So here may need careful.
  *
+ * We hope it can support the spin inversion symmetry in the future.
  */
-template<typename TenElemT, typename QNT>
+template<typename TenElemT, typename QNT, typename Dress = qlpeps::NoDress>
 struct TPSWaveFunctionComponent {
  public:
-  Configuration config;
-  TenElemT amplitude;
-  TensorNetwork2D<TenElemT, QNT> tn;
-  BMPSTruncatePara trun_para;
 
   ///< No initialized construct. considering to be removed in future.
   TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncatePara &truncate_para) :
@@ -50,6 +76,9 @@ struct TPSWaveFunctionComponent {
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config); // projection
     EvaluateAmplitude();
   }
+
+  const TenElemT &GetAmplitude(void) const { return amplitude; }
+  size_t GetConfiguration(const SiteIdx &site) const { return config(site); }
 
   /**
    * @param sitps
@@ -124,6 +153,11 @@ struct TPSWaveFunctionComponent {
     amplitude = new_amplitude;
   }
 
+  Configuration config;
+  TenElemT amplitude;
+  TensorNetwork2D<TenElemT, QNT> tn;
+  BMPSTruncatePara trun_para;
+  Dress dress;
  private:
   void UpdateSingleSite_(const SiteIdx &site,
                          const size_t new_config,
