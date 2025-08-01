@@ -349,7 +349,13 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
   }
 }
 
-///< Normalize TPS tensor so that the amplitude of the wave function is order 1
+/**
+ * @brief Normalize TPS tensor so that the amplitude of the wave function is order 1. 
+ * This normalization is safer for Monte-Carlo based calculations.
+ * 
+ * The TPSs across all ranks are gathered and the maximum absolute value is found.
+ * All the TPSs across all ranks are then scaled by the scale factor 1 / max_abs uniformly.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 requires
 MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
@@ -384,8 +390,13 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
   split_index_tps_ *= scale_factor_on_site;
   Configuration config = tps_sample_.config;
   tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
-//  std::cout << "Rank" << rank_ << "tps_sample_.amplitude : " << tps_sample_.amplitude << std::endl;
-//  tps_sample_.amplitude *= scale_factor;
+  //print the normalization info
+  if (rank_ == kMPIMasterRank) {
+    std::cout << "Normalization TPS For Order 1 Amplitude info: " << std::endl;
+    std::cout << "Overall scale factor: " << scale_factor << std::endl;
+    std::cout << "Scale factor on site: " << scale_factor_on_site << std::endl;
+    std::cout << "TPS sample amplitude (rank " << rank_ << "): " << tps_sample_.amplitude << std::endl;
+  }
 }
 }//qlpeps
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_PEPS_BASE_H

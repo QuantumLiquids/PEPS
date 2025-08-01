@@ -9,7 +9,6 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlmps/case_params_parser.h"
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 
 using namespace qlten;
@@ -46,22 +45,22 @@ std::vector<MatrixElement<double>> GenerateTriElements(
 }
 
 std::string GenPEPSPath(std::string model_name, size_t Dmax) {
-#if TEN_ELEM_TYPE == QLTEN_Double
+#if TEN_ELEM_TYPE_NUM == 1
   return "dpeps_" + model_name + "_D" + std::to_string(Dmax);
-#elif TEN_ELEM_TYPE == QLTEN_Complex
+#elif TEN_ELEM_TYPE_NUM == 2
   return "zpeps_" + model_name + "_D" + std::to_string(Dmax);
 #else
-#error "Unexpected TEN_ELEM_TYPE"
+#error "Unexpected TEN_ELEM_TYPE_NUM"
 #endif
 }
 
 std::string GenTPSPath(std::string model_name, size_t Dmax) {
-#if TEN_ELEM_TYPE == QLTEN_Double
+#if TEN_ELEM_TYPE_NUM == 1
   return "dtps_" + model_name + "_D" + std::to_string(Dmax);
-#elif TEN_ELEM_TYPE == QLTEN_Complex
+#elif TEN_ELEM_TYPE_NUM == 2
   return "ztps_" + model_name + "_D" + std::to_string(Dmax);
 #else
-#error "Unexpected TEN_ELEM_TYPE"
+#error "Unexpected TEN_ELEM_TYPE_NUM"
 #endif
 }
 

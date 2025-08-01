@@ -53,9 +53,9 @@ VMCPEPSExecutor<TenElemT,
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
-  if (std::find(stochastic_reconfiguration_method.cbegin(),
-                stochastic_reconfiguration_method.cend(),
-                optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
+  if (std::find(stochastic_reconfiguration_methods.cbegin(),
+                stochastic_reconfiguration_methods.cend(),
+                optimize_para.update_scheme) != stochastic_reconfiguration_methods.cend()) {
     stochastic_reconfiguration_update_class_ = true;
   } else {
     stochastic_reconfiguration_update_class_ = false;
@@ -87,9 +87,9 @@ VMCPEPSExecutor<TenElemT,
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
 
-  if (std::find(stochastic_reconfiguration_method.cbegin(),
-                stochastic_reconfiguration_method.cend(),
-                optimize_para.update_scheme) != stochastic_reconfiguration_method.cend()) {
+  if (std::find(stochastic_reconfiguration_methods.cbegin(),
+                stochastic_reconfiguration_methods.cend(),
+                optimize_para.update_scheme) != stochastic_reconfiguration_methods.cend()) {
     stochastic_reconfiguration_update_class_ = true;
   } else {
     stochastic_reconfiguration_update_class_ = false;
@@ -517,6 +517,8 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Sampl
         gradient_tensor = CalGTenForFermionicTensors(holes({row, col}), tps_sample_.tn({row, col}));
       } else {
         // For bosonic systems, use standard gradient calculation
+        // holes : \partial_{theta^*} \Psi^*
+        // inverse_amplitude : 1 / \Psi^*
         gradient_tensor = inverse_amplitude * holes({row, col});
       }
       

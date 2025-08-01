@@ -13,6 +13,8 @@
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/optimizer/optimizer_params.h"
+#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
 
@@ -39,17 +41,16 @@ struct HeisenbergSystem : public MPITest {
   Tensor ham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
   Tensor ham_hei_tri;  // three-site hamiltonian in triangle lattice
 
-  VMCOptimizePara optimize_para =
-      VMCOptimizePara(BMPSTruncatePara(6, 12, 1e-15,
-                                       CompressMPSScheme::SVD_COMPRESS,
-                                       std::make_optional<double>(1e-14),
-                                       std::make_optional<size_t>(10)),
-                      100, 100, 1,
-                      std::vector<size_t>(2, Lx * Ly / 2),
-                      Ly, Lx,
-                      std::vector<double>(40, 0.3),
-                      StochasticReconfiguration,
-                      ConjugateGradientParams(100, 1e-5, 20, 0.001));
+  std::string model_name = "square_afm_heisenberg";
+  std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
+
+  VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
+      OptimizerParams::CreateStochasticReconfiguration({0.3}, ConjugateGradientParams(100, 1e-5, 20, 0.001), 40),
+      MonteCarloParams(100, 100, 1, tps_path,
+                       Configuration(Ly, Lx,
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+      PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                  std::make_optional<double>(1e-14), std::make_optional<size_t>(10)), tps_path));
 
   MCMeasurementPara measure_para = MCMeasurementPara(
       BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
@@ -57,11 +58,10 @@ struct HeisenbergSystem : public MPITest {
                        std::make_optional<double>(1e-14),
                        std::make_optional<size_t>(10)),
       1000, 1000, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx);
+      Configuration(Ly, Lx,
+                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Random generate configuration with Sz = 0
+      tps_path);
 
-  std::string model_name = "square_afm_heisenberg";
-  std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
   void SetUp() {
     MPITest::SetUp();
     ham_hei_nn({0, 0, 0, 0}) = 0.25;
@@ -70,9 +70,6 @@ struct HeisenbergSystem : public MPITest {
     ham_hei_nn({0, 0, 1, 1}) = -0.25;
     ham_hei_nn({0, 1, 1, 0}) = 0.5;
     ham_hei_nn({1, 0, 0, 1}) = 0.5;
-    
-    optimize_para.wavefunction_path = tps_path;
-    measure_para.wavefunction_path = tps_path;
   }
 };
 
@@ -120,13 +117,16 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 // Check if the TPS doesn't change by setting step length = 0
 TEST_F(HeisenbergSystem, ZeroUpdate) {
   MPI_Barrier(comm);
-  optimize_para.step_lens = {0.0};
+  vmc_peps_para.optimizer_params.core_params.step_lengths = {0.0};
+  vmc_peps_para.optimizer_params.core_params.max_iterations = 3;
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);
   auto init_tps = tps;
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(optimize_para, tps,
-                                                                                              comm);
+      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
+                                                                                                       tps,
+                                                                                                       comm,
+                                                                                                       SquareSpinOneHalfXXZModel());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
   executor->Execute();
@@ -136,6 +136,8 @@ TEST_F(HeisenbergSystem, ZeroUpdate) {
   std::cout << "flop = " << end_flop - start_flop << std::endl;
   std::cout << "Gflops = " << Gflops << std::endl;
   SplitIndexTPS<TenElemT, QNT> result_sitps = executor->GetState();
+  init_tps.NormalizeAllSite();
+  result_sitps.NormalizeAllSite();
   auto diff = init_tps + (-result_sitps);
   EXPECT_NE(diff.NormSquare(), 1e-14);
   delete executor;
@@ -149,8 +151,10 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //VMC
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(optimize_para, tps,
-                                                                                              comm);
+      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
+                                                                                                       tps,
+                                                                                                       comm,
+                                                                                                       SquareSpinOneHalfXXZModel());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 

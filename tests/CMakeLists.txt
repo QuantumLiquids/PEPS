@@ -6,6 +6,9 @@
 # Description: QuantumLiquids/PEPS project. CMake file to control unittest.
 # Including the setting for compile flags and link flags for test cases
 
+# Define source directory path for tests
+add_definitions(-DTEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests") # used in test code
+
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(BLA_VENDOR Intel10_64lp_seq)   #FOR VENDOR CHOICE: https://cmake.org/cmake/help/latest/module/FindBLAS.html
     set(BLAS_INCLUDE_DIR "$ENV{MKLROOT}/include")
@@ -69,7 +72,7 @@ macro(add_two_type_unittest
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
             PRIVATE MPI::MPI_CXX)
-    target_compile_definitions(${TEST_NAME}_double PRIVATE TEN_ELEM_TYPE=QLTEN_Double)
+    target_compile_definitions(${TEST_NAME}_double PRIVATE TEN_ELEM_TYPE=QLTEN_Double TEN_ELEM_TYPE_NUM=1)
     target_link_libraries(${TEST_NAME}_double
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
@@ -90,7 +93,7 @@ macro(add_two_type_unittest
             PRIVATE ${QLTENSOR_HEADER_PATH}
             PRIVATE ${QLMPS_HEADER_PATH}
             PRIVATE MPI::MPI_CXX)
-    target_compile_definitions(${TEST_NAME}_complex PRIVATE TEN_ELEM_TYPE=QLTEN_Complex)
+    target_compile_definitions(${TEST_NAME}_complex PRIVATE TEN_ELEM_TYPE=QLTEN_Complex TEN_ELEM_TYPE_NUM=2)
     target_link_libraries(${TEST_NAME}_complex
             GTest::GTest GTest::Main
             ${hptt_LIBRARY}
@@ -209,41 +212,47 @@ add_two_type_unittest(test_simple_update
 #        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
 #)
 
-# Test vmc-peps
+# Test vmc-peps (Unit Tests)
 add_two_type_unittest(test_vmc_peps
         "test_algorithm_boson/test_vmc_peps.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
+        " "
 )
 
-add_mpi_unittest_run(test_vmc_peps_double "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json")
-add_mpi_unittest_run(test_vmc_peps_complex "4" "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json")
+add_mpi_unittest_run(test_vmc_peps_double "4" " ")
+add_mpi_unittest_run(test_vmc_peps_complex "4" " ")
 
+# Test optimizer
+add_two_type_unittest(test_optimizer
+        "test_algorithm_boson/test_optimizer.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_mpi_unittest_run(test_optimizer_double "4" " ")
+add_mpi_unittest_run(test_optimizer_complex "4" " ")
+
+# Test VMC PEPS optimizer executor
+add_two_type_unittest(test_vmc_peps_optimizer
+        "test_algorithm_boson/test_vmc_peps_optimizer.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_mpi_unittest_run(test_vmc_peps_optimizer_double "4" " ")
+add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
 
 #add_unittest(test_fermion_vmc_peps
 #        "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
 #        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
 #        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
 #)
-add_unittest(test_fermion_peps_exact_summation
-        "test_algorithm_fermion/test_fermion_exact_optimization.cpp"
+
+# Test exact summation optimization using VMCPEPSOptimizerExecutor with custom energy evaluator
+add_unittest(test_exact_sum_optimization
+        "test_algorithm_fermion/test_exact_sum_optimization.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
-
-add_two_type_unittest(test_square_heisenberg
-        "Integration_tests/test_square_heisenberg.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_two_type_unittest(test_square_j1j2_xxz
-        "Integration_tests/test_square_j1_j2_xxz.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
-add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
 
 add_two_type_unittest(test_measure
         "test_algorithm_boson/test_boson_mc_peps_measure.cpp"
@@ -264,6 +273,17 @@ add_unittest(test_fermion_mc_updater
         "${CMAKE_CURRENT_LIST_DIR}/test_data/"
 )
 
+# VMC Integration Tests
+add_two_type_unittest(test_square_heisenberg
+        "Integration_tests/test_square_heisenberg.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
+add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
+
+
 add_two_type_unittest(test_square_nn_spinless_free_fermion
         "Integration_tests/test_square_nn_spinless_free_fermion.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
@@ -272,6 +292,40 @@ add_two_type_unittest(test_square_nn_spinless_free_fermion
 
 add_mpi_unittest_run(test_square_nn_spinless_free_fermion_double "56" " ")
 add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "56" " ")
+
+
+add_two_type_unittest(test_square_j1j2_xxz
+        "Integration_tests/test_square_j1j2_xxz.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_two_type_unittest(test_square_j1j2_xxz_legacy
+        "Integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_two_type_unittest(test_triangle_heisenberg
+        "Integration_tests/test_triangle_heisenberg.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_two_type_unittest(test_triangle_j1j2_heisenberg
+        "Integration_tests/test_triangle_j1j2_heisenberg.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+add_mpi_unittest_run(test_square_j1j2_xxz_double "56" " ")
+add_mpi_unittest_run(test_square_j1j2_xxz_complex "56" " ")
+add_mpi_unittest_run(test_square_j1j2_xxz_legacy_double "56" " ")
+add_mpi_unittest_run(test_square_j1j2_xxz_legacy_complex "56" " ")
+add_mpi_unittest_run(test_triangle_heisenberg_double "56" " ")
+add_mpi_unittest_run(test_triangle_heisenberg_complex "56" " ")
+add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "56" " ")
+add_mpi_unittest_run(test_triangle_j1j2_heisenberg_complex "56" " ")
 
 ## Test utility
 add_unittest(test_conjugate_gradient_solver

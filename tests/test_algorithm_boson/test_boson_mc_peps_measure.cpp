@@ -17,12 +17,12 @@
 using namespace qlten;
 using namespace qlpeps;
 
-#if TEN_ELEM_TYPE == QLTEN_Double
+#if TEN_ELEM_TYPE_NUM == 1
 std::string data_type_in_file_name = "Double";
-#elif TEN_ELEM_TYPE == QLTEN_Complex
+#elif TEN_ELEM_TYPE_NUM == 2
 std::string data_type_in_file_name = "Complex";
 #else
-#error "Unexpected TEN_ELEM_TYPE"
+#error "Unexpected TEN_ELEM_TYPE_NUM"
 #endif
 
 #include <filesystem>

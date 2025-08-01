@@ -24,6 +24,20 @@ inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,
       kQLTenFileSuffix;
 }
 
+/**
+ * @brief Split-index Tensor Product State (TPS) class
+ * 
+ * This class represents a TPS where tensors are split along the physical index.
+ * Each site contains a vector of tensors, one for each physical state.
+ * 
+ * @note The operator() method from the base class TenMatrix will automatically
+ * allocate memory for elements when accessed if they haven't been initialized.
+ * For std::vector<Tensor> elements, this means creating an empty vector.
+ * Users should ensure proper initialization before accessing elements.
+ * 
+ * @tparam TenElemT Tensor element type
+ * @tparam QNT Quantum number type
+ */
 template<typename TenElemT, typename QNT>
 class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   using Tensor = QLTensor<TenElemT, QNT>;

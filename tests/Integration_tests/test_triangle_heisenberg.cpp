@@ -1,0 +1,195 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+
+/*
+* Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
+* Creation Date: 2024-12-19
+*
+* Description: QuantumLiquids/PEPS project. Integration testing for Triangle Heisenberg model with VMC optimization.
+*/
+
+#define QLTEN_COUNT_FLOPS 1
+
+#include "gtest/gtest.h"
+#include "qlten/qlten.h"
+#include "qlpeps/qlpeps.h"
+#include "integration_test_framework.h"
+
+using namespace qlten;
+using namespace qlpeps;
+
+using QNT = qlten::special_qn::TrivialRepQN;
+using TenElemT = TEN_ELEM_TYPE;
+using IndexT = Index<QNT>;
+using QNSctT = QNSector<QNT>;
+using Tensor = QLTensor<TenElemT, QNT>;
+
+template<typename T>
+struct MatrixElement {
+  std::vector<size_t> coors;
+  T elem;
+};
+
+std::vector<MatrixElement<double>> GenerateTriElements(
+    const std::vector<MatrixElement<double>> &base_elements, size_t i) {
+  std::vector<MatrixElement<double>> tri_elements;
+  
+  for (const auto &elem : base_elements) {
+    // Create new matrix element for each `ham_hei_tri_terms[i]`
+    for (size_t j = 0; j < 2; j++) {
+      MatrixElement<double> new_elem = elem;
+      
+      // Insert {j, j} at position 2*i in the coordinates
+      new_elem.coors.insert(new_elem.coors.begin() + 2 * i, {j, j});
+      tri_elements.push_back(new_elem);
+    }
+  }
+  
+  return tri_elements;
+}
+
+class TriangleHeisenbergSystem : public IntegrationTestFramework<QNT> {
+protected:
+  Tensor ham_hei_nn;  // nearest-neighbor hamiltonian
+  Tensor ham_hei_tri;  // three-site hamiltonian in triangle lattice
+  std::vector<MatrixElement<double>> ham_hei_nn_elements;
+  
+  void SetUpIndices() override {
+    pb_out = IndexT({QNSctT(QNT(), 2)}, TenIndexDirType::OUT);
+    pb_in = InverseIndex(pb_out);
+  }
+  
+  void SetUpHamiltonians() override {
+    // Define matrix elements for nearest-neighbor Heisenberg Hamiltonian
+    ham_hei_nn_elements = {
+      // Sz_i * Sz_j
+      {{0, 0, 0, 0}, 0.25},
+      {{1, 1, 1, 1}, 0.25},
+      {{1, 1, 0, 0}, -0.25},
+      {{0, 0, 1, 1}, -0.25},
+      // 0.5 * S^+_i * S^-_j
+      {{0, 1, 1, 0}, 0.5},
+      // 0.5 * S^-_i * S^+_j
+      {{1, 0, 0, 1}, 0.5},
+    };
+    
+    // Construct nearest-neighbor Heisenberg Hamiltonian
+    ham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
+    for (const auto &element : ham_hei_nn_elements) {
+      ham_hei_nn(element.coors) = element.elem;
+    }
+    
+    // Triangle lattice three-site Hamiltonian using proper construction
+    Tensor ham_hei_tri_terms[3];
+    for (size_t i = 0; i < 3; i++) {
+      std::vector<MatrixElement<double>> tri_elements = GenerateTriElements(ham_hei_nn_elements, i);
+      ham_hei_tri_terms[i] = Tensor({pb_in, pb_out, pb_in, pb_out, pb_in, pb_out});
+      for (const auto &element : tri_elements) {
+        ham_hei_tri_terms[i](element.coors) = element.elem;
+      }
+    }
+    ham_hei_tri = ham_hei_tri_terms[0] + ham_hei_tri_terms[1] + ham_hei_tri_terms[2];
+  }
+  
+  void SetUpParameters() override {
+    model_name = "triangle_heisenberg";
+    energy_ed = -8.0; // Approximate expected energy for triangle lattice
+    
+    optimize_para = VMCOptimizePara(
+        BMPSTruncatePara(6, 12, 1e-15,
+                         CompressMPSScheme::SVD_COMPRESS,
+                         std::make_optional<double>(1e-14),
+                         std::make_optional<size_t>(10)),
+        100, 100, 1,
+        std::vector<size_t>(2, Lx * Ly / 2),
+        Ly, Lx,
+        std::vector<double>(40, 0.3),
+        StochasticReconfiguration,
+        ConjugateGradientParams(100, 1e-5, 20, 0.001));
+    
+    measure_para = MCMeasurementPara(
+        BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                         CompressMPSScheme::SVD_COMPRESS,
+                         std::make_optional<double>(1e-14),
+                         std::make_optional<size_t>(10)),
+        1000, 1000, 1,
+        std::vector<size_t>(2, Lx * Ly / 2),
+        Ly, Lx);
+  }
+};
+
+TEST_F(TriangleHeisenbergSystem, SimpleUpdate) {
+  if (rank == kMPIMasterRank) {
+    SquareLatticePEPS<TenElemT, QNT> peps0(pb_out, Ly, Lx);
+    std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
+    for (size_t y = 0; y < Ly; y++) {
+      for (size_t x = 0; x < Lx; x++) {
+        size_t sz_int = x + y;
+        activates[y][x] = sz_int % 2;
+      }
+    }
+    peps0.Initial(activates);
+
+    SimpleUpdatePara update_para(1000, 0.1, 1, 4, 1e-15);
+    auto su_exe = new TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>(
+        update_para, peps0, ham_hei_nn, ham_hei_tri);
+    
+    RunSimpleUpdate(su_exe);
+    delete su_exe;
+  }
+}
+
+TEST_F(TriangleHeisenbergSystem, ZeroUpdate) {
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
+  Model triangle_hei_solver;
+  RunZeroUpdateTest<Model, MCUpdateSquareTNN3SiteExchange>(triangle_hei_solver);
+}
+
+TEST_F(TriangleHeisenbergSystem, StochasticReconfigurationOpt) {
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
+  Model triangle_hei_solver;
+  
+  // VMC optimization
+  RunVMCOptimization<Model, MCUpdateSquareTNN3SiteExchange>(triangle_hei_solver);
+  
+  // Monte Carlo measurement
+  RunMCMeasurement<Model, MCUpdateSquareTNN3SiteExchange>(triangle_hei_solver);
+}
+
+TEST_F(TriangleHeisenbergSystem, StochasticGradientOpt) {
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
+  Model triangle_hei_solver;
+  
+  // Change to stochastic gradient
+  optimize_para.update_scheme = StochasticGradient;
+  optimize_para.step_lens = std::vector<double>(40, 0.1);
+  
+  // VMC optimization
+  RunVMCOptimization<Model, MCUpdateSquareNNExchange>(triangle_hei_solver);
+  
+  // Monte Carlo measurement
+  RunMCMeasurement<Model, MCUpdateSquareNNExchange>(triangle_hei_solver);
+}
+
+TEST_F(TriangleHeisenbergSystem, NaturalGradientLineSearch) {
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
+  Model triangle_hei_solver;
+  
+  // Change to natural gradient line search
+  optimize_para.update_scheme = NaturalGradientLineSearch;
+  optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
+  
+  // VMC optimization
+  RunVMCOptimization<Model, MCUpdateSquareTNN3SiteExchange>(triangle_hei_solver);
+  
+  // Monte Carlo measurement
+  RunMCMeasurement<Model, MCUpdateSquareTNN3SiteExchange>(triangle_hei_solver);
+}
+
+int main(int argc, char *argv[]) {
+  MPI_Init(nullptr, nullptr);
+  testing::InitGoogleTest(&argc, argv);
+  hp_numeric::SetTensorManipulationThreads(1);
+  auto test_err = RUN_ALL_TESTS();
+  MPI_Finalize();
+  return test_err;
+} 

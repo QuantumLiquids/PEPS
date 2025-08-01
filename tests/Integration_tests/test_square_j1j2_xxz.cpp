@@ -11,6 +11,9 @@
 #include "qlten/qlten.h"
 #include "qlmps/case_params_parser.h"
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/optimizer/optimizer_params.h"
+#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
+#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
 
@@ -41,17 +44,17 @@ struct SpinOneHalfSystem : public MPITest {
 
   Tensor ham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
   Tensor ham_hei_nnn = Tensor({pb_in, pb_out, pb_in, pb_out});
-  VMCOptimizePara optimize_para =
-      VMCOptimizePara(BMPSTruncatePara(6, 12, 1e-15,
-                                       CompressMPSScheme::SVD_COMPRESS,
-                                       std::make_optional<double>(1e-14),
-                                       std::make_optional<size_t>(10)),
-                      100, 100, 1,
-                      std::vector<size_t>(2, Lx * Ly / 2),
-                      Ly, Lx,
-                      std::vector<double>(40, 0.3),
-                      StochasticReconfiguration,
-                      ConjugateGradientParams(100, 1e-5, 20, 0.001));
+  
+  std::string model_name = "square_j1j2_xxz";
+  std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
+  
+  VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
+      OptimizerParams::CreateStochasticReconfiguration(std::vector<double>(40, 0.3), ConjugateGradientParams(100, 1e-5, 20, 0.001), 40),
+      MonteCarloParams(100, 100, 1, tps_path,
+                       Configuration(Ly, Lx,
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+      PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                  std::make_optional<double>(1e-14), std::make_optional<size_t>(10)), tps_path));
 
   MCMeasurementPara measure_para = MCMeasurementPara(
       BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
@@ -59,11 +62,9 @@ struct SpinOneHalfSystem : public MPITest {
                        std::make_optional<double>(1e-14),
                        std::make_optional<size_t>(10)),
       1000, 1000, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx);
-
-  std::string model_name = "square_j1j2_xxz";
-  std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
+      Configuration(Ly, Lx,
+                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
+      tps_path);
 
   void SetUp() {
     MPITest::SetUp();
@@ -80,9 +81,6 @@ struct SpinOneHalfSystem : public MPITest {
     ham_hei_nnn({0, 0, 1, 1}) = -0.25 * jz2;
     ham_hei_nnn({0, 1, 1, 0}) = 0.5 * jxy2;
     ham_hei_nnn({1, 0, 0, 1}) = 0.5 * jxy2;
-
-    optimize_para.wavefunction_path = tps_path;
-    measure_para.wavefunction_path = tps_path;
   }
 
 };
@@ -139,11 +137,13 @@ TEST_F(SpinOneHalfSystem, StochasticReconfigurationOpt) {
 
   using Model = SquareSpinOneHalfJ1J2XXZModel;
   Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
+  
   //VMC
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, Model>(optimize_para, tps,
-                                                                                 comm,
-                                                                                 j1j2_model);
+      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, Model>(vmc_peps_para,
+        tps,
+                                                                                         comm,
+                                                                                         j1j2_model);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 

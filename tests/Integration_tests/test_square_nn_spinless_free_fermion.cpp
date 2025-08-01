@@ -21,12 +21,12 @@ using namespace qlten;
 using namespace qlpeps;
 
 std::string GenTPSPath(std::string model_name, size_t Dmax, size_t Lx, size_t Ly) {
-#if TEN_ELEM_TYPE == QLTEN_Double
+#if TEN_ELEM_TYPE_NUM == 1
   return "dtps_" + model_name + "_D" + std::to_string(Dmax) + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
-#elif TEN_ELEM_TYPE == QLTEN_Complex
+#elif TEN_ELEM_TYPE_NUM == 2
   return "ztps_" + model_name + "_D" + std::to_string(Dmax)  + "_L" + std::to_string(Lx) + "x" + std::to_string(Ly);
 #else
-#error "Unexpected TEN_ELEM_TYPE"
+#error "Unexpected TEN_ELEM_TYPE_NUM"
 #endif
 }
 

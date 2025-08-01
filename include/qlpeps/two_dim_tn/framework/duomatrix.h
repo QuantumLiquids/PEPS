@@ -61,6 +61,7 @@ class DuoMatrix {
 
   /**
    * Copy a DuoMatrix.
+   * The size of (*this) and rhs can be mismatch, it will reset as size of rhs
    * @param rhs A DuoMatrix instance.
    */
   DuoMatrix<ElemT> &operator=(const DuoMatrix<ElemT> &rhs) {
@@ -166,6 +167,8 @@ class DuoMatrix {
    * Element setter. If the corresponding memory has not been allocated, allocate it first.
    * @param row Row index of the element.
    * @param col Column index of the element.
+   * @note This method will create a default-constructed element if the position
+   * hasn't been allocated yet. 
    */
   ElemT &operator()(const std::array<size_t, 2> coordinate) {
     const size_t row = coordinate[0];

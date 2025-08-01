@@ -331,6 +331,19 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
     }
   } res;
 
+  /**
+   * Record the statistic inside `bin_size`
+   */
+  struct BinStatistics {
+    double energy_mean;
+    double energy_square_mean;  // used to restore the global variance
+    std::vector<double> bond_energy_mean;
+    std::vector<double> bond_square_mean;
+
+    std::vector<double> one_point_function_mean;
+    std::vector<double> two_point_function_mean;
+
+  };
   // observable
   struct SampleData {
     std::vector<TenElemT> wave_function_amplitude_samples;

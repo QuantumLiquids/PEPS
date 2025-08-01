@@ -97,7 +97,7 @@ class VMCPEPSExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCa
   // Add getter for current energy
   double GetCurrentEnergy() const noexcept { 
     return energy_trajectory_.empty() ? std::numeric_limits<double>::max() : 
-           static_cast<double>(energy_trajectory_.back()); 
+           Real(energy_trajectory_.back()); 
   }
   
   // Add getter for minimum energy
