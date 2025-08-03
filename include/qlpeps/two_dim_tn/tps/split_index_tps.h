@@ -58,6 +58,11 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
 
   SplitIndexTPS(const SplitIndexTPS &rhs) : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(rhs) {}
 
+  SplitIndexTPS(SplitIndexTPS &&) noexcept;
+
+  SplitIndexTPS &operator=(SplitIndexTPS &&) noexcept;
+
+
   //Constructor from TPS
   SplitIndexTPS(const TPST &tps) : TenMatrix<std::vector<Tensor>>(tps.rows(), tps.cols()) {
     const size_t phy_idx = 4;
@@ -258,6 +263,8 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   SplitIndexTPS operator-(const SplitIndexTPS &right) const {
     return (*this) + (-right);
   }
+
+  SplitIndexTPS &operator-=(const SplitIndexTPS &);
 
   ///< NB! not the wave function norm, it's the summation of tensor norm square.
   ///< definition: summation of tensor element squares

@@ -197,33 +197,50 @@ void SplitIndexTPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool 
       }
     }
   }
-  file = tps_path + "/" + "phys_dim";
+
+  file = tps_path + "/" + "tps_meta.txt";
   std::ofstream ofs(file, std::ofstream::binary);
-  ofs << phy_dim;
+  ofs << this->rows() << " " << this->cols() << " " << phy_dim;
   ofs.close();
 }
 
 template<typename TenElemT, typename QNT>
 bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
-
   if (!qlmps::IsPathExist(tps_path)) {
     std::cout << "No path " << tps_path << std::endl;
     return false;
   }
-  std::string file = tps_path + "/" + "phys_dim";
-  std::ifstream ifs(file, std::ofstream::binary);
-  size_t phy_dim(0);
-  ifs >> phy_dim;
-  ifs.close();
+
+  size_t phy_dim = 0;
+  std::string meta_file = tps_path + "/" + "tps_meta.txt";
+  std::ifstream ifs(meta_file, std::ifstream::binary);
+
+  if (ifs.good()) {
+    // New format
+    size_t rows = 0, cols = 0;
+    ifs >> rows >> cols >> phy_dim;
+    if (ifs.fail()) { return false; } // Handle corrupted meta file
+    *this = SplitIndexTPS<TenElemT, QNT>(rows, cols);
+  } else {
+    // Old format
+    std::string old_meta_file = tps_path + "/" + "phys_dim";
+    std::ifstream old_ifs(old_meta_file, std::ifstream::binary);
+    if (!old_ifs.good()) { return false; } // No meta file found
+    old_ifs >> phy_dim;
+    if (old_ifs.fail()) { return false; } // Handle corrupted phys_dim file
+    // For old format, assume `this` is already sized correctly.
+  }
+
   if (phy_dim == 0) {
     return false;
   }
+
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
       (*this)({row, col}) = std::vector<Tensor>(phy_dim);
       for (size_t compt = 0; compt < phy_dim; compt++) {
-        file = GenSplitIndexTPSTenName(tps_path, row, col, compt);
-        if (!(this->LoadTen(row, col, compt, file))) {
+        std::string ten_file = GenSplitIndexTPSTenName(tps_path, row, col, compt);
+        if (!this->LoadTen(row, col, compt, ten_file)) {
           return false;
         }
       }
@@ -237,6 +254,12 @@ SplitIndexTPS<TenElemT, QNT> operator*(const TenElemT scalar, const SplitIndexTP
   return split_idx_tps * scalar;
 }
 
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT> &SplitIndexTPS<TenElemT, QNT>::operator-=(const SplitIndexTPS &right) {
+  (*this) = (*this) + (-right);
+  return *this;
+}
+
 template<typename QNT>
 SplitIndexTPS<QLTEN_Complex, QNT>
 operator*(const QLTEN_Double scalar, const SplitIndexTPS<QLTEN_Complex, QNT> &split_idx_tps) {
@@ -245,16 +268,16 @@ operator*(const QLTEN_Double scalar, const SplitIndexTPS<QLTEN_Complex, QNT> &sp
 
 template<typename TenElemT, typename QNT>
 void BroadCast(
-    SplitIndexTPS<TenElemT, QNT> &split_index_tps,
-    const MPI_Comm &comm
+  SplitIndexTPS<TenElemT, QNT> &split_index_tps,
+  const MPI_Comm &comm
 ) {
   CGSolverBroadCastVector(split_index_tps, comm);
 }
 
 template<typename TenElemT, typename QNT>
 void CGSolverBroadCastVector(
-    SplitIndexTPS<TenElemT, QNT> &v,
-    const MPI_Comm &comm
+  SplitIndexTPS<TenElemT, QNT> &v,
+  const MPI_Comm &comm
 ) {
   int rank, mpi_size;
   MPI_Comm_rank(comm, &rank);
@@ -282,10 +305,10 @@ void CGSolverBroadCastVector(
 
 template<typename TenElemT, typename QNT>
 void CGSolverSendVector(
-    const MPI_Comm &comm,
-    const SplitIndexTPS<TenElemT, QNT> &v,
-    const size_t dest,
-    const int tag
+  const MPI_Comm &comm,
+  const SplitIndexTPS<TenElemT, QNT> &v,
+  const size_t dest,
+  const int tag
 ) {
   using Tensor = QLTensor<TenElemT, QNT>;
   size_t peps_size[3] = {v.rows(), v.cols(), v.PhysicalDim()};
@@ -299,10 +322,10 @@ void CGSolverSendVector(
 
 template<typename TenElemT, typename QNT>
 MPI_Status CGSolverRecvVector(
-    const MPI_Comm &comm,
-    SplitIndexTPS<TenElemT, QNT> &v,
-    int src,
-    int tag
+  const MPI_Comm &comm,
+  SplitIndexTPS<TenElemT, QNT> &v,
+  int src,
+  int tag
 ) {
   using Tensor = QLTensor<TenElemT, QNT>;
   size_t peps_size[3];
@@ -321,6 +344,16 @@ MPI_Status CGSolverRecvVector(
   return status;
 }
 
-}//qlpeps
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>::SplitIndexTPS(SplitIndexTPS &&other) noexcept
+    : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(std::move(other)) {
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT> &SplitIndexTPS<TenElemT, QNT>::operator=(SplitIndexTPS &&other) noexcept {
+  TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>::operator=(std::move(other));
+  return *this;
+}
+} //qlpeps
 
 #endif //QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H

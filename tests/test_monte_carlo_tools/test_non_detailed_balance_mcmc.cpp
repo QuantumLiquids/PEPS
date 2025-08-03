@@ -693,7 +693,7 @@ class ConservedIsingModel {
 
       // Compute the energy difference if spins are exchanged
       double energy_old = CalculateEnergy_();
-      std::swap(spins_[site1], spins_[site2]);
+      spins_[site1].swap(spins_[site2]);
       double energy_new = CalculateEnergy_();
       double deltaE = energy_new - energy_old;
 
@@ -702,7 +702,7 @@ class ConservedIsingModel {
         // Accept the swap (already done)
       } else {
         // Reject the swap, revert back
-        std::swap(spins_[site1], spins_[site2]);
+        spins_[site1].swap(spins_[site2]);
       }
     }
   }
@@ -824,18 +824,18 @@ class ConservedIsingModel {
     // Default weight for no change
     weights[init_state] = std::exp(-CalculateEnergy_() / temperature_);;
 
-    std::swap(spins_[site1], spins_[site2]);
-    std::swap(spins_[site2], spins_[site3]);
+    spins_[site1].swap(spins_[site2]);
+    spins_[site2].swap(spins_[site3]);
 
     // Calculate energy differences for each possible configuration
     weights[(init_state + 2) % 3] = std::exp(-CalculateEnergy_() / temperature_);
 
-    std::swap(spins_[site1], spins_[site2]);
-    std::swap(spins_[site2], spins_[site3]);
+    spins_[site1].swap(spins_[site2]);
+    spins_[site2].swap(spins_[site3]);
     weights[(init_state + 1) % 3] = std::exp(-CalculateEnergy_() / temperature_);
 
-    std::swap(spins_[site1], spins_[site2]);
-    std::swap(spins_[site2], spins_[site3]);//back to original
+    spins_[site1].swap(spins_[site2]);
+    spins_[site2].swap(spins_[site3]);//back to original
 
     // Choose the final state using NonDBMCMCStateUpdate
     size_t final_state = NonDBMCMCStateUpdate(init_state, weights, gen);

@@ -246,8 +246,8 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
                                                                                ham_nn, ham_nnn);
     su_exe->Execute();
     auto peps = su_exe->GetPEPS();
-    delete su_exe;
     auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+    delete su_exe;
     SplitIndexTPS<QLTEN_Double, fZ2QN> sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
     sitps.ScaleMaxAbsForAllSite(1.0);
     return sitps;
@@ -354,8 +354,8 @@ struct TrivialHeisenbergTools : public testing::Test {
                                                                                       ham_nn);
     su_exe->Execute();
     auto peps = su_exe->GetPEPS();
-    delete su_exe;
     auto tps = TPS<QLTEN_Double, TrivialRepQN>(peps);
+    delete su_exe;
     SplitIndexTPS<QLTEN_Double, TrivialRepQN> sitps = SplitIndexTPS<QLTEN_Double, TrivialRepQN>(tps);
     sitps.ScaleMaxAbsForAllSite(1.0);
     return sitps;
@@ -457,8 +457,8 @@ struct TrivialTransverseIsingTools : public testing::Test {
                                                                                       ham_nn);
     su_exe->Execute();
     auto peps = su_exe->GetPEPS();
-    delete su_exe;
     auto tps = TPS<QLTEN_Double, TrivialRepQN>(peps);
+    delete su_exe;
     SplitIndexTPS<QLTEN_Double, TrivialRepQN> sitps = SplitIndexTPS<QLTEN_Double, TrivialRepQN>(tps);
     sitps.ScaleMaxAbsForAllSite(1.0);
     return sitps;
@@ -565,8 +565,8 @@ struct Z2tJTools : public testing::Test {
                                                                                dham_tj_nn);
     su_exe->Execute();
     auto peps = su_exe->GetPEPS();
-    delete su_exe;
     auto tps = TPS<QLTEN_Double, fZ2QN>(peps);
+    delete su_exe;
     SplitIndexTPS<QLTEN_Double, fZ2QN> sitps = SplitIndexTPS<QLTEN_Double, fZ2QN>(tps);
     return sitps;
   }
