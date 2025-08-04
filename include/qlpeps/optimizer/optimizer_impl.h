@@ -27,7 +27,8 @@ Optimizer<TenElemT, QNT>::Optimizer(const OptimizerParams &params,
                                     int mpi_size)
     : params_(params), comm_(comm), rank_(rank), mpi_size_(mpi_size),
       random_engine_(std::random_device{}()),
-      uniform_dist_(0.0, 1.0) {
+      uniform_dist_(0.0, 1.0),
+      adagrad_initialized_(false) {
 }
 
 template<typename TenElemT, typename QNT>
