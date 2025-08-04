@@ -20,6 +20,20 @@
 
 namespace qlpeps {
 
+/**
+ * @brief Single-state update of the Markov chain using non-detailed balance MCMC.
+ * @param init_state The state in last step.
+ * @param weights The relative weights of the states. The weights not need to be normalized.
+ * @param generator The random number generator.
+ * @return The updated state.
+ * 
+ * @note The order of the states MUST be defined in the initial of Monte-Carlo simulation,
+ * and should be fixed and consistent during the whole Monte-Carlo simulation, and do not
+ * depend on the init_state.
+ * If not, the balance condition will be violated and results will be biased! 
+ * (The nightmare is if such mistake is made, the biase is extremly small so that it is 
+ * hard to detect, but the results is wrong.)
+ */
 template<class RandGenerator>
 size_t NonDBMCMCStateUpdate(size_t init_state,
                             std::vector<double> weights,
