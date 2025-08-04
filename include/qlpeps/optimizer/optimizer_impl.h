@@ -14,7 +14,7 @@
 #include <algorithm>
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/utility/helpers.h"
-#include "qlpeps/monte_carlo_tools/statistics.h"
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlten/utility/timer.h"
 
 namespace qlpeps {

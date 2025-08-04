@@ -12,7 +12,7 @@
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                //SplitIndexTPS
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  //MCMeasurementPara
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" //ObservablesLocal
-#include "qlpeps/monte_carlo_tools/statistics.h"                  // Mean, Variance, DumpVecData, ...
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"                  // Mean, Variance, DumpVecData, ...
 #include "monte_carlo_peps_base.h"
 #include "qlpeps/base/mpi_signal_guard.h"
 

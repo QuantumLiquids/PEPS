@@ -11,11 +11,11 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_VMC_PEPS_IMPL_H
 
 #include <iomanip>
-#include "qlpeps/algorithm/vmc_update/stochastic_reconfiguration_smatrix.h" //SRSMatrix
+#include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h" //SRSMatrix
 #include "qlpeps/utility/conjugate_gradient_solver.h"
 #include "qlpeps/utility/helpers.h"                                         //ComplexConjugate
 #include "qlpeps/algorithm/vmc_update/axis_update.h"
-#include "qlpeps/monte_carlo_tools/statistics.h"
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlpeps/vmc_basic/statistics_tensor.h"
 
 namespace qlpeps {

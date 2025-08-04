@@ -9,8 +9,8 @@
 #include <gtest/gtest.h>
 #include <random>
 #include "qlten/utility/timer.h"                                  //Timer
-#include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"
-#include "qlpeps/monte_carlo_tools/statistics.h"                  //Mean
+#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"                  //Mean
 
 using qlten::Timer;
 using namespace qlpeps;

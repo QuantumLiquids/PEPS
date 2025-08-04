@@ -10,7 +10,7 @@
 
 #include "qlpeps/vmc_basic/wave_function_component.h"    // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
+#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 
 namespace qlpeps {
 
@@ -19,13 +19,13 @@ namespace qlpeps {
  * @tparam MCUpdater should define function TNN3SiteUpdateImpl
  * e.g. MCUpdateSquareTNN3SiteExchange
  */
-template<typename MCUpdater>
-class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase {
-  using MonteCarloSweepUpdaterBase::MonteCarloSweepUpdaterBase;
+template<typename MCUpdater, typename WaveFunctionDress = qlpeps::NoDress>
+class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctionDress> {
+  using MonteCarloSweepUpdaterBase<WaveFunctionDress>::MonteCarloSweepUpdaterBase;
  public:
   template<typename TenElemT, typename QNT>
   void operator()(const SplitIndexTPS<TenElemT, QNT> &sitps,
-                  TPSWaveFunctionComponent<TenElemT, QNT> &tps_component,
+                  TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress> &tps_component,
                   std::vector<double> &accept_rates) {
     size_t flip_accept_num = 0;
     auto &tn = tps_component.tn;
@@ -100,13 +100,13 @@ class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase {
  *    - t-J model.
  */
 class MCUpdateSquareTNN3SiteExchange :
-    public MCUpdateSquareTNN3SiteUpdateBase<MCUpdateSquareTNN3SiteExchange> {
+    public MCUpdateSquareTNN3SiteUpdateBase<MCUpdateSquareTNN3SiteExchange, qlpeps::NoDress> {
  public:
   template<typename TenElemT, typename QNT>
   bool TNN3SiteUpdateImpl(const SiteIdx &site1, const SiteIdx &site2, const SiteIdx &site3,
                           BondOrientation bond_dir,
                           const SplitIndexTPS<TenElemT, QNT> &sitps,
-                          TPSWaveFunctionComponent<TenElemT, QNT> &tps_component) {
+                          TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress> &tps_component) {
     auto &tn = tps_component.tn;
     size_t spin1 = tps_component.config(site1);
     size_t spin2 = tps_component.config(site2);

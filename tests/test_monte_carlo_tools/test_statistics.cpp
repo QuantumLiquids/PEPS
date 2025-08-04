@@ -6,7 +6,7 @@
 */
 
 #include "gtest/gtest.h"
-#include "qlpeps/monte_carlo_tools/statistics.h"
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 
 class StatisticsTest : public ::testing::Test {
  protected:

@@ -18,10 +18,10 @@
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_impl.h"  // For CalGTenForFermionicTensors
 #include "qlpeps/utility/helpers.h"
-#include "qlpeps/monte_carlo_tools/statistics.h"
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlten/utility/timer.h"
 #include "qlpeps/utility/conjugate_gradient_solver.h"
-#include "qlpeps/algorithm/vmc_update/stochastic_reconfiguration_smatrix.h"
+#include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
 
 namespace qlpeps {
 using namespace qlten;

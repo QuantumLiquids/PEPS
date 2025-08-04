@@ -11,7 +11,7 @@
 
 #include "qlpeps/vmc_basic/wave_function_component.h"               // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
+#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
 #include "monte_carlo_sweep_updater_all.h"                          // MonteCarloSweepUpdaterBase
 #include "qlpeps/vmc_basic/tj_single_site_state.h"
 
@@ -20,7 +20,7 @@ namespace qlpeps {
 ///< base class for CRTP
 template<typename MCUpdater, typename WaveFunctionDress = qlpeps::NoDress>
 class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctionDress> {
-  using MonteCarloSweepUpdaterBase::MonteCarloSweepUpdaterBase;
+  using MonteCarloSweepUpdaterBase<WaveFunctionDress>::MonteCarloSweepUpdaterBase;
  public:
   template<typename TenElemT, typename QNT>
   void operator()(const SplitIndexTPS<TenElemT, QNT> &sitps,
