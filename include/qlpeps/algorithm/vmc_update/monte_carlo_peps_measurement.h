@@ -198,6 +198,14 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
     }
     return res;
   }
+
+  /**
+   * @brief Get the current configuration of the TPS sample
+   * @return Current configuration
+   */
+  const Configuration& GetCurrentConfiguration() const {
+    return tps_sample_.config;
+  }
  private:
   void ReserveSamplesDataSpace_();
 

@@ -9,6 +9,16 @@
 # Define source directory path for tests
 add_definitions(-DTEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests") # used in test code
 
+# Test configuration options
+option(BUILD_SLOW_TESTS "Build slow integration tests (may take several minutes)" OFF)
+
+# Print test configuration
+if(BUILD_SLOW_TESTS)
+    message(STATUS "Slow tests: ENABLED")
+else()
+    message(STATUS "Slow tests: DISABLED")
+endif()
+
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
     set(BLA_VENDOR Intel10_64lp_seq)   #FOR VENDOR CHOICE: https://cmake.org/cmake/help/latest/module/FindBLAS.html
     set(BLAS_INCLUDE_DIR "$ENV{MKLROOT}/include")
@@ -224,17 +234,14 @@ add_mpi_unittest_run(test_vmc_peps_complex "4" " ")
 
 # Test optimizer
 add_two_type_unittest(test_optimizer
-        "test_algorithm_boson/test_optimizer.cpp"
+        "test_algorithm/test_optimizer.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
-add_mpi_unittest_run(test_optimizer_double "4" " ")
-add_mpi_unittest_run(test_optimizer_complex "4" " ")
-
 # Test VMC PEPS optimizer executor
 add_two_type_unittest(test_vmc_peps_optimizer
-        "test_algorithm_boson/test_vmc_peps_optimizer.cpp"
+        "test_algorithm/test_vmc_peps_optimizer.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
@@ -249,23 +256,32 @@ add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
 #)
 
 # Test exact summation optimization using VMCPEPSOptimizerExecutor with custom energy evaluator
-add_unittest(test_exact_sum_optimization
-        "test_algorithm_fermion/test_exact_sum_optimization.cpp"
+add_two_type_unittest(test_exact_sum_optimization
+        "test_algorithm/test_exact_sum_optimization.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 
-add_two_type_unittest(test_measure
-        "test_algorithm_boson/test_boson_mc_peps_measure.cpp"
+# Fast tests (2x2 systems, quick execution)
+add_two_type_unittest(test_mc_peps_measure
+        "test_algorithm/test_mc_peps_measure.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "test_algorithm_boson/test_data/tps_square_heisenberg4x4D8Double"
+        "test_algorithm/test_data/tps_square_heisenberg2x2D4Double"
 )
 
-
-add_two_type_unittest(test_fermion_measure
-        "test_algorithm_fermion/test_fermion_mc_measure.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
-)
+# Slow tests (4x4 systems, long execution)
+if(BUILD_SLOW_TESTS)
+    add_two_type_unittest(test_boson_measure
+            "slow_tests/test_boson_mc_peps_measure.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "slow_tests/test_data/tps_square_heisenberg4x4D8Double"
+    )
+    
+    add_two_type_unittest(test_fermion_measure
+            "slow_tests/test_fermion_mc_peps_measure.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+endif()
 
 add_unittest(test_fermion_mc_updater
         "test_algorithm_fermion/test_fermion_mc_updater.cpp"

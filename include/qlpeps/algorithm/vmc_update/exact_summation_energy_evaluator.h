@@ -63,7 +63,7 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
   using SplitIndexTPSType = SplitIndexTPS<TenElemT, QNT>;
 
   std::vector<double> weights;
-  std::vector<double> e_loc_set;
+  std::vector<TenElemT> e_loc_set;
   SplitIndexTPSType g_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());
   SplitIndexTPSType g_times_e_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());
 
@@ -73,7 +73,7 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
         tps_sample(split_index_tps, config, trun_para);
     weights.push_back(std::norm(tps_sample.amplitude));
     TensorNetwork2D<TenElemT, QNT> holes_dag(Ly, Lx);// \partial_{theta^*} \Psi^*
-    double e_loc =
+    TenElemT e_loc =
         model.template CalEnergyAndHoles<TenElemT, QNT, true>(
             &split_index_tps, &tps_sample, holes_dag);
     e_loc_set.push_back(e_loc);
@@ -100,7 +100,7 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 
   // Calculate weighted averages
   double weight_sum = 0.0;
-  double e_loc_sum = 0.0;
+  TenElemT e_loc_sum = TenElemT(0.0);
   for (size_t j = 0; j < e_loc_set.size(); j++) {
     e_loc_sum += e_loc_set[j] * weights[j];
     weight_sum += weights[j];

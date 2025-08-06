@@ -49,7 +49,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   result.min_energy = Real(initial_energy);
 
   if (rank_ == kMPIMasterRank) {
-    result.gradient_norms.push_back(initial_gradient.NormSquare());
+    result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
   }
 
   // Determine search direction based on optimization scheme
@@ -69,7 +69,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
           initial_gradient, {}, {}, init_guess);
       search_direction = natural_grad;
       cg_iterations = cg_iters;
-      natural_grad_norm = natural_grad.NormSquare();
+      natural_grad_norm = std::sqrt(natural_grad.NormSquare());
       break;
     }
 
@@ -110,7 +110,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
       // The energy error should be calculated by the energy evaluator
       // For now, we'll use a placeholder
       result.energy_error_trajectory.push_back(energy_error);
-      result.gradient_norms.push_back(test_gradient.NormSquare());
+      result.gradient_norms.push_back(std::sqrt(test_gradient.NormSquare()));
     }
 
     // Update best state if energy improved
@@ -128,7 +128,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     LogOptimizationStep(i,
                         Real(test_energy),
                         energy_error,
-                        test_gradient.NormSquare(),
+                        std::sqrt(test_gradient.NormSquare()),
                         cumulative_step,
                         {},
                         0,
@@ -137,7 +137,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
                         update_time);
 
     if (callback.on_iteration) {
-      callback.on_iteration(i, Real(test_energy), energy_error, test_gradient.NormSquare());
+      callback.on_iteration(i, Real(test_energy), energy_error, std::sqrt(test_gradient.NormSquare()));
     }
 
     if (callback.should_stop && callback.should_stop(i, Real(test_energy), energy_error)) {
@@ -175,7 +175,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   if (rank_ == kMPIMasterRank) {
     result.energy_error_trajectory.push_back(initial_error);
-    result.gradient_norms.push_back(initial_gradient.NormSquare());
+    result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
   }
 
   // Determine search direction based on optimization scheme
@@ -195,7 +195,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
           initial_gradient, {}, {}, init_guess);
       search_direction = natural_grad;
       cg_iterations = cg_iters;
-      natural_grad_norm = natural_grad.NormSquare();
+      natural_grad_norm = std::sqrt(natural_grad.NormSquare());
       break;
     }
 
@@ -233,7 +233,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     // Store energy error and gradient norm only on master rank
     if (rank_ == kMPIMasterRank) {
       result.energy_error_trajectory.push_back(test_error);
-      result.gradient_norms.push_back(test_gradient.NormSquare());
+      result.gradient_norms.push_back(std::sqrt(test_gradient.NormSquare()));
     }
 
     // Update best state if energy improved
@@ -251,7 +251,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     LogOptimizationStep(i,
                         Real(test_energy),
                         test_error,
-                        test_gradient.NormSquare(),
+                        std::sqrt(test_gradient.NormSquare()),
                         cumulative_step,
                         {},
                         0,
@@ -260,7 +260,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
                         update_time);
 
     if (callback.on_iteration) {
-      callback.on_iteration(i, Real(test_energy), test_error, test_gradient.NormSquare());
+      callback.on_iteration(i, Real(test_energy), test_error, std::sqrt(test_gradient.NormSquare()));
     }
 
     if (callback.should_stop && callback.should_stop(i, Real(test_energy), test_error)) {
@@ -332,7 +332,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     // Store energy error and gradient norm only on master rank
     if (rank_ == kMPIMasterRank) {
       result.energy_error_trajectory.push_back(current_error);
-      result.gradient_norms.push_back(current_gradient.NormSquare());
+      result.gradient_norms.push_back(std::sqrt(current_gradient.NormSquare()));
     }
 
     total_iterations_performed = iter + 1;
@@ -356,7 +356,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     // Advanced stopping criteria checks (skip for first iteration)
     if (iter > 0) {
       double current_energy_real = Real(current_energy);
-      double gradient_norm = current_gradient.NormSquare();
+      double gradient_norm = std::sqrt(current_gradient.NormSquare());
 
       // EFFICIENT APPROACH: Only master rank evaluates stopping criteria, and broadcast the decision.
       bool should_stop = ShouldStop(current_energy_real, previous_energy, gradient_norm, iterations_without_improvement);
@@ -374,9 +374,6 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                              0.0, // sr_natural_grad_norm
                              energy_eval_time,
                              0.0); // update_time
-        result.optimized_state = best_state;
-        result.final_energy = best_energy;
-        result.total_iterations = total_iterations_performed;
         result.converged = true;
         }
         
@@ -482,7 +479,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     LogOptimizationStep(iter,
                         Real(current_energy),
                         current_error,
-                        current_gradient.NormSquare(),
+                        std::sqrt(current_gradient.NormSquare()),
                         step_length,
                         {},
                         sr_iterations,
@@ -491,7 +488,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                         update_time);
 
     if (callback.on_iteration) {
-      callback.on_iteration(iter, Real(current_energy), current_error, current_gradient.NormSquare());
+      callback.on_iteration(iter, Real(current_energy), current_error, std::sqrt(current_gradient.NormSquare()));
     }
 
     if (callback.should_stop && callback.should_stop(iter, Real(current_energy), current_error)) {
@@ -502,7 +499,6 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   result.optimized_state = best_state;
   result.final_energy = best_energy;
   result.total_iterations = total_iterations_performed;
-  result.converged = false;
 
   // Ensure the final state is valid
   if (rank_ == kMPIMasterRank) {
@@ -591,7 +587,7 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
   auto [natural_gradient, cg_iterations] = CalculateNaturalGradient(
       gradient, gten_samples, gten_average, init_guess);
 
-  double natural_grad_norm = natural_gradient.NormSquare();
+  double natural_grad_norm = std::sqrt(natural_gradient.NormSquare());
 
   if (normalize) {
     step_length /= std::sqrt(natural_grad_norm);

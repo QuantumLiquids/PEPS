@@ -78,6 +78,7 @@ struct TPSWaveFunctionComponent {
   }
 
   const TenElemT &GetAmplitude(void) const { return amplitude; }
+    Configuration &GetConfig(void) { return config; }
   size_t GetConfiguration(const SiteIdx &site) const { return config(site); }
 
   /**
