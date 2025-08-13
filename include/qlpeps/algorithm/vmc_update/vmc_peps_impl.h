@@ -683,7 +683,7 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Gradi
       for (size_t col = 0; col < lx_; col++) {
         size_t dim = split_index_tps_({row, col}).size();
         for (size_t i = 0; i < dim; i++)
-          grad_({row, col})[i].ElementWiseRandSign(unit_even_distribution, random_engine_);
+          grad_({row, col})[i].ElementWiseRandomizeMagnitudePreservePhase(unit_even_distribution, random_engine_);
       }
     }
 }
