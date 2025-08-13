@@ -256,7 +256,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
     ham_nnn({0, 1, 0, 1}) = -t2;
     ham_nnn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
 
-    SimpleUpdatePara update_para(10, 0.1, 4, 4, 1e-15);
+    SimpleUpdatePara update_para(30, 0.1, 4, 4, 1e-15);
     SimpleUpdateExecutor<TEN_ELEM_TYPE, fZ2QN>
         *su_exe = new SquareLatticeNNNSimpleUpdateExecutor<TEN_ELEM_TYPE, fZ2QN>(update_para, peps0,
                                                                                ham_nn, ham_nnn);
@@ -307,10 +307,13 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     // Create optimization parameters using new structure
     // step length = 3 to jump out the local minimal
     qlpeps::OptimizerParams opt_params = qlpeps::OptimizerParams::CreateAdaGrad(0.5, 1e-10, 200);
-    Configuration random_config(Lx, Ly);
-    std::vector<size_t> occupancy_num({2, 2});
-    random_config.Random(occupancy_num);
-    qlpeps::MonteCarloParams mc_params(1, 0, 1, "", random_config);
+    Configuration fixed_init_config(Lx, Ly);
+    // Create a fixed checkerboard pattern that satisfies occupancy {2, 2}
+    fixed_init_config({0, 0}) = 0;  // empty
+    fixed_init_config({0, 1}) = 1;  // occupied  
+    fixed_init_config({1, 0}) = 1;  // occupied
+    fixed_init_config({1, 1}) = 0;  // empty
+    qlpeps::MonteCarloParams mc_params(1, 0, 1, "", fixed_init_config);
     qlpeps::PEPSParams peps_params(trun_para, GetTypeSpecificPath("test_algorithm/test_data/spinless_fermion_tps_t2_" + std::to_string(t2)));
     qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 

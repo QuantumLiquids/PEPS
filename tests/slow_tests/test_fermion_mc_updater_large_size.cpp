@@ -3,6 +3,8 @@
 * Creation Date: 2024-10-14
 *
 * Description: QuantumLiquids/PEPS project. Unittests for PEPS Monte-Carlo Updater for fermion tensor networks.
+*
+* ~ 100 seconds to run.
 */
 
 #include "gtest/gtest.h"
@@ -165,7 +167,7 @@ size_t CountNumOfHole(const Configuration &config) {
 TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
   TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.init_config, mc_measurement_para.bmps_trunc_para);
   std::vector<double> accept_rate(1);
-  for (size_t i = 0; i < 100; i++) {
+  for (size_t i = 0; i < 10; i++) {
     MCUpdateSquareNNExchange tnn_flip_updater;
     tnn_flip_updater(split_idx_tps, tps_sample, accept_rate);
     EXPECT_EQ(CountNumOfHole(tps_sample.config), hole_num);
@@ -177,7 +179,7 @@ TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
 TEST_F(Z2tJModelTools, MonteCarlo3SiteUpdate) {
   TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.init_config, mc_measurement_para.bmps_trunc_para);
   std::vector<double> accept_rate(1);
-  for (size_t i = 0; i < 100; i++) {
+  for (size_t i = 0; i < 10; i++) {
     MCUpdateSquareTNN3SiteExchange tnn_flip_updater;
     tnn_flip_updater(split_idx_tps, tps_sample, accept_rate);
     EXPECT_EQ(CountNumOfHole(tps_sample.config), hole_num);

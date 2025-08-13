@@ -5,6 +5,9 @@
 * Creation Date: 2023-07-25
 *
 * Description: QuantumLiquids/PEPS project. Unit tests for VMC Optimization in PEPS.
+* 
+* NOTE: This is a SLOW TEST that involves VMC PEPS optimization with Monte Carlo sampling.
+* It should be run with BUILD_SLOW_TESTS=ON in CMake configuration.
 */
 
 #include "gtest/gtest.h"
@@ -49,9 +52,9 @@ class VMCPEPSUnitTest : public MPITest {
 
     // Set up test data path based on data type using CMake-defined source directory
 #if TEN_ELEM_TYPE_NUM == 1
-    test_data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm_boson/test_data/tps_square_heisenberg4x4D8Double";
+    test_data_path = std::string(TEST_SOURCE_DIR) + "/slow_tests/test_data/tps_square_heisenberg4x4D8Double";
 #elif TEN_ELEM_TYPE == QLTEN_Complex
-    test_data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm_boson/test_data/tps_square_heisenberg4x4D8Complex";
+    test_data_path = std::string(TEST_SOURCE_DIR) + "/slow_tests/test_data/tps_square_heisenberg4x4D8Complex";
 #else
 #error "Unexpected TEN_ELEM_TYPE_NUM"
 #endif

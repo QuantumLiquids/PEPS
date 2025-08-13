@@ -5,6 +5,11 @@
 * Creation Date: 2023-07-25
 *
 * Description: QuantumLiquids/PEPS project. Variational Monte-Carlo PEPS executor.
+*
+* @deprecated This class is deprecated and will be removed in a future version.
+*            Please migrate to VMCPEPSOptimizerExecutor for better modularity,
+*            maintainability, and MPI performance.
+*            See tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md for migration guide.
 */
 
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_VMC_UPDATE_H
@@ -15,10 +20,23 @@
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  //VMCOptimizePara
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_base.h"
 
+// Compiler warning for deprecation
+#if defined(__GNUC__) || defined(__clang__)
+  #define QLPEPS_DEPRECATED __attribute__((deprecated("VMCPEPSExecutor is deprecated. Use VMCPEPSOptimizerExecutor instead. See migration guide for details.")))
+#elif defined(_MSC_VER)
+  #define QLPEPS_DEPRECATED __declspec(deprecated("VMCPEPSExecutor is deprecated. Use VMCPEPSOptimizerExecutor instead. See migration guide for details."))
+#else
+  #define QLPEPS_DEPRECATED
+#endif
+
 namespace qlpeps {
 using namespace qlten;
 
 /**
+ * @deprecated This class is deprecated and will be removed in a future version.
+ *            Please migrate to VMCPEPSOptimizerExecutor for better modularity,
+ *            maintainability, and MPI performance.
+ * 
  * Finite-size PEPS optimization executor in Variational Monte-Carlo method.
  *
  * @tparam TenElemT wavefunctional elementary type, real or complex
@@ -47,6 +65,16 @@ using namespace qlten;
  * 
  * Below class may be helpful for the implementation of the EnergySolver:
  * - SquareNNModelEnergySolver: Base class for nearest-neighbor fermion models on square lattice
+ * 
+ * @note MIGRATION REQUIRED: This class will be removed in a future version.
+ *       Please migrate to VMCPEPSOptimizerExecutor:
+ *       - Better modularity with separate Optimizer class
+ *       - Improved MPI coordination and performance
+ *       - Cleaner separation of concerns
+ *       - Better testability and maintainability
+ *       
+ *       Migration guide: tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md
+ *       Quick summary: tutorial/examples/MIGRATION_SUMMARY.md
  * 
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>

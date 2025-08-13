@@ -32,7 +32,27 @@ VMCPEPSExecutor<TenElemT,
     VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>(optimize_para,
                                                                          SITPST(tps_init),
                                                                          comm,
-                                                                         solver) {}
+                                                                         solver) {
+  // Runtime deprecation warning
+  if (rank_ == 0) {
+    std::cout << "\n"
+              << "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+              << "║                           ⚠️  DEPRECATION WARNING ⚠️                           ║\n"
+              << "╠══════════════════════════════════════════════════════════════════════════════╣\n"
+              << "║ VMCPEPSExecutor is deprecated and will be removed in a future version.     ║\n"
+              << "║                                                                              ║\n"
+              << "║ Please migrate to VMCPEPSOptimizerExecutor for:                              ║\n"
+              << "║   • Better modularity and maintainability                                    ║\n"
+              << "║   • Improved MPI coordination and performance                                ║\n"
+              << "║   • Cleaner separation of concerns                                           ║\n"
+              << "║   • Better testability                                                       ║\n"
+              << "║                                                                              ║\n"
+              << "║ Migration guide: tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md  ║\n"
+              << "║ Quick summary: tutorial/examples/MIGRATION_SUMMARY.md                       ║\n"
+              << "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+              << std::endl;
+  }
+}
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 VMCPEPSExecutor<TenElemT,
@@ -53,6 +73,26 @@ VMCPEPSExecutor<TenElemT,
     grad_(ly_, lx_), natural_grad_(ly_, lx_),
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
+  // Runtime deprecation warning
+  if (rank_ == 0) {
+    std::cout << "\n"
+              << "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+              << "║                           ⚠️  DEPRECATION WARNING ⚠️                           ║\n"
+              << "╠══════════════════════════════════════════════════════════════════════════════╣\n"
+              << "║ VMCPEPSExecutor is deprecated and will be removed in a future version.     ║\n"
+              << "║                                                                              ║\n"
+              << "║ Please migrate to VMCPEPSOptimizerExecutor for:                              ║\n"
+              << "║   • Better modularity and maintainability                                    ║\n"
+              << "║   • Improved MPI coordination and performance                                ║\n"
+              << "║   • Cleaner separation of concerns                                           ║\n"
+              << "║   • Better testability                                                       ║\n"
+              << "║                                                                              ║\n"
+              << "║ Migration guide: tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md  ║\n"
+              << "║ Quick summary: tutorial/examples/MIGRATION_SUMMARY.md                       ║\n"
+              << "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+              << std::endl;
+  }
+  
   if (std::find(stochastic_reconfiguration_methods.cbegin(),
                 stochastic_reconfiguration_methods.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_methods.cend()) {
@@ -87,6 +127,26 @@ VMCPEPSExecutor<TenElemT,
     en_min_(std::numeric_limits<double>::max()),
     tps_lowest_(split_index_tps_) {
 
+  // Runtime deprecation warning
+  if (rank_ == 0) {
+    std::cout << "\n"
+              << "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+              << "║                           ⚠️  DEPRECATION WARNING ⚠️                           ║\n"
+              << "╠══════════════════════════════════════════════════════════════════════════════╣\n"
+              << "║ VMCPEPSExecutor is deprecated and will be removed in a future version.     ║\n"
+              << "║                                                                              ║\n"
+              << "║ Please migrate to VMCPEPSOptimizerExecutor for:                              ║\n"
+              << "║   • Better modularity and maintainability                                    ║\n"
+              << "║   • Improved MPI coordination and performance                                ║\n"
+              << "║   • Cleaner separation of concerns                                           ║\n"
+              << "║   • Better testability                                                       ║\n"
+              << "║                                                                              ║\n"
+              << "║ Migration guide: tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md  ║\n"
+              << "║ Quick summary: tutorial/examples/MIGRATION_SUMMARY.md                       ║\n"
+              << "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+              << std::endl;
+  }
+
   if (std::find(stochastic_reconfiguration_methods.cbegin(),
                 stochastic_reconfiguration_methods.cend(),
                 optimize_para.update_scheme) != stochastic_reconfiguration_methods.cend()) {
@@ -101,6 +161,23 @@ VMCPEPSExecutor<TenElemT,
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Execute(void) {
+  // Runtime deprecation warning on first execution
+  static bool warning_shown = false;
+  if (!warning_shown && rank_ == 0) {
+    std::cout << "\n"
+              << "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+              << "║                           ⚠️  DEPRECATION WARNING ⚠️                           ║\n"
+              << "╠══════════════════════════════════════════════════════════════════════════════╣\n"
+              << "║ VMCPEPSExecutor::Execute() is deprecated and will be removed in a future    ║\n"
+              << "║ version. Please migrate to VMCPEPSOptimizerExecutor::Execute().              ║\n"
+              << "║                                                                              ║\n"
+              << "║ Migration guide: tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md  ║\n"
+              << "║ Quick summary: tutorial/examples/MIGRATION_SUMMARY.md                       ║\n"
+              << "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+              << std::endl;
+    warning_shown = true;
+  }
+  
   this->SetStatus(ExecutorStatus::EXEING);
   this->WarmUp_();
   if (optimize_para.update_scheme == GradientLineSearch || optimize_para.update_scheme == NaturalGradientLineSearch) {
@@ -168,6 +245,26 @@ void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Reser
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::PrintExecutorInfo_(void) {
+  // Show deprecation warning prominently during initialization
+  if (rank_ == kMPIMasterRank) {
+    std::cout << "\n"
+              << "╔══════════════════════════════════════════════════════════════════════════════╗\n"
+              << "║                           ⚠️  DEPRECATION WARNING ⚠️                           ║\n"
+              << "╠══════════════════════════════════════════════════════════════════════════════╣\n"
+              << "║ VMCPEPSExecutor is deprecated and will be removed in a future version.     ║\n"
+              << "║                                                                              ║\n"
+              << "║ Please migrate to VMCPEPSOptimizerExecutor for:                              ║\n"
+              << "║   • Better modularity and maintainability                                    ║\n"
+              << "║   • Improved MPI coordination and performance                                ║\n"
+              << "║   • Cleaner separation of concerns                                           ║\n"
+              << "║   • Better testability                                                       ║\n"
+              << "║                                                                              ║\n"
+              << "║ Migration guide: tutorial/examples/migration_vmcpeps_to_vmcpepsoptimizer.md  ║\n"
+              << "║ Quick summary: tutorial/examples/MIGRATION_SUMMARY.md                       ║\n"
+              << "╚══════════════════════════════════════════════════════════════════════════════╝\n"
+              << std::endl;
+  }
+  
   this->PrintCommonInfo_("VARIATIONAL MONTE-CARLO PROGRAM FOR PEPS");
   if (rank_ == kMPIMasterRank) {
     size_t indent = 40;

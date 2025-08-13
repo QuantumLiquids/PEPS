@@ -204,29 +204,36 @@ add_unittest(test_tJ_model_solver
 )
 
 ## Test algorithms
-# Test simple update
-add_two_type_unittest(test_simple_update
-        "test_algorithm_boson/test_boson_simple_update.cpp"
+# NOTE: Test files have been reorganized:
+# - All active algorithm tests are now in test_algorithm/
+# - Deprecated tests are in test_deprecated/
+# - Old test_algorithm_boson/ and test_algorithm_fermion/ directories removed
+#
+# Test boson simple update
+add_two_type_unittest(test_boson_simple_update
+        "test_algorithm/test_boson_simple_update.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
+        ""
 )
 
-#add_unittest(test_fermion_simple_update
-#        "test_algorithm_fermion/test_fermion_simple_and_loop_update.cpp"
+# Test fermion simple update
+add_two_type_unittest(test_fermion_simple_update
+        "test_algorithm/test_fermion_simple_update.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+# DEPRECATED: Loop update test moved to test_deprecated/
+# add_two_type_unittest(test_loop_update
+#        "test_deprecated/test_loop_update_deprecated.cpp"
 #        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-#        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
-#)
-#add_two_type_unittest(test_loop_update
-#        "test_algorithm_boson/test_loop_update.cpp"
-#        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-#        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_boson/test_params.json"
-#)
+#        ""
+# )
 
 # Test vmc-peps (Unit Tests)
 add_two_type_unittest(test_vmc_peps
-        "test_algorithm_boson/test_vmc_peps.cpp"
+        "test_algorithm/test_vmc_peps.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
+        "test_data"
 )
 
 add_mpi_unittest_run(test_vmc_peps_double "4" " ")
@@ -249,11 +256,6 @@ add_two_type_unittest(test_vmc_peps_optimizer
 add_mpi_unittest_run(test_vmc_peps_optimizer_double "4" " ")
 add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
 
-#add_unittest(test_fermion_vmc_peps
-#        "test_algorithm_fermion/test_fermion_vmc_peps.cpp"
-#        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-#        "${CMAKE_CURRENT_LIST_DIR}/test_algorithm_fermion/test_params.json"
-#)
 
 # Test exact summation optimization using VMCPEPSOptimizerExecutor with custom energy evaluator
 add_two_type_unittest(test_exact_sum_optimization
@@ -268,80 +270,7 @@ add_two_type_unittest(test_mc_peps_measure
         "test_algorithm/test_data/tps_square_heisenberg2x2D4Double"
 )
 
-# Slow tests (4x4 systems, long execution)
-if(BUILD_SLOW_TESTS)
-    add_two_type_unittest(test_boson_measure
-            "slow_tests/test_boson_mc_peps_measure.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-            "slow_tests/test_data/tps_square_heisenberg4x4D8Double"
-    )
-    
-    add_two_type_unittest(test_fermion_measure
-            "slow_tests/test_fermion_mc_peps_measure.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-            " "
-    )
-endif()
 
-add_unittest(test_fermion_mc_updater
-        "test_algorithm_fermion/test_fermion_mc_updater.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "${CMAKE_CURRENT_LIST_DIR}/test_data/"
-)
-
-# VMC Integration Tests
-add_two_type_unittest(test_square_heisenberg
-        "Integration_tests/test_square_heisenberg.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
-add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
-
-
-add_two_type_unittest(test_square_nn_spinless_free_fermion
-        "Integration_tests/test_square_nn_spinless_free_fermion.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_mpi_unittest_run(test_square_nn_spinless_free_fermion_double "56" " ")
-add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "56" " ")
-
-
-add_two_type_unittest(test_square_j1j2_xxz
-        "Integration_tests/test_square_j1j2_xxz.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_two_type_unittest(test_square_j1j2_xxz_legacy
-        "Integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_two_type_unittest(test_triangle_heisenberg
-        "Integration_tests/test_triangle_heisenberg.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_two_type_unittest(test_triangle_j1j2_heisenberg
-        "Integration_tests/test_triangle_j1j2_heisenberg.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        " "
-)
-
-add_mpi_unittest_run(test_square_j1j2_xxz_double "56" " ")
-add_mpi_unittest_run(test_square_j1j2_xxz_complex "56" " ")
-add_mpi_unittest_run(test_square_j1j2_xxz_legacy_double "56" " ")
-add_mpi_unittest_run(test_square_j1j2_xxz_legacy_complex "56" " ")
-add_mpi_unittest_run(test_triangle_heisenberg_double "56" " ")
-add_mpi_unittest_run(test_triangle_heisenberg_complex "56" " ")
-add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "56" " ")
-add_mpi_unittest_run(test_triangle_j1j2_heisenberg_complex "56" " ")
 
 ## Test utility
 add_unittest(test_conjugate_gradient_solver
@@ -355,3 +284,77 @@ add_mpi_unittest(test_conjugate_gradient_mpi_solver
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3"
         ""
 )
+
+
+# Slow tests (4x4 systems, long execution)
+if(BUILD_SLOW_TESTS)
+    add_two_type_unittest(test_boson_measure
+            "slow_tests/test_boson_mc_peps_measure.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "slow_tests/test_data/tps_square_heisenberg4x4D8Double"
+    )
+    
+    add_two_type_unittest(test_fermion_measure
+            "slow_tests/test_fermion_mc_peps_measure.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_unittest(test_fermion_mc_updater
+            "slow_tests/test_fermion_mc_updater_large_size.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${CMAKE_CURRENT_LIST_DIR}/test_data/"
+    )
+
+    # VMC Integration Tests (moved to slow tests section)
+    add_two_type_unittest(test_square_heisenberg
+            "Integration_tests/test_square_heisenberg.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
+    add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
+
+    add_two_type_unittest(test_square_nn_spinless_free_fermion
+            "Integration_tests/test_square_nn_spinless_free_fermion.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_mpi_unittest_run(test_square_nn_spinless_free_fermion_double "56" " ")
+    add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "56" " ")
+
+    add_two_type_unittest(test_square_j1j2_xxz
+            "Integration_tests/test_square_j1j2_xxz.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_two_type_unittest(test_square_j1j2_xxz_legacy
+            "Integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_two_type_unittest(test_triangle_heisenberg
+            "Integration_tests/test_triangle_heisenberg.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_two_type_unittest(test_triangle_j1j2_heisenberg
+            "Integration_tests/test_triangle_j1j2_heisenberg.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+
+    add_mpi_unittest_run(test_square_j1j2_xxz_double "56" " ")
+    add_mpi_unittest_run(test_square_j1j2_xxz_complex "56" " ")
+    add_mpi_unittest_run(test_square_j1j2_xxz_legacy_double "56" " ")
+    add_mpi_unittest_run(test_square_j1j2_xxz_legacy_complex "56" " ")
+    add_mpi_unittest_run(test_triangle_heisenberg_double "56" " ")
+    add_mpi_unittest_run(test_triangle_heisenberg_complex "56" " ")
+    add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "56" " ")
+    add_mpi_unittest_run(test_triangle_j1j2_heisenberg_complex "56" " ")
+endif()

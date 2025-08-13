@@ -3,6 +3,10 @@
 * Creation Date: 2024-07-30
 *
 * Description: QuantumLiquids/PEPS project. Unittests for Loop Update in PEPS optimization.
+* 
+* DEPRECATED: This test file has been abandoned and is no longer maintained.
+* The loop update functionality may be removed in future versions.
+* Use at your own risk.
 */
 
 #define PLAIN_TRANSPOSE 1
@@ -28,15 +32,13 @@ using QNSctVecT = QNSectorVec<U1QN>;
 using TenElemT = TEN_ELEM_TYPE;
 using Tensor = QLTensor<TenElemT, U1QN>;
 
-using qlmps::CaseParamsParserBasic;
-
 using LoopGateT = std::array<Tensor, 4>;
-char *params_file;
 
-struct SystemSizeParams : public CaseParamsParserBasic {
-  SystemSizeParams(const char *f) : CaseParamsParserBasic(f) {
-    Lx = ParseInt("Lx");
-    Ly = ParseInt("Ly");
+// Hardcoded parameters instead of reading from file
+struct SystemSizeParams {
+  SystemSizeParams() {
+    Lx = 4;  // From test_params.json
+    Ly = 4;  // From test_params.json
   }
 
   size_t Ly;
@@ -44,7 +46,7 @@ struct SystemSizeParams : public CaseParamsParserBasic {
 };
 
 struct TransverseIsingLoopUpdate : public testing::Test {
-  SystemSizeParams params = SystemSizeParams(params_file);
+  SystemSizeParams params;  // Remove file dependency
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
 
@@ -289,7 +291,7 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
 
 //Square Heisenberg
 struct HeisenbergLoopUpdate : public testing::Test {
-  SystemSizeParams params = SystemSizeParams(params_file);
+  SystemSizeParams params;  // Remove file dependency
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
 
@@ -525,7 +527,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
 
 //Triangle Heisenberg
 struct TriangleHeisenbergLoopUpdate : public testing::Test {
-  SystemSizeParams params = SystemSizeParams(params_file);
+  SystemSizeParams params;  // Remove file dependency
   size_t Lx = params.Lx; //cols
   size_t Ly = params.Ly;
 
@@ -835,7 +837,7 @@ int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
-  params_file = argv[1];
+  // params_file = argv[1]; // Removed file dependency
   auto test_err = RUN_ALL_TESTS();
   MPI_Finalize();
   return test_err;
