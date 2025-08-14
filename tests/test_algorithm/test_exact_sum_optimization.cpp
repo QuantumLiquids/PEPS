@@ -306,7 +306,10 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
 
     // Create optimization parameters using new structure
     // step length = 3 to jump out the local minimal
-    qlpeps::OptimizerParams opt_params = qlpeps::OptimizerParams::CreateAdaGrad(0.5, 1e-10, 200);
+    // Use custom CoreParams to set plateau_patience = 50 for more patience
+    qlpeps::OptimizerParams::CoreParams core_params(50, 1e-15, 1e-15, 50, {0.5});
+    qlpeps::AdaGradParams adagrad_params(1e-10);
+    qlpeps::OptimizerParams opt_params(core_params, adagrad_params);
     Configuration fixed_init_config(Lx, Ly);
     // Create a fixed checkerboard pattern that satisfies occupancy {2, 2}
     fixed_init_config({0, 0}) = 0;  // empty
