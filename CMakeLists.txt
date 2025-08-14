@@ -55,6 +55,27 @@ install(
         DIRECTORY ${QLPEPS_HEADER_DIR}
         DESTINATION ${QLPEPS_INCLUDE_DEST})
 
+# Doxygen documentation
+find_package(Doxygen)
+if (DOXYGEN_FOUND)
+    set(DOXYGEN_IN ${PROJECT_SOURCE_DIR}/docs/Doxyfile)
+    set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/docs)
+    
+    file(MAKE_DIRECTORY ${DOXYGEN_OUT})
+    
+    add_custom_target(docs ALL
+        COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_IN}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        COMMENT "Generating API documentation with Doxygen"
+        VERBATIM)
+    
+    # Install documentation
+    install(DIRECTORY ${DOXYGEN_OUT}/html
+            DESTINATION ${CMAKE_INSTALL_PREFIX}/share/doc/qlpeps
+            OPTIONAL)
+else()
+    message(WARNING "Doxygen not found. Documentation will not be generated.")
+endif()
 
 # Build tool scripts
 #add_subdirectory(script)

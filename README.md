@@ -9,6 +9,23 @@ for two-dimension quantum many-body problems. It is still under building.
 
 ---
 
+## Documentation
+
+The PEPS project provides comprehensive documentation organized into several categories:
+
+- **📚 [API Documentation](docs/)** - Complete API reference generated with Doxygen
+- **📖 [Tutorials](docs/tutorial/)** - User guides and migration tutorials
+- **🛠️ [Development](docs/dev/)** - Developer guides and best practices
+- **💻 [Examples](examples/)** - Code examples and sample implementations
+
+### Quick Start
+
+1. **Generate Documentation**: `./docs/build_docs.sh` (run from project root)
+2. **View Tutorials**: Check `docs/tutorial/` for usage guides
+3. **Run Examples**: Build and run examples from the `examples/` directory
+
+---
+
 ## To-Do List
 
 - [ ] PESS
