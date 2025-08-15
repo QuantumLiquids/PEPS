@@ -1,70 +1,60 @@
 # PEPS Documentation
 
-This directory contains the Doxygen configuration and documentation generation scripts for the PEPS project.
+This directory contains the documentation for the PEPS (Projected Entangled Pair States) library.
 
-## Directory Structure
+## Building Documentation
 
-- **`tutorial/`** - User tutorials and guides
-  - Migration guides and examples
-  - Usage tutorials
-- **`dev/`** - Development documentation
-  - API improvement proposals
-  - Testing best practices
-  - Developer guides
-- **`Doxyfile`** - Doxygen configuration file for the PEPS project
-- **`mainpage.md`** - Main documentation page content
-- **`build_docs.sh`** - Script to generate documentation
-- **`README.md`** - This file
+### Option 1: Using the Build Script (Recommended)
 
-## Generating Documentation
-
-### Prerequisites
-
-1. **Install Doxygen**:
-   - **macOS**: `brew install doxygen`
-   - **Ubuntu/Debian**: `sudo apt-get install doxygen`
-   - **CentOS/RHEL**: `sudo yum install doxygen`
-   - **Windows**: Download from [doxygen.nl](https://www.doxygen.nl/)
-
-2. **Build the project** (optional, for CMake integration):
-   ```bash
-   mkdir build && cd build
-   cmake ..
-   make docs
-   ```
-
-### Using the Script
-
-The easiest way to generate documentation is using the provided script:
+The easiest way to build documentation is using the provided build script:
 
 ```bash
-./docs/build_docs.sh
+# Navigate to the docs directory
+cd docs/
+
+# Run the build script
+./build_docs.sh
 ```
 
-**Important**: This script must be run from the **ROOT** of the project (PEPS/), not from inside the docs/ directory.
+This will:
+- Generate HTML documentation in `docs/build/html/`
+- Automatically open the documentation in your default browser
+- Work on both macOS and Linux
 
-### Manual Generation
+### Option 2: Using CMake
+
+You can also build documentation as part of the main project build:
 
 ```bash
 # From the project root
-doxygen docs/Doxyfile
+mkdir build && cd build
+cmake ..
+make docs
 ```
 
-## Documentation Structure
+### Option 3: Manual Doxygen
 
-- **API Reference**: Generated from header files in `include/qlpeps/`
-- **Tutorials**: User guides and examples in `tutorial/`
-- **Development**: Developer documentation in `dev/`
-- **Examples**: Code examples in the root `examples/` directory
+If you prefer to run Doxygen manually:
 
-## Output
+```bash
+cd docs/
+doxygen Doxyfile
+```
 
-Generated documentation is placed in `build/docs/html/` and can be viewed in any web browser.
+## Build Output
 
-## Contributing
+- **HTML Documentation**: `docs/build/html/index.html`
+- **Build Directory**: `docs/build/` (automatically added to .gitignore)
 
-When adding new documentation:
-1. Place it in the appropriate subdirectory (`tutorial/` for user guides, `dev/` for developer docs)
-2. Update the relevant README files
-3. Follow the existing documentation style
-4. Include clear examples and explanations
+## Configuration
+
+- **Doxyfile**: Main Doxygen configuration file
+- **Doxyfile.in**: CMake template for Doxyfile generation
+- **CMakeLists.txt**: CMake configuration for documentation building
+
+## Notes
+
+- The build script automatically detects the project structure
+- Build files are contained within the `docs/` directory
+- The `docs/build/` directory is automatically ignored by git
+- Documentation includes all header files from `../include/qlpeps/`

@@ -306,9 +306,9 @@ if(BUILD_SLOW_TESTS)
             "${CMAKE_CURRENT_LIST_DIR}/test_data/"
     )
 
-    # VMC Integration Tests (moved to slow tests section)
+    # VMC integration tests (moved to slow tests section)
     add_two_type_unittest(test_square_heisenberg
-            "Integration_tests/test_square_heisenberg.cpp"
+            "integration_tests/test_square_heisenberg.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
@@ -317,7 +317,7 @@ if(BUILD_SLOW_TESTS)
     add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
 
     add_two_type_unittest(test_square_nn_spinless_free_fermion
-            "Integration_tests/test_square_nn_spinless_free_fermion.cpp"
+            "integration_tests/test_square_nn_spinless_free_fermion.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
@@ -326,25 +326,25 @@ if(BUILD_SLOW_TESTS)
     add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "56" " ")
 
     add_two_type_unittest(test_square_j1j2_xxz
-            "Integration_tests/test_square_j1j2_xxz.cpp"
+            "integration_tests/test_square_j1j2_xxz.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
 
     add_two_type_unittest(test_square_j1j2_xxz_legacy
-            "Integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
+            "integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
 
     add_two_type_unittest(test_triangle_heisenberg
-            "Integration_tests/test_triangle_heisenberg.cpp"
+            "integration_tests/test_triangle_heisenberg.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
 
     add_two_type_unittest(test_triangle_j1j2_heisenberg
-            "Integration_tests/test_triangle_j1j2_heisenberg.cpp"
+            "integration_tests/test_triangle_j1j2_heisenberg.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )

@@ -38,6 +38,7 @@ release/
 debug/
 test/
 build_doc/
+docs/build/
 external/gqten/
 .vscode/
 .idea/
@@ -47,4 +48,5 @@ external/gqten/
 *swo
 .DS_Store
 .ycm_extra_conf.py
+docs/PEPS.tag
 
