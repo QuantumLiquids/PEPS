@@ -1,0 +1,202 @@
+# QLTEN Type Enforcement Rules for Cursor
+
+## IMPORTANT: Scope Limitation
+**These rules apply ONLY to QLTensor element types, NOT to general numeric variables throughout the codebase.**
+
+## Rule: Use QLTEN_Double for QLTensor element types
+
+### Pattern
+```cpp
+QLTensor<double, QNT>
+```
+
+### Replacement
+```cpp
+QLTensor<QLTEN_Double, QNT>
+```
+
+### Context
+- **ONLY** for QLTensor template parameters
+- **NOT** for general variables, parameters, or other numeric types
+
+### Examples
+```cpp
+// ✅ Correct: QLTensor element types
+QLTensor<QLTEN_Double, QNT> real_tensor;
+QLTensor<QLTEN_Complex, QNT> complex_tensor;
+
+// ✅ Correct: General variables can use standard types
+double t = 1.0;
+double J = 0.3;
+double doping = 0.125;
+
+// ❌ Wrong: Using raw types for tensor element types
+QLTensor<double, QNT> tensor;                    // Wrong
+QLTensor<std::complex<double>, QNT> tensor;      // Wrong
+```
+
+---
+
+## Rule: Use QLTEN_Complex for QLTensor element types
+
+### Pattern
+```cpp
+QLTensor<std::complex<double>, QNT>
+```
+
+### Replacement
+```cpp
+QLTensor<QLTEN_Complex, QNT>
+```
+
+### Context
+- **ONLY** for QLTensor template parameters
+- **Critical for CUDA**: Host and device complex types can differ
+
+### Examples
+```cpp
+// ✅ Correct: QLTensor with complex element types
+QLTensor<QLTEN_Complex, QNT> complex_tensor;
+
+// ✅ Correct: General complex variables can use standard types
+std::complex<double> phase_factor;
+std::complex<double> coupling;
+
+// ❌ Wrong: Using std::complex for tensor element types
+QLTensor<std::complex<double>, QNT> tensor;      // Wrong
+```
+
+---
+
+## Rule: Template parameters for tensor classes
+
+### Pattern
+```cpp
+template<typename TenElemT, typename QNT>
+class TensorClass {
+    QLTensor<TenElemT, QNT> tensor;
+};
+```
+
+### Replacement
+```cpp
+template<typename TenElemT, typename QNT>
+class TensorClass {
+    QLTensor<TenElemT, QNT> tensor;
+};
+// TenElemT should be QLTEN_Double or QLTEN_Complex when used
+```
+
+### Usage
+```cpp
+// ✅ Correct: Use QLTEN types when instantiating
+TensorClass<QLTEN_Double, U1QN> real_class;
+TensorClass<QLTEN_Complex, U1QN> complex_class;
+
+// ❌ Wrong: Using raw types
+TensorClass<double, U1QN> real_class;           // Wrong
+TensorClass<std::complex<double>, U1QN> complex_class; // Wrong
+```
+
+---
+
+## Rule: Function parameters that are tensor element types
+
+### Pattern
+```cpp
+void ProcessTensor(QLTensor<double, QNT>& tensor)
+QLTensor<double, QNT> CreateTensor()
+```
+
+### Replacement
+```cpp
+void ProcessTensor(QLTensor<QLTEN_Double, QNT>& tensor)
+QLTensor<QLTEN_Double, QNT> CreateTensor()
+```
+
+### Context
+- **ONLY** when the function parameter/return type is a QLTensor
+- **NOT** for general numeric parameters
+
+### Examples
+```cpp
+// ✅ Correct: Tensor-related functions
+void OptimizeTensor(QLTensor<QLTEN_Double, QNT>& tensor);
+QLTensor<QLTEN_Complex, QNT> CreateComplexTensor();
+
+// ✅ Correct: General numeric functions
+void SetParameter(double value);
+double CalculateEnergy();
+```
+
+---
+
+## What NOT to Change
+
+### General Variables (Keep as-is)
+```cpp
+// ✅ Keep these as standard types
+double t = 1.0;                    // Model parameter
+double J = 0.3;                    // Coupling constant
+double doping = 0.125;             // Physical parameter
+std::vector<double> parameters;    // Configuration data
+std::map<std::string, double> config; // Settings
+```
+
+### Function Parameters (Keep as-is)
+```cpp
+// ✅ Keep these as standard types
+void SetParameter(double value);    // General parameter
+double GetEnergy();                 // General return type
+void UpdateConfig(double threshold); // Configuration parameter
+```
+
+### Standard Library Usage (Keep as-is)
+```cpp
+// ✅ Keep these as standard types
+double result = std::sqrt(2.0);
+std::complex<double> phase = std::exp(std::complex<double>(0, M_PI));
+```
+
+## CUDA Considerations
+
+### Why QLTEN Types for Tensors?
+1. **Memory layout**: Host and device complex types can differ
+2. **Alignment**: QLTEN types are optimized for GPU memory operations
+3. **Consistency**: Ensures same behavior on CPU and GPU
+4. **Performance**: Optimized for tensor operations
+
+### General Variables
+- Can use standard C++ types
+- No GPU memory concerns
+- Better readability and compatibility
+
+## Enforcement Priority
+
+1. **High Priority**: QLTensor template parameters
+2. **Medium Priority**: Template class parameters involving tensors
+3. **Low Priority**: Function signatures involving tensors
+4. **No Change**: General variables, parameters, and non-tensor code
+
+## Testing
+
+After applying these rules:
+1. Compile to check for tensor type compatibility
+2. Run tensor operation tests
+3. Verify CUDA operations work correctly
+4. Ensure general code still compiles and works
+5. Check that only tensor element types were changed
+
+## Summary
+
+**Key Point**: Use QLTEN types (`QLTEN_Double`, `QLTEN_Complex`) **ONLY** for:
+- `QLTensor<TenElemT, QNT>` where `TenElemT` is the element type
+- Template parameters that will be used for tensor element types
+- Function parameters/returns that are QLTensor types
+
+**Do NOT change**:
+- General numeric variables (t, J, doping, etc.)
+- Function parameters for non-tensor operations
+- Standard library containers for non-tensor data
+- Any other numeric types not related to tensor element types
+

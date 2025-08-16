@@ -203,28 +203,13 @@ class Optimizer {
                        double step_length);
 
   /**
-   * @brief Check if optimization scheme uses stochastic reconfiguration
+   * @brief Get current learning rate based on iteration and scheduler
    * 
-   * @param scheme Optimization scheme
-   * @return True if scheme uses SR
+   * @param iteration Current optimization iteration
+   * @param current_energy Current energy value (for energy-aware schedulers)
+   * @return Learning rate for this iteration
    */
-  static bool UsesStochasticReconfiguration(WAVEFUNCTION_UPDATE_SCHEME scheme);
-
-  /**
-   * @brief Check if optimization scheme is line search
-   * 
-   * @param scheme Optimization scheme
-   * @return True if scheme is line search
-   */
-  static bool IsLineSearchScheme(WAVEFUNCTION_UPDATE_SCHEME scheme);
-
-  /**
-   * @brief Check if optimization scheme is adaptive (AdaGrad, Adam, etc.)
-   * 
-   * @param scheme Optimization scheme
-   * @return True if scheme is adaptive
-   */
-  static bool IsAdaptiveScheme(WAVEFUNCTION_UPDATE_SCHEME scheme);
+  double GetCurrentLearningRate(size_t iteration, double current_energy = 0.0) const;
 
   /**
    * @brief Check if optimization should stop based on convergence criteria
@@ -292,23 +277,7 @@ class Optimizer {
   
  };
 
-// Implementation of static methods
-template<typename TenElemT, typename QNT>
-bool Optimizer<TenElemT, QNT>::UsesStochasticReconfiguration(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return std::find(stochastic_reconfiguration_methods.cbegin(),
-                   stochastic_reconfiguration_methods.cend(),
-                   scheme) != stochastic_reconfiguration_methods.cend();
-}
 
-template<typename TenElemT, typename QNT>
-bool Optimizer<TenElemT, QNT>::IsLineSearchScheme(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return scheme == GradientLineSearch || scheme == NaturalGradientLineSearch;
-}
-
-template<typename TenElemT, typename QNT>
-bool Optimizer<TenElemT, QNT>::IsAdaptiveScheme(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return scheme == AdaGrad;
-}
 
 } // namespace qlpeps
 

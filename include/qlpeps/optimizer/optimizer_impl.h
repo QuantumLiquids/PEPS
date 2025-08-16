@@ -36,6 +36,17 @@ Optimizer<TenElemT, QNT>::Optimizer(const OptimizerParams &params,
 }
 
 template<typename TenElemT, typename QNT>
+double Optimizer<TenElemT, QNT>::GetCurrentLearningRate(size_t iteration, double current_energy) const {
+  double learning_rate = params_.base_params.learning_rate;  // Default/base rate
+  
+  if (params_.base_params.lr_scheduler) {
+    learning_rate = params_.base_params.lr_scheduler->GetLearningRate(iteration, current_energy);
+  }
+  
+  return learning_rate;
+}
+
+template<typename TenElemT, typename QNT>
 typename Optimizer<TenElemT, QNT>::OptimizationResult
 Optimizer<TenElemT, QNT>::LineSearchOptimize(
     const SITPST &initial_state,
@@ -56,28 +67,25 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
   }
 
-  // Determine search direction based on optimization scheme
+  // Determine search direction based on algorithm type
   SITPST search_direction;
   size_t cg_iterations = 0;
   double natural_grad_norm = 0.0;
 
-  switch (params_.update_scheme) {
-    case GradientLineSearch:search_direction = initial_gradient;
-      break;
-
-    case NaturalGradientLineSearch: {
-      // For natural gradient, we need to calculate it
-      // This is a simplified version - in practice, you'd need the gradient samples
-      SITPST init_guess(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
-      auto [natural_grad, cg_iters] = CalculateNaturalGradient(
-          initial_gradient, {}, {}, init_guess);
-      search_direction = natural_grad;
-      cg_iterations = cg_iters;
-      natural_grad_norm = std::sqrt(natural_grad.NormSquare());
-      break;
-    }
-
-    default:throw std::runtime_error("Invalid optimization scheme for line search");
+  // Simple dispatch - currently only SGD and SR variants supported for line search
+  if (params_.IsAlgorithm<SGDParams>()) {
+    search_direction = initial_gradient;
+  } else if (params_.IsAlgorithm<StochasticReconfigurationParams>()) {
+    // For natural gradient, we need to calculate it
+    // This is a simplified version - in practice, you'd need the gradient samples
+    SITPST init_guess(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
+    auto [natural_grad, cg_iters] = CalculateNaturalGradient(
+        initial_gradient, {}, {}, init_guess);
+    search_direction = natural_grad;
+    cg_iterations = cg_iters;
+    natural_grad_norm = std::sqrt(natural_grad.NormSquare());
+  } else {
+    throw std::runtime_error("Invalid algorithm type for line search");
   }
 
   // Perform line search along the search direction
@@ -85,8 +93,12 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   double best_energy = Real(initial_energy);
   double cumulative_step = 0.0;
 
-  for (size_t i = 0; i < params_.base_params.step_lengths.size(); ++i) {
-    double step_length = params_.base_params.step_lengths[i];
+  // For line search, use multiple steps with the current learning rate
+  // Default to 3 line search steps if no specific configuration
+  size_t max_line_search_steps = 3;
+  
+  for (size_t i = 0; i < max_line_search_steps; ++i) {
+    double step_length = GetCurrentLearningRate(i, best_energy);
     cumulative_step += step_length;
 
     // Start timer for update step
@@ -151,7 +163,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   result.optimized_state = best_state;
   result.final_energy = best_energy;
-  result.total_iterations = params_.base_params.step_lengths.size();
+  result.total_iterations = max_line_search_steps;
   result.converged = true;
 
   // Clean up optimization state
@@ -182,28 +194,25 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
   }
 
-  // Determine search direction based on optimization scheme
+  // Determine search direction based on algorithm type
   SITPST search_direction;
   size_t cg_iterations = 0;
   double natural_grad_norm = 0.0;
 
-  switch (params_.update_scheme) {
-    case GradientLineSearch:search_direction = initial_gradient;
-      break;
-
-    case NaturalGradientLineSearch: {
-      // For natural gradient, we need to calculate it
-      // This is a simplified version - in practice, you'd need the gradient samples
-      SITPST init_guess(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
-      auto [natural_grad, cg_iters] = CalculateNaturalGradient(
-          initial_gradient, {}, {}, init_guess);
-      search_direction = natural_grad;
-      cg_iterations = cg_iters;
-      natural_grad_norm = std::sqrt(natural_grad.NormSquare());
-      break;
-    }
-
-    default:throw std::runtime_error("Invalid optimization scheme for line search");
+  // Simple dispatch - currently only SGD and SR variants supported for line search
+  if (params_.IsAlgorithm<SGDParams>()) {
+    search_direction = initial_gradient;
+  } else if (params_.IsAlgorithm<StochasticReconfigurationParams>()) {
+    // For natural gradient, we need to calculate it
+    // This is a simplified version - in practice, you'd need the gradient samples
+    SITPST init_guess(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
+    auto [natural_grad, cg_iters] = CalculateNaturalGradient(
+        initial_gradient, {}, {}, init_guess);
+    search_direction = natural_grad;
+    cg_iterations = cg_iters;
+    natural_grad_norm = std::sqrt(natural_grad.NormSquare());
+  } else {
+    throw std::runtime_error("Invalid algorithm type for line search");
   }
 
   // Perform line search along the search direction
@@ -211,8 +220,12 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   double best_energy = Real(initial_energy);
   double cumulative_step = 0.0;
 
-  for (size_t i = 0; i < params_.base_params.step_lengths.size(); ++i) {
-    double step_length = params_.base_params.step_lengths[i];
+  // For line search, use multiple steps with the current learning rate
+  // Default to 3 line search steps if no specific configuration
+  size_t max_line_search_steps = 3;
+  
+  for (size_t i = 0; i < max_line_search_steps; ++i) {
+    double step_length = GetCurrentLearningRate(i, best_energy);
     cumulative_step += step_length;
 
     // Start timer for update step
@@ -274,7 +287,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   result.optimized_state = best_state;
   result.final_energy = best_energy;
-  result.total_iterations = params_.base_params.step_lengths.size();
+  result.total_iterations = max_line_search_steps;
   result.converged = true;
 
   // Clean up optimization state
@@ -303,7 +316,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
   // Initialize for stochastic reconfiguration if needed
   SITPST sr_init_guess;
-  if (UsesStochasticReconfiguration(params_.update_scheme)) {
+  if (params_.IsAlgorithm<StochasticReconfigurationParams>()) {
     sr_init_guess = SITPST(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
   }
 
@@ -313,15 +326,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
   size_t total_iterations_performed = 0;
   for (size_t iter = 0; iter < params_.base_params.max_iterations; ++iter) {
-    // For AdaGrad, use uniform learning rate; for other methods use step_lengths with additional steps repeat use the last step length
-    double step_length;
-    if (params_.update_scheme == AdaGrad) {
-      step_length = params_.base_params.step_lengths.front();
-    } else {
-      step_length =
-          params_.base_params.step_lengths[iter < params_.base_params.step_lengths.size() ? iter :
-                                           params_.base_params.step_lengths.size() - 1];
-    }
+    // Get current learning rate based on iteration and scheduler
+    double step_length = GetCurrentLearningRate(iter, best_energy);
 
     // Start timer for energy evaluation (the dominant computational cost)
     Timer energy_eval_timer("energy_evaluation");
@@ -393,83 +399,51 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     // Start timer for optimization update step
     Timer update_timer("optimization_update");
 
-    // Apply optimization update based on scheme
+    // Apply optimization update based on algorithm type
     SITPST updated_state;
     size_t sr_iterations = 0;
     double sr_natural_grad_norm = 0.0;
 
-    switch (params_.update_scheme) {
-      case StochasticGradient:updated_state = UpdateTPSByGradient(current_state, current_gradient, step_length);
-        break;
-
-      case RandomStepStochasticGradient:step_length *= uniform_dist_(random_engine_);
-        updated_state = UpdateTPSByGradient(current_state, current_gradient, step_length);
-        break;
-
-      case StochasticReconfiguration: {
+    // Use std::visit for type-safe algorithm dispatch
+    std::visit([&](const auto& algo_params) {
+      using T = std::decay_t<decltype(algo_params)>;
+      
+      if constexpr (std::is_same_v<T, SGDParams>) {
+        // Basic SGD variants
+        if (algo_params.nesterov) {
+          // TODO: Implement Nesterov momentum when needed
+          updated_state = UpdateTPSByGradient(current_state, current_gradient, step_length);
+        } else {
+          updated_state = UpdateTPSByGradient(current_state, current_gradient, step_length);
+        }
+      }
+      else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
+        // Stochastic Reconfiguration variants
         auto [new_state, ng_norm, sr_iters] = StochasticReconfigurationUpdate(
             current_state, current_gradient,
             gten_samples ? *gten_samples : std::vector<SITPST>{},
             gten_average ? *gten_average : SITPST{},
-            step_length, sr_init_guess, false);
+            step_length, sr_init_guess, algo_params.normalize_update);
         updated_state = new_state;
         sr_iterations = sr_iters;
         sr_natural_grad_norm = ng_norm;
         sr_init_guess = new_state; // Use as initial guess for next iteration
-        break;
       }
-
-      case RandomStepStochasticReconfiguration: {
-        step_length *= uniform_dist_(random_engine_);
-        auto [new_state, ng_norm, sr_iters] = StochasticReconfigurationUpdate(
-            current_state, current_gradient,
-            gten_samples ? *gten_samples : std::vector<SITPST>{},
-            gten_average ? *gten_average : SITPST{},
-            step_length, sr_init_guess, false);
-        updated_state = new_state;
-        sr_iterations = sr_iters;
-        sr_natural_grad_norm = ng_norm;
-        sr_init_guess = new_state;
-        break;
+      else if constexpr (std::is_same_v<T, AdaGradParams>) {
+        updated_state = AdaGradUpdate(current_state, current_gradient, step_length);
       }
-
-      case NormalizedStochasticReconfiguration: {
-        auto [new_state, ng_norm, sr_iters] = StochasticReconfigurationUpdate(
-            current_state, current_gradient,
-            gten_samples ? *gten_samples : std::vector<SITPST>{},
-            gten_average ? *gten_average : SITPST{},
-            step_length, sr_init_guess, true);
-        updated_state = new_state;
-        sr_iterations = sr_iters;
-        sr_natural_grad_norm = ng_norm;
-        sr_init_guess = new_state;
-        break;
+      else if constexpr (std::is_same_v<T, AdamParams>) {
+        // TODO: Implement Adam when needed
+        throw std::runtime_error("Adam algorithm not yet implemented");
       }
-
-      case RandomGradientElement: {
-        SITPST random_gradient = current_gradient;
-        // Apply random signs to gradient elements
-        for (size_t row = 0; row < random_gradient.rows(); ++row) {
-          for (size_t col = 0; col < random_gradient.cols(); ++col) {
-            for (size_t i = 0; i < random_gradient({row, col}).size(); ++i) {
-              if (uniform_dist_(random_engine_) < 0.5) {
-                random_gradient({row, col})[i] *= -1.0;
-              }
-            }
-          }
-        }
-        updated_state = UpdateTPSByGradient(current_state, random_gradient, step_length);
-        break;
+      else if constexpr (std::is_same_v<T, LBFGSParams>) {
+        // TODO: Implement L-BFGS when needed
+        throw std::runtime_error("L-BFGS algorithm not yet implemented");
       }
-
-      case BoundGradientElement:updated_state = BoundedGradientUpdate(current_state, current_gradient, step_length);
-        break;
-
-      case AdaGrad:updated_state = AdaGradUpdate(current_state, current_gradient, step_length);
-        break;
-
-      default:throw std::runtime_error("Unsupported optimization scheme for iterative optimization");
-    }
+      else {
+        throw std::runtime_error("Unsupported algorithm type for iterative optimization");
+      }
+    }, params_.algorithm_params);
 
     current_state = updated_state;
 
@@ -545,7 +519,9 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
     const SITPST &gten_average,
     const SITPST &init_guess) {
 
-  const ConjugateGradientParams &cg_params = params_.cg_params;
+  // Get CG parameters from StochasticReconfigurationParams
+  const auto& sr_params = params_.GetAlgorithmParams<StochasticReconfigurationParams>();
+  const ConjugateGradientParams &cg_params = sr_params.cg_params;
 
   // Create S-matrix for stochastic reconfiguration
   SITPST *pgten_average = nullptr;
@@ -657,6 +633,9 @@ typename Optimizer<TenElemT, QNT>::SITPST
 Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
                                         const SITPST &gradient,
                                         double step_length) {
+  // Get AdaGrad parameters from the algorithm params
+  const auto& adagrad_params = params_.GetAlgorithmParams<AdaGradParams>();
+  
   // Initialize AdaGrad state if not already done
   if (!adagrad_initialized_) {
     accumulated_gradients_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
@@ -666,7 +645,7 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
         for (size_t i = 0; i < accumulated_gradients_({row, col}).size(); ++i) {
           accumulated_gradients_({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
           QNT div = gradient({row, col})[i].Div();
-          accumulated_gradients_({row, col})[i].Fill(div, params_.GetAdaGradParams().initial_accumulator_value);
+          accumulated_gradients_({row, col})[i].Fill(div, adagrad_params.initial_accumulator_value);
           // Note here for fermionic tensor, positive and negative are relatively define, 
           // In the AdaGrad, we fix the order of indexes to make it make sense.
         }
@@ -681,7 +660,7 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
 
   // Compute adaptive learning rates: 1/sqrt(G_k) for |G_k| > epsilon
   SITPST
-      adaptive_rates = ElementWiseInverse(ElementWiseSqrt(accumulated_gradients_), params_.GetAdaGradParams().epsilon);
+      adaptive_rates = ElementWiseInverse(ElementWiseSqrt(accumulated_gradients_), adagrad_params.epsilon);
 
   // Apply AdaGrad update: θ_{k+1} = θ_k - η * adaptive_rates * gradient
   SITPST updated_state = current_state;
@@ -801,7 +780,7 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
     }
 
     // Print SR information if available
-    if (UsesStochasticReconfiguration(params_.update_scheme) && sr_iterations > 0) {
+    if (params_.IsAlgorithm<StochasticReconfigurationParams>() && sr_iterations > 0) {
       std::cout << "SRSolver Iter = " << std::setw(4) << sr_iterations;
       std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
     }
