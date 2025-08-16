@@ -307,7 +307,7 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     // Create optimization parameters using new structure
     // step length = 3 to jump out the local minimal
     // Use custom CoreParams to set plateau_patience = 50 for more patience
-    qlpeps::OptimizerParams::CoreParams core_params(50, 1e-15, 1e-15, 50, {0.5});
+    qlpeps::OptimizerParams::BaseParams core_params(50, 1e-15, 1e-15, 50, {0.5});
     qlpeps::AdaGradParams adagrad_params(1e-10);
     qlpeps::OptimizerParams opt_params(core_params, adagrad_params);
     Configuration fixed_init_config(Lx, Ly);

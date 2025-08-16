@@ -287,13 +287,13 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   }
 
   if (this->rank_ == 0) {
-    const size_t step_count = params_.optimizer_params.core_params.step_lengths.size();
+    const size_t step_count = params_.optimizer_params.base_params.step_lengths.size();
     energy_trajectory_.reserve(step_count);
     energy_error_traj_.reserve(step_count);
   }
 
   if (this->rank_ == kMPIMasterRank) {
-    grad_norm_.reserve(params_.optimizer_params.core_params.step_lengths.size());
+    grad_norm_.reserve(params_.optimizer_params.base_params.step_lengths.size());
   }
 
   if (stochastic_reconfiguration_update_class_) {
@@ -307,7 +307,7 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   this->PrintCommonInfo_("VMC PEPS OPTIMIZER EXECUTOR");
   if (this->rank_ == kMPIMasterRank) {
     size_t indent = 40;
-    std::cout << std::setw(indent) << "PEPS update times:" << params_.optimizer_params.core_params.step_lengths.size()
+    std::cout << std::setw(indent) << "PEPS update times:" << params_.optimizer_params.base_params.step_lengths.size()
               << "\n";
     std::cout << std::setw(indent) << "PEPS update strategy:"
               << WavefunctionUpdateSchemeString(params_.optimizer_params.update_scheme) << "\n";

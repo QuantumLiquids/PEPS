@@ -6,6 +6,7 @@ This directory contains documentation for developers working on the PEPS project
 
 ### API Development
 - **`API_IMPROVEMENT_SUGGESTIONS.md`** - Suggestions and proposals for improving the PEPS API
+- **`OPTIMIZER_PARAMS_REFACTOR_PROPOSAL.md`** - Comprehensive refactor proposal for modernizing optimizer parameters API
 
 ### Testing and Best Practices
 - **`MONTE_CARLO_TESTING_BEST_PRACTICES.md`** - Best practices for testing Monte Carlo implementations

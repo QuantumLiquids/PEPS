@@ -85,8 +85,8 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   double best_energy = Real(initial_energy);
   double cumulative_step = 0.0;
 
-  for (size_t i = 0; i < params_.core_params.step_lengths.size(); ++i) {
-    double step_length = params_.core_params.step_lengths[i];
+  for (size_t i = 0; i < params_.base_params.step_lengths.size(); ++i) {
+    double step_length = params_.base_params.step_lengths[i];
     cumulative_step += step_length;
 
     // Start timer for update step
@@ -151,7 +151,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   result.optimized_state = best_state;
   result.final_energy = best_energy;
-  result.total_iterations = params_.core_params.step_lengths.size();
+  result.total_iterations = params_.base_params.step_lengths.size();
   result.converged = true;
 
   // Clean up optimization state
@@ -211,8 +211,8 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   double best_energy = Real(initial_energy);
   double cumulative_step = 0.0;
 
-  for (size_t i = 0; i < params_.core_params.step_lengths.size(); ++i) {
-    double step_length = params_.core_params.step_lengths[i];
+  for (size_t i = 0; i < params_.base_params.step_lengths.size(); ++i) {
+    double step_length = params_.base_params.step_lengths[i];
     cumulative_step += step_length;
 
     // Start timer for update step
@@ -274,7 +274,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   result.optimized_state = best_state;
   result.final_energy = best_energy;
-  result.total_iterations = params_.core_params.step_lengths.size();
+  result.total_iterations = params_.base_params.step_lengths.size();
   result.converged = true;
 
   // Clean up optimization state
@@ -312,15 +312,15 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   size_t iterations_without_improvement = 0;  // plateau counter
 
   size_t total_iterations_performed = 0;
-  for (size_t iter = 0; iter < params_.core_params.max_iterations; ++iter) {
+  for (size_t iter = 0; iter < params_.base_params.max_iterations; ++iter) {
     // For AdaGrad, use uniform learning rate; for other methods use step_lengths with additional steps repeat use the last step length
     double step_length;
     if (params_.update_scheme == AdaGrad) {
-      step_length = params_.core_params.step_lengths.front();
+      step_length = params_.base_params.step_lengths.front();
     } else {
       step_length =
-          params_.core_params.step_lengths[iter < params_.core_params.step_lengths.size() ? iter :
-                                           params_.core_params.step_lengths.size() - 1];
+          params_.base_params.step_lengths[iter < params_.base_params.step_lengths.size() ? iter :
+                                           params_.base_params.step_lengths.size() - 1];
     }
 
     // Start timer for energy evaluation (the dominant computational cost)
@@ -824,25 +824,25 @@ bool Optimizer<TenElemT, QNT>::ShouldStop(double current_energy, double previous
   
   if (rank_ == kMPIMasterRank) {
     // Check gradient norm convergence
-    if (gradient_norm < params_.core_params.gradient_tolerance) {
+    if (gradient_norm < params_.base_params.gradient_tolerance) {
       std::cout << "Stopping: Gradient norm converged (" << std::scientific << std::setprecision(1) << gradient_norm
-                << " < " << std::scientific << std::setprecision(1) << params_.core_params.gradient_tolerance
+                << " < " << std::scientific << std::setprecision(1) << params_.base_params.gradient_tolerance
                 << ")" << std::endl;
       should_stop = true;
     }
 
     // Check energy convergence
-    if (std::abs(current_energy - previous_energy) < params_.core_params.energy_tolerance) {
+    if (std::abs(current_energy - previous_energy) < params_.base_params.energy_tolerance) {
       std::cout << "Stopping: Energy converged (|ΔE| = " << std::scientific << std::setprecision(1)
                 << std::abs(current_energy - previous_energy)
-                << " < " << std::scientific << std::setprecision(1) << params_.core_params.energy_tolerance
+                << " < " << std::scientific << std::setprecision(1) << params_.base_params.energy_tolerance
                 << ")" << std::endl;
       should_stop = true;
     }
 
     // Check plateau detection
-    if (iterations_without_improvement >= params_.core_params.plateau_patience) {
-      std::cout << "Stopping: No improvement for " << params_.core_params.plateau_patience
+    if (iterations_without_improvement >= params_.base_params.plateau_patience) {
+      std::cout << "Stopping: No improvement for " << params_.base_params.plateau_patience
                 << " iterations (plateau detected)" << std::endl;
       should_stop = true;
     }

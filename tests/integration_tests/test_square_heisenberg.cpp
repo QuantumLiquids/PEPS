@@ -117,8 +117,8 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 // Check if the TPS doesn't change by setting step length = 0
 TEST_F(HeisenbergSystem, ZeroUpdate) {
   MPI_Barrier(comm);
-  vmc_peps_para.optimizer_params.core_params.step_lengths = {0.0};
-  vmc_peps_para.optimizer_params.core_params.max_iterations = 3;
+  vmc_peps_para.optimizer_params.base_params.step_lengths = {0.0};
+  vmc_peps_para.optimizer_params.base_params.max_iterations = 3;
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);
   auto init_tps = tps;

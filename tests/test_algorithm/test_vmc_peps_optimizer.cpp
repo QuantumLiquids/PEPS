@@ -148,7 +148,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
 
   // Test with invalid parameters - empty step lengths should be handled gracefully
   VMCPEPSOptimizerParams invalid_para = optimize_para;
-  invalid_para.optimizer_params.core_params.step_lengths.clear();  // Empty step lengths
+  invalid_para.optimizer_params.base_params.step_lengths.clear();  // Empty step lengths
 
   // The constructor should handle empty step lengths gracefully, not throw
   EXPECT_NO_THROW(

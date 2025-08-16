@@ -165,38 +165,33 @@ struct AdaGradParams {
  */
 struct OptimizerParams {
   /**
- * @struct CoreParams
+ * @struct BaseParams
  * @brief Core optimization parameters that are independent of specific algorithms.
  */
-  struct CoreParams {
+  struct BaseParams {
     size_t max_iterations;
     double energy_tolerance;
     double gradient_tolerance;
     size_t plateau_patience;        // Stop after N iterations without improvement
     std::vector<double> step_lengths;
-    bool enable_logging;
-    size_t log_frequency;
-    std::string log_file_path;
 
-    CoreParams(size_t max_iter, double energy_tol = 1e-15, double grad_tol = 1e-30,
-               size_t patience = 20, const std::vector<double> &steps = {0.1},
-               bool logging = true, size_t log_freq = 10, const std::string &log_path = "")
+    BaseParams(size_t max_iter, double energy_tol = 1e-15, double grad_tol = 1e-30,
+               size_t patience = 20, const std::vector<double> &steps = {0.1})
         : max_iterations(max_iter), energy_tolerance(energy_tol), gradient_tolerance(grad_tol),
-          plateau_patience(patience), step_lengths(steps), enable_logging(logging),
-          log_frequency(log_freq), log_file_path(log_path) {}
+          plateau_patience(patience), step_lengths(steps) {}
   };
 
-  CoreParams core_params;
+  BaseParams base_params;
   WAVEFUNCTION_UPDATE_SCHEME update_scheme;
   std::variant<std::monostate, AdaGradParams> algorithm_params;
   ConjugateGradientParams cg_params;
 
-  OptimizerParams(void) : core_params(0) { ; } // default we expect non-sense params.
+  OptimizerParams(void) : base_params(0) { ; } // default we expect non-sense params.
 
-  OptimizerParams(const CoreParams &core_params,
+  OptimizerParams(const BaseParams &core_params,
                   WAVEFUNCTION_UPDATE_SCHEME scheme,
                   const ConjugateGradientParams &cg = ConjugateGradientParams())
-      : core_params(core_params), update_scheme(scheme), cg_params(cg) {
+      : base_params(core_params), update_scheme(scheme), cg_params(cg) {
     if (IsStochasticReconfiguration(scheme)) {
       if (cg.IsDefault()) {
         throw std::invalid_argument("ConjugateGradientParams is not provided for stochastic reconfiguration methods");
@@ -204,9 +199,9 @@ struct OptimizerParams {
     }
   }
 
-  OptimizerParams(const CoreParams &core_params,
+  OptimizerParams(const BaseParams &core_params,
                   const AdaGradParams &adagrad_params)
-      : core_params(core_params), update_scheme(AdaGrad), algorithm_params(adagrad_params) {}
+      : base_params(core_params), update_scheme(AdaGrad), algorithm_params(adagrad_params) {}
 
   AdaGradParams GetAdaGradParams() const {
     if (std::holds_alternative<AdaGradParams>(algorithm_params)) {
@@ -217,21 +212,21 @@ struct OptimizerParams {
 
   static OptimizerParams CreateStochasticGradient(const std::vector<double> &step_lengths,
                                                   size_t max_iterations) {
-    return OptimizerParams(CoreParams(max_iterations, 1e-15, 1e-15, 20, step_lengths),
+    return OptimizerParams(BaseParams(max_iterations, 1e-15, 1e-15, 20, step_lengths),
                            StochasticGradient);
   }
 
   static OptimizerParams CreateAdaGrad(double step_length,
                                        double epsilon,
                                        size_t max_iterations) {
-    return OptimizerParams(CoreParams(max_iterations, 1e-15, 1e-15, 20, {step_length}),
+    return OptimizerParams(BaseParams(max_iterations, 1e-15, 1e-15, 20, {step_length}),
                            AdaGradParams(epsilon));
   }
 
   static OptimizerParams CreateStochasticReconfiguration(const std::vector<double> &step_lengths,
                                                          const ConjugateGradientParams &cg_params,
                                                          size_t max_iterations) {
-    return OptimizerParams(CoreParams(max_iterations, 1e-15, 1e-15, 20, step_lengths),
+    return OptimizerParams(BaseParams(max_iterations, 1e-15, 1e-15, 20, step_lengths),
                            StochasticReconfiguration, cg_params);
   }
 };

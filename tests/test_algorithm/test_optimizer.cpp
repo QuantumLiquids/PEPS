@@ -53,7 +53,7 @@ class OptimizerTest : public ::testing::Test {
       // Set up test parameters with realistic convergence criteria for testing
       // Mock evaluator changes energy by ~0.01 per iteration, so set reasonable tolerances
       test_params_ = OptimizerParams(
-        OptimizerParams::CoreParams(1000, 1e-6, 1e-6, 20, {0.1, 0.05, 0.01}),
+        OptimizerParams::BaseParams(1000, 1e-6, 1e-6, 20, {0.1, 0.05, 0.01}),
         StochasticGradient);
 
       // Create a simple test TPS
@@ -185,7 +185,7 @@ TEST_F(OptimizerTest, GradientUpdate) {
 TEST_F(OptimizerTest, LineSearchOptimization) {
   // Use gradient line search for simplicity
   test_params_ =
-      OptimizerParams(OptimizerParams::CoreParams(1000, 1e-2, 1e-4, 20, {0.1, 0.05, 0.01}), GradientLineSearch);
+      OptimizerParams(OptimizerParams::BaseParams(1000, 1e-2, 1e-4, 20, {0.1, 0.05, 0.01}), GradientLineSearch);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -204,7 +204,7 @@ TEST_F(OptimizerTest, LineSearchOptimization) {
 // Test iterative optimization
 TEST_F(OptimizerTest, IterativeOptimization) {
   test_params_ = OptimizerParams(
-    OptimizerParams::CoreParams(1000, 1e-15, 1e-15, 1000, {0.1, 0.05, 0.01}),
+    OptimizerParams::BaseParams(1000, 1e-15, 1e-15, 1000, {0.1, 0.05, 0.01}),
     StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -289,7 +289,7 @@ TEST_F(OptimizerTest, TimeLogging) {
     // if convergence criteria are not met. The time logging should match iterations.
     EXPECT_GT(totT_count, 0);
     EXPECT_EQ(totT_count, result.total_iterations);
-    EXPECT_LE(result.total_iterations, test_params_.core_params.max_iterations);
+    EXPECT_LE(result.total_iterations, test_params_.base_params.max_iterations);
   }
 }
 
@@ -334,7 +334,7 @@ TEST_F(OptimizerTest, TimeLoggingImposeStoppingAdvance) {
     // if convergence criteria are not met. The time logging should match iterations.
     EXPECT_GT(totT_count, 0);
     EXPECT_EQ(totT_count, result.total_iterations);
-    EXPECT_LE(result.total_iterations, test_params_.core_params.max_iterations);
+    EXPECT_LE(result.total_iterations, test_params_.base_params.max_iterations);
   }
 }
 
@@ -348,7 +348,7 @@ TEST_F(OptimizerTest, DifferentOptimizationSchemes) {
   };
 
   for (auto scheme : schemes) {
-    test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-15, 1e-15, 1000, {0.1}), scheme);
+    test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-15, 1e-15, 1000, {0.1}), scheme);
 
     OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -437,7 +437,7 @@ TEST_F(OptimizerTest, RandomGradientUpdate) {
 // Test advanced stop functionality - Gradient convergence
 TEST_F(OptimizerTest, AdvancedStopGradientConvergence) {
   // Set very low gradient tolerance to trigger gradient convergence
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-2, 1e-10, 20, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-2, 1e-10, 20, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -468,14 +468,14 @@ TEST_F(OptimizerTest, AdvancedStopGradientConvergence) {
 
   EXPECT_TRUE(result.converged);
   // Should stop early due to gradient convergence
-  EXPECT_LT(result.total_iterations, test_params_.core_params.step_lengths.size());
+  EXPECT_LT(result.total_iterations, test_params_.base_params.step_lengths.size());
   EXPECT_GT(result.total_iterations, 0);
 }
 
 // Test advanced stop functionality - Energy convergence
 TEST_F(OptimizerTest, AdvancedStopEnergyConvergence) {
   // Set very low energy tolerance to trigger energy convergence
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-10, 1e-6, 20, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-10, 1e-6, 20, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -509,7 +509,7 @@ TEST_F(OptimizerTest, AdvancedStopEnergyConvergence) {
 // Test advanced stop functionality - Plateau detection
 TEST_F(OptimizerTest, AdvancedStopPlateauDetection) {
   // Set very low plateau patience to trigger plateau detection
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-2, 1e-4, 2, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-2, 1e-4, 2, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -537,13 +537,13 @@ TEST_F(OptimizerTest, AdvancedStopPlateauDetection) {
 
   EXPECT_TRUE(result.converged);
   // Should stop after plateau_patience iterations without improvement
-  EXPECT_EQ(result.total_iterations, test_params_.core_params.plateau_patience + 1);
+  EXPECT_EQ(result.total_iterations, test_params_.base_params.plateau_patience + 1);
 }
 
 // Test advanced stop functionality - ShouldStop method directly
 TEST_F(OptimizerTest, ShouldStopMethod) {
   test_params_ = OptimizerParams(
-    OptimizerParams::CoreParams(1000, 1e-15, 1e-30, 20, {0.1}),
+    OptimizerParams::BaseParams(1000, 1e-15, 1e-30, 20, {0.1}),
     StochasticGradient);
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -563,7 +563,7 @@ TEST_F(OptimizerTest, ShouldStopMethod) {
 // Test actual gradient convergence with rapidly decreasing gradient
 TEST_F(OptimizerTest, ActualGradientConvergence) {
   // Use standard tolerances for genuine convergence testing
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-3, 1e-4, 20, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-3, 1e-4, 20, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -595,7 +595,7 @@ TEST_F(OptimizerTest, ActualGradientConvergence) {
 // Test actual energy convergence with stable energy after initial improvement
 TEST_F(OptimizerTest, ActualEnergyConvergence) {
   // Use strict energy tolerance for energy convergence testing
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-6, 1e-2, 20, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-6, 1e-2, 20, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -630,7 +630,7 @@ TEST_F(OptimizerTest, ActualEnergyConvergence) {
 // Test actual plateau detection with no improvement in energy
 TEST_F(OptimizerTest, ActualPlateauDetection) {
   // Use small plateau patience for plateau detection testing
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-10, 1e-10, 5, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-10, 1e-10, 5, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -657,8 +657,8 @@ TEST_F(OptimizerTest, ActualPlateauDetection) {
 
   EXPECT_TRUE(result.converged); // Should converge due to plateau detection
   // Should stop after plateau_patience iterations without improvement (plus initial improvement phase)
-  EXPECT_LE(result.total_iterations, test_params_.core_params.plateau_patience + 5);
-  EXPECT_GT(result.total_iterations, test_params_.core_params.plateau_patience);
+  EXPECT_LE(result.total_iterations, test_params_.base_params.plateau_patience + 5);
+  EXPECT_GT(result.total_iterations, test_params_.base_params.plateau_patience);
   EXPECT_FALSE(result.energy_trajectory.empty());
   EXPECT_FALSE(result.gradient_norms.empty());
 }
@@ -666,7 +666,7 @@ TEST_F(OptimizerTest, ActualPlateauDetection) {
 // Test that optimization continues when no stopping criteria are met
 TEST_F(OptimizerTest, NoEarlyStop) {
   // Set very strict tolerances and high patience to prevent early stopping
-  test_params_ = OptimizerParams(OptimizerParams::CoreParams(1000, 1e-20, 1e-20, 1000, {0.1, 0.05, 0.01}),
+  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-20, 1e-20, 1000, {0.1, 0.05, 0.01}),
                                  StochasticGradient);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
@@ -694,7 +694,7 @@ TEST_F(OptimizerTest, NoEarlyStop) {
 
   // With very strict tolerances, should NOT converge early - should run full iterations
   EXPECT_FALSE(result.converged);
-  EXPECT_EQ(result.total_iterations, test_params_.core_params.max_iterations);
+  EXPECT_EQ(result.total_iterations, test_params_.base_params.max_iterations);
 }
 } // namespace qlpeps
 
