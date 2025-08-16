@@ -42,6 +42,7 @@ docs/build/
 external/gqten/
 .vscode/
 .idea/
+.cursor/
 
 # File
 *swp
