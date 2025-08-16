@@ -20,6 +20,7 @@ TODO: actually test the VMC PEPS optimizer executor for 2 by 2 systems, as test_
 #include "qlten/qlten.h"
 #include "qlpeps/vmc_basic/wave_function_component.h"
 #include "../test_mpi_env.h"
+#include "../utilities.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -86,18 +87,33 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
     pb_out = IndexT({QNSctT(QNT(), 2)}, TenIndexDirType::OUT);
     pb_in = InverseIndex(pb_out);
 
-    // Set up test data path based on data type using CMake-defined source directory
+    // Set up test data paths: read reference data from source, write results to build directory
+    std::string reference_data_path;
+    std::string output_data_subdir;
 #if TEN_ELEM_TYPE_NUM == 1
-    test_data_path = std::string(TEST_SOURCE_DIR) + "/slow_tests/test_data/tps_square_heisenberg4x4D8Double";
+    reference_data_path = std::string(TEST_SOURCE_DIR) + "/slow_tests/test_data/tps_square_heisenberg4x4D8Double";
+    output_data_subdir = "tps_square_heisenberg4x4D8Double";
 #elif TEN_ELEM_TYPE == QLTEN_Complex
-    test_data_path = std::string(TEST_SOURCE_DIR) + "/slow_tests/test_data/tps_square_heisenberg4x4D8Complex";
+    reference_data_path = std::string(TEST_SOURCE_DIR) + "/slow_tests/test_data/tps_square_heisenberg4x4D8Complex";
+    output_data_subdir = "tps_square_heisenberg4x4D8Complex";
 #else
 #error "Unexpected TEN_ELEM_TYPE_NUM"
 #endif
 
+    // Create output directory and copy reference data
+    test_data_path = GetTestOutputPath("vmc_peps_optimizer", output_data_subdir);
+    
+    // Copy reference TPS data to output directory so optimizer can read and modify it
+    if (std::filesystem::exists(reference_data_path)) {
+      std::filesystem::copy(reference_data_path, test_data_path, 
+                          std::filesystem::copy_options::overwrite_existing | 
+                          std::filesystem::copy_options::recursive);
+    }
+
     // Set up VMC parameters using new structure
-    OptimizerParams opt_params = OptimizerParams::CreateStochasticReconfiguration(
-        {0.1}, ConjugateGradientParams(100, 1e-5, 10, 0.01), 10);
+    ConjugateGradientParams cg_params(100, 1e-5, 10, 0.01);
+    OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(
+        10, 1e-15, 1e-30, 20, cg_params, 0.1);
     Configuration random_config(Ly, Lx);
     std::vector<size_t> occupancy = {Ly * Lx / 2, Ly * Lx / 2};  // Equal number of 0s and 1s
     random_config.Random(occupancy);
@@ -146,11 +162,11 @@ TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
   // Initialize with simple data
   InitializeTPSWithOBC(test_tps, Ly, Lx);
 
-  // Test with invalid parameters - empty step lengths should be handled gracefully
+  // Test with invalid parameters - negative learning rate should be handled gracefully
   VMCPEPSOptimizerParams invalid_para = optimize_para;
-  invalid_para.optimizer_params.base_params.step_lengths.clear();  // Empty step lengths
+  invalid_para.optimizer_params.base_params.learning_rate = -1.0;  // Invalid negative learning rate
 
-  // The constructor should handle empty step lengths gracefully, not throw
+  // The constructor should handle invalid learning rate gracefully, not throw
   EXPECT_NO_THROW(
       (void) (new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
           invalid_para, test_tps, comm, model)));
@@ -184,22 +200,39 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
 
   Model model;
 
-  // Test different optimization schemes
-  std::vector<WAVEFUNCTION_UPDATE_SCHEME> schemes = {
-      StochasticReconfiguration,
-      StochasticGradient,
-      NaturalGradientLineSearch,
-      GradientLineSearch
+  // Test different optimization algorithms
+  std::vector<std::string> algorithm_names = {
+      "StochasticReconfiguration",
+      "SGD",
+      "AdaGrad"
   };
 
-  for (auto scheme : schemes) {
+  for (const auto& name : algorithm_names) {
     VMCPEPSOptimizerParams scheme_para = optimize_para;
-    scheme_para.optimizer_params.update_scheme = scheme;
+    
+    // Update optimizer params for each algorithm type
+    if (name == "StochasticReconfiguration") {
+      ConjugateGradientParams cg_params(100, 1e-5, 10, 0.01);
+      scheme_para.optimizer_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
+    } else if (name == "SGD") {
+      OptimizerParams::BaseParams base_params(10, 1e-15, 1e-15, 20, 0.1);
+      SGDParams sgd_params(0.0, false);
+      scheme_para.optimizer_params = OptimizerParams(base_params, sgd_params);
+    } else if (name == "AdaGrad") {
+      scheme_para.optimizer_params = OptimizerFactory::CreateAdaGradAdvanced(10, 1e-15, 1e-30, 20, 0.1, 1e-8, 0.0);
+    }
 
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
         scheme_para, Ly, Lx, comm, model);
 
-    EXPECT_EQ(executor->GetParams().optimizer_params.update_scheme, scheme);
+    // Test that the correct algorithm type is configured
+    if (name == "StochasticReconfiguration") {
+      EXPECT_TRUE(executor->GetParams().optimizer_params.IsAlgorithm<StochasticReconfigurationParams>());
+    } else if (name == "SGD") {
+      EXPECT_TRUE(executor->GetParams().optimizer_params.IsAlgorithm<SGDParams>());
+    } else if (name == "AdaGrad") {
+      EXPECT_TRUE(executor->GetParams().optimizer_params.IsAlgorithm<AdaGradParams>());
+    }
 
     delete executor;
   }

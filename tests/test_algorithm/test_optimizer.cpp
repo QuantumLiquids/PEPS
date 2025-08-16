@@ -52,9 +52,9 @@ class OptimizerTest : public ::testing::Test {
 
       // Set up test parameters with realistic convergence criteria for testing
       // Mock evaluator changes energy by ~0.01 per iteration, so set reasonable tolerances
-      test_params_ = OptimizerParams(
-        OptimizerParams::BaseParams(1000, 1e-6, 1e-6, 20, {0.1, 0.05, 0.01}),
-        StochasticGradient);
+      OptimizerParams::BaseParams base_params(1000, 1e-6, 1e-6, 20, 0.1);
+      SGDParams sgd_params(0.0, false);  // No momentum, no nesterov
+      test_params_ = OptimizerParams(base_params, sgd_params);
 
       // Create a simple test TPS
       test_tps_ = CreateRandTestTPS();
@@ -111,9 +111,20 @@ class OptimizerTest : public ::testing::Test {
       // Simple decreasing energy for convergence testing
       energy -= call_count * 0.01; // Energy decreases by 0.01 per iteration
 
-      // Mock gradient (not related to actual energy function)
-      SITPST gradient = 0.01 * state; // a small gradient so that have small effect on energy improvement.
-      // if use gradient = state, then the gradient will converge sometime as the gradient of cost function |state|^2.
+          // Mock gradient (not related to actual energy function)
+    // Create gradient with constant magnitude to prevent convergence in tests that expect non-convergence
+    SITPST gradient = state;
+    
+    // Normalize the gradient to have a constant magnitude
+    double current_norm = std::sqrt(gradient.NormSquare());
+    if (current_norm > 1e-14) {  // Avoid division by zero
+      double target_norm = 0.01;  // Constant gradient magnitude
+      gradient *= (target_norm / current_norm);
+    } else {
+      // If state is too small, create a minimal gradient
+      gradient = state;
+      gradient *= 0.01;
+    }
 
       // // Scale gradient down as optimization progresses (simulating convergence)
       // double gradient_scale = std::max(0.00001, 1.0 - call_count * 0.1);
@@ -142,18 +153,17 @@ TEST_F(OptimizerTest, Construction) {
   EXPECT_TRUE(true); // Should not throw
 }
 
-// Test static methods
-TEST_F(OptimizerTest, StaticMethods) {
-  EXPECT_TRUE(OptimizerT::UsesStochasticReconfiguration(StochasticReconfiguration));
-  EXPECT_TRUE(OptimizerT::UsesStochasticReconfiguration(RandomStepStochasticReconfiguration));
-  EXPECT_TRUE(OptimizerT::UsesStochasticReconfiguration(NormalizedStochasticReconfiguration));
-  EXPECT_FALSE(OptimizerT::UsesStochasticReconfiguration(StochasticGradient));
-  EXPECT_FALSE(OptimizerT::UsesStochasticReconfiguration(RandomGradientElement));
-
-  EXPECT_TRUE(OptimizerT::IsLineSearchScheme(GradientLineSearch));
-  EXPECT_TRUE(OptimizerT::IsLineSearchScheme(NaturalGradientLineSearch));
-  EXPECT_FALSE(OptimizerT::IsLineSearchScheme(StochasticGradient));
-  EXPECT_FALSE(OptimizerT::IsLineSearchScheme(RandomGradientElement));
+// Test parameter type checking
+TEST_F(OptimizerTest, ParameterTypes) {
+  // Test SGD parameters
+  EXPECT_TRUE(test_params_.IsAlgorithm<SGDParams>());
+  EXPECT_FALSE(test_params_.IsAlgorithm<StochasticReconfigurationParams>());
+  EXPECT_FALSE(test_params_.IsAlgorithm<AdaGradParams>());
+  
+  // Test accessing algorithm parameters
+  const auto& sgd_params = test_params_.GetAlgorithmParams<SGDParams>();
+  EXPECT_EQ(sgd_params.momentum, 0.0);
+  EXPECT_FALSE(sgd_params.nesterov);
 }
 
 // Test gradient update
@@ -183,9 +193,10 @@ TEST_F(OptimizerTest, GradientUpdate) {
 
 // Test line search optimization
 TEST_F(OptimizerTest, LineSearchOptimization) {
-  // Use gradient line search for simplicity
-  test_params_ =
-      OptimizerParams(OptimizerParams::BaseParams(1000, 1e-2, 1e-4, 20, {0.1, 0.05, 0.01}), GradientLineSearch);
+  // Use SGD for line search functionality
+  OptimizerParams::BaseParams base_params(1000, 1e-2, 1e-4, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -203,9 +214,9 @@ TEST_F(OptimizerTest, LineSearchOptimization) {
 
 // Test iterative optimization
 TEST_F(OptimizerTest, IterativeOptimization) {
-  test_params_ = OptimizerParams(
-    OptimizerParams::BaseParams(1000, 1e-15, 1e-15, 1000, {0.1, 0.05, 0.01}),
-    StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 1000, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -223,7 +234,9 @@ TEST_F(OptimizerTest, IterativeOptimization) {
 
 // Test optimization with callbacks
 TEST_F(OptimizerTest, OptimizationWithCallbacks) {
-  test_params_ = OptimizerParams::CreateStochasticGradient({0.1, 0.05}, 1000);
+  OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -249,7 +262,9 @@ TEST_F(OptimizerTest, OptimizationWithCallbacks) {
 
 // Test time logging functionality
 TEST_F(OptimizerTest, TimeLogging) {
-  test_params_ = OptimizerParams::CreateStochasticGradient({0.1, 0.05, 0.01}, 1000);
+  OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -294,7 +309,9 @@ TEST_F(OptimizerTest, TimeLogging) {
 }
 
 TEST_F(OptimizerTest, TimeLoggingImposeStoppingAdvance) {
-  test_params_ = OptimizerParams::CreateStochasticGradient({0.1, 0.05, 0.01, 0}, 1000);
+  OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -338,51 +355,58 @@ TEST_F(OptimizerTest, TimeLoggingImposeStoppingAdvance) {
   }
 }
 
-// Test different optimization schemes
-TEST_F(OptimizerTest, DifferentOptimizationSchemes) {
-  std::vector<WAVEFUNCTION_UPDATE_SCHEME> schemes = {
-    StochasticGradient,
-    RandomStepStochasticGradient,
-    RandomGradientElement,
-    BoundGradientElement
-  };
-
-  for (auto scheme : schemes) {
-    test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-15, 1e-15, 1000, {0.1}), scheme);
-
-    OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
-
+// Test different optimization algorithms  
+TEST_F(OptimizerTest, DifferentOptimizationAlgorithms) {
+  // Test SGD
+  {
+    OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 1000, 0.1);
+    SGDParams sgd_params(0.0, false);
+    OptimizerParams sgd_test_params(base_params, sgd_params);
+    
+    OptimizerT optimizer(sgd_test_params, comm_, rank_, mpi_size_);
     auto result = optimizer.IterativeOptimize(test_tps_,
                                               [this](const SITPST &state) { return MockEnergyEvaluator(state); });
-
+    EXPECT_FALSE(result.converged);
+    EXPECT_TRUE(std::isfinite(result.final_energy));
+  }
+  
+  // Test AdaGrad
+  {
+    OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 1000, 0.1);
+    AdaGradParams adagrad_params(1e-8, 0.0);
+    OptimizerParams adagrad_test_params(base_params, adagrad_params);
+    
+    OptimizerT optimizer(adagrad_test_params, comm_, rank_, mpi_size_);
+    auto result = optimizer.IterativeOptimize(test_tps_,
+                                              [this](const SITPST &state) { return MockEnergyEvaluator(state); });
     EXPECT_FALSE(result.converged);
     EXPECT_TRUE(std::isfinite(result.final_energy));
   }
 }
 
-// Test error handling for invalid schemes
+// Test error handling for unsupported algorithms
 TEST_F(OptimizerTest, ErrorHandling) {
-  test_params_.update_scheme = static_cast<WAVEFUNCTION_UPDATE_SCHEME>(999); // Invalid scheme
-
-  OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
-
+  // Test error when trying to access wrong algorithm parameters
   EXPECT_THROW(
-    optimizer.IterativeOptimize(test_tps_,
-      [this](const SITPST &state) { return MockEnergyEvaluator(state); }),
-    std::runtime_error
+    test_params_.GetAlgorithmParams<AdaGradParams>(),
+    std::bad_variant_access
   );
 }
 
 // Test stochastic reconfiguration structure (basic test)
 TEST_F(OptimizerTest, StochasticReconfigurationStructure) {
-  test_params_ =
-      OptimizerParams::CreateStochasticReconfiguration({0.1}, ConjugateGradientParams(100, 1e-6, 0, 10), 1000);
+  ConjugateGradientParams cg_params(100, 1e-6, 0, 10);
+  test_params_ = OptimizerFactory::CreateStochasticReconfigurationAdvanced(1000, 1e-15, 1e-30, 20, cg_params, 0.1);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
   // Test that the optimizer can be constructed with stochastic reconfiguration
   // We'll skip the actual optimization since it requires proper gradient samples
-  EXPECT_TRUE(true); // Just test that construction succeeds
+  EXPECT_TRUE(test_params_.IsAlgorithm<StochasticReconfigurationParams>());
+  
+  const auto& sr_params = test_params_.GetAlgorithmParams<StochasticReconfigurationParams>();
+  EXPECT_EQ(sr_params.cg_params.max_iter, 100);
+  EXPECT_EQ(sr_params.cg_params.tolerance, 1e-6);
 }
 
 // Test bounded gradient update
@@ -437,8 +461,9 @@ TEST_F(OptimizerTest, RandomGradientUpdate) {
 // Test advanced stop functionality - Gradient convergence
 TEST_F(OptimizerTest, AdvancedStopGradientConvergence) {
   // Set very low gradient tolerance to trigger gradient convergence
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-2, 1e-10, 20, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-2, 1e-10, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -468,15 +493,16 @@ TEST_F(OptimizerTest, AdvancedStopGradientConvergence) {
 
   EXPECT_TRUE(result.converged);
   // Should stop early due to gradient convergence
-  EXPECT_LT(result.total_iterations, test_params_.base_params.step_lengths.size());
+  EXPECT_LT(result.total_iterations, test_params_.base_params.max_iterations);
   EXPECT_GT(result.total_iterations, 0);
 }
 
 // Test advanced stop functionality - Energy convergence
 TEST_F(OptimizerTest, AdvancedStopEnergyConvergence) {
   // Set very low energy tolerance to trigger energy convergence
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-10, 1e-6, 20, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-10, 1e-6, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -509,8 +535,9 @@ TEST_F(OptimizerTest, AdvancedStopEnergyConvergence) {
 // Test advanced stop functionality - Plateau detection
 TEST_F(OptimizerTest, AdvancedStopPlateauDetection) {
   // Set very low plateau patience to trigger plateau detection
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-2, 1e-4, 2, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-2, 1e-4, 2, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -543,8 +570,8 @@ TEST_F(OptimizerTest, AdvancedStopPlateauDetection) {
 // Test advanced stop functionality - ShouldStop method directly
 TEST_F(OptimizerTest, ShouldStopMethod) {
   test_params_ = OptimizerParams(
-    OptimizerParams::BaseParams(1000, 1e-15, 1e-30, 20, {0.1}),
-    StochasticGradient);
+    OptimizerParams::BaseParams(1000, 1e-15, 1e-30, 20, 0.1),
+    SGDParams(0.0, false));
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
   // Test gradient convergence
@@ -563,8 +590,9 @@ TEST_F(OptimizerTest, ShouldStopMethod) {
 // Test actual gradient convergence with rapidly decreasing gradient
 TEST_F(OptimizerTest, ActualGradientConvergence) {
   // Use standard tolerances for genuine convergence testing
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-3, 1e-4, 20, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-3, 1e-4, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -595,8 +623,9 @@ TEST_F(OptimizerTest, ActualGradientConvergence) {
 // Test actual energy convergence with stable energy after initial improvement
 TEST_F(OptimizerTest, ActualEnergyConvergence) {
   // Use strict energy tolerance for energy convergence testing
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-6, 1e-2, 20, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-6, 1e-2, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -630,8 +659,9 @@ TEST_F(OptimizerTest, ActualEnergyConvergence) {
 // Test actual plateau detection with no improvement in energy
 TEST_F(OptimizerTest, ActualPlateauDetection) {
   // Use small plateau patience for plateau detection testing
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-10, 1e-10, 5, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-10, 1e-10, 5, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -666,8 +696,9 @@ TEST_F(OptimizerTest, ActualPlateauDetection) {
 // Test that optimization continues when no stopping criteria are met
 TEST_F(OptimizerTest, NoEarlyStop) {
   // Set very strict tolerances and high patience to prevent early stopping
-  test_params_ = OptimizerParams(OptimizerParams::BaseParams(1000, 1e-20, 1e-20, 1000, {0.1, 0.05, 0.01}),
-                                 StochasticGradient);
+  OptimizerParams::BaseParams base_params(1000, 1e-20, 1e-20, 1000, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 
@@ -679,12 +710,21 @@ TEST_F(OptimizerTest, NoEarlyStop) {
     double error = 0.1;
     iteration_count++;
 
-    for (size_t row = 0; row < state.rows(); ++row) {
-      for (size_t col = 0; col < state.cols(); ++col) {
-        for (size_t i = 0; i < state({row, col}).size(); ++i) {
-          gradient({row, col})[i] = state({row, col})[i];
+    // Create gradient with constant magnitude to prevent convergence
+    double current_norm = std::sqrt(gradient.NormSquare());
+    if (current_norm > 1e-14) {  // Avoid division by zero
+      double target_norm = 1e-15;  // Constant gradient magnitude above 1e-20 threshold
+      gradient *= (target_norm / current_norm);
+    } else {
+      // If state is too small, set gradient elements to target magnitude
+      for (size_t row = 0; row < state.rows(); ++row) {
+        for (size_t col = 0; col < state.cols(); ++col) {
+          for (size_t i = 0; i < gradient({row, col}).size(); ++i) {
+            gradient({row, col})[i] = state({row, col})[i];
+          }
         }
       }
+      gradient *= 1e-15;
     }
 
     return {energy, gradient, error};

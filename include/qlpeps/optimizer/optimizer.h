@@ -211,6 +211,34 @@ class Optimizer {
    */
   double GetCurrentLearningRate(size_t iteration, double current_energy = 0.0) const;
 
+  // =============================================================================
+  // BACKWARD COMPATIBILITY: Static methods for legacy VMC PEPS code
+  // =============================================================================
+  
+  /**
+   * @brief Check if scheme uses line search optimization
+   * @deprecated Use OptimizerParams.IsAlgorithm<SGDParams>() instead
+   */
+  static bool IsLineSearchScheme(WAVEFUNCTION_UPDATE_SCHEME scheme) {
+    return scheme == GradientLineSearch || scheme == NaturalGradientLineSearch;
+  }
+
+  /**
+   * @brief Check if scheme uses stochastic reconfiguration
+   * @deprecated Use OptimizerParams.IsAlgorithm<StochasticReconfigurationParams>() instead
+   */
+  static bool UsesStochasticReconfiguration(WAVEFUNCTION_UPDATE_SCHEME scheme) {
+    return IsStochasticReconfiguration(scheme);
+  }
+
+  /**
+   * @brief Check if scheme is adaptive (uses adaptive step size)
+   * @deprecated Use the new parameter system instead
+   */
+  static bool IsAdaptiveScheme(WAVEFUNCTION_UPDATE_SCHEME scheme) {
+    return scheme == AdaGrad;
+  }
+
   /**
    * @brief Check if optimization should stop based on convergence criteria
    * 

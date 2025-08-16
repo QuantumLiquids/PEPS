@@ -18,6 +18,7 @@
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/simple_update/square_lattice_nnn_simple_update.h"
+#include "../utilities.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -26,19 +27,29 @@ using qlten::special_qn::fZ2QN;
 using qlten::special_qn::TrivialRepQN;
 
 /**
- * @brief Generate type-specific path for TPS data
- * @param base_path Base path without type suffix
- * @return Path with type suffix (Double or Complex)
+ * @brief Generate type-specific path for TPS data in test output directory
+ * @param base_name Base name for the TPS data (e.g., "heisenberg_tps")
+ * @return Path in test output directory with type suffix (Double or Complex)
  */
-std::string GetTypeSpecificPath(const std::string& base_path) {
+std::string GetTypeSpecificPath(const std::string& base_name) {
+  std::string type_suffix;
   if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double>) {
-    return base_path + "_double";
+    type_suffix = "_double";
   } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
-    return base_path + "_complex";
+    type_suffix = "_complex";
   } else {
     // This should never be reached due to the CMake configuration
-    return base_path + "_unknown";
+    type_suffix = "_unknown";
   }
+  
+  // Extract just the model name from the base_name (remove "test_algorithm/test_data/" prefix if present)
+  std::string model_name = base_name;
+  size_t pos = model_name.find_last_of('/');
+  if (pos != std::string::npos) {
+    model_name = model_name.substr(pos + 1);
+  }
+  
+  return GetTestOutputPath("exact_sum_optimization", model_name + type_suffix + "lowest");
 }
 
 struct SimpleUpdateTestParams {
@@ -305,11 +316,11 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     std::cout << "Initial gradient norm: " << initial_gradient.NormSquare() << std::endl;
 
     // Create optimization parameters using new structure
-    // step length = 3 to jump out the local minimal
-    // Use custom CoreParams to set plateau_patience = 50 for more patience
-    qlpeps::OptimizerParams::BaseParams core_params(50, 1e-15, 1e-15, 50, {0.5});
-    qlpeps::AdaGradParams adagrad_params(1e-10);
-    qlpeps::OptimizerParams opt_params(core_params, adagrad_params);
+    // step length = 0.5 to jump out the local minimal
+    // Use custom OptimizerParams::BaseParams to set plateau_patience = 50 for more patience
+    qlpeps::OptimizerParams::BaseParams base_params(50, 1e-15, 1e-15, 50, 0.5);
+    qlpeps::AdaGradParams adagrad_params(1e-10, 0.0);
+    qlpeps::OptimizerParams opt_params(base_params, adagrad_params);
     Configuration fixed_init_config(Lx, Ly);
     // Create a fixed checkerboard pattern that satisfies occupancy {2, 2}
     fixed_init_config({0, 0}) = 0;  // empty
@@ -407,7 +418,7 @@ TEST_F(TrivialHeisenbergTools, ExactSumGradientOptWithVMCOptimizer) {
   Model heisenberg_model(J, J, 0); // Jx = Jy = J, Jz = 0 (XY model)
 
   // Create optimization parameters using new structure
-  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerParams::CreateAdaGrad(1.0, 1e-8, 100);
+  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(100, 1e-15, 1e-30, 20, 1.0, 1e-8, 0.0);
   Configuration rand_config(2, 2);
   rand_config.Random(std::vector<size_t>{2, 2});
   qlpeps::MonteCarloParams mc_params(1, 0, 1, "", rand_config);
@@ -513,7 +524,7 @@ TEST_F(TrivialTransverseIsingTools, ExactSumGradientOptWithVMCOptimizer) {
   Model transverse_ising_model(h);
 
   // Create optimization parameters using new structure
-  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerParams::CreateAdaGrad(0.05, 1e-8, 100);
+  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(100, 1e-15, 1e-30, 20, 0.05, 1e-8, 0.0);
   Configuration random_config(Ly, Lx);
   std::vector<size_t> occupancy = {4, 0};  // 4 up 0 down
   random_config.Random(occupancy);
@@ -622,7 +633,7 @@ TEST_F(Z2tJTools, ExactSumGradientOptWithVMCOptimizer) {
   Model tj_model(t, 0, J, J / 4, mu);
 
   // Create optimization parameters using new structure
-  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerParams::CreateAdaGrad(1.0, 1e-8, 200);
+  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(200, 1e-15, 1e-30, 20, 1.0, 1e-8, 0.0);
   Configuration random_config(Ly, Lx);
   std::vector<size_t> occupancy =
       {1, 1, 2};  // 1 up 1 down 2 empty(although no effect on calculation, but should be valid for Base class)
