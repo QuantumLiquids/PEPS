@@ -229,15 +229,7 @@ add_two_type_unittest(test_fermion_simple_update
 #        ""
 # )
 
-# Test vmc-peps (Unit Tests)
-add_two_type_unittest(test_vmc_peps
-        "test_algorithm/test_vmc_peps.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "test_data"
-)
-
-add_mpi_unittest_run(test_vmc_peps_double "4" " ")
-add_mpi_unittest_run(test_vmc_peps_complex "4" " ")
+# Legacy test_vmc_peps removed - use test_vmc_peps_optimizer instead
 
 # Test optimizer
 add_two_type_unittest(test_optimizer
@@ -331,11 +323,7 @@ if(BUILD_SLOW_TESTS)
             " "
     )
 
-    add_two_type_unittest(test_square_j1j2_xxz_legacy
-            "integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-            " "
-    )
+    # Legacy test removed - functionality merged into test_square_j1j2_xxz
 
     add_two_type_unittest(test_triangle_heisenberg
             "integration_tests/test_triangle_heisenberg.cpp"
@@ -351,8 +339,7 @@ if(BUILD_SLOW_TESTS)
 
     add_mpi_unittest_run(test_square_j1j2_xxz_double "56" " ")
     add_mpi_unittest_run(test_square_j1j2_xxz_complex "56" " ")
-    add_mpi_unittest_run(test_square_j1j2_xxz_legacy_double "56" " ")
-    add_mpi_unittest_run(test_square_j1j2_xxz_legacy_complex "56" " ")
+    # Legacy test runs removed - functionality merged into test_square_j1j2_xxz
     add_mpi_unittest_run(test_triangle_heisenberg_double "56" " ")
     add_mpi_unittest_run(test_triangle_heisenberg_complex "56" " ")
     add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "56" " ")

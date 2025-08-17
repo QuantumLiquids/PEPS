@@ -15,7 +15,7 @@
 #include <functional>
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_base.h"
 #include "qlpeps/optimizer/optimizer.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps.h"
+// Removed circular include - vmc_peps.h is deprecated
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 

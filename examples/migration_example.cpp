@@ -40,36 +40,25 @@ using SITPST = SplitIndexTPS<TenElemT, QNT>;
 // OLD CODE: Using VMCPEPSExecutor (Legacy)
 // ============================================================================
 
-void old_legacy_approach() {
-    std::cout << "=== OLD LEGACY APPROACH ===" << std::endl;
+void demonstrate_legacy_problems() {
+    std::cout << "=== WHY LEGACY APPROACH WAS PROBLEMATIC ===" << std::endl;
     
-    // OLD: Single parameter structure
-    VMCOptimizePara optimize_para(
-        BMPSTruncatePara(8, 1e-12, 1000),  // truncation parameters
-        1000,  // num_samples
-        100,   // num_warmup_sweeps
-        10,    // sweeps_between_samples
-        {1, 1, 1, 1},  // occupancy
-        4, 4,  // ly, lx
-        {0.01, 0.01, 0.01},  // step_lengths
-        StochasticReconfiguration,  // update_scheme
-        ConjugateGradientParams(1e-6, 1000, 1e-8),  // cg_params
-        "wavefunction_data"  // wavefunction_path
-    );
-
-    // OLD: Create executor with legacy parameters
-    using Model = SquareSpinOneHalfXXZModel;
-    using MCUpdater = MCUpdateSquareNNExchange;
-    Model model;
+    std::cout << "❌ Legacy VMCPEPSExecutor problems:" << std::endl;
+    std::cout << "  - Monolithic parameter structure (VMCOptimizePara)" << std::endl;
+    std::cout << "  - Mixed concerns in single executor class" << std::endl;
+    std::cout << "  - Hardcoded optimization algorithms" << std::endl;
+    std::cout << "  - Difficult to extend with new optimizers" << std::endl;
+    std::cout << "  - Poor separation between MC, PEPS, and optimization logic" << std::endl;
+    std::cout << "  - Legacy enum-based algorithm selection" << std::endl;
+    std::cout << "" << std::endl;
     
-    // Note: This would be the old executor (commented out for migration)
-    // VMCPEPSExecutor<TenElemT, QNT, MCUpdater, Model> executor(
-    //     optimize_para, 4, 4, MPI_COMM_WORLD, model);
-    
-    std::cout << "Legacy parameter structure created successfully" << std::endl;
-    std::cout << "  - MC samples: " << optimize_para.mc_samples << std::endl;
-    std::cout << "  - Step lengths: " << optimize_para.step_lens.size() << " steps" << std::endl;
-    std::cout << "  - Update scheme: " << optimize_para.update_scheme << std::endl;
+    std::cout << "✅ Modern VMCPEPSOptimizerExecutor solutions:" << std::endl;
+    std::cout << "  - Clean separation of parameter types" << std::endl;
+    std::cout << "  - Modular Optimizer class design" << std::endl;
+    std::cout << "  - Type-safe algorithm selection with std::variant" << std::endl;
+    std::cout << "  - Easy to add new optimization algorithms" << std::endl;
+    std::cout << "  - Clear responsibility boundaries" << std::endl;
+    std::cout << "  - Factory methods and builder patterns" << std::endl;
 }
 
 // ============================================================================
@@ -124,35 +113,30 @@ void new_modern_approach() {
 // MIGRATION HELPER FUNCTIONS
 // ============================================================================
 
-// Helper function to convert legacy parameters to new structure
-VMCPEPSOptimizerParams convert_legacy_to_modern(const VMCOptimizePara& legacy_params) {
-    std::cout << "\n=== CONVERTING LEGACY TO MODERN ===" << std::endl;
+// Modern parameter creation with factory methods
+VMCPEPSOptimizerParams create_modern_parameters() {
+    std::cout << "\n=== CREATING MODERN PARAMETERS WITH FACTORY METHODS ===" << std::endl;
     
-    // Convert Monte Carlo parameters
+    // Create Monte Carlo parameters
     MonteCarloParams mc_params(
-        legacy_params.mc_samples,
-        legacy_params.mc_warm_up_sweeps,
-        legacy_params.mc_sweeps_between_sample,
-        "config_path",  // You may need to set this appropriately
-        legacy_params.init_config  // Use the legacy configuration
+        1000,  // num_samples
+        100,   // num_warmup_sweeps
+        10,    // sweeps_between_samples
+        {1, 1, 1, 1}  // occupancy configuration
     );
     
-    // Convert PEPS parameters
-    PEPSParams peps_params(
-        legacy_params.bmps_trunc_para,
-        legacy_params.wavefunction_path
-    );
+    // Create PEPS parameters
+    BMPSTruncatePara truncate_para(8, 1e-12, 1000);
+    PEPSParams peps_params(truncate_para, 4, 4, "wavefunction_data");
     
-    // Convert optimizer parameters
-    OptimizerParams opt_params;
-    opt_params.core_params.step_lengths = legacy_params.step_lens;
-    opt_params.update_scheme = legacy_params.update_scheme;
-    opt_params.cg_params = legacy_params.cg_params;
+    // Create optimizer parameters using factory method
+    ConjugateGradientParams cg_params(1000, 1e-6, 20, 1e-8);
+    OptimizerParams opt_params = OptimizerParams::CreateStochasticReconfiguration(
+        100, cg_params, 0.01);
     
-    // Create combined parameters
     VMCPEPSOptimizerParams modern_params(opt_params, mc_params, peps_params);
     
-    std::cout << "Successfully converted legacy parameters to modern structure" << std::endl;
+    std::cout << "✅ Successfully created modern parameter structure" << std::endl;
     return modern_params;
 }
 
@@ -173,24 +157,14 @@ int main(int argc, char* argv[]) {
         std::cout << "MPI Size: " << size << std::endl;
         std::cout << "=====================================" << std::endl;
         
-        // Demonstrate old approach
-        old_legacy_approach();
+        // Explain why legacy approach was problematic
+        demonstrate_legacy_problems();
         
-        // Demonstrate new approach
+        // Demonstrate modern approach
         new_modern_approach();
         
-        // Demonstrate conversion
-        VMCOptimizePara legacy_params(
-            BMPSTruncatePara(8, 1e-12, 1000),
-            1000, 100, 10,
-            {1, 1, 1, 1}, 4, 4,
-            {0.01, 0.01, 0.01},
-            StochasticReconfiguration,
-            ConjugateGradientParams(1e-6, 1000, 1e-8),
-            "wavefunction_data"
-        );
-        
-        VMCPEPSOptimizerParams converted_params = convert_legacy_to_modern(legacy_params);
+        // Demonstrate modern parameter creation with factory methods
+        VMCPEPSOptimizerParams modern_params = create_modern_parameters();
         
         std::cout << "\n=== MIGRATION COMPLETE ===" << std::endl;
         std::cout << "You can now use VMCPEPSOptimizerExecutor with the converted parameters!" << std::endl;

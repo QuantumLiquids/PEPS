@@ -96,22 +96,15 @@ class TriangleJ1J2HeisenbergSystem : public IntegrationTestFramework<QNT> {
       model_name = "triangle_j1j2_heisenberg";
       energy_ed = -8.5; // Approximate expected energy for triangle J1-J2 lattice
 
-      optimize_para = VMCOptimizePara(
-        BMPSTruncatePara(6,
-                         12,
-                         1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        100,
-        100,
-        1,
-        std::vector<size_t>(2, Lx * Ly / 2),
-        Ly,
-        Lx,
-        std::vector<double>(40, 0.3),
-        StochasticReconfiguration,
-        ConjugateGradientParams(100, 1e-5, 20, 0.001));
+      optimize_para = VMCPEPSOptimizerParams(
+          OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
+          MonteCarloParams(100, 100, 1, tps_path,
+                           Configuration(Ly, Lx, 
+                                         OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+          PEPSParams(BMPSTruncatePara(6, 12, 1e-15,
+                                      CompressMPSScheme::SVD_COMPRESS,
+                                      std::make_optional<double>(1e-14),
+                                      std::make_optional<size_t>(10)), tps_path));
 
       measure_para = MCMeasurementPara(
         BMPSTruncatePara(Dpeps,
@@ -175,8 +168,7 @@ TEST_F(TriangleJ1J2HeisenbergSystem, StochasticGradientOpt) {
   Model trianglej1j2_hei_solver(j2);
 
   // Change to stochastic gradient
-  optimize_para.update_scheme = StochasticGradient;
-  optimize_para.step_lens = std::vector<double>(40, 0.1);
+  optimize_para.optimizer_params = OptimizerFactory::CreateSGDWithDecay(40, 0.1, 1.0, 1000);
 
   // VMC optimization
   RunVMCOptimization<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);
@@ -189,9 +181,8 @@ TEST_F(TriangleJ1J2HeisenbergSystem, NaturalGradientLineSearch) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS;
   Model trianglej1j2_hei_solver(j2);
 
-  // Change to natural gradient line search
-  optimize_para.update_scheme = NaturalGradientLineSearch;
-  optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
+  // Change to natural gradient line search (using L-BFGS as approximation)
+  optimize_para.optimizer_params = OptimizerFactory::CreateLBFGS(40, 0.01);
 
   // VMC optimization
   RunVMCOptimization<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);

@@ -14,7 +14,7 @@
 #include "qlpeps/consts.h"                        //kTpsPath
 #include "qlpeps/vmc_basic/configuration.h"  //Configuration
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  //BMPSTruncatePara
-#include "qlpeps/optimizer/optimizer_params.h"    //WAVEFUNCTION_UPDATE_SCHEME, ConjugateGradientParams, AdaGradParams
+#include "qlpeps/optimizer/optimizer_params.h"    //ConjugateGradientParams
 
 namespace qlpeps {
 /**
@@ -59,84 +59,7 @@ struct PEPSParams {
   }
 };
 
-/**
- * @struct VMCOptimizePara
- * @brief Parameters for VMC PEPS optimization (Legacy).
- *
- * - update_scheme: The update scheme used (see WAVEFUNCTION_UPDATE_SCHEME).
- * - step_lens: List of step lengths (\f$\eta\f$) for each iteration.
- * - max_iter: Maximum number of optimization iterations.
- * - energy_tol: Convergence tolerance for the energy.
- * - gradient_tol: Convergence tolerance for the gradient norm.
- * - wavefunction_path: Path to the wavefunction file.
- * - cg_params: Optional parameters for the conjugate gradient solver.
- */
-struct VMCOptimizePara {
-  VMCOptimizePara(void) = default;
-
-  VMCOptimizePara(BMPSTruncatePara trunc_para,
-                  size_t samples,
-                  size_t warm_up_sweeps,
-                  size_t mc_sweeps_between_sample,
-                  const std::vector<size_t> &occupancy,
-                  const size_t rows,
-                  const size_t cols,
-                  const std::vector<double> &step_lens,
-                  const WAVEFUNCTION_UPDATE_SCHEME update_scheme,
-                  const ConjugateGradientParams &cg_params = ConjugateGradientParams(),
-                  const std::string &wavefunction_path = kTpsPath) : bmps_trunc_para(trunc_para), mc_samples(samples),
-                                                                     mc_warm_up_sweeps(warm_up_sweeps),
-                                                                     mc_sweeps_between_sample(mc_sweeps_between_sample),
-                                                                     init_config(rows, cols),
-                                                                     step_lens(step_lens),
-                                                                     update_scheme(update_scheme),
-                                                                     wavefunction_path(wavefunction_path),
-                                                                     cg_params(cg_params) {
-    init_config.Random(occupancy);
-  }
-
-  VMCOptimizePara(BMPSTruncatePara trunc_para,
-                  size_t samples,
-                  size_t warm_up_sweeps,
-                  size_t mc_sweeps_between_sample,
-                  const Configuration &init_config,
-                  const std::vector<double> &step_lens,
-                  const WAVEFUNCTION_UPDATE_SCHEME update_scheme,
-                  const ConjugateGradientParams &cg_params = ConjugateGradientParams(),
-                  const std::string &wavefunction_path = kTpsPath) : bmps_trunc_para(trunc_para),
-                                                                     mc_warm_up_sweeps(warm_up_sweeps),
-                                                                     mc_sweeps_between_sample(mc_sweeps_between_sample),
-                                                                     init_config(init_config),
-                                                                     step_lens(step_lens),
-                                                                     update_scheme(update_scheme),
-                                                                     wavefunction_path(wavefunction_path),
-                                                                     cg_params(cg_params) {
-  }
-
-  operator BMPSTruncatePara() const {
-    return bmps_trunc_para;
-  }
-  operator MonteCarloParams() const {
-    return {mc_samples, mc_warm_up_sweeps, mc_sweeps_between_sample, wavefunction_path, init_config};
-  }
-  operator PEPSParams() const {
-    return {bmps_trunc_para, wavefunction_path};
-  }
-
-  BMPSTruncatePara bmps_trunc_para; // Truncation error and bond dimension for compressing boundary MPS
-
-  //Monte-Carlo parameters
-  size_t mc_samples;
-  size_t mc_warm_up_sweeps;
-  size_t mc_sweeps_between_sample;
-
-  Configuration init_config;
-
-  std::vector<double> step_lens; // The # of step_lens indicate update times in optimization.
-  WAVEFUNCTION_UPDATE_SCHEME update_scheme;
-  std::string wavefunction_path;
-  std::optional<ConjugateGradientParams> cg_params;
-};
+// Legacy VMCOptimizePara removed - use VMCPEPSOptimizerParams instead
 
 /**
  * @struct MCMeasurementPara

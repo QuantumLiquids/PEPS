@@ -47,7 +47,7 @@ protected:
   double energy_ed;
   
   // VMC optimization parameters
-  VMCOptimizePara optimize_para;
+  VMCPEPSOptimizerParams optimize_para;
   
   // Monte Carlo measurement parameters
   MCMeasurementPara measure_para;
@@ -64,7 +64,7 @@ protected:
     
     // Set common paths
     tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
-    optimize_para.wavefunction_path = tps_path;
+    // wavefunction_path is now part of MonteCarloParams and PEPSParams in the constructor
     measure_para.wavefunction_path = tps_path;
   }
 
@@ -103,7 +103,7 @@ protected:
     SplitIndexTPST tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto executor = new VMCPEPSExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
+    auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
         optimize_para, tps, comm, model);
     
     size_t start_flop = flop;
@@ -152,13 +152,13 @@ protected:
   template<typename ModelT, typename MCUpdaterT>
   void RunZeroUpdateTest(const ModelT& model) {
     MPI_Barrier(comm);
-    optimize_para.step_lens = {0.0};
+    optimize_para.optimizer_params.base_params.learning_rate = 0.0;
     
     SplitIndexTPST tps(Ly, Lx);
     tps.Load(tps_path);
     auto init_tps = tps;
     
-    auto executor = new VMCPEPSExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
+    auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
         optimize_para, tps, comm, model);
     
     size_t start_flop = flop;

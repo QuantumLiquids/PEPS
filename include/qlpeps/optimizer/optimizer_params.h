@@ -24,59 +24,7 @@
 
 namespace qlpeps {
 
-/**
- * @enum WAVEFUNCTION_UPDATE_SCHEME
- * @deprecated Use the new algorithm-specific parameter structs instead
- * @brief Legacy enumeration for backward compatibility with VMC PEPS code
- */
-enum WAVEFUNCTION_UPDATE_SCHEME {
-  StochasticGradient,                     //0
-  RandomStepStochasticGradient,           //1
-  StochasticReconfiguration,              //2
-  RandomStepStochasticReconfiguration,    //3
-  NormalizedStochasticReconfiguration,    //4
-  RandomGradientElement,                  //5
-  BoundGradientElement,                   //6
-  GradientLineSearch,                     //7
-  NaturalGradientLineSearch,              //8
-  AdaGrad                                 //9
-};
-
-// Legacy constant for backward compatibility
-const std::vector<WAVEFUNCTION_UPDATE_SCHEME> stochastic_reconfiguration_methods = {
-  StochasticReconfiguration,
-  RandomStepStochasticReconfiguration,
-  NormalizedStochasticReconfiguration
-};
-
-/**
- * @deprecated Use algorithm-specific parameters instead
- */
-inline std::string WavefunctionUpdateSchemeString(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  switch (scheme) {
-    case StochasticGradient: return "StochasticGradient";
-    case RandomStepStochasticGradient: return "RandomStepStochasticGradient";
-    case StochasticReconfiguration: return "StochasticReconfiguration";
-    case RandomStepStochasticReconfiguration: return "RandomStepStochasticReconfiguration";
-    case NormalizedStochasticReconfiguration: return "NormalizedStochasticReconfiguration";
-    case RandomGradientElement: return "RandomGradientElement";
-    case BoundGradientElement: return "BoundGradientElement";
-    case GradientLineSearch: return "GradientLineSearch";
-    case NaturalGradientLineSearch: return "NaturalGradientLineSearch";
-    case AdaGrad: return "AdaGrad";
-    default: return "Unknown";
-  }
-}
-
-/**
- * @deprecated Use algorithm-specific parameters instead
- */
-inline bool IsStochasticReconfiguration(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return scheme == StochasticReconfiguration || 
-         scheme == RandomStepStochasticReconfiguration ||
-         scheme == NormalizedStochasticReconfiguration ||
-         scheme == NaturalGradientLineSearch;
-}
+// Legacy WAVEFUNCTION_UPDATE_SCHEME enum removed - use modern variant-based algorithm parameters instead
 
 // =============================================================================
 // LEARNING RATE SCHEDULER INTERFACE
@@ -414,35 +362,13 @@ struct OptimizerParams {
   // Uses obviously invalid values to make misuse immediately obvious
   OptimizerParams() 
     : base_params(1, 999.0, 999.0, 1, 999.0),  // Obviously wrong values
-      algorithm_params(SGDParams()) {
-    SetLegacyFields();
-  }
+      algorithm_params(SGDParams()) {}
 
   // Constructor requires explicit parameters (no defaults)
   OptimizerParams(const BaseParams& base_params, const AlgorithmParams& algo_params)
-    : base_params(base_params), algorithm_params(algo_params) {
-    // Set legacy fields for backward compatibility
-    SetLegacyFields();
-  }
+    : base_params(base_params), algorithm_params(algo_params) {}
 
-  // Legacy backward compatibility fields - DEPRECATED, use new API instead
-  WAVEFUNCTION_UPDATE_SCHEME update_scheme = StochasticReconfiguration;  // Default to most common
-  std::vector<double> step_lengths = {0.1};  // Default step length
-  ConjugateGradientParams cg_params;  // Default CG params
-
-private:
-  void SetLegacyFields() {
-    // Set legacy fields based on new API for backward compatibility
-    if (std::holds_alternative<StochasticReconfigurationParams>(algorithm_params)) {
-      update_scheme = StochasticReconfiguration;
-      cg_params = std::get<StochasticReconfigurationParams>(algorithm_params).cg_params;
-    } else if (std::holds_alternative<SGDParams>(algorithm_params)) {
-      update_scheme = StochasticGradient;
-    } else if (std::holds_alternative<AdaGradParams>(algorithm_params)) {
-      update_scheme = AdaGrad;
-    }
-    step_lengths = {base_params.learning_rate};  // Use learning rate as step length
-  }
+  // Legacy compatibility fields removed - use new variant-based API instead
 
 public:
     
@@ -737,6 +663,23 @@ public:
                                   double epsilon = 1e-8, double weight_decay = 0.0) {
     AdamParams adam_params(beta1, beta2, epsilon, weight_decay);
     algorithm_params_ = adam_params;
+    return *this;
+  }
+  
+  /**
+   * @brief Configure for L-BFGS algorithm
+   */
+  OptimizerParamsBuilder& WithLBFGS(const LBFGSParams& lbfgs_params) {
+    algorithm_params_ = lbfgs_params;
+    return *this;
+  }
+  
+  /**
+   * @brief Configure for AdaGrad algorithm
+   */
+  OptimizerParamsBuilder& WithAdaGrad(double epsilon = 1e-8, double initial_accumulator = 0.0) {
+    AdaGradParams adagrad_params(epsilon, initial_accumulator);
+    algorithm_params_ = adagrad_params;
     return *this;
   }
   

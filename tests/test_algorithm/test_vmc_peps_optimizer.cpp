@@ -149,6 +149,23 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPS) {
   delete executor;
 }
 
+// Test VMC PEPS Optimizer Executor Construction with TPS loading from file (migrated from legacy test)
+TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPSFromFile) {
+  using Model = SquareSpinOneHalfXXZModel;
+  using MCUpdater = MCUpdateSquareNNExchange;
+
+  Model model;
+
+  // Test constructor with TPS loading from test data path (similar to legacy VMCPEPSExecutor behavior)
+  auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+      optimize_para, Ly, Lx, comm, model);
+
+  EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.rows(), Ly);
+  EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.cols(), Lx);
+
+  delete executor;
+}
+
 // Test VMC PEPS Optimizer Parameter Validation
 TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
   using Model = SquareSpinOneHalfXXZModel;
@@ -170,6 +187,52 @@ TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
   EXPECT_NO_THROW(
       (void) (new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
           invalid_para, test_tps, comm, model)));
+}
+
+// Test VMC PEPS Optimizer Enhanced Parameter Validation (migrated from legacy test)
+TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
+  using Model = SquareSpinOneHalfXXZModel;
+  using MCUpdater = MCUpdateSquareNNExchange;
+
+  Model model;
+
+  // Create a simple TPS in memory for testing
+  SITPST test_tps(Ly, Lx, 2);
+  InitializeTPSWithOBC(test_tps, Ly, Lx);
+
+  // Test with various invalid parameters (migrated from legacy step_lens validation)
+  {
+    // Test zero samples - This SHOULD throw an exception as MC samples = 0 is physically meaningless
+    VMCPEPSOptimizerParams invalid_para = optimize_para;
+    invalid_para.mc_params.num_samples = 0;  // Invalid zero samples
+    
+    // The constructor should throw std::invalid_argument for zero samples
+    EXPECT_THROW(
+        (void) (new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+            invalid_para, test_tps, comm, model)), std::invalid_argument);
+  }
+
+  {
+    // Test zero sweeps between samples - This is technically valid (continuous sampling)
+    VMCPEPSOptimizerParams valid_para = optimize_para;
+    valid_para.mc_params.sweeps_between_samples = 0;  // Zero sweeps = continuous sampling
+    
+    // The constructor should handle zero sweeps between samples (continuous sampling mode)
+    EXPECT_NO_THROW(
+        (void) (new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+            valid_para, test_tps, comm, model)));
+  }
+
+  {
+    // Test extreme learning rate values - Large but not invalid, may cause numerical issues
+    VMCPEPSOptimizerParams extreme_para = optimize_para;
+    extreme_para.optimizer_params.base_params.learning_rate = 1e10;  // Very large learning rate
+    
+    // The constructor should handle extreme learning rates gracefully (no validation at construction)
+    EXPECT_NO_THROW(
+        (void) (new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+            extreme_para, test_tps, comm, model)));
+  }
 }
 
 // Test VMC PEPS Optimizer State Management
@@ -233,6 +296,71 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
     } else if (name == "AdaGrad") {
       EXPECT_TRUE(executor->GetParams().optimizer_params.IsAlgorithm<AdaGradParams>());
     }
+
+    delete executor;
+  }
+}
+
+// Test VMC PEPS Optimizer Legacy Optimization Schemes (migrated from legacy WAVEFUNCTION_UPDATE_SCHEME)
+TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
+  using Model = SquareSpinOneHalfXXZModel;
+  using MCUpdater = MCUpdateSquareNNExchange;
+
+  Model model;
+
+  // Map legacy WAVEFUNCTION_UPDATE_SCHEME enum values to new optimizer types
+  struct LegacyScheme {
+    std::string name;
+    std::function<OptimizerParams()> create_params;
+  };
+
+  std::vector<LegacyScheme> legacy_schemes = {
+      {
+          "StochasticReconfiguration",
+          []() {
+            ConjugateGradientParams cg_params(10, 1e-4, 5, 0.01);
+            return OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
+          }
+      },
+      {
+          "StochasticGradient", 
+          []() {
+            // StochasticGradient maps to SGD with default parameters
+            OptimizerParams::BaseParams base_params(10, 1e-15, 1e-15, 20, 0.1);
+            SGDParams sgd_params(0.0, false);
+            return OptimizerParams(base_params, sgd_params);
+          }
+      },
+      {
+          "NaturalGradientLineSearch",
+          []() {
+            // NaturalGradientLineSearch can be approximated with StochasticReconfiguration + line search
+            ConjugateGradientParams cg_params(10, 1e-4, 5, 0.01);
+            return OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
+          }
+      },
+      {
+          "GradientLineSearch",
+          []() {
+            // GradientLineSearch can be approximated with SGD
+            OptimizerParams::BaseParams base_params(10, 1e-15, 1e-15, 20, 0.1);
+            SGDParams sgd_params(0.0, false); 
+            return OptimizerParams(base_params, sgd_params);
+          }
+      }
+  };
+
+  for (const auto& scheme : legacy_schemes) {
+    VMCPEPSOptimizerParams scheme_para = optimize_para;
+    scheme_para.optimizer_params = scheme.create_params();
+
+    auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+        scheme_para, Ly, Lx, comm, model);
+
+    // Verify the executor was created successfully (legacy compatibility test)
+    EXPECT_NE(executor, nullptr);
+    EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.rows(), Ly);
+    EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.cols(), Lx);
 
     delete executor;
   }

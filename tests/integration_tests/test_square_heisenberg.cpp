@@ -45,7 +45,7 @@ struct HeisenbergSystem : public MPITest {
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
 
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
-      OptimizerParams::CreateStochasticReconfiguration({0.3}, ConjugateGradientParams(100, 1e-5, 20, 0.001), 40),
+      OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
       MonteCarloParams(100, 100, 1, tps_path,
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
@@ -117,7 +117,7 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 // Check if the TPS doesn't change by setting step length = 0
 TEST_F(HeisenbergSystem, ZeroUpdate) {
   MPI_Barrier(comm);
-  vmc_peps_para.optimizer_params.step_lengths = {0.0};
+  vmc_peps_para.optimizer_params.base_params.learning_rate = 0.0;
   vmc_peps_para.optimizer_params.base_params.max_iterations = 3;
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);

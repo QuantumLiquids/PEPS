@@ -19,7 +19,6 @@
 #include "qlpeps/algorithm/loop_update/loop_update.h"
 
 //Monte-Carlo method
-#include "qlpeps/algorithm/vmc_update/vmc_peps.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h" 

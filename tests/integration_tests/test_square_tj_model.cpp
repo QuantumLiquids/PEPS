@@ -53,18 +53,19 @@ protected:
     model_name = "square_tj_model";
     energy_ed = -0.5;  // Placeholder - should be updated with actual ED energy
     
-    // VMC optimization parameters
-    optimize_para = VMCOptimizePara(
-        BMPSTruncatePara(Dpeps, Dpeps * 2, 1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        100, 100, 1,
-        {(Lx * Ly - hole_num) / 2, (Lx * Ly - hole_num) / 2, hole_num},
-        Ly, Lx,
-        std::vector<double>(40, 0.2),
-        StochasticReconfiguration,
-        ConjugateGradientParams(100, 1e-4, 20, 0.01));
+    // VMC optimization parameters - Modern API
+    BMPSTruncatePara truncate_para(Dpeps, Dpeps * 2, 1e-15,
+                                   CompressMPSScheme::SVD_COMPRESS,
+                                   std::make_optional<double>(1e-14),
+                                   std::make_optional<size_t>(10));
+    
+    MonteCarloParams mc_params(100, 100, 1, {(Lx * Ly - hole_num) / 2, (Lx * Ly - hole_num) / 2, hole_num});
+    PEPSParams peps_params(truncate_para, Ly, Lx, tps_path);
+    
+    ConjugateGradientParams cg_params(100, 1e-4, 20, 0.01);
+    OptimizerParams opt_params = OptimizerParams::CreateStochasticReconfiguration(40, cg_params, 0.2);
+    
+    optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params);
     
     // Monte Carlo measurement parameters
     measure_para = MCMeasurementPara(

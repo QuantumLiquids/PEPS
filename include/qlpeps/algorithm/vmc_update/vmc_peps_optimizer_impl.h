@@ -16,9 +16,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_impl.h"  // For CalGTenForFermionicTensors
+// CalGTenForFermionicTensors now in helpers.h
 #include "qlpeps/utility/helpers.h"
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
+#include "qlpeps/vmc_basic/statistics_tensor.h"
 #include "qlten/utility/timer.h"
 #include "qlpeps/utility/conjugate_gradient_solver.h"
 #include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
@@ -51,13 +52,8 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
       tps_lowest_(this->split_index_tps_),
       current_energy_error_(0.0) {
 
-  if (std::find(stochastic_reconfiguration_methods.cbegin(),
-                stochastic_reconfiguration_methods.cend(),
-                params.optimizer_params.update_scheme) != stochastic_reconfiguration_methods.cend()) {
-    stochastic_reconfiguration_update_class_ = true;
-  } else {
-    stochastic_reconfiguration_update_class_ = false;
-  }
+  // Check if using stochastic reconfiguration algorithm
+  stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
   CreateDirectoryIfNeeded_(params_.peps_params.wavefunction_path);
   ReserveSamplesDataSpace_();
@@ -82,13 +78,8 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
       tps_lowest_(this->split_index_tps_),
       current_energy_error_(0.0) {
 
-  if (std::find(stochastic_reconfiguration_methods.cbegin(),
-                stochastic_reconfiguration_methods.cend(),
-                params.optimizer_params.update_scheme) != stochastic_reconfiguration_methods.cend()) {
-    stochastic_reconfiguration_update_class_ = true;
-  } else {
-    stochastic_reconfiguration_update_class_ = false;
-  }
+  // Check if using stochastic reconfiguration algorithm
+  stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
   CreateDirectoryIfNeeded_(params_.peps_params.wavefunction_path);
   ReserveSamplesDataSpace_();
@@ -135,16 +126,13 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   // Perform optimization based on scheme
   typename OptimizerT::OptimizationResult result;
 
-  if (OptimizerT::IsLineSearchScheme(params_.optimizer_params.update_scheme)) {
-    result = optimizer_.LineSearchOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_);
+  // Use iterative optimization for all algorithms in the current implementation
+  // Line search support can be added as enhancement later
+  if (stochastic_reconfiguration_update_class_) {
+    result = optimizer_.IterativeOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_,
+                                          &gten_samples_, &gten_ave_);
   } else {
-    // For stochastic reconfiguration, pass the gradient samples
-    if (stochastic_reconfiguration_update_class_) {
-      result = optimizer_.IterativeOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_,
-                                            &gten_samples_, &gten_ave_);
-    } else {
-      result = optimizer_.IterativeOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_);
-    }
+    result = optimizer_.IterativeOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_);
   }
 
   // CRITICAL: Update final state and synchronize across all ranks
@@ -287,13 +275,13 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   }
 
   if (this->rank_ == 0) {
-    const size_t step_count = params_.optimizer_params.step_lengths.size();
+    const size_t step_count = params_.optimizer_params.base_params.max_iterations;
     energy_trajectory_.reserve(step_count);
     energy_error_traj_.reserve(step_count);
   }
 
   if (this->rank_ == kMPIMasterRank) {
-    grad_norm_.reserve(params_.optimizer_params.step_lengths.size());
+    grad_norm_.reserve(params_.optimizer_params.base_params.max_iterations);
   }
 
   if (stochastic_reconfiguration_update_class_) {
@@ -307,13 +295,31 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   this->PrintCommonInfo_("VMC PEPS OPTIMIZER EXECUTOR");
   if (this->rank_ == kMPIMasterRank) {
     size_t indent = 40;
-    std::cout << std::setw(indent) << "PEPS update times:" << params_.optimizer_params.step_lengths.size()
+    std::cout << std::setw(indent) << "PEPS update times:" << params_.optimizer_params.base_params.max_iterations
               << "\n";
-    std::cout << std::setw(indent) << "PEPS update strategy:"
-              << WavefunctionUpdateSchemeString(params_.optimizer_params.update_scheme) << "\n";
+    std::cout << std::setw(indent) << "PEPS update strategy:";
+    // Get algorithm name from variant
+    std::visit([](const auto& algo_params) {
+      using T = std::decay_t<decltype(algo_params)>;
+      if constexpr (std::is_same_v<T, SGDParams>) {
+        std::cout << "StochasticGradient";
+      } else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
+        std::cout << "StochasticReconfiguration";
+      } else if constexpr (std::is_same_v<T, AdaGradParams>) {
+        std::cout << "AdaGrad";
+      } else if constexpr (std::is_same_v<T, AdamParams>) {
+        std::cout << "Adam";
+      } else if constexpr (std::is_same_v<T, LBFGSParams>) {
+        std::cout << "LBFGS";
+      } else {
+        std::cout << "Unknown";
+      }
+    }, params_.optimizer_params.algorithm_params);
+    std::cout << "\n";
     if (stochastic_reconfiguration_update_class_) {
+      const auto& sr_params = params_.optimizer_params.GetAlgorithmParams<StochasticReconfigurationParams>();
       std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:"
-                << params_.optimizer_params.cg_params.diag_shift
+                << sr_params.cg_params.diag_shift
                 << "\n";
     }
   }
