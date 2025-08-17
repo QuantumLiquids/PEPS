@@ -96,22 +96,22 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
 
   VMCPEPSOptimizerParams optimize_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(60, ConjugateGradientParams(100, 1e-4, 20, 0.01), 0.2),
-      MonteCarloParams(100, 100, 1, tps_path,
+      MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx, 
-                                     OccupancyNum({4, 8}))),
+                                     OccupancyNum({4, 8})),
+                       false), // not warmed up initially
       PEPSParams(BMPSTruncatePara(Dpeps, Dpeps * 3,
                                   1e-15, CompressMPSScheme::SVD_COMPRESS,
                                   std::make_optional<double>(1e-14),
-                                  std::make_optional<size_t>(10)), tps_path));
+                                  std::make_optional<size_t>(10))));
 
-  MCMeasurementPara measure_para = MCMeasurementPara(
-      BMPSTruncatePara(Dpeps, 3 * Dpeps, 1e-15,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      1000, 1000, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx);
+  Configuration measure_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2))};
+  MonteCarloParams measure_mc_params{1000, 1000, 1, measure_config, false}; // not warmed up initially
+  PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 3 * Dpeps, 1e-15,
+                                                  CompressMPSScheme::SVD_COMPRESS,
+                                                  std::make_optional<double>(1e-14),
+                                                  std::make_optional<size_t>(10))};
+  MCMeasurementParams measure_para{measure_mc_params, measure_peps_params};
 
   void SetUp(void) {
     MPITest::SetUp();
@@ -124,8 +124,7 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
     ham_nn({0, 1, 0, 1}) = -t;
     ham_nn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-    // wavefunction_path is now part of MonteCarloParams constructor
-    measure_para.wavefunction_path = tps_path;
+    // New API: TPS path is handled by the caller, not stored in parameters
   }
 };
 
@@ -194,8 +193,8 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   //Measure
   auto measure_exe =
       new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(
-          measure_para,
           tps,
+          measure_para,
           comm,
           spinless_fermion_model_solver);
   start_flop = flop;
@@ -214,8 +213,8 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
 
   auto measure_exe2 =
       new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
-          measure_para,
           tps,
+          measure_para,
           comm,
           spinless_fermion_model_solver);
   measure_exe2->Execute();

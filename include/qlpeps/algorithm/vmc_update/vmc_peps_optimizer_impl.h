@@ -16,8 +16,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
-// CalGTenForFermionicTensors now in helpers.h
+#include "qlpeps/consts.h"  // For kTpsPath constant
 #include "qlpeps/utility/helpers.h"
+#include "qlpeps/utility/filesystem_utils.h"
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlpeps/vmc_basic/statistics_tensor.h"
 #include "qlten/utility/timer.h"
@@ -26,14 +27,6 @@
 
 namespace qlpeps {
 using namespace qlten;
-
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOptimizerExecutor(
-    const VMCPEPSOptimizerParams &params,
-    const TPST &tps_init,
-    const MPI_Comm &comm,
-    const EnergySolver &solver)
-    : VMCPEPSOptimizerExecutor(params, SITPST(tps_init), comm, solver) {}
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOptimizerExecutor(
@@ -55,7 +48,10 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
   // Check if using stochastic reconfiguration algorithm
   stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
-  CreateDirectoryIfNeeded_(params_.peps_params.wavefunction_path);
+  // Ensure necessary directories exist for output
+  if (!params_.tps_dump_base_name.empty()) {
+    this->EnsureDirectoryExists_(params_.tps_dump_base_name + "final");
+  }
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -64,10 +60,10 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOptimizerExecutor(
     const VMCPEPSOptimizerParams &params,
-    const size_t ly, const size_t lx,
+    const std::string &tps_path,
     const MPI_Comm &comm,
     const EnergySolver &solver)
-    : BaseExecutor(ly, lx, params.mc_params, params.peps_params, comm),
+    : BaseExecutor(tps_path, params.mc_params, params.peps_params, comm),
       params_(params),
       energy_solver_(solver),
       optimizer_(params.optimizer_params, comm, this->rank_, this->mpi_size_),
@@ -81,7 +77,10 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
   // Check if using stochastic reconfiguration algorithm
   stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
-  CreateDirectoryIfNeeded_(params_.peps_params.wavefunction_path);
+  // Ensure necessary directories exist for output
+  if (!params_.tps_dump_base_name.empty()) {
+    this->EnsureDirectoryExists_(params_.tps_dump_base_name + "final");
+  }
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -479,61 +478,36 @@ bool VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   return too_small;
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizerExecutor<TenElemT,
-                              QNT,
-                              MonteCarloSweepUpdater,
-                              EnergySolver>::CreateDirectoryIfNeeded_(const std::string &path) {
-  if (path.empty()) {
-    if (this->rank_ == kMPIMasterRank) {
-      std::cerr << "Warning: Wavefunction path is empty. No directory will be created." << std::endl;
-    }
-    return;
-  }
-
-  // Extract directory from path
-  std::filesystem::path fs_path(path);
-  std::filesystem::path dir_path = fs_path.parent_path();
-
-  if (!dir_path.empty()) {
-    try {
-      if (!std::filesystem::exists(dir_path)) {
-        if (this->rank_ == kMPIMasterRank) {
-          std::cout << "Creating directory: " << dir_path.string() << std::endl;
-          std::filesystem::create_directories(dir_path);
-        }
-        // Ensure all processes wait for directory creation
-        MPI_Barrier(this->comm_);
-      }
-    } catch (const std::exception &e) {
-      if (this->rank_ == kMPIMasterRank) {
-        std::cerr << "Error creating directory " << dir_path.string() << ": " << e.what() << std::endl;
-      }
-    }
-  }
-}
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpData(const bool release_mem) {
-  DumpData(params_.peps_params.wavefunction_path, release_mem);
+  DumpData(params_.tps_dump_base_name, release_mem);  // Use base name from parameters
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT,
                               QNT,
                               MonteCarloSweepUpdater,
-                              EnergySolver>::DumpData(const std::string &tps_path,
+                              EnergySolver>::DumpData(const std::string &tps_base_name,
                                                       const bool release_mem) {
+  // Generate paths with consistent naming: tps_base_name + "final" and tps_base_name + "lowest"
+  std::string final_tps_path = tps_base_name + "final";
+  std::string lowest_tps_path = tps_base_name + "lowest";
   std::string energy_data_path = "./energy";
+  
   if (this->rank_ == kMPIMasterRank) {
-    this->split_index_tps_.Dump(tps_path, release_mem);
-    tps_lowest_.Dump(tps_path + "lowest", release_mem);
-    if (!qlmps::IsPathExist(energy_data_path)) {
-      qlmps::CreatPath(energy_data_path);
+    // Only dump TPS if base name is not empty
+    if (!tps_base_name.empty()) {
+      this->split_index_tps_.Dump(final_tps_path, release_mem);
+      tps_lowest_.Dump(lowest_tps_path, release_mem);
     }
+    EnsureDirectoryExists(energy_data_path);
   }
   MPI_Barrier(this->comm_); // configurations dump will collapse when creating path if there is no barrier.
-  this->tps_sample_.config.Dump(tps_path, this->rank_);
+  // Dump configuration using path from MonteCarloParams (empty = no dump)
+  if (!params_.mc_params.config_dump_path.empty()) {
+    this->tps_sample_.config.Dump(params_.mc_params.config_dump_path, this->rank_);
+  }
   DumpVecData(energy_data_path + "/energy_sample" + std::to_string(this->rank_), energy_samples_);
   if (this->rank_ == kMPIMasterRank) {
     DumpVecData(energy_data_path + "/energy_trajectory", energy_trajectory_);

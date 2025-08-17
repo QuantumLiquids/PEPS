@@ -327,8 +327,8 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     fixed_init_config({0, 1}) = 1;  // occupied  
     fixed_init_config({1, 0}) = 1;  // occupied
     fixed_init_config({1, 1}) = 0;  // empty
-    qlpeps::MonteCarloParams mc_params(1, 0, 1, "", fixed_init_config);
-    qlpeps::PEPSParams peps_params(trun_para, GetTypeSpecificPath("test_algorithm/test_data/spinless_fermion_tps_t2_" + std::to_string(t2)));
+    qlpeps::MonteCarloParams mc_params(1, 0, 1, fixed_init_config, false);  // Use user-provided config
+    qlpeps::PEPSParams peps_params(trun_para);  // User loads TPS separately
     qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
     // Use the common test runner
@@ -421,8 +421,8 @@ TEST_F(TrivialHeisenbergTools, ExactSumGradientOptWithVMCOptimizer) {
   qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(100, 1e-15, 1e-30, 20, 1.0, 1e-8, 0.0);
   Configuration rand_config(2, 2);
   rand_config.Random(std::vector<size_t>{2, 2});
-  qlpeps::MonteCarloParams mc_params(1, 0, 1, "", rand_config);
-  qlpeps::PEPSParams peps_params(trun_para, GetTypeSpecificPath("test_algorithm/test_data/heisenberg_tps"));
+  qlpeps::MonteCarloParams mc_params(1, 0, 1, rand_config, true);
+  qlpeps::PEPSParams peps_params(trun_para);
   qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
   // Use the common test runner
@@ -528,8 +528,8 @@ TEST_F(TrivialTransverseIsingTools, ExactSumGradientOptWithVMCOptimizer) {
   Configuration random_config(Ly, Lx);
   std::vector<size_t> occupancy = {4, 0};  // 4 up 0 down
   random_config.Random(occupancy);
-  qlpeps::MonteCarloParams mc_params(1, 0, 1, "", random_config);
-  qlpeps::PEPSParams peps_params(trun_para, GetTypeSpecificPath("test_algorithm/test_data/transverse_ising_tps"));
+  qlpeps::MonteCarloParams mc_params(1, 0, 1, random_config, true);
+  qlpeps::PEPSParams peps_params(trun_para);
   qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
   // Use the common test runner
@@ -638,8 +638,8 @@ TEST_F(Z2tJTools, ExactSumGradientOptWithVMCOptimizer) {
   std::vector<size_t> occupancy =
       {1, 1, 2};  // 1 up 1 down 2 empty(although no effect on calculation, but should be valid for Base class)
   random_config.Random(occupancy);
-  qlpeps::MonteCarloParams mc_params(1, 0, 1, "", random_config);
-  qlpeps::PEPSParams peps_params(trun_para, GetTypeSpecificPath("test_algorithm/test_data/tj_model_tps"));
+  qlpeps::MonteCarloParams mc_params(1, 0, 1, random_config, true);
+  qlpeps::PEPSParams peps_params(trun_para);
   qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
   // Use the common test runner

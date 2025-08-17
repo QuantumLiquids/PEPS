@@ -5,11 +5,28 @@
 * Creation Date: 2025-01-27
 *
 * Description: QuantumLiquids/PEPS project. Tests for the VMC PEPS optimizer executor.
-TODO: actually test the VMC PEPS optimizer executor for 2 by 2 systems, as test_mc_peps_measure.cpp does.
+*
+* WARNING: Current test suite is incomplete and mostly useless.
+* These tests only cover constructor validation and parameter checking,
+* but completely miss the core functionality - the Execute() method.
+* 
+* TODO: Add real optimization execution tests that:
+*   1. Actually call Execute() method 
+*   2. Verify energy convergence behavior
+*   3. Test gradient calculation correctness
+*   4. Validate Monte Carlo sampling works
+*   5. Check optimization step updates are applied
+*   
+* The current 500+ lines test constructors but ignore the actual optimization logic.
+* This gives false confidence - Execute() could be completely broken and tests would pass.
+* 
+* Actually test the VMC PEPS optimizer executor can use 2 by 2 systems, as test_mc_peps_measure.cpp does.
+* Potential consideration: The test running test consideration.
 */
 
 #include <gtest/gtest.h>
 #include <mpi.h>
+#include <filesystem>
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"
@@ -33,11 +50,26 @@ using Tensor = QLTensor<TenElemT, QNT>;
 using TPST = TPS<TenElemT, QNT>;
 using SITPST = SplitIndexTPS<TenElemT, QNT>;
 
+/**
+ * @brief Get the correct TPS data path based on tensor element type
+ * @param base_name Base name of the TPS data (e.g., "heisenberg_tps")
+ * @return Full path to the TPS data directory
+ */
+std::string GetTPSDataPath(const std::string &base_name) {
+  if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double>) {
+    return "test_algorithm/test_data/" + base_name + "_doublelowest";
+  } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
+    return "test_algorithm/test_data/" + base_name + "_complexlowest";
+  } else {
+    return "test_algorithm/test_data/" + base_name + "_unknownlowest";
+  }
+}
+
 class VMCPEPSOptimizerUnitTest : public MPITest {
  protected:
-  size_t Lx = 4;  // 4x4 system
-  size_t Ly = 4;
-  size_t D = 8;   // Bond dimension
+  size_t Lx = 2;  // 2x2 system to match test data
+  size_t Ly = 2;
+  size_t D = 4;   // Bond dimension for 2x2 test data
 
   // Helper function to initialize TPS with Open Boundary Conditions (OBC)
   void InitializeTPSWithOBC(SITPST &tps, size_t Ly, size_t Lx) {
@@ -79,6 +111,7 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
 
   VMCPEPSOptimizerParams optimize_para;
   std::string test_data_path;
+  SITPST valid_test_tps;  // Pre-loaded valid TPS for testing
 
   void SetUp() override {
     MPITest::SetUp();
@@ -86,6 +119,15 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
     // Set up physical indices
     pb_out = IndexT({QNSctT(QNT(), 2)}, TenIndexDirType::OUT);
     pb_in = InverseIndex(pb_out);
+
+    // Load valid TPS data for testing
+    std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("heisenberg_tps")).string();
+    valid_test_tps = SITPST(Ly, Lx, 2);  // Physical dimension 2 for spin-1/2
+    bool load_success = valid_test_tps.Load(source_tps_path);
+    if (!load_success) {
+      // Fallback: create a properly initialized TPS in memory
+      InitializeTPSWithOBC(valid_test_tps, Ly, Lx);
+    }
 
     // Set up test data paths: read reference data from source, write results to build directory
     std::string reference_data_path;
@@ -110,19 +152,24 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
                           std::filesystem::copy_options::recursive);
     }
 
-    // Set up VMC parameters using new structure
+    // Set up VMC parameters using new structure with explicit path control
     ConjugateGradientParams cg_params(100, 1e-5, 10, 0.01);
     OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(
         10, 1e-15, 1e-30, 20, cg_params, 0.1);
     Configuration random_config(Ly, Lx);
     std::vector<size_t> occupancy = {Ly * Lx / 2, Ly * Lx / 2};  // Equal number of 0s and 1s
     random_config.Random(occupancy);
-    MonteCarloParams mc_params(10, 10, 1, "", random_config);
+    
+    // Output paths should be in working directory (build dir), not in reference data directory
+    std::string output_config_path = "./final_config";  // Working directory
+    std::string output_tps_path = "./optimized_tps";    // Working directory
+    
+    MonteCarloParams mc_params(10, 10, 1, random_config, false, output_config_path);  // Added explicit config output path
     PEPSParams peps_params(BMPSTruncatePara(4, 8, 1e-15,
                                             CompressMPSScheme::SVD_COMPRESS,
                                             std::make_optional<double>(1e-14),
-                                            std::make_optional<size_t>(10)), test_data_path);
-    optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params);
+                                            std::make_optional<size_t>(10)));  // Only needs BMPSTruncatePara
+    optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params, output_tps_path);  // TPS output path
   }
 };
 
@@ -143,8 +190,8 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPS) {
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
       optimize_para, test_tps, comm, model);
 
-  EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.rows(), Ly);
-  EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.cols(), Lx);
+  EXPECT_EQ(executor->GetParams().mc_params.initial_config.rows(), Ly);
+  EXPECT_EQ(executor->GetParams().mc_params.initial_config.cols(), Lx);
 
   delete executor;
 }
@@ -156,12 +203,20 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPSFromFile) {
 
   Model model;
 
-  // Test constructor with TPS loading from test data path (similar to legacy VMCPEPSExecutor behavior)
-  auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, Ly, Lx, comm, model);
+  // Load actual TPS data from test_data directory
+  std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("heisenberg_tps")).string();
+  
+  // Create and load the TPS from file
+  SITPST test_tps(Ly, Lx, 2);  // Physical dimension 2 for spin-1/2
+  bool load_success = test_tps.Load(source_tps_path);
+  EXPECT_TRUE(load_success) << "Failed to load TPS from " << source_tps_path;
 
-  EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.rows(), Ly);
-  EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.cols(), Lx);
+  // Test constructor with TPS loaded from file
+  auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+      optimize_para, test_tps, comm, model);
+
+  EXPECT_EQ(executor->GetParams().mc_params.initial_config.rows(), Ly);
+  EXPECT_EQ(executor->GetParams().mc_params.initial_config.cols(), Lx);
 
   delete executor;
 }
@@ -243,7 +298,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, StateManagement) {
   Model model;
 
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, Ly, Lx, comm, model);
+      optimize_para, valid_test_tps, comm, model);
 
   // Test initial energy
   auto initial_energy = executor->GetCurrentEnergy();
@@ -286,7 +341,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
     }
 
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-        scheme_para, Ly, Lx, comm, model);
+        scheme_para, valid_test_tps, comm, model);
 
     // Test that the correct algorithm type is configured
     if (name == "StochasticReconfiguration") {
@@ -355,12 +410,12 @@ TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
     scheme_para.optimizer_params = scheme.create_params();
 
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-        scheme_para, Ly, Lx, comm, model);
+        scheme_para, valid_test_tps, comm, model);
 
     // Verify the executor was created successfully (legacy compatibility test)
     EXPECT_NE(executor, nullptr);
-    EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.rows(), Ly);
-    EXPECT_EQ(executor->GetParams().mc_params.alternative_init_config.cols(), Lx);
+    EXPECT_EQ(executor->GetParams().mc_params.initial_config.rows(), Ly);
+    EXPECT_EQ(executor->GetParams().mc_params.initial_config.cols(), Lx);
 
     delete executor;
   }
@@ -376,7 +431,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
     Model model;
 
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, Ly, Lx, comm, model);
+        optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 
@@ -385,7 +440,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
     Model model(1.0, 1.0, 0.2, 0.2, 0.0);
 
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, Ly, Lx, comm, model);
+        optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 }
@@ -399,14 +454,14 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentMCUpdaters) {
   {
     using MCUpdater = MCUpdateSquareNNExchange;
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, Ly, Lx, comm, model);
+        optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 
   {
     using MCUpdater = MCUpdateSquareNNFullSpaceUpdate;
     auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, Ly, Lx, comm, model);
+        optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 }
@@ -419,7 +474,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DataDumping) {
   Model model;
 
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, Ly, Lx, comm, model);
+      optimize_para, valid_test_tps, comm, model);
 
   // Test DumpData without path
   EXPECT_NO_THROW(executor->DumpData(false));
@@ -445,7 +500,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncatePara) {
                                                     std::make_optional<size_t>(5));
 
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      para, Ly, Lx, comm, model);
+      para, valid_test_tps, comm, model);
 
   EXPECT_EQ(executor->GetParams().peps_params.truncate_para.D_min, 2);
   EXPECT_EQ(executor->GetParams().peps_params.truncate_para.D_max, 4);
@@ -463,7 +518,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, InterfaceCompatibility) {
   Model model;
 
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, Ly, Lx, comm, model);
+      optimize_para, valid_test_tps, comm, model);
 
   // Test that all interface methods exist and work
   EXPECT_NO_THROW(executor->GetState());
@@ -485,7 +540,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, CallbackSystem) {
   Model model;
 
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, Ly, Lx, comm, model);
+      optimize_para, valid_test_tps, comm, model);
 
   // Test callback setting
   typename VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>::OptimizerT::OptimizationCallback callback;
@@ -506,7 +561,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, CustomEnergyEvaluator) {
   Model model;
 
   auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, Ly, Lx, comm, model);
+      optimize_para, valid_test_tps, comm, model);
 
   // Test custom energy evaluator setting
   auto custom_evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
@@ -516,6 +571,25 @@ TEST_F(VMCPEPSOptimizerUnitTest, CustomEnergyEvaluator) {
   EXPECT_NO_THROW(executor->SetEnergyEvaluator(custom_evaluator));
 
   delete executor;
+}
+
+// Test VMC PEPS Optimizer Input Validation (prevents segfault from empty TPS)
+TEST_F(VMCPEPSOptimizerUnitTest, InputValidation) {
+  using Model = SquareSpinOneHalfXXZModel;
+  using MCUpdater = MCUpdateSquareNNExchange;
+
+  Model model;
+
+  // Test with TPS that has proper dimensions but uninitialized tensors
+  SITPST empty_tps(Ly, Lx, 2);  // TPS with physical dimension but default tensors
+  Configuration test_config(Ly, Lx);
+  test_config.Random(std::vector<size_t>(2, Ly * Lx / 2));
+
+  // This should throw std::invalid_argument with a clear error message
+  EXPECT_THROW(
+      (void) (new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>(
+          optimize_para, empty_tps, comm, model)), 
+      std::invalid_argument);
 }
 
 int main(int argc, char *argv[]) {

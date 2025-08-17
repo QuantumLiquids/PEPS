@@ -139,43 +139,28 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
   compatible_config({1, 1}) = 0; // up
   // This gives us 2 up spins and 2 down spins: [0, 1, 1, 0]
 
-  // TODO: DESIGN PROBLEM - Configuration read/write paths are the same!
-  // MonteCarloMeasurementExecutor writes config files to wavefunction_path,
-  // which pollutes the source directory. Need to separate read/write paths.
-  // Future: Let user control config/TPS read/write instead of automatic behavior.
-  
-  // TEMPORARY FIX: Use test output directory for wavefunction_path to avoid pollution
+  // Path separation problem SOLVED by refactor - user controls all dump paths explicitly
   std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("heisenberg_tps")).string();
-  std::string working_tps_path = GetTestOutputPath("mc_peps_measure", "heisenberg_tps_work");
+  std::string output_dir = GetTestOutputPath("mc_peps_measure", "results");
   
-  // Copy source TPS data to working directory
-  if (std::filesystem::exists(source_tps_path)) {
-    std::filesystem::copy(source_tps_path, working_tps_path,
-                          std::filesystem::copy_options::overwrite_existing |
-                          std::filesystem::copy_options::recursive);
-  }
-
-  MCMeasurementPara para = MCMeasurementPara(
-    BMPSTruncatePara(Dpeps,
-                     2 * Dpeps,
-                     1e-15,
-                     CompressMPSScheme::SVD_COMPRESS,
-                     std::make_optional<double>(1e-14),
-                     std::make_optional<size_t>(10)),
-    50,
-    50,
-    1,
-    // Use compatible configuration instead of random
-    compatible_config,
-    // Use working directory (safe for writes) instead of source directory
-    working_tps_path);
+  // Ensure subdirectories exist for dump paths
+  std::filesystem::create_directories(output_dir);
+  
+  // Create unified parameter structure with explicit dump path control  
+  MonteCarloParams mc_params(50, 50, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
+  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+                                          2 * Dpeps,
+                                          1e-15,
+                                          CompressMPSScheme::SVD_COMPRESS,
+                                          std::make_optional<double>(1e-14),
+                                          std::make_optional<size_t>(10)));
+  MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");  // explicit measurement dump path
 
   Model heisenberg_model(J, J, 0);
 
   auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>(
-    para,
-    Ly,
-    Lx,
+    source_tps_path,   // TPS path - convenient constructor loads automatically
+    para,              // Unified parameters
     comm,
     heisenberg_model);
 
@@ -209,44 +194,29 @@ TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
   double h = 1.0;
   double energy_exact = Calculate2x2OBCTransverseIsingEnergy(J, h);
 
-  // TODO: Same design problem - separate read/write paths needed
-  // Load TPS data from file and copy to working directory
-  std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) /
-    GetTPSDataPath("transverse_ising_tps")).string();
-  std::string working_tps_path = GetTestOutputPath("mc_peps_measure", "transverse_ising_tps_work");
+  // Path separation problem SOLVED by refactor - use convenient file loading pattern
+  std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("transverse_ising_tps")).string();
+  std::string output_dir = GetTestOutputPath("mc_peps_measure", "transverse_ising_results");
+
+  // Create random configuration explicitly
+  Configuration random_config(Ly, Lx);
+  random_config.Random(std::vector<size_t>(2, N / 2));  // Reduced samples for fast testing
   
-  // Copy source TPS data to working directory
-  if (std::filesystem::exists(source_tps_path)) {
-    std::filesystem::copy(source_tps_path, working_tps_path,
-                          std::filesystem::copy_options::overwrite_existing |
-                          std::filesystem::copy_options::recursive);
-  }
-  std::string tps_path = working_tps_path;
-
-  SplitIndexTPS<TenElemT, QNT> sitps(Ly, Lx);
-  sitps.Load(tps_path);
-
-  // Monte Carlo measurement parameters
-  MCMeasurementPara para = MCMeasurementPara(
-    BMPSTruncatePara(Dpeps,
-                     2 * Dpeps,
-                     1e-15,
-                     CompressMPSScheme::SVD_COMPRESS,
-                     std::make_optional<double>(1e-14),
-                     std::make_optional<size_t>(10)),
-    50,
-    50,
-    1,
-    // Reduced samples for fast testing
-    std::vector<size_t>(2, N / 2),
-    Ly,
-    Lx);
+  // Create unified parameter structure with explicit dump path control
+  MonteCarloParams mc_params(50, 50, 1, random_config, false, output_dir + "/final_config");  // explicit config dump path
+  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+                                          2 * Dpeps,
+                                          1e-15,
+                                          CompressMPSScheme::SVD_COMPRESS,
+                                          std::make_optional<double>(1e-14),
+                                          std::make_optional<size_t>(10)));
+  MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");  // explicit measurement dump path
 
   Model transverse_ising_model(h);
 
   auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdate, Model>(
-    para,
-    sitps,
+    source_tps_path,   // TPS path - convenient constructor loads automatically
+    para,              // Unified parameters  
     comm,
     transverse_ising_model);
 
@@ -283,37 +253,25 @@ TEST_F(Test2x2MCPEPSFermion, SpinlessFermionModel) {
   compatible_config({1, 1}) = 1; // occupied
   // This gives us 2 occupied sites and 2 empty sites: [1, 0, 0, 1]
 
-  MCMeasurementPara para = MCMeasurementPara(
-    BMPSTruncatePara(Dpeps,
-                     2 * Dpeps,
-                     1e-15,
-                     CompressMPSScheme::SVD_COMPRESS,
-                     std::make_optional<double>(1e-14),
-                     std::make_optional<size_t>(10)),
-    50,
-    50,
-    1,
-    // Use compatible configuration instead of random
-    compatible_config,
-    // Load TPS data from path (generated by test_exact_sum_optimization.cpp)
-    // TODO: Same design problem - copy to working directory
-    [&]() {
-      std::string source = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("spinless_fermion_tps_t2_0.000000")).string();
-      std::string working = GetTestOutputPath("mc_peps_measure", "spinless_fermion_work");
-      if (std::filesystem::exists(source)) {
-        std::filesystem::copy(source, working,
-                              std::filesystem::copy_options::overwrite_existing |
-                              std::filesystem::copy_options::recursive);
-      }
-      return working;
-    }());
+  // Path separation problem SOLVED by refactor - use convenient file loading pattern
+  std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("spinless_fermion_tps_t2_0.000000")).string();
+  std::string output_dir = GetTestOutputPath("mc_peps_measure", "spinless_fermion_results");
+  
+  // Create unified parameter structure with explicit dump path control
+  MonteCarloParams mc_params(50, 50, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
+  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+                                          2 * Dpeps,
+                                          1e-15,
+                                          CompressMPSScheme::SVD_COMPRESS,
+                                          std::make_optional<double>(1e-14),
+                                          std::make_optional<size_t>(10)));
+  MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");  // explicit measurement dump path
 
   Model fermion_model(t, t2, 0);
 
   auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>(
-    para,
-    Ly,
-    Lx,
+    source_tps_path,   // TPS path - convenient constructor loads automatically
+    para,              // Unified parameters
     comm,
     fermion_model);
 
@@ -346,37 +304,25 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
   compatible_config({1, 1}) = 1; // down
   // This gives us 1 up, 1 down, 2 empty sites: [2, 2, 0, 1]
 
-  MCMeasurementPara para = MCMeasurementPara(
-    BMPSTruncatePara(Dpeps,
-                     2 * Dpeps,
-                     1e-15,
-                     CompressMPSScheme::SVD_COMPRESS,
-                     std::make_optional<double>(1e-14),
-                     std::make_optional<size_t>(10)),
-    50,
-    50,
-    1,
-    // Use compatible configuration instead of random
-    compatible_config,
-    // Load TPS data from path (generated by test_exact_sum_optimization.cpp)
-    // TODO: Same design problem - copy to working directory
-    [&]() {
-      std::string source = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("tj_model_tps")).string();
-      std::string working = GetTestOutputPath("mc_peps_measure", "tj_model_work");
-      if (std::filesystem::exists(source)) {
-        std::filesystem::copy(source, working,
-                              std::filesystem::copy_options::overwrite_existing |
-                              std::filesystem::copy_options::recursive);
-      }
-      return working;
-    }());
+  // Path separation problem SOLVED by refactor - use convenient file loading pattern
+  std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("tj_model_tps")).string();
+  std::string output_dir = GetTestOutputPath("mc_peps_measure", "tj_model_results");
+  
+  // Create unified parameter structure with explicit dump path control
+  MonteCarloParams mc_params(50, 50, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
+  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+                                          2 * Dpeps,
+                                          1e-15,
+                                          CompressMPSScheme::SVD_COMPRESS,
+                                          std::make_optional<double>(1e-14),
+                                          std::make_optional<size_t>(10)));
+  MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");  // explicit measurement dump path
 
   Model tj_model(t, 0, J, J / 4, mu);
 
   auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>(
-    para,
-    Ly,
-    Lx,
+    source_tps_path,   // TPS path - convenient constructor loads automatically
+    para,              // Unified parameters
     comm,
     tj_model);
 

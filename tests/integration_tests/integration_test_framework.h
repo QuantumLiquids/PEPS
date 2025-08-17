@@ -50,7 +50,7 @@ protected:
   VMCPEPSOptimizerParams optimize_para;
   
   // Monte Carlo measurement parameters
-  MCMeasurementPara measure_para;
+  MCMeasurementParams measure_para;
 
   virtual void SetUpIndices() = 0;
   virtual void SetUpHamiltonians() = 0;
@@ -64,8 +64,7 @@ protected:
     
     // Set common paths
     tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
-    // wavefunction_path is now part of MonteCarloParams and PEPSParams in the constructor
-    measure_para.wavefunction_path = tps_path;
+    // New API: TPS path is handled by the caller, not stored in parameters
   }
 
   // Common simple update workflow
@@ -130,7 +129,7 @@ protected:
     tps.Load(tps_path);
 
     auto measure_exe = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
-        measure_para, tps, comm, model);
+        tps, measure_para, comm, model);
     
     size_t start_flop = flop;
     Timer measure_timer("measurement");

@@ -16,7 +16,7 @@
 #include <stdexcept>
 #include "mpi.h"                // MPI BroadCast
 #include "qlten/qlten.h"        // Showable, Streamable
-#include "qlmps/qlmps.h"        // IsPathExist, CreatPath
+#include "qlpeps/utility/filesystem_utils.h"  // IsPathExist, CreatePath
 #include "qlpeps/two_dim_tn/framework/duomatrix.h"
 
 namespace qlpeps {
@@ -225,6 +225,31 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
     return sum;
   }
 
+  /**
+   * @brief Count occupancy numbers for each species in the configuration
+   * 
+   * Returns a vector where occupancy[i] = number of sites in state i.
+   * This is useful for validating U1 conservation in quantum systems.
+   * 
+   * @return Vector of occupancy numbers for each species
+   */
+  std::vector<size_t> CountOccupancy() const {
+    if (this->size() == 0) return {};
+    
+    // Find maximum state value to determine vector size
+    size_t max_state = 0;
+    for (size_t elem : *this) {
+      max_state = std::max(max_state, elem);
+    }
+    
+    std::vector<size_t> occupancy(max_state + 1, 0);
+    for (size_t elem : *this) {
+      occupancy[elem]++;
+    }
+    
+    return occupancy;
+  }
+
   void StreamRead(std::istream &) override;
   void StreamWrite(std::ostream &) const override;
 
@@ -247,7 +272,7 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
    * @param label Label for the file (e.g., MPI rank number)
    */
   void Dump(const std::string &path, const size_t label) {
-    if (!qlmps::IsPathExist(path)) { qlmps::CreatPath(path); }
+    EnsureDirectoryExists(path);
     std::string file = path + "/configuration" + std::to_string(label);
     std::ofstream ofs(file, std::ofstream::binary);
     ofs << (*this);

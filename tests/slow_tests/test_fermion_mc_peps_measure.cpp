@@ -17,8 +17,6 @@
 using namespace qlten;
 using namespace qlpeps;
 
-using qlmps::CaseParamsParserBasic;
-char *params_file;
 
 using qlten::special_qn::fZ2QN;
 using TenElemT = TEN_ELEM_TYPE;
@@ -60,14 +58,13 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
   );
   IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
 
-  MCMeasurementPara mc_measurement_para = MCMeasurementPara(
-      BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      file_params.MC_samples, file_params.WarmUp, 1,
-      {N / 2, N / 2},
-      Ly, Lx);
+  Configuration mc_config{Ly, Lx, OccupancyNum({N / 2, N / 2})};
+  MonteCarloParams mc_params{file_params.MC_samples, file_params.WarmUp, 1, mc_config, false}; // not warmed up initially
+  PEPSParams peps_params{BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
+                                          CompressMPSScheme::SVD_COMPRESS,
+                                          std::make_optional<double>(1e-14),
+                                          std::make_optional<size_t>(10))};
+  MCMeasurementParams mc_measurement_para{mc_params, peps_params};
 
   std::string simple_update_peps_path = "peps_spinless_free_fermion_half_filling";
   const MPI_Comm comm = MPI_COMM_WORLD;
@@ -82,8 +79,6 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
     }
 
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-    mc_measurement_para.wavefunction_path =
-        "tps_spinless_fermion_half_filling_D" + std::to_string(file_params.D);
   }
 };
 
@@ -96,8 +91,8 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
       new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
-          mc_measurement_para,
           sitps,
+          mc_measurement_para,
           comm,
           spinless_fermion_solver);
 
@@ -115,8 +110,8 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(mc_measurement_para,
-                                                                                                sitps,
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
+                                                                                                mc_measurement_para,
                                                                                                 comm,
                                                                                                 spinless_fermion_solver);
 
@@ -146,14 +141,13 @@ struct Z2tJModelTools : public testing::Test {
                                QNSctT(fZ2QN(0), 1)}, // |0> empty state
                               TenIndexDirType::IN
   );
-  MCMeasurementPara mc_measurement_para = MCMeasurementPara(
-      BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      file_params.MC_samples, file_params.WarmUp, 1,
-      {(N - hole_num) / 2, (N - hole_num) / 2, hole_num},
-      Ly, Lx);
+  Configuration mc_config2{Ly, Lx, OccupancyNum({(N - hole_num) / 2, (N - hole_num) / 2, hole_num})};
+  MonteCarloParams mc_params2{file_params.MC_samples, file_params.WarmUp, 1, mc_config2, false}; // not warmed up initially
+  PEPSParams peps_params2{BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
+                                           CompressMPSScheme::SVD_COMPRESS,
+                                           std::make_optional<double>(1e-14),
+                                           std::make_optional<size_t>(10))};
+  MCMeasurementParams mc_measurement_para{mc_params2, peps_params2};
 
   std::string simple_update_peps_path = "peps_tj_doping0.125";
   const MPI_Comm comm = MPI_COMM_WORLD;
@@ -168,8 +162,7 @@ struct Z2tJModelTools : public testing::Test {
     }
 
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-    mc_measurement_para.wavefunction_path =
-        "tps_tJ_doping" + std::to_string(doping) + "_D" + std::to_string(file_params.D);
+    // New API: TPS path is handled by the caller, not stored in parameters
   }
 };
 
@@ -181,8 +174,8 @@ TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJNNModel>(mc_measurement_para,
-                                                                                                    sitps,
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJNNModel>(sitps,
+                                                                                                    mc_measurement_para,
                                                                                                     comm,
                                                                                                     tj_solver);
 
@@ -200,8 +193,8 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(mc_measurement_para,
-                                                                                                sitps,
+      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
+                                                                                                mc_measurement_para,
                                                                                                 comm,
                                                                                                 tj_solver);
 
@@ -214,7 +207,6 @@ int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);
   std::cout << argc << std::endl;
-  params_file = argv[1];
   auto test_err = RUN_ALL_TESTS();
   MPI_Finalize();
 }

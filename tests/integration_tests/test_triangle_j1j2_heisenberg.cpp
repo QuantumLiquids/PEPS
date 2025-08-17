@@ -98,27 +98,22 @@ class TriangleJ1J2HeisenbergSystem : public IntegrationTestFramework<QNT> {
 
       optimize_para = VMCPEPSOptimizerParams(
           OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
-          MonteCarloParams(100, 100, 1, tps_path,
+          MonteCarloParams(100, 100, 1,
                            Configuration(Ly, Lx, 
-                                         OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+                                         OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
+                           false), // Sz = 0, not warmed up initially
           PEPSParams(BMPSTruncatePara(6, 12, 1e-15,
                                       CompressMPSScheme::SVD_COMPRESS,
                                       std::make_optional<double>(1e-14),
-                                      std::make_optional<size_t>(10)), tps_path));
+                                      std::make_optional<size_t>(10))));
 
-      measure_para = MCMeasurementPara(
-        BMPSTruncatePara(Dpeps,
-                         2 * Dpeps,
-                         1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        1000,
-        1000,
-        1,
-        std::vector<size_t>(2, Lx * Ly / 2),
-        Ly,
-        Lx);
+      Configuration measure_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2))};
+      MonteCarloParams measure_mc_params{1000, 1000, 1, measure_config, false}; // not warmed up initially
+      PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                                                      CompressMPSScheme::SVD_COMPRESS,
+                                                      std::make_optional<double>(1e-14),
+                                                      std::make_optional<size_t>(10))};
+      measure_para = MCMeasurementParams{measure_mc_params, measure_peps_params};
     }
 };
 

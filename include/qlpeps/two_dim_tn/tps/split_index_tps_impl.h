@@ -8,6 +8,8 @@
 #ifndef QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 #define QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 
+#include "qlpeps/utility/filesystem_utils.h"
+
 namespace qlpeps {
 using namespace qlten;
 
@@ -183,7 +185,7 @@ bool SplitIndexTPS<TenElemT, QNT>::LoadTen(const size_t row,
 
 template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool release_mem) {
-  if (!qlmps::IsPathExist(tps_path)) { qlmps::CreatPath(tps_path); }
+  EnsureDirectoryExists(tps_path);
   std::string file;
   const size_t phy_dim = (*this)({0, 0}).size();
   for (size_t row = 0; row < this->rows(); ++row) {
@@ -206,7 +208,7 @@ void SplitIndexTPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool 
 
 template<typename TenElemT, typename QNT>
 bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
-  if (!qlmps::IsPathExist(tps_path)) {
+  if (!IsPathExist(tps_path)) {
     std::cout << "No path " << tps_path << std::endl;
     return false;
   }

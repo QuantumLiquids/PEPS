@@ -11,7 +11,6 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlmps/case_params_parser.h"
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
@@ -46,21 +45,22 @@ struct HeisenbergSystem : public MPITest {
 
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
-      MonteCarloParams(100, 100, 1, tps_path,
+      MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
+                       false), // Sz = 0, not warmed up initially
       PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                  std::make_optional<double>(1e-14), std::make_optional<size_t>(10)), tps_path));
+                                  std::make_optional<double>(1e-14), std::make_optional<size_t>(10))));
 
-  MCMeasurementPara measure_para = MCMeasurementPara(
-      BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      1000, 1000, 1,
-      Configuration(Ly, Lx,
-                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Random generate configuration with Sz = 0
-      tps_path);
+  MonteCarloParams measure_mc_params{1000, 1000, 1,
+                                      Configuration(Ly, Lx,
+                                                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Random generate configuration with Sz = 0
+                                      false}; // not warmed up initially
+  PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                                                  CompressMPSScheme::SVD_COMPRESS,
+                                                  std::make_optional<double>(1e-14),
+                                                  std::make_optional<size_t>(10))};
+  MCMeasurementParams measure_para{measure_mc_params, measure_peps_params};
 
   void SetUp() {
     MPITest::SetUp();
@@ -171,8 +171,8 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   //Measure
   auto measure_exe =
       new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
-          measure_para,
           tps,
+          measure_para,
           comm);
   start_flop = flop;
 

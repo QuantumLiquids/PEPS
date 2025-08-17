@@ -55,12 +55,14 @@ Performs Trotter steps with local truncation on a finite Square-Lattice PEPS by 
 ### Minimal usage example
 
 ```cpp
+#include "qlten/qlten.h"
 #include "qlpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
+using namespace qlten;
 using namespace qlpeps;
 
 using TenElemT = QLTEN_Double;     // or QLTEN_Complex
-using QNT = TrivialQN;  // Use TrivialQN for no symmetry (trivial quantum number)
+using QNT = qlten::special_qn::TrivialRepQN;  // Use TrivialRepQN for no symmetry (trivial quantum number)
 
 using Tensor = QLTensor<TenElemT, QNT>;
 using PEPST  = SquareLatticePEPS<TenElemT, QNT>;
@@ -127,13 +129,18 @@ Built-in Monte Carlo sweep updaters and model energy solvers are provided under:
 ### Minimal usage example
 
 ```cpp
+#include "mpi.h"
+#include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
+#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
+#include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
+using namespace qlten;
 using namespace qlpeps;
 
 using TenElemT = QLTEN_Double;
-using QNT      = NoQuantumNumber;
+using QNT      = qlten::special_qn::TrivialRepQN;
 
 using MonteCarloSweepUpdater = MCUpdateSquareNNExchange<TenElemT, QNT>; // example updater
 using EnergySolver          = ExactSummationEnergyEvaluator;            // or a model-specific solver
@@ -145,7 +152,7 @@ PEPSParams peps_params;                 // BMPS truncate_para, wavefunction_path
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 
 // Initial state
-TPS<TenElemT, QNT> tps_init(/* ... */);
+SplitIndexTPS<TenElemT, QNT> tps_init(/* ly, lx */);
 
 MPI_Comm comm = MPI_COMM_WORLD;
 EnergySolver solver;
@@ -174,7 +181,7 @@ Runs MPI-parallel Monte Carlo sampling to estimate energy, bond energies, one- a
 
 ### Parameters and solvers
 
-- `MCMeasurementPara` combines `MonteCarloParams` and `PEPSParams` for measurement runs.
+- `MCMeasurementParams` combines `MonteCarloParams` and `PEPSParams` for measurement runs.
 - The `MeasurementSolver` functor must return `ObservablesLocal<TenElemT>` when called as:
   `measurement_solver_(&split_index_tps_, &tps_sample_)`.
   Built-in model measurement solvers are available under
@@ -194,26 +201,33 @@ Runs MPI-parallel Monte Carlo sampling to estimate energy, bond energies, one- a
 ### Minimal usage example
 
 ```cpp
+#include "mpi.h"
+#include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
+using namespace qlten;
 using namespace qlpeps;
 
 using TenElemT = QLTEN_Double;
-using QNT      = NoQuantumNumber;
+using QNT      = qlten::special_qn::TrivialRepQN;
 
 using MonteCarloSweepUpdater = MCUpdateSquareNNExchange<TenElemT, QNT>;
 using MeasurementSolver      = SomeModelMeasurementSolver; // choose a concrete one
 
-MCMeasurementPara meas_para; // set mc_samples, warmup, sweeps_between_samples, BMPS truncate, wavefunction_path
+MCMeasurementParams meas_para; // set mc_samples, warmup, sweeps_between_samples, BMPS truncate
 
-// Load from path (meas_para.peps_path) or pass an in-memory SplitIndexTPS
 size_t ly = /*...*/, lx = /*...*/;
 MPI_Comm comm = MPI_COMM_WORLD;
 MeasurementSolver solver;
 
+// Load TPS from file path or use in-memory TPS
+SplitIndexTPS<TenElemT, QNT> tps(ly, lx);
+tps.Load(meas_para.peps_params.wavefunction_path); // or load from your path
+
 MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
-  meas(meas_para, ly, lx, comm, solver);
+  meas(tps, meas_para, comm, solver);
 meas.Execute();
 
 auto [E, dE] = meas.OutputEnergy();

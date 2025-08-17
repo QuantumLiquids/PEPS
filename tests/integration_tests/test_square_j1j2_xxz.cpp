@@ -56,13 +56,13 @@ protected:
           .SetLearningRate(0.3)
           .WithStochasticReconfiguration(ConjugateGradientParams(100, 1e-5, 20, 0.001))
           .Build(),
-      MonteCarloParams(100, 100, 1, tps_path,
+      MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
+                       false), // not warmed up initially
       PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
                                   std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10)), 
-                 tps_path));
+                                  std::make_optional<size_t>(10))));
   
   VMCPEPSOptimizerParams vmc_sgd_params = VMCPEPSOptimizerParams(
       OptimizerParamsBuilder()
@@ -70,13 +70,13 @@ protected:
           .SetLearningRate(0.1)
           .WithSGD()
           .Build(),
-      MonteCarloParams(100, 100, 1, tps_path,
+      MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))),
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
+                       false), // not warmed up initially
       PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
                                   std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10)), 
-                 tps_path));
+                                  std::make_optional<size_t>(10))));
   
   VMCPEPSOptimizerParams vmc_lbfgs_params = VMCPEPSOptimizerParams(
       OptimizerParamsBuilder()
@@ -84,23 +84,23 @@ protected:
           .SetLearningRate(0.1)
           .WithLBFGS(LBFGSParams(20, 1e-6, 1e-12, 1000))
           .Build(),
-      MonteCarloParams(100, 100, 1, tps_path,
+      MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))),
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
+                       false), // not warmed up initially
       PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
                                   std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10)), 
-                 tps_path));
+                                  std::make_optional<size_t>(10))));
 
-  MCMeasurementPara measure_para = MCMeasurementPara(
-      BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      1000, 1000, 1,
-      Configuration(Ly, Lx,
-                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
-      tps_path);
+  MonteCarloParams measure_mc_params{1000, 1000, 1,
+                                     Configuration(Ly, Lx,
+                                                   OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
+                                     false}; // not warmed up initially
+  PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                                                  CompressMPSScheme::SVD_COMPRESS,
+                                                  std::make_optional<double>(1e-14),
+                                                  std::make_optional<size_t>(10))};
+  MCMeasurementParams measure_para{measure_mc_params, measure_peps_params};
       
   void SetUp() override {
     MPITest::SetUp();
@@ -187,7 +187,7 @@ protected:
     tps.Load(tps_path);
 
     auto measure_exe = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
-        measure_para, tps, comm, model);
+        tps, measure_para, comm, model);
     
     size_t start_flop = flop;
     Timer mc_timer("mc");
@@ -224,13 +224,13 @@ TEST_F(J1J2XXZSystem, ZeroUpdate) {
           .SetLearningRate(0.3)
           .WithStochasticReconfiguration(ConjugateGradientParams(100, 1e-5, 20, 0.001))
           .Build(),
-      MonteCarloParams(0, 0, 1, tps_path,
+      MonteCarloParams(0, 0, 1,
                        Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))),
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
+                       false), // not warmed up initially
       PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
                                   std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10)), 
-                 tps_path));
+                                  std::make_optional<size_t>(10))));
   
   // Test with zero sweeps (just initialization) - should not throw
   RunVMCOptimization<Model, MCUpdateSquareTNN3SiteExchange>(j1j2_model, zero_params);

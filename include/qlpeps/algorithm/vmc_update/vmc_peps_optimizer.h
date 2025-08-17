@@ -61,37 +61,53 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
   using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::ly_;
   using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::lx_;
 
-  // Constructor overloads with new parameter structure
-  VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
-                           const TPST &tps_init,
-                           const MPI_Comm &comm,
-                           const EnergySolver &solver);
-
+  /**
+   * @brief Constructor with explicit TPS provided by user.
+   * 
+   * User provides all data explicitly - no hidden file loading.
+   * This constructor gives users complete control over the input data.
+   * 
+   * @param params Unified optimizer parameters (Optimizer + MC + PEPS)
+   * @param sitpst_init Split-index TPS provided by user
+   * @param comm MPI communicator
+   * @param solver Energy solver for optimization
+   */
   VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
                            const SITPST &sitpst_init,
                            const MPI_Comm &comm,
                            const EnergySolver &solver);
 
+  /**
+   * @brief Constructor with TPS loaded from file path.
+   * 
+   * Convenience constructor for users who have TPS data stored on disk.
+   * This is the recommended approach when starting optimization from saved TPS.
+   * The lattice dimensions (ly, lx) are automatically inferred from the
+   * initial configuration size: ly = initial_config.rows(), lx = initial_config.cols().
+   * 
+   * @param params Unified optimizer parameters (must contain valid initial_config)
+   * @param tps_path Path to TPS data files on disk
+   * @param comm MPI communicator
+   * @param solver Energy solver for optimization
+   * 
+   * @note The initial_config in params.mc_params must be properly sized to determine lattice dimensions
+   * @note This constructor automatically loads TPS from disk and initializes the optimization system
+   * 
+   * @todo REFACTOR PROPOSAL - Replace with static factory function for better design:
+   * @todo   static std::unique_ptr<VMCPEPSOptimizerExecutor> 
+   * @todo   CreateByLoadingTPS(const VMCPEPSOptimizerParams& params,
+   * @todo                      const std::string& tps_path,
+   * @todo                      const MPI_Comm& comm,
+   * @todo                      const EnergySolver& solver);
+   * @todo
+   * @todo This follows the same refactor proposal as the base class - using static factory
+   * @todo functions instead of multiple constructors for better single-responsibility design.
+   * @todo See base class MonteCarloPEPSBaseExecutor for detailed rationale.
+   */
   VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
-                           const size_t ly, const size_t lx,
+                           const std::string &tps_path,
                            const MPI_Comm &comm,
                            const EnergySolver &solver);
-
-  // Constructor overloads for backward compatibility
-//  VMCPEPSOptimizerExecutor(const VMCOptimizePara &optimize_para,
-//                           const TPST &tps_init,
-//                           const MPI_Comm &comm,
-//                           const EnergySolver &solver);
-//
-//  VMCPEPSOptimizerExecutor(const VMCOptimizePara &optimize_para,
-//                           const SITPST &sitpst_init,
-//                           const MPI_Comm &comm,
-//                           const EnergySolver &solver);
-//
-//  VMCPEPSOptimizerExecutor(const VMCOptimizePara &optimize_para,
-//                           const size_t ly, const size_t lx,
-//                           const MPI_Comm &comm,
-//                           const EnergySolver &solver);
 
   // Main execution method
   void Execute(void) override;
@@ -113,7 +129,7 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
 
   // Data dumping methods
   void DumpData(const bool release_mem = false);
-  void DumpData(const std::string &tps_path, const bool release_mem = false);
+  void DumpData(const std::string &tps_base_name, const bool release_mem = false);
 
   // Optimizer access for advanced usage
   OptimizerT &GetOptimizer() { return optimizer_; }
@@ -185,7 +201,7 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
   void ReserveSamplesDataSpace_(void);
   void PrintExecutorInfo_(void);
   void ValidateState_(const SITPST &state);
-  void CreateDirectoryIfNeeded_(const std::string &path);
+
 
   // CRITICAL: Helper method to ensure wavefunction component consistency
   // This encapsulates the intertwined relationship between split_index_tps_ and tps_sample_

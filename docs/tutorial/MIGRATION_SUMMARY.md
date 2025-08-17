@@ -12,33 +12,42 @@ This guide helps you migrate from the legacy `VMCPEPSExecutor` to the new `VMCPE
 #include "qlpeps/algorithm/vmc_update/vmc_peps.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"
 
-// NEW  
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
-#include "qlpeps/optimizer/optimizer_params.h"
+// NEW - Simple single header includes everything
+#include "qlpeps/qlpeps.h"
 ```
 
 ### 2. **Parameter Structure**
 ```cpp
-// OLD: Single structure
-VMCOptimizePara optimize_para(/* all parameters */);
+// OLD: Single structure with lattice size and occupancy arrays
+VMCOptimizePara optimize_para(
+    truncate_para, num_samples, num_warmup_sweeps, sweeps_between_samples,
+    {1, 1, 1, 1}, // occupancy array
+    4, 4,         // ly, lx
+    step_lengths, update_scheme, cg_params, wavefunction_path);
 
-// NEW: Separate structures
-MonteCarloParams mc_params(/* MC parameters */);
-PEPSParams peps_params(/* PEPS parameters */);
-OptimizerParams opt_params(/* optimization parameters */);
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+// NEW: Separate structures with Configuration object
+Configuration initial_config(4, 4, OccupancyNum({1, 1, 2})); // ly, lx, occupancy
+MonteCarloParams mc_params(num_samples, num_warmup_sweeps, sweeps_between_samples, 
+                          initial_config, false); // config, is_warmed_up
+PEPSParams peps_params(truncate_para); // simplified structure
+OptimizerParams opt_params; // step_lengths, update_scheme, cg_params set separately
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "./"); // tps_dump_path
 ```
 
-### 3. **Executor Type**
+### 3. **Executor Construction**
 ```cpp
-// OLD
+// OLD: Multiple constructor patterns
 VMCPEPSExecutor<TenElemT, QNT, MCUpdater, Model> executor(
     optimize_para, tps_init, comm, model);
 
-// NEW
+// NEW: Two clean patterns
+// Pattern A: Explicit TPS provided by user
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
     params, tps_init, comm, model);
+
+// Pattern B: TPS loaded from file path (ly, lx inferred from initial_config)
+VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+    params, "/path/to/tps", comm, model);
 ```
 
 ## What Stays the Same
@@ -55,8 +64,16 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 - **VMCPEPSOptimizerExecutor**: Clean separation using the `Optimizer` class for all optimization logic
 
 ### Parameter Structure
-- **VMCPEPSExecutor**: Uses `VMCOptimizePara` (legacy structure)
+- **VMCPEPSExecutor**: Uses `VMCOptimizePara` (legacy structure with occupancy arrays and lattice dimensions)
 - **VMCPEPSOptimizerExecutor**: Uses `VMCPEPSOptimizerParams` with separate `OptimizerParams`, `MonteCarloParams`, and `PEPSParams`
+
+### Configuration Handling
+- **VMCPEPSExecutor**: Used occupancy arrays `{num_up, num_down, ...}` and separate `ly`, `lx` parameters
+- **VMCPEPSOptimizerExecutor**: Uses `Configuration` objects that encapsulate lattice size and occupancy in a unified structure
+
+### Constructor Patterns  
+- **VMCPEPSExecutor**: Multiple overloaded constructors with different parameter combinations
+- **VMCPEPSOptimizerExecutor**: Two clean patterns - explicit TPS vs. file path loading with automatic lattice size inference
 
 ### MPI Behavior
 - **VMCPEPSOptimizerExecutor**: Better MPI coordination with master rank handling state updates and broadcasting to all ranks
@@ -74,7 +91,7 @@ VMCOptimizePara optimize_para(
     1000,  // num_samples
     100,   // num_warmup_sweeps
     10,    // sweeps_between_samples
-    {1, 1, 1, 1},  // occupancy
+    {1, 1, 1, 1},  // occupancy array
     4, 4,  // ly, lx
     {0.01, 0.01, 0.01},  // step_lengths
     StochasticReconfiguration,  // update_scheme
@@ -88,21 +105,23 @@ VMCPEPSExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 
 #### After (VMCPEPSOptimizerExecutor):
 ```cpp
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
-#include "qlpeps/optimizer/optimizer_params.h"
+#include "qlpeps/qlpeps.h"
 
-// Create separate parameter structures
+// Step 1: Create Configuration object (replaces occupancy array + ly/lx)
+Configuration initial_config(4, 4, OccupancyNum({1, 1, 2})); // ly, lx, occupancy
+
+// Step 2: Create separate parameter structures
 MonteCarloParams mc_params(
     1000,  // num_samples
     100,   // num_warmup_sweeps
     10,    // sweeps_between_samples
-    "config_path",  // config_path
-    Configuration(4, 4)  // alternative_init_config
+    initial_config,  // initial configuration
+    false,  // is_warmed_up
+    ""      // config_dump_path (optional)
 );
 
 PEPSParams peps_params(
-    BMPSTruncatePara(/* truncation parameters */),
-    "wavefunction_path"  // wavefunction_path
+    BMPSTruncatePara(/* truncation parameters */)
 );
 
 OptimizerParams opt_params;
@@ -110,29 +129,40 @@ opt_params.core_params.step_lengths = {0.01, 0.01, 0.01};
 opt_params.update_scheme = StochasticReconfiguration;
 opt_params.cg_params = ConjugateGradientParams();
 
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+// Step 3: Combine into unified parameter structure
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "./"); // tps_dump_path
 
+// Step 4: Create executor (same TPS, just new parameters)
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
     params, tps_init, comm, model);
 ```
 
 ### Step 2: Update Constructor Calls
 
-The constructor signatures remain the same, but use the new parameter structure:
+The new API provides two clean constructor patterns:
 
 ```cpp
-// Constructor with TPS
+// Pattern A: Explicit TPS provided by user
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
-    params, tps_init, comm, model);
+    params,        // VMCPEPSOptimizerParams
+    sitpst_init,   // SplitIndexTPS provided by user
+    comm,          // MPI communicator
+    model          // Energy solver
+);
 
-// Constructor with SplitIndexTPS
+// Pattern B: TPS loaded from file path (recommended for saved states)
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
-    params, sitpst_init, comm, model);
-
-// Constructor with dimensions
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
-    params, ly, lx, comm, model);
+    params,        // VMCPEPSOptimizerParams (ly, lx inferred from initial_config)
+    "/path/to/tps", // TPS path - loaded automatically
+    comm,          // MPI communicator
+    model          // Energy solver
+);
 ```
+
+**Key Changes:**
+- No more separate `ly`, `lx` constructor - lattice size is inferred from `initial_config`
+- File path constructor automatically loads TPS and determines lattice size
+- All constructors use the same unified parameter structure
 
 ### Step 3: Update Header Includes
 
@@ -144,30 +174,32 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 
 #### After:
 ```cpp
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
-#include "qlpeps/optimizer/optimizer_params.h"
+#include "qlpeps/qlpeps.h"  // Single header includes everything needed
 ```
+
+**Why this works**: The `qlpeps.h` header automatically includes:
+- `vmc_peps_optimizer.h` 
+- `monte_carlo_peps_measurement.h`
+- `model_solvers/build_in_model_solvers_all.h`
+- `configuration_update_strategies/monte_carlo_sweep_updater_all.h`
+- All other necessary headers
 
 ## Complete Migration Example
 
 ### Before (Legacy Code):
 ```cpp
-#include "qlpeps/algorithm/vmc_update/vmc_peps.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
-#include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
+#include "qlpeps/qlpeps.h"
 
 using namespace qlpeps;
 using namespace qlten;
 
-// Setup parameters
+// Setup parameters with all-in-one structure
 VMCOptimizePara optimize_para(
     BMPSTruncatePara(8, 1e-12, 1000),
     1000,  // MC samples
     100,   // warmup sweeps
     10,    // sweeps between samples
-    {1, 1, 1, 1},  // occupancy
+    {1, 1, 1, 1},  // occupancy array
     4, 4,  // lattice size
     {0.01, 0.01, 0.01},  // step lengths
     StochasticReconfiguration,
@@ -175,7 +207,7 @@ VMCOptimizePara optimize_para(
     "wavefunction_data"
 );
 
-// Create executor
+// Create executor with lattice dimensions
 using Model = SquareSpinOneHalfXXZModel;
 using MCUpdater = MCUpdateSquareNNExchange;
 Model model;
@@ -189,27 +221,25 @@ executor.Execute();
 
 ### After (New Code):
 ```cpp
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
-#include "qlpeps/optimizer/optimizer_params.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
-#include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
+#include "qlpeps/qlpeps.h"
 
 using namespace qlpeps;
 using namespace qlten;
+
+// Create Configuration object (replaces occupancy array + ly/lx)
+Configuration initial_config(4, 4, OccupancyNum({1, 1, 2})); // ly=4, lx=4, occupancy
 
 // Setup separate parameter structures
 MonteCarloParams mc_params(
     1000,  // MC samples
     100,   // warmup sweeps
     10,    // sweeps between samples
-    "config_path",  // config path
-    Configuration(4, 4)  // alternative init config
+    initial_config,  // initial configuration
+    false  // is_warmed_up
 );
 
 PEPSParams peps_params(
-    BMPSTruncatePara(8, 1e-12, 1000),
-    "wavefunction_data"  // wavefunction path
+    BMPSTruncatePara(8, 1e-12, 1000)
 );
 
 OptimizerParams opt_params;
@@ -217,15 +247,15 @@ opt_params.core_params.step_lengths = {0.01, 0.01, 0.01};
 opt_params.update_scheme = StochasticReconfiguration;
 opt_params.cg_params = ConjugateGradientParams(1e-6, 1000, 1e-8);
 
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "./"); // tps_dump_path
 
-// Create executor
+// Create executor - Option A: from file path (ly, lx auto-inferred from initial_config)
 using Model = SquareSpinOneHalfXXZModel;
 using MCUpdater = MCUpdateSquareNNExchange;
 Model model;
 
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
-    params, 4, 4, comm, model);
+    params, "wavefunction_data", comm, model);
 
 // Execute optimization
 executor.Execute();
@@ -258,27 +288,38 @@ executor.Execute();
 
 ## Migration Checklist
 
-- [ ] Update header includes
-- [ ] Convert `VMCOptimizePara` to separate parameter structures
-- [ ] Change executor type from `VMCPEPSExecutor` to `VMCPEPSOptimizerExecutor`
-- [ ] Update constructor calls to use new parameter structure
-- [ ] Test compilation
-- [ ] Test runtime execution
-- [ ] Verify results match
+- [ ] **Headers**: Use single `#include "qlpeps/qlpeps.h"` (no changes needed if already using this)
+- [ ] **Configuration**: Replace occupancy arrays `{num_up, num_down, ...}` with `Configuration(ly, lx, OccupancyNum({...}))` objects  
+- [ ] **Parameters**: Convert `VMCOptimizePara` to separate `MonteCarloParams`, `PEPSParams`, and `OptimizerParams`
+- [ ] **Unification**: Combine parameter structures into unified `VMCPEPSOptimizerParams`
+- [ ] **Lattice Size**: Remove explicit `ly`, `lx` parameters - use Configuration object for lattice size
+- [ ] **Executor Type**: Change from `VMCPEPSExecutor` to `VMCPEPSOptimizerExecutor`
+- [ ] **Constructor Pattern**: Choose explicit TPS vs. file path loading (both patterns work)
+- [ ] **Testing**: Test compilation
+- [ ] **Testing**: Test runtime execution  
+- [ ] **Validation**: Verify energy convergence matches expected behavior
 
 ## Common Issues and Solutions
 
 ### 1. **Missing optimizer headers**
 **Problem**: Compilation errors due to missing optimizer headers  
-**Solution**: Include `optimizer_params.h`
+**Solution**: Include `#include "qlpeps/optimizer/optimizer_params.h"`
 
 ### 2. **Parameter structure mismatch**
 **Problem**: Trying to use `VMCOptimizePara` with the new executor  
-**Solution**: Convert to `VMCPEPSOptimizerParams` structure
+**Solution**: Convert to separate `MonteCarloParams`, `PEPSParams`, and `OptimizerParams` structures
 
 ### 3. **Configuration initialization**
-**Problem**: Configuration not properly initialized in new parameter structure  
-**Solution**: Use `Configuration(ly, lx)` constructor and set occupancy
+**Problem**: Configuration not properly initialized - lattice size undefined  
+**Solution**: Use `Configuration(ly, lx, OccupancyNum({num_up, num_down, num_holes}))` constructor
+
+### 4. **Lattice size mismatch**
+**Problem**: TPS file size doesn't match configuration size  
+**Solution**: Ensure `initial_config.rows()` and `initial_config.cols()` match the saved TPS dimensions
+
+### 5. **Constructor pattern confusion**
+**Problem**: Trying to pass `ly`, `lx` directly to constructor  
+**Solution**: Use file path constructor - lattice size is inferred from `initial_config` automatically
 
 ## Backward Compatibility
 

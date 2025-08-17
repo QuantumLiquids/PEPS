@@ -11,36 +11,37 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_VMC_PEPS_OPTIMIZER_PARAMS_H
 
 #include <string>
+#include "monte_carlo_peps_params.h"               // MonteCarloParams, PEPSParams  
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/vmc_basic/configuration.h"
+#include "qlpeps/consts.h"                          // kTpsPathBase
 
 namespace qlpeps {
 struct VMCPEPSOptimizerParams {
   OptimizerParams optimizer_params;
   MonteCarloParams mc_params;
   PEPSParams peps_params;
+  std::string tps_dump_base_name;  ///< Base name for TPS dump files
+  std::string tps_dump_path;  ///< Path for dumping optimized TPS (empty = no dump)
 
-  VMCPEPSOptimizerParams() = default;
+  VMCPEPSOptimizerParams() : tps_dump_base_name(kTpsPathBase), tps_dump_path("./") {}
 
   VMCPEPSOptimizerParams(const OptimizerParams &opt_params,
                          const MonteCarloParams &mc_params,
-                         const PEPSParams &peps_params)
-    : optimizer_params(opt_params), mc_params(mc_params), peps_params(peps_params) {
+                         const PEPSParams &peps_params,
+                         const std::string &tps_dump_path = "./")
+    : optimizer_params(opt_params), mc_params(mc_params), 
+      peps_params(peps_params), tps_dump_base_name(kTpsPathBase), 
+      tps_dump_path(tps_dump_path) {
   }
 
-  operator BMPSTruncatePara() const { return peps_params.truncate_para; }
-  operator MonteCarloParams() const { return mc_params; }
-  operator PEPSParams() const { return peps_params; }
-  operator OptimizerParams() const { return optimizer_params; }
-  //  operator VMCOptimizePara() const {
-  //    return VMCOptimizePara(peps_params.truncate_para, mc_params.num_samples,
-  //                           mc_params.num_warmup_sweeps, mc_params.sweeps_between_samples,
-  //                           mc_params.alternative_init_config,
-  //                           optimizer_params.core_params.step_lengths,
-  //                           optimizer_params.update_scheme, optimizer_params.cg_params,
-  //                           peps_params.wavefunction_path);
-  //  }
+  // Explicit accessors - no implicit conversions
+  BMPSTruncatePara GetTruncatePara() const { return peps_params.truncate_para; }
+  const MonteCarloParams& GetMCParams() const { return mc_params; }
+  const PEPSParams& GetPEPSParams() const { return peps_params; }
+  const OptimizerParams& GetOptimizerParams() const { return optimizer_params; }
+
 };
 } // namespace qlpeps
 

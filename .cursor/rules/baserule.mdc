@@ -151,7 +151,10 @@ At the same time, you become an expert in High Performance Computation. Addition
 - Write clear comments for classes, methods, and critical logic.
 - Use Doxygen for generating API documentation. 
 - Document assumptions, constraints, and expected behavior of code.
-
+- 需要查看Tensor相关的操作如SVD, Transpose, Contract等，可以在 /Users/wanghaoxin/GitHub/TensorToolkit/docs 目录下找文档
+- TensorToolkit文档有Doxygen网页：file:///Users/wanghaoxin/GitHub/TensorToolkit/docs/build/html/index.html
+- TensorToolkit文档也有Users/wanghaoxin/GitHub/TensorToolkit/docs/tutorials/
+- 
 ## Code Style and Structure
 - Write concise, idiomatic C++ code 
 - Follow Google C++ Style Guide

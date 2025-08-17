@@ -8,6 +8,8 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_PEPS_BASE_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_PEPS_BASE_H
 
+#include <iomanip>                                                // std::setprecision
+#include <filesystem>                                             // std::filesystem
 #include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                // SplitIndexTPS
 #include "qlpeps/vmc_basic/wave_function_component.h"                              // CheckWaveFunctionAmplitudeValidity
@@ -55,46 +57,100 @@ class MonteCarloPEPSBaseExecutor : public Executor {
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using IndexT = Index<QNT>;
   using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
+  
+  /**
+   * @brief Constructor with explicit TPS provided by user.
+   * 
+   * User provides all data explicitly - no hidden file loading.
+   * This constructor gives users complete control over the input data.
+   * 
+   * @param sitps Split-index TPS provided by user
+   * @param monte_carlo_params Monte Carlo sampling parameters
+   * @param peps_params PEPS calculation parameters  
+   * @param comm MPI communicator
+   */
   MonteCarloPEPSBaseExecutor(const SITPST &sitps,
                              const MonteCarloParams &monte_carlo_params,
                              const PEPSParams &peps_params,
-                             const MPI_Comm &comm) :
-      split_index_tps_(sitps),
-      lx_(sitps.cols()),
-      ly_(sitps.rows()),
-      tps_sample_(sitps.rows(), sitps.cols(), peps_params.truncate_para),
-      monte_carlo_params_(monte_carlo_params),
-      u_double_(0, 1),
-      warm_up_(false),
-      comm_(comm) {
-    MPI_SetUp_();
-    InitConfigs_(monte_carlo_params.config_path, monte_carlo_params.alternative_init_config);
-  }
-
-  MonteCarloPEPSBaseExecutor(const size_t ly, const size_t lx,
+                             const MPI_Comm &comm);
+  
+  /**
+   * @brief Constructor with TPS loaded from file path.
+   * 
+   * Convenience constructor for users who have TPS data stored on disk.
+   * The lattice dimensions (ly, lx) are automatically inferred from the
+   * initial configuration size: ly = initial_config.rows(), lx = initial_config.cols().
+   * 
+   * @param tps_path Path to TPS data files on disk
+   * @param monte_carlo_params Monte Carlo sampling parameters (must contain valid initial_config)
+   * @param peps_params PEPS calculation parameters
+   * @param comm MPI communicator
+   * 
+   * @note The initial_config in monte_carlo_params must be properly sized to determine lattice dimensions
+   * @note This constructor automatically loads TPS from disk and initializes the system
+   * 
+   * @todo REFACTOR PROPOSAL - Replace with static factory function for better design:
+   * @todo   static std::unique_ptr<MonteCarloPEPSBaseExecutor> 
+   * @todo   CreateByLoadingTPS(const std::string& tps_path,
+   * @todo                      const MonteCarloParams& monte_carlo_params,
+   * @todo                      const PEPSParams& peps_params,
+   * @todo                      const MPI_Comm& comm);
+   * @todo
+   * @todo Rationale: 
+   * @todo   - Follows single-responsibility principle (constructor only initializes, factory handles loading)
+   * @todo   - Eliminates special cases and conditional logic in construction
+   * @todo   - Enables better error handling and resource management
+   * @todo   - Provides same user convenience while maintaining clean design
+   * @todo   - Follows Linus's "good taste" philosophy: eliminate complexity rather than manage it
+   * @todo
+   * @todo Usage would become:
+   * @todo   // Direct construction (advanced users)
+   * @todo   auto executor = new MonteCarloPEPSBaseExecutor(sitps, params, comm);
+   * @todo   
+   * @todo   // Convenience factory (typical users)  
+   * @todo   auto executor = MonteCarloPEPSBaseExecutor::CreateByLoadingTPS(path, mc_params, peps_params, comm);
+   * @todo
+   * @todo Benefits:
+   * @todo   - Only one constructor = single responsibility
+   * @todo   - Factory function provides user convenience  
+   * @todo   - TPS loading becomes testable and cacheable
+   * @todo   - Cleaner error propagation and resource lifecycle
+   * @todo   - Enables future enhancements (caching, async loading, validation)
+   */
+  MonteCarloPEPSBaseExecutor(const std::string &tps_path,
                              const MonteCarloParams &monte_carlo_params,
                              const PEPSParams &peps_params,
-                             const MPI_Comm &comm) :
-      split_index_tps_(ly, lx),
-      lx_(lx),
-      ly_(ly),
-      tps_sample_(ly, lx, peps_params.truncate_para),
-      monte_carlo_params_(monte_carlo_params),
-      u_double_(0, 1),
-      warm_up_(false),
-      comm_(comm) {
-    MPI_SetUp_();
-    LoadTenData_(peps_params.wavefunction_path);
-    InitConfigs_(monte_carlo_params.config_path, monte_carlo_params.alternative_init_config);
-  }
+                             const MPI_Comm &comm);
 
   void Execute(void) override {}
 
+  // State access methods - clean interface for users
+  const Configuration& GetCurrentConfiguration() const { return tps_sample_.config; }
+  const SITPST& GetCurrentTPS() const { return split_index_tps_; }
+  
+  // Optional persistence methods - user controls I/O
+  void DumpConfiguration(const std::string& path) const {
+    tps_sample_.config.Dump(path, rank_);
+  }
+  
+  void DumpTPS(const std::string& path) const {
+    split_index_tps_.Dump(path);
+  }
+
  protected:
+  
+  /**
+   * @brief Ensure directory exists for the given file path (MPI-safe)
+   * @param file_path Path to file (directory will be extracted and created if needed)
+   * 
+   * This method handles MPI coordination automatically:
+   * - Only rank 0 creates directories
+   * - All processes wait at MPI barrier for completion
+   * - Safe to call from any derived class
+   */
+  void EnsureDirectoryExists_(const std::string& file_path);
   void PrintCommonInfo_(const std::string &) const;
   void PrintTechInfo_() const;
-
-  void LoadTenData_(const std::string &tps_path);
 
   ///< @return Success info
   int WarmUp_(void);
@@ -128,11 +184,57 @@ class MonteCarloPEPSBaseExecutor : public Executor {
     MPI_Comm_size(comm_, &mpi_size_);
   }
 
-  void SyncValidConfiguration_();
+  /**
+   * @brief Synchronize valid configurations across all MPI processes.
+   * 
+   * @details This function is crucial for numerical stability in large-scale 
+   * Monte Carlo simulations. When initial configurations lead to wave function
+   * amplitudes that are too small (approaching floating-point underflow), 
+   * this function ensures system reliability by:
+   * 
+   * 1. **Validity Check**: Each MPI process checks if its current configuration
+   *    produces a numerically valid wave function amplitude
+   * 2. **Global Communication**: All validity statuses are gathered via MPI_Allgather
+   * 3. **Configuration Rescue**: If some processes have invalid configurations,
+   *    they adopt valid configurations from other processes
+   * 4. **Warm-up Reset**: Processes that receive rescued configurations are marked
+   *    as not warmed up, requiring re-thermalization
+   * 
+   * This mechanism is particularly important for:
+   * - Large system sizes where some random initial configurations may be pathological
+   * - Complex many-body states where amplitude can vary by many orders of magnitude
+   * - Ensuring all MPI processes start from numerically stable states
+   * 
+   * @warning If ALL processes have invalid configurations, the program terminates
+   * with detailed error information to help diagnose the underlying issue.
+   * 
+   * @note This function modifies tps_sample_ and warm_up_ status for processes
+   * that receive rescued configurations.
+   * 
+   * @todo Enhanced diagnostic output: Add detailed amplitude information, 
+   * per-process diagnostics, and more comprehensive error reporting. 
+   * Requires careful MPI output coordination to avoid race conditions.
+   * Current implementation uses minimal but safe output.
+   */
+  void RescueInvalidConfigurations_();
 
-  ///< @return Success info
-  int InitConfigs_(const std::string &config_path, const Configuration &alternative_configs);
-  int InitConfigs_(const Configuration &init_configs, bool warm_up = false);
+  /**
+   * @brief Initialize Monte Carlo sampling system with user-provided configuration.
+   * 
+   * Performs complete initialization sequence:
+   * 1. Creates wave function sample from user configuration and TPS
+   * 2. Validates and synchronizes configurations across MPI processes (with fallback)
+   * 3. Normalizes wave function for numerical stability
+   * 
+   * @note This is the main initialization entry point called by constructors.
+   * Includes fallback logic: if user configuration is invalid on some MPI processes,
+   * valid configurations from other processes will be broadcast as rescue.
+   * 
+   * @warning If ALL processes have invalid configurations, program terminates.
+   */
+  void Initialize();
+
+private:
 
 };//MonteCarloPEPSBaseExecutor
 
@@ -180,41 +282,28 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
   }
 }
 
+/**
+ * @brief Initialize Monte Carlo sampling system with user-provided configuration.
+ * 
+ * Entry point that orchestrates the complete initialization sequence:
+ * construction, validation/fallback, and normalization.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 requires
 MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
-int MonteCarloPEPSBaseExecutor<TenElemT,
-                               QNT,
-                               MonteCarloSweepUpdater>::InitConfigs_(const std::string &config_path,
-                                                                     const Configuration &alternative_configs) {
-  Configuration config(ly_, lx_);
-  bool load_success = config.Load(config_path, rank_);
-  if (load_success) {
-    tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
-    warm_up_ = true;
-  } else {
-    // Fallback to default configuration from parameters
-    tps_sample_ = WaveFunctionComponentT(split_index_tps_, alternative_configs, tps_sample_.trun_para);
-    warm_up_ = false;
-  }
-  SyncValidConfiguration_();
+void MonteCarloPEPSBaseExecutor<TenElemT,
+                                QNT,
+                                MonteCarloSweepUpdater>::Initialize() {
+  // Create wave function sample from user configuration and TPS
+  tps_sample_ = WaveFunctionComponentT(split_index_tps_, 
+                                      monte_carlo_params_.initial_config, 
+                                      tps_sample_.trun_para);
+  
+  // Validate configurations and rescue invalid ones from other processes
+  RescueInvalidConfigurations_();
+  
+  // Normalize for numerical stability
   NormTPSForOrder1Amplitude_();
-  return 0;
-}
-
-///< Directly initialize with the given configuration
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
-requires
-MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
-int MonteCarloPEPSBaseExecutor<TenElemT,
-                               QNT,
-                               MonteCarloSweepUpdater>::InitConfigs_(const qlpeps::Configuration &init_configs,
-                                                                     bool warm_up) {
-  tps_sample_ = WaveFunctionComponentT(split_index_tps_, init_configs);
-  warm_up_ = warm_up;
-  SyncValidConfiguration_();
-  NormTPSForOrder1Amplitude_();
-  return 0;
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
@@ -243,17 +332,7 @@ int MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::WarmUp_()
   return 0;
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
-requires
-MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
-void MonteCarloPEPSBaseExecutor<TenElemT,
-                                QNT,
-                                MonteCarloSweepUpdater>::LoadTenData_(const std::string &tps_path) {
-  if (!split_index_tps_.Load(tps_path)) {
-    std::cout << "Loading TPS files fails." << std::endl;
-    exit(-1);
-  }
-}
+
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 requires
@@ -288,7 +367,7 @@ requires
 MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                MonteCarloSweepUpdater>::SyncValidConfiguration_() {
+                                MonteCarloSweepUpdater>::RescueInvalidConfigurations_() {
   int local_valid = CheckWaveFunctionAmplitudeValidity(tps_sample_) ? 1 : 0;
   std::vector<int> global_valid(mpi_size_);
   HANDLE_MPI_ERROR(MPI_Allgather(&local_valid, 1, MPI_INT,
@@ -302,12 +381,14 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
     }
   }
   if (all_valid) {
-    if (rank_ == kMPIMasterRank)
-      std::cout << "All configurations are valid. " << std::endl;
+    if (rank_ == kMPIMasterRank) {
+      std::cout << "✓ Configuration validation: All " << mpi_size_ 
+                << " processes have valid configurations." << std::endl;
+    }
     return;
   }
 
-  // Find first valid rank (lowest priority)
+  // Find first valid rank for broadcasting
   int any_valid = 0;
   int source_rank = MPI_UNDEFINED;
   for (int r = 0; r < mpi_size_; ++r) {
@@ -318,32 +399,70 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
     }
   }
 
-  // Broadcast valid configuration if exists
+  // Enhanced rescue logic with better diagnostics
   if (any_valid) {
+    int num_valid = std::accumulate(global_valid.begin(), global_valid.end(), 0);
+    int num_invalid = mpi_size_ - num_valid;
+    
+    if (rank_ == kMPIMasterRank) {
+      std::cout << "⚠ Configuration rescue initiated:" << std::endl;
+      std::cout << "  - Invalid processes: " << num_invalid << "/" << mpi_size_ << std::endl;
+      std::cout << "  - Rescue source: rank " << source_rank << std::endl;
+      std::cout << "  - This is normal for complex quantum many-body initial states" << std::endl;
+    }
+    
+    // Provide local diagnostics before rescue
+    if (!local_valid && rank_ == kMPIMasterRank) {
+      std::cout << "  - Failed amplitude magnitude: " << std::abs(tps_sample_.amplitude) << std::endl;
+    }
+    
     Configuration config_valid(ly_, lx_);
     if (rank_ == source_rank) {
       config_valid = tps_sample_.config;
     }
     MPI_BCast(config_valid, source_rank, comm_);
+    
     if (!local_valid) {
       tps_sample_ = WaveFunctionComponentT(split_index_tps_, config_valid, tps_sample_.trun_para);
-      std::cout << "Rank" << rank_ << "replace configuration with valid configuration in Rank" << source_rank
-                << std::endl;
-      warm_up_ = false;
+      warm_up_ = false;  // Reset warm-up for rescued processes
+      
+      std::cout << "  Rank " << rank_ << ": successfully adopted configuration from rank " 
+                << source_rank << " (new amplitude: " << std::abs(tps_sample_.amplitude) << ")" << std::endl;
+    }
+    
+    if (rank_ == kMPIMasterRank) {
+      std::cout << "✓ Configuration rescue completed successfully" << std::endl;
     }
   } else {
-    // Handle all invalid case
+    // Enhanced error reporting for complete rescue failure
     if (rank_ == kMPIMasterRank) {
-      std::cerr << "All configurations invalid:\n";
+      std::cerr << "\n=== CRITICAL CONFIGURATION FAILURE ===" << std::endl;
+      std::cerr << "All " << mpi_size_ << " processes have invalid configurations!" << std::endl;
+      std::cerr << "No rescue possible - this indicates a fundamental parameter issue." << std::endl;
+      std::cerr << "\n TROUBLESHOOTING GUIDE:" << std::endl;
+      std::cerr << "1. TPS Bond Dimension: Try increasing bond dimension" << std::endl;
+      std::cerr << "2. Truncation: reduce truncation cutoff parameters" << std::endl;
+      std::cerr << "3. Initial Configuration: Try different initial configuration" << std::endl;
+      std::cerr << "4. Parameters: Check physical parameters (couplings, fields)" << std::endl;
+      std::cerr << "5. System Size: Consider smaller system for testing" << std::endl;
+      std::cerr << "\n DETAILED DIAGNOSTICS:" << std::endl;
     }
+    
+    // Collect comprehensive diagnostic information
     std::ostringstream oss;
-    oss << "Rank " << rank_ << " invalid configuration:\n";
-    oss << tps_sample_.config;
-    oss << "\n psi : " << tps_sample_.amplitude << "\n";
+    oss << "Rank " << rank_ << " diagnostics:" << std::endl;
+    oss << "  - Amplitude: " << tps_sample_.amplitude << std::endl;
+    oss << "  - Magnitude: " << std::abs(tps_sample_.amplitude) << std::endl;
+    oss << "  - Is finite: " << std::isfinite(std::abs(tps_sample_.amplitude)) << std::endl;
+    oss << "  - Configuration:" << std::endl;
+    oss << tps_sample_.config << std::endl;
 
-    // Gather all error messages to rank 0 for clean output
     std::string local_msg = oss.str();
     hp_numeric::GatherAndPrintErrorMessages(local_msg, comm_);
+
+    if (rank_ == kMPIMasterRank) {
+      std::cerr << "\n TIP: Save this diagnostic output for parameter tuning" << std::endl;
+    }
 
     MPI_Abort(comm_, EXIT_FAILURE);
   }
@@ -397,6 +516,79 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
     std::cout << "Scale factor on site: " << scale_factor_on_site << std::endl;
     std::cout << "TPS sample amplitude (rank " << rank_ << "): " << tps_sample_.amplitude << std::endl;
   }
+  }
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
+void MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::EnsureDirectoryExists_(const std::string& file_path) {
+  if (file_path.empty()) {
+    if (rank_ == kMPIMasterRank) {
+      std::cerr << "Warning: File path is empty. No directory will be created." << std::endl;
+    }
+    return;
+  }
+  
+  // Extract directory from path
+  std::filesystem::path parent_dir = std::filesystem::path(file_path).parent_path();
+  if (parent_dir.empty()) return;
+  
+  if (rank_ == kMPIMasterRank) {
+    try {
+      if (!std::filesystem::exists(parent_dir)) {
+        std::cout << "Creating directory: " << parent_dir.string() << std::endl;
+        std::filesystem::create_directories(parent_dir);
+      }
+    } catch (const std::exception& e) {
+      std::cerr << "Error creating directory " << parent_dir.string() << ": " << e.what() << std::endl;
+    }
+  }
+  // Always barrier for safety - all processes must wait
+  MPI_Barrier(comm_);
 }
+
+// Constructor implementations
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
+MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::MonteCarloPEPSBaseExecutor(
+    const SITPST &sitps,
+    const MonteCarloParams &monte_carlo_params,
+    const PEPSParams &peps_params,
+    const MPI_Comm &comm) :
+    split_index_tps_(sitps),
+    lx_(sitps.cols()),
+    ly_(sitps.rows()),
+    tps_sample_(sitps.rows(), sitps.cols(), peps_params.truncate_para),
+    monte_carlo_params_(monte_carlo_params),
+    u_double_(0, 1),
+    warm_up_(monte_carlo_params.is_warmed_up),
+    comm_(comm) {
+  MPI_SetUp_();
+  Initialize();
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
+requires MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
+MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::MonteCarloPEPSBaseExecutor(
+    const std::string &tps_path,
+    const MonteCarloParams &monte_carlo_params,
+    const PEPSParams &peps_params,
+    const MPI_Comm &comm) :
+    split_index_tps_(monte_carlo_params.initial_config.rows(), monte_carlo_params.initial_config.cols()),
+    lx_(monte_carlo_params.initial_config.cols()),
+    ly_(monte_carlo_params.initial_config.rows()),
+    tps_sample_(monte_carlo_params.initial_config.rows(), monte_carlo_params.initial_config.cols(), peps_params.truncate_para),
+    monte_carlo_params_(monte_carlo_params),
+    u_double_(0, 1),
+    warm_up_(monte_carlo_params.is_warmed_up),
+    comm_(comm) {
+  // Load TPS from file path
+  if (!split_index_tps_.Load(tps_path)) {
+    throw std::runtime_error("Failed to load TPS from path: " + tps_path);
+  }
+  
+  MPI_SetUp_();
+  Initialize();
+}
+
 }//qlpeps
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_PEPS_BASE_H
