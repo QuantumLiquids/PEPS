@@ -115,112 +115,117 @@ void operator()(const SplitIndexTPS<TenElemT, QNT>& sitps,
 
 ### 概念：能量和梯度计算引擎
 
-模型能量求解器计算特定粒子配置和TPS状态的**局域能量和梯度信息**。它封装了所有模型特定的哈密顿量细节。
+模型能量求解器计算特定粒子配置和TPS状态的**局域能量和梯度信息**。它封装了所有模型特定的哈密顿量细节，是连接物理问题和优化算法的桥梁。
 
-### 为什么重要
+VMC优化的核心是最小化能量期望值 $\langle H \rangle$，这需要计算每个蒙特卡洛样本的局域能量 $E_{\text{loc}} = \frac{\langle \text{config}|H|\psi \rangle}{\langle \text{config}|\psi \rangle}$ 和波函数对参数的梯度。能量求解器的职责就是高效、精确地完成这个计算。
 
-VMC优化需要：
-- **能量样本**：$E_{\text{loc}}$ 对每个采样配置
-- **梯度样本**：$\frac{\partial \ln|\psi(S)|}{\partial \theta_i}$ (对数导数) 
+### 使用方式：模板参数注入
 
-能量样本和梯度样本除了用来计算能量和梯度，也对SR的计算有作用。
-
-能量求解器将所有复杂的张量网络收缩隐藏在干净的接口后面。
-
-### 基础接口：CRTP模式
-
-位于：`include/qlpeps/algorithm/vmc_update/model_energy_solver.h`
+与蒙特卡洛更新器一样，能量求解器也是一个**策略对象**，通过模板参数注入到 `VMCPEPSOptimizerExecutor` 中：
 
 ```cpp
-template<typename ConcreteModelSolver>
-class ModelEnergySolver {
-public:
-  template<typename TenElemT, typename QNT, bool calchols>
-  TenElemT CalEnergyAndHoles(
-      const SplitIndexTPS<TenElemT, QNT>* sitps,
-      TPSWaveFunctionComponent<TenElemT, QNT>* tps_sample,
-      TensorNetwork2D<TenElemT, QNT>& hole_res
-  );
-};
+// 声明一个使用特定求解器的执行器类型
+using MyExecutor = VMCPEPSOptimizerExecutor<TenElemT, QNT, MyUpdater, MyEnergySolver>;
+
+// 实例化求解器并传入
+MyEnergySolver solver(...);
+MyExecutor executor(params, tps, comm, solver);
 ```
 
-**设计模式**：使用CRTP (Curiously Recurring Template Pattern) 实现静态多态。每个具体求解器实现 `CalEnergyAndHolesImpl()`。
+这种设计将物理模型的复杂性与优化流程完全解耦。
 
 ### 内置能量求解器
 
-位于：`include/qlpeps/algorithm/vmc_update/model_solvers/`
+我们提供了一系列针对标准物理模型的内置求解器：
+- `SquareSpinOneHalfXXZModel`
+- `SpinOneHalfTriangleHeisenbergSquarePEPS`
+- `SpinOneHalfTriangleHeisenbergJ1J2SquarePEPS`
+- `SquaretJModel`
 
-#### 1. 方格XXZ模型
+### 扩展性：添加新模型
+
+系统是完全可扩展的。你可以通过继承 `ModelEnergySolver` 基类并实现必要的接口来支持任何新的物理模型。
+
+**详细的技术实现、API契约和自定义指南，请参考独立的[模型能量求解器指南](MODEL_ENERGY_SOLVER_GUIDE.md)。**
+
+---
+
+## VMC中的梯度计算数学原理
+
+变分蒙特卡洛(VMC)优化的核心是寻找最优变分参数 $\{\theta_i\}$ 以最小化能量期望值。本节详细推导复数参数情况下的梯度计算公式。
+
+### 问题设置
+
+设变分波函数为 $|\Psi(\theta)\rangle = \sum_S \Psi(S; \theta) |S\rangle$，其中：
+- $\{S\}$ 是配置空间的基矢
+- $\{\theta_i\}$ 是变分参数（在PEPS中是张量元素）
+- 目标：最小化 $E(\theta) = \frac{\langle \Psi(\theta)| H |\Psi(\theta)\rangle}{\langle \Psi(\theta)|\Psi(\theta)\rangle}$
+
+### 复数参数的微积分
+
+当参数 $\theta_i$ 是复数时，将 $\theta_i$ 和 $\theta_i^*$ 视为独立变量：
+- $\Psi(S; \theta)$ 是 $\{\theta_i\}$ 的全纯函数
+- $\Psi^*(S; \theta^*)$ 是 $\{\theta_i^*\}$ 的全纯函数
+
+梯度下降的方向是 $-\frac{\partial E}{\partial \theta_i^*}$。
+
+### 梯度公式推导
+
+从能量期望值的定义开始：
+\[
+E = \frac{\sum_S |\Psi(S)|^2 E_{\mathrm{loc}}(S)}{\sum_S |\Psi(S)|^2}
+\]
+
+其中局域能量为：
+\[
+E_{\mathrm{loc}}(S) = \sum_{S'} \frac{\Psi^*(S')}{\Psi^*(S)} \langle S'| H | S\rangle
+\]
+
+应用链式法则计算梯度：
+\[
+\frac{\partial E}{\partial \theta_i^*} = \frac{\partial_{\theta_i^*}(\langle \Psi|H|\Psi\rangle)}{\langle \Psi|\Psi\rangle} - E \frac{\partial_{\theta_i^*} (\langle \Psi|\Psi\rangle)}{\langle \Psi|\Psi\rangle}
+\]
+
+通过变分分析，可以证明：
+\[
+\frac{\partial E}{\partial \theta_i^*} = \langle E_{\mathrm{loc}}^* \cdot O_i^* \rangle - \langle E_{\mathrm{loc}}^* \rangle \langle O_i^* \rangle
+\]
+
+其中：
+- $O_i^*(S) = \frac{\partial \ln \Psi^*(S; \theta_i^*)}{\partial \theta_i^*}$ 是对数导数
+- $E_{\mathrm{loc}}^*$ 是局域能量的复共轭
+
+### 实现细节
+
+**梯度计算的关键点**：
+
+1. **局域能量**：使用 $E_{\mathrm{loc}}(S) = \sum_{S'} \frac{\Psi^*(S')}{\Psi^*(S)} \langle S'| H | S\rangle$
+
+2. **复共轭处理**：在代码中通过 `ComplexConjugate(local_energy)` 实现 $E_{\mathrm{loc}}^*$
+
+3. **对数导数**：通过张量网络的"洞"计算 $O_i^*$
+
+**为什么需要复共轭**：
+- **数学要求**：复数微积分的自然结果
+- **数值稳定性**：在随机重构(SR)中提供更好的收敛性
+- **物理一致性**：保证优化过程中能量期望值始终为实数
+
+### 算法实现
+
+代码中的梯度累积：
 ```cpp
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
-using SolverType = SquareSpinOneHalfXXZModel;
+// 每个蒙特卡洛样本
+TenElemT local_energy_conjugate = ComplexConjugate(local_energy);
+gten_sum_ += gradient_tensor;                              // ∑ O_i*
+g_times_energy_sum_ += local_energy_conjugate * gradient_tensor;  // ∑ E_loc* · O_i*
 ```
 
-**哈密顿量**：$H = J_z \sum_{\langle i,j \rangle} S^z_i S^z_j + J_{xy} \sum_{\langle i,j \rangle} (S^x_i S^x_j + S^y_i S^y_j)$
-**特性**：最近邻XXZ相互作用，可选磁场
-**量子数**：可选无对称性或 U(1)对称性
-
-#### 2. 三角格点模型
+最终梯度：
 ```cpp
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
-using SolverType = SpinOneHalfTriangleHeisenbergSquarePEPS;
+gradient = (g_times_energy_sum_ - mean_energy * gten_sum_) / n_samples;
 ```
 
-**哈密顿量**：三角格点几何上的海森堡模型
-**特性**：处理复杂的三角-方格映射用于PEPS
-
-
-#### 3. J1-J2模型
-```cpp
-#include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenbergJ1J2_sqrpeps.h"
-using SolverType = SpinOneHalfTriangleHeisenbergJ1J2SquarePEPS;
-```
-
-**哈密顿量**：$H = J_1 \sum_{\langle i,j \rangle} \vec{S}_i \cdot \vec{S}_j + J_2 \sum_{\langle\langle i,j \rangle\rangle} \vec{S}_i \cdot \vec{S}_j$
-**特性**：最近邻+次近邻相互作用，竞争相互作用，阻挫效应
-
-#### 4. t-J模型
-```cpp
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_tJ_model.h"
-using SolverType = SquaretJModel;
-```
-
-**哈密顿量**：$H = -t\sum_{\langle i,j\rangle,\sigma} (c_{i,\sigma}^\dagger c_{j,\sigma} + h.c.) + J \sum_{\langle i,j\rangle} (\vec{S}_i \cdot \vec{S}_j - \frac{1}{4} n_i n_j) - \mu N$
-**特性**：费米子统计，电荷守恒，强关联系统
-
-### 能量求解器工作流程
-
-**对于每个蒙特卡洛样本**：
-1. **输入**：当前TPS状态 + 粒子配置
-2. **处理**：
-   - 收缩张量网络计算 $\langle \text{config}|H|\psi \rangle$
-   - 计算局域能量：$E_{\text{loc}} = \langle \text{config}|H|\psi \rangle / \langle \text{config}|\psi \rangle$
-   - 可选计算梯度洞用于优化
-3. **输出**：局域能量值 + 梯度信息
-
-**关键优化**：跨样本重用边界MPS结构以提高效率。
-
-### 自定义能量求解器开发
-
-要实现新模型，从适当的基类继承：
-
-```cpp
-// 对于最近邻模型
-class MyCustomSolver : public SquareNNModelEnergySolver<MyCustomSolver> {
-public:
-  template<typename TenElemT, typename QNT, bool calchols>
-  TenElemT CalEnergyAndHolesImpl(/*...*/);
-  
-  // 定义模型特定的能量评估
-  TenElemT EvaluateBondEnergy(/* site1, site2, ... */);
-  TenElemT EvaluateOnsiteEnergy(/* site, ... */);
-};
-```
-
-**必需方法**：
-- `EvaluateBondEnergy()`：计算每个键的能量
-- `EvaluateOnsiteEnergy()`：计算在位能量项
-- `CalEnergyAndHolesImpl()`：协调计算
+这精确实现了理论公式 $\frac{\partial E}{\partial \theta_i^*} = \langle E_{\mathrm{loc}}^* \cdot O_i^* \rangle - \langle E_{\mathrm{loc}}^* \rangle \langle O_i^* \rangle$。
 
 ---
 
@@ -529,3 +534,6 @@ MonteCarloParams precise_mc(20000, 5000, 10, config, false, "");
 - [VMC Data Persistence Guide (English)](../VMC_DATA_PERSISTENCE_GUIDE.md)
 
 本指南涵盖了VMCPEPSOptimizerExecutor的核心概念，重点解释了model energy solver和monte carlo updater这两个关键组件的作用和选择策略。
+
+
+//TODO for this doc: Paramters

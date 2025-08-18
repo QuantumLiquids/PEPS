@@ -75,52 +75,29 @@ class MonteCarloPEPSBaseExecutor : public Executor {
                              const MPI_Comm &comm);
   
   /**
-   * @brief Constructor with TPS loaded from file path.
+   * @brief Static factory function to create executor by loading TPS from file path.
    * 
-   * Convenience constructor for users who have TPS data stored on disk.
-   * The lattice dimensions (ly, lx) are automatically inferred from the
-   * initial configuration size: ly = initial_config.rows(), lx = initial_config.cols().
+   * Convenience factory for users who have TPS data stored on disk.
+   * This follows the single-responsibility principle: factory handles loading,
+   * constructor only handles initialization.
    * 
    * @param tps_path Path to TPS data files on disk
    * @param monte_carlo_params Monte Carlo sampling parameters (must contain valid initial_config)
    * @param peps_params PEPS calculation parameters
    * @param comm MPI communicator
+   * @return Unique pointer to the created executor
    * 
    * @note The initial_config in monte_carlo_params must be properly sized to determine lattice dimensions
-   * @note This constructor automatically loads TPS from disk and initializes the system
+   * @note This factory automatically loads TPS from disk and initializes the system
    * 
-   * @todo REFACTOR PROPOSAL - Replace with static factory function for better design:
-   * @todo   static std::unique_ptr<MonteCarloPEPSBaseExecutor> 
-   * @todo   CreateByLoadingTPS(const std::string& tps_path,
-   * @todo                      const MonteCarloParams& monte_carlo_params,
-   * @todo                      const PEPSParams& peps_params,
-   * @todo                      const MPI_Comm& comm);
-   * @todo
-   * @todo Rationale: 
-   * @todo   - Follows single-responsibility principle (constructor only initializes, factory handles loading)
-   * @todo   - Eliminates special cases and conditional logic in construction
-   * @todo   - Enables better error handling and resource management
-   * @todo   - Provides same user convenience while maintaining clean design
-   * @todo   - Follows Linus's "good taste" philosophy: eliminate complexity rather than manage it
-   * @todo
-   * @todo Usage would become:
-   * @todo   // Direct construction (advanced users)
-   * @todo   auto executor = new MonteCarloPEPSBaseExecutor(sitps, params, comm);
-   * @todo   
-   * @todo   // Convenience factory (typical users)  
-   * @todo   auto executor = MonteCarloPEPSBaseExecutor::CreateByLoadingTPS(path, mc_params, peps_params, comm);
-   * @todo
-   * @todo Benefits:
-   * @todo   - Only one constructor = single responsibility
-   * @todo   - Factory function provides user convenience  
-   * @todo   - TPS loading becomes testable and cacheable
-   * @todo   - Cleaner error propagation and resource lifecycle
-   * @todo   - Enables future enhancements (caching, async loading, validation)
+   * Usage:
+   *   auto executor = MonteCarloPEPSBaseExecutor::CreateByLoadingTPS(tps_path, mc_params, peps_params, comm);
    */
-  MonteCarloPEPSBaseExecutor(const std::string &tps_path,
-                             const MonteCarloParams &monte_carlo_params,
-                             const PEPSParams &peps_params,
-                             const MPI_Comm &comm);
+  static std::unique_ptr<MonteCarloPEPSBaseExecutor> 
+  CreateByLoadingTPS(const std::string& tps_path,
+                     const MonteCarloParams& monte_carlo_params,
+                     const PEPSParams& peps_params,
+                     const MPI_Comm& comm);
 
   void Execute(void) override {}
 
@@ -568,26 +545,22 @@ MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::MonteCarloPEP
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
 requires MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
-MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::MonteCarloPEPSBaseExecutor(
-    const std::string &tps_path,
-    const MonteCarloParams &monte_carlo_params,
-    const PEPSParams &peps_params,
-    const MPI_Comm &comm) :
-    split_index_tps_(monte_carlo_params.initial_config.rows(), monte_carlo_params.initial_config.cols()),
-    lx_(monte_carlo_params.initial_config.cols()),
-    ly_(monte_carlo_params.initial_config.rows()),
-    tps_sample_(monte_carlo_params.initial_config.rows(), monte_carlo_params.initial_config.cols(), peps_params.truncate_para),
-    monte_carlo_params_(monte_carlo_params),
-    u_double_(0, 1),
-    warm_up_(monte_carlo_params.is_warmed_up),
-    comm_(comm) {
-  // Load TPS from file path
-  if (!split_index_tps_.Load(tps_path)) {
+std::unique_ptr<MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>>
+MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::CreateByLoadingTPS(
+    const std::string& tps_path,
+    const MonteCarloParams& monte_carlo_params,
+    const PEPSParams& peps_params,
+    const MPI_Comm& comm) {
+  
+  // Load TPS from file path with proper error handling
+  SITPST loaded_tps(monte_carlo_params.initial_config.rows(), monte_carlo_params.initial_config.cols());
+  if (!loaded_tps.Load(tps_path)) {
     throw std::runtime_error("Failed to load TPS from path: " + tps_path);
   }
   
-  MPI_SetUp_();
-  Initialize();
+  // Create executor using the primary constructor with loaded TPS
+  return std::make_unique<MonteCarloPEPSBaseExecutor>(
+      loaded_tps, monte_carlo_params, peps_params, comm);
 }
 
 }//qlpeps

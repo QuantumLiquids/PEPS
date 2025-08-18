@@ -173,9 +173,9 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
                                 const MeasurementSolver &solver = MeasurementSolver());
 
   /**
-   * @brief Constructor with TPS loaded from file path.
+   * @brief Static factory function to create measurement executor by loading TPS from file path.
    * 
-   * Convenience constructor for users who have TPS data stored on disk.
+   * Convenience factory for users who have TPS data stored on disk.
    * This is the recommended approach when TPS data is saved from previous calculations.
    * The lattice dimensions (ly, lx) are automatically inferred from the
    * initial configuration size: ly = initial_config.rows(), lx = initial_config.cols().
@@ -184,25 +184,19 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
    * @param measurement_params Unified measurement parameters (must contain valid initial_config)
    * @param comm MPI communicator
    * @param solver Model measurement solver for observables
+   * @return Unique pointer to the created measurement executor
    * 
    * @note The initial_config in measurement_params.mc_params must be properly sized to determine lattice dimensions
-   * @note This constructor automatically loads TPS from disk and initializes the measurement system
+   * @note This factory automatically loads TPS from disk and initializes the measurement system
    * 
-   * @todo REFACTOR PROPOSAL - Replace with static factory function for better design:
-   * @todo   static std::unique_ptr<MonteCarloMeasurementExecutor> 
-   * @todo   CreateByLoadingTPS(const std::string& tps_path,
-   * @todo                      const MCMeasurementParams& measurement_params,
-   * @todo                      const MPI_Comm& comm,
-   * @todo                      const MeasurementSolver& solver = MeasurementSolver());
-   * @todo
-   * @todo This follows the same refactor proposal as the base class - using static factory
-   * @todo functions instead of multiple constructors for better single-responsibility design.
-   * @todo See base class MonteCarloPEPSBaseExecutor for detailed rationale.
+   * Usage:
+   *   auto executor = MonteCarloMeasurementExecutor::CreateByLoadingTPS(tps_path, measurement_params, comm, solver);
    */
-  MonteCarloMeasurementExecutor(const std::string &tps_path,
-                                const MCMeasurementParams &measurement_params,
-                                const MPI_Comm &comm,
-                                const MeasurementSolver &solver = MeasurementSolver());
+  static std::unique_ptr<MonteCarloMeasurementExecutor> 
+  CreateByLoadingTPS(const std::string& tps_path,
+                     const MCMeasurementParams& measurement_params,
+                     const MPI_Comm& comm,
+                     const MeasurementSolver& solver = MeasurementSolver());
 
   void Execute(void) override;
 
@@ -497,19 +491,23 @@ MonteCarloMeasurementExecutor<TenElemT,
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::MonteCarloMeasurementExecutor(
-    const std::string &tps_path,
-    const MCMeasurementParams &measurement_params,
-    const MPI_Comm &comm,
-    const MeasurementSolver &solver) :
-    MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>(
-        tps_path, measurement_params.mc_params, measurement_params.peps_params, comm),
-    mc_measure_params(measurement_params),
-    measurement_solver_(solver) {
-  ReserveSamplesDataSpace_();
-  PrintExecutorInfo_();
-  qlpeps::MPISignalGuard::Register();
-  this->SetStatus(ExecutorStatus::INITED);
+std::unique_ptr<MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>>
+MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::CreateByLoadingTPS(
+    const std::string& tps_path,
+    const MCMeasurementParams& measurement_params,
+    const MPI_Comm& comm,
+    const MeasurementSolver& solver) {
+  
+  // Load TPS from file path with proper error handling
+  SITPST loaded_tps(measurement_params.mc_params.initial_config.rows(), 
+                    measurement_params.mc_params.initial_config.cols());
+  if (!loaded_tps.Load(tps_path)) {
+    throw std::runtime_error("Failed to load TPS from path: " + tps_path);
+  }
+  
+  // Create executor using the primary constructor with loaded TPS
+  return std::make_unique<MonteCarloMeasurementExecutor>(
+      loaded_tps, measurement_params, comm, solver);
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>

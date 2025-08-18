@@ -58,32 +58,21 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOptimizerExecutor(
+std::unique_ptr<VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>
+VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::CreateByLoadingTPS(
     const VMCPEPSOptimizerParams &params,
     const std::string &tps_path,
     const MPI_Comm &comm,
-    const EnergySolver &solver)
-    : BaseExecutor(tps_path, params.mc_params, params.peps_params, comm),
-      params_(params),
-      energy_solver_(solver),
-      optimizer_(params.optimizer_params, comm, this->rank_, this->mpi_size_),
-      gten_sum_(this->ly_, this->lx_),
-      g_times_energy_sum_(this->ly_, this->lx_),
-      grad_(this->ly_, this->lx_),
-      en_min_(std::numeric_limits<double>::max()),
-      tps_lowest_(this->split_index_tps_),
-      current_energy_error_(0.0) {
-
-  // Check if using stochastic reconfiguration algorithm
-  stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
-
-  // Ensure necessary directories exist for output
-  if (!params_.tps_dump_base_name.empty()) {
-    this->EnsureDirectoryExists_(params_.tps_dump_base_name + "final");
+    const EnergySolver &solver) {
+  
+  // Load TPS from file path with proper error handling
+  SITPST loaded_tps(params.mc_params.initial_config.rows(), params.mc_params.initial_config.cols());
+  if (!loaded_tps.Load(tps_path)) {
+    throw std::runtime_error("Failed to load TPS from path: " + tps_path);
   }
-  ReserveSamplesDataSpace_();
-  PrintExecutorInfo_();
-  this->SetStatus(ExecutorStatus::INITED);
+  
+  // Create executor using the primary constructor with loaded TPS
+  return std::make_unique<VMCPEPSOptimizerExecutor>(params, loaded_tps, comm, solver);
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
@@ -332,10 +321,13 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
 #endif
 
   // Calculate local energy and holes for current configuration
+  // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
   TensorNetwork2D<TenElemT, QNT> holes(this->ly_, this->lx_);
   TenElemT local_energy = energy_solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(
       &this->split_index_tps_, &this->tps_sample_, holes);
 
+  // For complex gradient calculation: use complex conjugate of local energy
+  // This implements Eq. (complex grad) from the research notes
   TenElemT local_energy_conjugate = ComplexConjugate(local_energy);
   TenElemT inverse_amplitude = ComplexConjugate(1.0 / this->tps_sample_.GetAmplitude());
 
@@ -357,7 +349,10 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
         gradient_tensor = inverse_amplitude * holes({row, col});
       }
 
-      // Accumulate gradient tensors
+      // Accumulate gradient tensors for VMC optimization
+      // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
+      // ∂E/∂θ* = <E_loc * O*> - <E_loc> <O*>
+      // where O* = ∂ln(Ψ*)/∂θ* is the complex conjugate of log-derivative
       gten_sum_({row, col})[basis_index] += gradient_tensor;
       g_times_energy_sum_({row, col})[basis_index] += local_energy_conjugate * gradient_tensor;
 

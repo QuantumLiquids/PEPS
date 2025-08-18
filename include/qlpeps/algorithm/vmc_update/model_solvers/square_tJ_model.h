@@ -25,14 +25,38 @@ namespace qlpeps {
 using namespace qlten;
 
 /**
- * Hamiltonian :
- * H = -t\sum_{<i,j>,sigma} (c_{i,\sigma}^dag c_{j,\sigma} + h.c.)
- *     -t2\sum_{<<i,j>>,sigma} (c_{i,\sigma}^dag c_{j,\sigma} + h.c.)
- *     + J \sum_{<i,j>} (S_i \cdot S_j - 1/4 n_i \cdot n_j )
- *     + V \sum_{<i,j>} n_i n_j
- *     - \mu N
- *
- *  if V == J/4, V term can cancel density interaction in J term
+ * t-J Model on Square Lattice with Extensions
+ * 
+ * Hamiltonian:
+ * $$H = -t\sum_{\langle i,j\rangle,\sigma} (c_{i,\sigma}^\dagger c_{j,\sigma} + c_{j,\sigma}^\dagger c_{i,\sigma})$$
+ * $$   -t_2\sum_{\langle\langle i,j\rangle\rangle,\sigma} (c_{i,\sigma}^\dagger c_{j,\sigma} + c_{j,\sigma}^\dagger c_{i,\sigma})$$  
+ * $$   + J \sum_{\langle i,j\rangle} (\vec{S}_i \cdot \vec{S}_j - \frac{1}{4} n_i n_j)$$
+ * $$   + V \sum_{\langle i,j\rangle} n_i n_j - \mu \sum_{i,\sigma} n_{i,\sigma}$$
+ * 
+ * where:
+ * - t: nearest-neighbor hopping amplitude
+ * - t₂: next-nearest-neighbor hopping amplitude (extended t-J model)
+ * - J: antiferromagnetic exchange coupling between neighboring spins
+ * - V: nearest-neighbor density-density interaction
+ * - μ: chemical potential
+ * - c_{i,σ}†: creation operator with no double occupancy constraint
+ * - n_i = n_{i,↑} + n_{i,↓}: total electron density at site i
+ * - \vec{S}_i: spin-1/2 operator at site i
+ * 
+ * Single-site states (tJ basis):
+ * - 0: spin up |↑⟩
+ * - 1: spin down |↓⟩  
+ * - 2: empty site |0⟩
+ * Note: Double occupancy |↑↓⟩ is excluded by strong correlation constraint
+ * 
+ * Physical regime and motivation:
+ * - Derived from Hubbard model in strong coupling limit (U >> t)
+ * - Describes doped Mott insulators (e.g., cuprate superconductors)
+ * - J ≈ 4t²/U from virtual hopping processes
+ * - Captures essential physics: kinetic energy vs magnetic order
+ * 
+ * Special case: if V = J/4, the V term exactly cancels the density 
+ * interaction in J term, yielding pure spin exchange for occupied sites.
  */
 class SquaretJModelMixIn {
  public:

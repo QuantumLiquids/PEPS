@@ -44,12 +44,32 @@ double HubbardConfig2Spinz(const size_t config) {
 }
 
 /**
- * NN hopping + U term
- *
- * 0: double occupancy
- * 1: spin up
- * 2: spin down
- * 3: empty
+ * Hubbard Model on Square Lattice
+ * 
+ * Hamiltonian:
+ * $$H = -t \sum_{\langle i,j \rangle, \sigma} (c_{i,\sigma}^\dagger c_{j,\sigma} + c_{j,\sigma}^\dagger c_{i,\sigma}) 
+ *       + U \sum_i n_{i,\uparrow} n_{i,\downarrow} - \mu \sum_{i,\sigma} n_{i,\sigma}$$
+ * 
+ * where:
+ * - t: nearest-neighbor hopping amplitude
+ * - U: on-site Coulomb repulsion energy  
+ * - μ: chemical potential controlling electron density
+ * - c_{i,σ}†/c_{i,σ}: creation/annihilation operators for spin σ at site i
+ * - n_{i,σ} = c_{i,σ}† c_{i,σ}: particle number operator
+ * - First sum: kinetic energy (electron hopping between NN sites)
+ * - Second sum: interaction energy (penalty for double occupancy)
+ * - Third sum: chemical potential term (controls total electron number)
+ * 
+ * Single-site states (basis encoding):
+ * - 0: double occupancy |↑↓⟩ (both spins present)
+ * - 1: spin up only |↑⟩ 
+ * - 2: spin down only |↓⟩
+ * - 3: empty site |0⟩
+ * 
+ * Physics regimes:
+ * - U << t: metallic behavior, itinerant electrons
+ * - U >> t: Mott insulator, localized electrons at half-filling
+ * - U ~ 8t: strongly correlated regime, rich physics
  */
 
 class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,

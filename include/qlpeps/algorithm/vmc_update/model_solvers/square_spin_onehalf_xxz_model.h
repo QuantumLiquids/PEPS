@@ -72,13 +72,25 @@ class SquareSpinOneHalfXXZModelMixIn {
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       const TenElemT inv_psi
   ) {
+    // Local energy contribution for XXZ Hamiltonian: H = Jz*Sz*Sz + Jxy*(Sx*Sx + Sy*Sy)
     if (config1 == config2) {
+      // Diagonal term: <config|Sz*Sz|config> = 1/4 (parallel spins)
       return 0.25 * jz_;
     } else {
+      // Off-diagonal term: compute <config'|H|config> where config' has sites 1&2 swapped
+      // psi_ex = <config'|ψ> (wavefunction amplitude for swapped configuration)
       TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
                                               split_index_tps_on_site1[config2],
                                               split_index_tps_on_site2[config1]);
+      
+      // Calculate amplitude ratio for off-diagonal matrix element
+      // ratio = Ψ*(S')/Ψ*(S) where S' is the configuration with spins swapped
+      // ComplexConjugate ensures correct complex analysis for VMC gradients
       TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
+      
+      // Total bond energy: diagonal part + off-diagonal part
+      // Diagonal term: <config|Sz*Sz|config> = -1/4 (antiparallel spins)
+      // <S'|H|S> = -Jz/4 + Jxy/2 for S≠S' (spin flip terms)
       return (-0.25 * jz_ + ratio * 0.5 * jxy_);
     }
   }

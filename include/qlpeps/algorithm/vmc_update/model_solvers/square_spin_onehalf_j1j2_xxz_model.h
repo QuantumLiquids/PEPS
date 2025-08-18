@@ -16,9 +16,20 @@ namespace qlpeps {
 using namespace qlten;
 
 /**
- * J_1-J_2 XXZ Model
- * For NN and NNN interaction terms。
- * For Jz = 0 reduce to planer limit
+ * J_1-J_2 XXZ Model on square lattice
+ * 
+ * Hamiltonian:
+ * $$H = \sum_{\langle i,j \rangle} (J_{z1} S^z_i S^z_j + J_{xy1} (S^x_i S^x_j + S^y_i S^y_j))$$
+ * $$   + \sum_{\langle\langle i,j \rangle\rangle} (J_{z2} S^z_i S^z_j + J_{xy2} (S^x_i S^x_j + S^y_i S^y_j)) - h_{00} S^z_{00}$$
+ * 
+ * where:
+ * - First sum over nearest-neighbor (NN) bonds <i,j>
+ * - Second sum over next-nearest-neighbor (NNN) bonds <<i,j>>
+ * - J_{z1}, J_{xy1}: NN coupling constants for Ising and XY interactions
+ * - J_{z2}, J_{xy2}: NNN coupling constants for Ising and XY interactions  
+ * - h_{00}: pinning field at corner site (0,0)
+ * - For J_z = 0: reduces to planar XY limit
+ * - Supports competing interactions and magnetic frustration effects
  */
 class SquareSpinOneHalfJ1J2XXZModel : public SquareNNNModelEnergySolver<SquareSpinOneHalfJ1J2XXZModel>,
                                       public SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>,

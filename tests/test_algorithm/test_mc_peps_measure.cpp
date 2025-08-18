@@ -158,11 +158,11 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
 
   Model heisenberg_model(J, J, 0);
 
-  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>(
-    source_tps_path,   // TPS path - convenient constructor loads automatically
+  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+    source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters
     comm,
-    heisenberg_model);
+    heisenberg_model).release(); // Convert unique_ptr to raw pointer for compatibility
 
   // Check that configuration has exactly 2 up and 2 down spins
   size_t count_0 = 0, count_1 = 0;
@@ -214,11 +214,11 @@ TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
 
   Model transverse_ising_model(h);
 
-  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdate, Model>(
-    source_tps_path,   // TPS path - convenient constructor loads automatically
+  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdate, Model>::CreateByLoadingTPS(
+    source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters  
     comm,
-    transverse_ising_model);
+    transverse_ising_model).release(); // Convert unique_ptr to raw pointer for compatibility
 
   executor->Execute();
   auto [energy, en_err] = executor->OutputEnergy();
@@ -269,11 +269,11 @@ TEST_F(Test2x2MCPEPSFermion, SpinlessFermionModel) {
 
   Model fermion_model(t, t2, 0);
 
-  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>(
-    source_tps_path,   // TPS path - convenient constructor loads automatically
+  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+    source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters
     comm,
-    fermion_model);
+    fermion_model).release(); // Convert unique_ptr to raw pointer for compatibility
 
   executor->Execute();
   auto [energy, en_err] = executor->OutputEnergy();
@@ -320,11 +320,11 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
 
   Model tj_model(t, 0, J, J / 4, mu);
 
-  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>(
-    source_tps_path,   // TPS path - convenient constructor loads automatically
+  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+    source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters
     comm,
-    tj_model);
+    tj_model).release(); // Convert unique_ptr to raw pointer for compatibility
 
   executor->Execute();
   auto [energy, en_err] = executor->OutputEnergy();

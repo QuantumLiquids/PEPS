@@ -78,36 +78,29 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
                            const EnergySolver &solver);
 
   /**
-   * @brief Constructor with TPS loaded from file path.
+   * @brief Static factory function to create optimizer executor by loading TPS from file path.
    * 
-   * Convenience constructor for users who have TPS data stored on disk.
+   * Convenience factory for users who have TPS data stored on disk.
    * This is the recommended approach when starting optimization from saved TPS.
-   * The lattice dimensions (ly, lx) are automatically inferred from the
-   * initial configuration size: ly = initial_config.rows(), lx = initial_config.cols().
+   
    * 
    * @param params Unified optimizer parameters (must contain valid initial_config)
    * @param tps_path Path to TPS data files on disk
    * @param comm MPI communicator
    * @param solver Energy solver for optimization
+   * @return Unique pointer to the created optimizer executor
    * 
    * @note The initial_config in params.mc_params must be properly sized to determine lattice dimensions
-   * @note This constructor automatically loads TPS from disk and initializes the optimization system
+   * @note This factory automatically loads TPS from disk and initializes the optimization system
    * 
-   * @todo REFACTOR PROPOSAL - Replace with static factory function for better design:
-   * @todo   static std::unique_ptr<VMCPEPSOptimizerExecutor> 
-   * @todo   CreateByLoadingTPS(const VMCPEPSOptimizerParams& params,
-   * @todo                      const std::string& tps_path,
-   * @todo                      const MPI_Comm& comm,
-   * @todo                      const EnergySolver& solver);
-   * @todo
-   * @todo This follows the same refactor proposal as the base class - using static factory
-   * @todo functions instead of multiple constructors for better single-responsibility design.
-   * @todo See base class MonteCarloPEPSBaseExecutor for detailed rationale.
+   * Usage:
+   *   auto executor = VMCPEPSOptimizerExecutor::CreateByLoadingTPS(params, tps_path, comm, solver);
    */
-  VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
-                           const std::string &tps_path,
-                           const MPI_Comm &comm,
-                           const EnergySolver &solver);
+  static std::unique_ptr<VMCPEPSOptimizerExecutor> 
+  CreateByLoadingTPS(const VMCPEPSOptimizerParams& params,
+                     const std::string& tps_path,
+                     const MPI_Comm& comm,
+                     const EnergySolver& solver);
 
   // Main execution method
   void Execute(void) override;
