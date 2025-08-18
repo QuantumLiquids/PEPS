@@ -11,6 +11,7 @@
 #include <vector>
 #include <fstream>
 #include <algorithm>
+#include <memory>
 #include "qlten/framework/hp_numeric/mpi_fun.h"
 #include "qlpeps/consts.h"                        //kMPIMasterRank
 
@@ -23,11 +24,25 @@ void DumpVecData(
     const std::vector<DataType> &data
 ) {
   std::ofstream ofs(filename, std::ofstream::binary);
+  if (!ofs.is_open()) {
+    throw std::ios_base::failure("Failed to open file: " + filename);
+  }
+  
   for (auto datum : data) {
     ofs << datum << '\n';
+    if (ofs.fail()) {
+      throw std::ios_base::failure("Failed to write to file: " + filename);
+    }
   }
   ofs << std::endl;
+  if (ofs.fail()) {
+    throw std::ios_base::failure("Failed to write endl to file: " + filename);
+  }
+  
   ofs.close();
+  if (ofs.fail()) {
+    throw std::ios_base::failure("Failed to close file: " + filename);
+  }
 }
 
 template<typename T>
@@ -114,15 +129,15 @@ std::pair<ElemT, double> GatherStatisticSingleData(
   ElemT mean(0);
   double standard_err(0);
 
-  ElemT *gather_data = nullptr;
+  std::unique_ptr<ElemT[]> gather_data;
   if (comm_rank == kMPIMasterRank) {
-    gather_data = new ElemT[comm_size];
+    gather_data = std::make_unique<ElemT[]>(comm_size);
   }
 
   HANDLE_MPI_ERROR(::MPI_Gather(&data,
                                 1,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                (void *) gather_data,
+                                (void *) gather_data.get(),
                                 1,
                                 hp_numeric::GetMPIDataType<ElemT>(),
                                 kMPIMasterRank,
@@ -154,7 +169,7 @@ std::pair<ElemT, double> GatherStatisticSingleData(
         std::cerr << "Mean value: " << mean << std::endl;
       }
     }
-    delete[] gather_data;
+
   }
   return std::make_pair(mean, standard_err);
 }

@@ -711,11 +711,20 @@ int main(int argc, char* argv[]) {
       const auto& error_traj = executor.GetEnergyErrorTrajectory();
       
       std::ofstream traj_file("optimization_trajectory.dat");
+      if (!traj_file.is_open()) {
+        throw std::ios_base::failure("Failed to open optimization_trajectory.dat");
+      }
       traj_file << "# Iteration Energy Error\n";
       for (size_t i = 0; i < energy_traj.size(); ++i) {
         traj_file << i << " " << energy_traj[i] << " " << error_traj[i] << "\n";
+        if (traj_file.fail()) {
+          throw std::ios_base::failure("Failed to write trajectory data");
+        }
       }
       traj_file.close();
+      if (traj_file.fail()) {
+        throw std::ios_base::failure("Failed to close optimization_trajectory.dat");
+      }
       
       std::cout << "Optimization trajectory saved to optimization_trajectory.dat" << std::endl;
     }

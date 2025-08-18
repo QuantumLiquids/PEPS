@@ -276,28 +276,52 @@ class MonteCarloMeasurementExecutor : public MonteCarloPEPSBaseExecutor<TenElemT
     void Dump() const {
       std::string filename = "energy_statistics";
       std::ofstream ofs(filename, std::ofstream::binary);
+      if (!ofs.is_open()) {
+        throw std::ios_base::failure("Failed to open file: " + filename);
+      }
       ofs.write((const char *) &energy, 1 * sizeof(TenElemT));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write energy to " + filename);
       ofs.write((const char *) &en_err, 1 * sizeof(double));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write en_err to " + filename);
       ofs.write((const char *) bond_energys.data(), bond_energys.size() * sizeof(TenElemT));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write bond_energys to " + filename);
       ofs.write((const char *) energy_auto_corr.data(), energy_auto_corr.size() * sizeof(TenElemT));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write energy_auto_corr to " + filename);
       ofs << std::endl;
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write endl to " + filename);
       ofs.close();
+      if (ofs.fail()) throw std::ios_base::failure("Failed to close " + filename);
 
       filename = "one_point_functions";
       ofs.open(filename, std::ofstream::binary);
+      if (!ofs.is_open()) {
+        throw std::ios_base::failure("Failed to open file: " + filename);
+      }
       ofs.write((const char *) one_point_functions.data(), one_point_functions.size() * sizeof(TenElemT));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write one_point_functions to " + filename);
       ofs.write((const char *) one_point_function_errs.data(), one_point_function_errs.size() * sizeof(double));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write one_point_function_errs to " + filename);
       ofs.write((const char *) one_point_functions_auto_corr.data(),
                 one_point_functions_auto_corr.size() * sizeof(TenElemT));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write one_point_functions_auto_corr to " + filename);
       ofs << std::endl;
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write endl to " + filename);
       ofs.close();
+      if (ofs.fail()) throw std::ios_base::failure("Failed to close " + filename);
 
       filename = "two_point_functions";
       ofs.open(filename, std::ofstream::binary);
+      if (!ofs.is_open()) {
+        throw std::ios_base::failure("Failed to open file: " + filename);
+      }
       ofs.write((const char *) two_point_functions.data(), two_point_functions.size() * sizeof(TenElemT));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write two_point_functions to " + filename);
       ofs.write((const char *) two_point_function_errs.data(), two_point_function_errs.size() * sizeof(double));
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write two_point_function_errs to " + filename);
       ofs << std::endl;
+      if (ofs.fail()) throw std::ios_base::failure("Failed to write endl to " + filename);
       ofs.close();
+      if (ofs.fail()) throw std::ios_base::failure("Failed to close " + filename);
     }
     void DumpCSV() const {
       // Dump energy and error

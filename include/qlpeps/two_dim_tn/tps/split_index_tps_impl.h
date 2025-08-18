@@ -202,8 +202,17 @@ void SplitIndexTPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool 
 
   file = tps_path + "/" + "tps_meta.txt";
   std::ofstream ofs(file, std::ofstream::binary);
+  if (!ofs.is_open()) {
+    throw std::ios_base::failure("Failed to open metadata file: " + file);
+  }
   ofs << this->rows() << " " << this->cols() << " " << phy_dim;
+  if (ofs.fail()) {
+    throw std::ios_base::failure("Failed to write metadata to file: " + file);
+  }
   ofs.close();
+  if (ofs.fail()) {
+    throw std::ios_base::failure("Failed to close metadata file: " + file);
+  }
 }
 
 template<typename TenElemT, typename QNT>

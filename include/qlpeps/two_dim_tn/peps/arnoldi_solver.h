@@ -17,6 +17,7 @@
 
 #include <functional>
 #include <optional>
+#include <memory>
 #include "qlmps/algorithm/lanczos_params.h"           //LanczosParams
 namespace qlpeps {
 using namespace qlten;
@@ -101,23 +102,23 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
   }
   std::vector<ElemT> vr(n * n), vl(n * n);
   std::vector<double> w_abs(n);
-  double *wr(nullptr), *wi(nullptr);
-  complex_t *w(nullptr);
+  std::unique_ptr<double[]> wr, wi;
+  std::unique_ptr<complex_t[]> w;
   ElemT dominant_w;
   size_t max_idx;
 
   int info;
   if constexpr (std::is_same<ElemT, double>::value) {
-    wr = new double[n];
-    wi = new double[n];
+    wr = std::make_unique<double[]>(n);
+    wi = std::make_unique<double[]>(n);
     info = LAPACKE_dgeev(LAPACK_ROW_MAJOR,
                          'V', // left eigenvectors are computed
                          'V', // right eigenvectors are computed
                          lapack_int(n), // order of h matrix
                          h_mat.data(),  // h matrix
                          lapack_int(n), // leading dimension of the h matrix (question : in lapack what's this parameter, what's the different with the size of h)
-                         wr, // real part of the eigenvalues
-                         wi, // imaginary part of the eigenvalues
+                         wr.get(), // real part of the eigenvalues
+                         wi.get(), // imaginary part of the eigenvalues
                          vl.data(), // the output eigenvectors
                          lapack_int(n),
                          vr.data(), // the output eigenvectors.
@@ -133,22 +134,20 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
 
     if (std::abs(wi[max_idx] / wr[max_idx]) > 1e-14) {
       //degeneracy case
-      delete[] wr;
-      delete[] wi;
       MatDomiEigenSystem<ElemT> res;
       res.valid = false;
       return res;
     }
     dominant_w = wr[max_idx];
   } else if constexpr (std::is_same<ElemT, complex_t>::value) {
-    w = new complex_t[n];
+    w = std::make_unique<complex_t[]>(n);
     info = LAPACKE_zgeev(LAPACK_ROW_MAJOR,
                          'V', // left eigenvectors are computed
                          'V', // right eigenvectors are computed
                          lapack_int(n), // order of h matrix
                          reinterpret_cast<lapack_complex_double *>(h_mat.data()),  // h matrix
                          lapack_int(n), // leading dimension of the h matrix (question : in lapack what's this parameter, what's the different with the size of h)
-                         reinterpret_cast<lapack_complex_double *>(w),
+                         reinterpret_cast<lapack_complex_double *>(w.get()),
                          reinterpret_cast<lapack_complex_double *>(vl.data()), // the output eigenvectors
                          lapack_int(n),
                          reinterpret_cast<lapack_complex_double *>(vr.data()), // the output eigenvectors.
@@ -176,9 +175,7 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
     right_dominant_eigenvector[i] = vr[i * n + max_idx];
     left_dominant_eigenvector[i] = vl[i * n + max_idx];
   }
-  delete[] wr;
-  delete[] wi;
-  delete[] w;
+
   return {true, dominant_w, right_dominant_eigenvector, left_dominant_eigenvector};
 }
 

@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
+#include <memory>
 
 using namespace qlten;
 using namespace qlpeps;
@@ -109,11 +110,10 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   // stage 1, D = 2
   SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
-  SimpleUpdateExecutor<TenElemT, Z2QN>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, Z2QN>(update_para,
-                                                                        peps0,
-                                                                        xx_term,
-                                                                        z_term);
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, Z2QN>>(update_para,
+                                                                                   peps0,
+                                                                                   xx_term,
+                                                                                   z_term);
   su_exe->Execute();
 
   // stage 2, D = 4
@@ -144,7 +144,7 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   // check the energy
   double ex_energy = -50.186623882777752;
   EXPECT_NEAR(ex_energy, E_est, 0.2);
-  delete su_exe;
+
 }
 
 //spin one-half system with trivial symmetry to match exact energy reference
@@ -332,24 +332,22 @@ struct SpinOneHalfSystemSimpleUpdateU1 : public testing::Test {
 TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, AFM_ClassicalIsing) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   SimpleUpdatePara update_para(50, 0.01, 1, 1, 1e-5);
-  SimpleUpdateExecutor<TenElemT, QNT>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(update_para,
-                                                                       peps0,
-                                                                       ham_ising_nn);
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(update_para,
+                                                                                    peps0,
+                                                                                    ham_ising_nn);
   su_exe->Execute();
   double ex_energy = -0.25 * ((Lx - 1) * Ly + (Ly - 1) * Lx);
   EXPECT_NEAR(ex_energy, su_exe->GetEstimatedEnergy(), 1e-10);
-  delete su_exe;
+
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenberg) {
   std::string model_name = "square_nn_hei";
   // stage 1,
 
-  SimpleUpdateExecutor<TenElemT, QNT>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(SimpleUpdatePara(50, 0.2, 1, 2, 1e-5),
-                                                                       peps0,
-                                                                       ham_hei_nn);
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.2, 1, 2, 1e-5),
+                                                                                    peps0,
+                                                                                    ham_hei_nn);
   su_exe->Execute();
 
   // stage 2,
@@ -373,7 +371,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenberg) {
 
   double en_exact = -6.691680193514947;
   EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.5);
-  delete su_exe;
+
 }
 
 
@@ -381,11 +379,10 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningFie
   std::string model_name = "square_nn_hei_pin";
   // stage 1, D = 2
 
-  SimpleUpdateExecutor<TenElemT, QNT>
-      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(SimpleUpdatePara(50, 0.1, 1, 2, 1e-5),
-                                                                       peps0,
-                                                                       ham_hei_nn,
-                                                                       afm_pinning_field);
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.1, 1, 2, 1e-5),
+                                                                                    peps0,
+                                                                                    ham_hei_nn,
+                                                                                    afm_pinning_field);
   su_exe->Execute();
 
   // stage 2, D = 4
@@ -409,18 +406,17 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningFie
 
   double en_exact = -6.878533413625821;
   EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.3);
-  delete su_exe;
+
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, TriangleNNHeisenberg) {
   std::string model_name = "tri_nn_hei";
   SimpleUpdatePara update_para(20, 0.1, 1, 2, 1e-5);
 
-  SimpleUpdateExecutor<TenElemT, QNT> *su_exe
-      = new TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>(update_para,
-                                                                         peps0,
-                                                                         ham_hei_nn,
-                                                                         ham_hei_tri);
+  auto su_exe = std::make_unique<TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>>(update_para,
+                                                                                              peps0,
+                                                                                              ham_hei_nn,
+                                                                                              ham_hei_tri);
   su_exe->Execute();
 
   su_exe->update_para.Dmax = 4;
@@ -431,7 +427,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, TriangleNNHeisenberg) {
   auto tps4 = TPS<TenElemT, QNT>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
   tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
-  delete su_exe;
+
 }
 
 int main(int argc, char *argv[]) {

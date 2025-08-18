@@ -4,8 +4,9 @@ This directory contains documentation for developers working on the PEPS project
 
 ## Contents
 
-### API Development
-- **`API_IMPROVEMENT_SUGGESTIONS.md`** - Suggestions and proposals for improving the PEPS API
+### Algorithm Development
+- **`MISSING_SGD_VARIANTS.md`** - Documentation of optimization algorithms to be implemented
+- **`CODE_REVIEW_FINDINGS.md`** - Code review findings and architectural analysis
 
 ### Testing and Best Practices
 - **`MONTE_CARLO_TESTING_BEST_PRACTICES.md`** - Best practices for testing Monte Carlo implementations

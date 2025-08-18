@@ -193,7 +193,9 @@ class MonteCarloPEPSBaseExecutor : public Executor {
    * Requires careful MPI output coordination to avoid race conditions.
    * Current implementation uses minimal but safe output.
    */
-  void RescueInvalidConfigurations_();
+  void EnsureConfigurationValidity_();
+
+
 
   /**
    * @brief Initialize Monte Carlo sampling system with user-provided configuration.
@@ -277,7 +279,7 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
                                       tps_sample_.trun_para);
   
   // Validate configurations and rescue invalid ones from other processes
-  RescueInvalidConfigurations_();
+  EnsureConfigurationValidity_();
   
   // Normalize for numerical stability
   NormTPSForOrder1Amplitude_();
@@ -344,104 +346,61 @@ requires
 MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
-                                MonteCarloSweepUpdater>::RescueInvalidConfigurations_() {
+                                MonteCarloSweepUpdater>::EnsureConfigurationValidity_() {
+  // 1. Collect validity status from all ranks
   int local_valid = CheckWaveFunctionAmplitudeValidity(tps_sample_) ? 1 : 0;
   std::vector<int> global_valid(mpi_size_);
   HANDLE_MPI_ERROR(MPI_Allgather(&local_valid, 1, MPI_INT,
-                                 global_valid.data(), 1, MPI_INT,
-                                 comm_));
-  int all_valid = 1;
-  for (int r = 0; r < mpi_size_; ++r) {
-    if (!global_valid[r]) {
-      all_valid = 0;
-      break;
-    }
-  }
-  if (all_valid) {
+                                 global_valid.data(), 1, MPI_INT, comm_));
+  
+  // 2. Count valid processes
+  int num_valid = std::accumulate(global_valid.begin(), global_valid.end(), 0);
+  
+  // 3. All valid - just log success
+  if (num_valid == mpi_size_) {
     if (rank_ == kMPIMasterRank) {
       std::cout << "✓ Configuration validation: All " << mpi_size_ 
                 << " processes have valid configurations." << std::endl;
     }
     return;
   }
-
-  // Find first valid rank for broadcasting
-  int any_valid = 0;
-  int source_rank = MPI_UNDEFINED;
-  for (int r = 0; r < mpi_size_; ++r) {
-    if (global_valid[r]) {
-      any_valid = 1;
-      source_rank = r;
-      break;
-    }
-  }
-
-  // Enhanced rescue logic with better diagnostics
-  if (any_valid) {
-    int num_valid = std::accumulate(global_valid.begin(), global_valid.end(), 0);
-    int num_invalid = mpi_size_ - num_valid;
-    
+  
+  // 4. Find first valid rank for rescue source
+  auto valid_iter = std::find(global_valid.begin(), global_valid.end(), 1);
+  if (valid_iter == global_valid.end()) {
+    // Complete failure - log diagnostics and abort
     if (rank_ == kMPIMasterRank) {
-      std::cout << "⚠ Configuration rescue initiated:" << std::endl;
-      std::cout << "  - Invalid processes: " << num_invalid << "/" << mpi_size_ << std::endl;
-      std::cout << "  - Rescue source: rank " << source_rank << std::endl;
-      std::cout << "  - This is normal for complex quantum many-body initial states" << std::endl;
+      std::cerr << "\n=== CRITICAL CONFIGURATION FAILURE ===\n"
+                << "All " << mpi_size_ << " processes have invalid configurations!\n"
+                << "Check: bond dimension, truncation cutoff, initial configuration\n";
     }
-    
-    // Provide local diagnostics before rescue
-    if (!local_valid && rank_ == kMPIMasterRank) {
-      std::cout << "  - Failed amplitude magnitude: " << std::abs(tps_sample_.amplitude) << std::endl;
-    }
-    
-    Configuration config_valid(ly_, lx_);
-    if (rank_ == source_rank) {
-      config_valid = tps_sample_.config;
-    }
-    MPI_BCast(config_valid, source_rank, comm_);
-    
-    if (!local_valid) {
-      tps_sample_ = WaveFunctionComponentT(split_index_tps_, config_valid, tps_sample_.trun_para);
-      warm_up_ = false;  // Reset warm-up for rescued processes
-      
-      std::cout << "  Rank " << rank_ << ": successfully adopted configuration from rank " 
-                << source_rank << " (new amplitude: " << std::abs(tps_sample_.amplitude) << ")" << std::endl;
-    }
-    
-    if (rank_ == kMPIMasterRank) {
-      std::cout << "✓ Configuration rescue completed successfully" << std::endl;
-    }
-  } else {
-    // Enhanced error reporting for complete rescue failure
-    if (rank_ == kMPIMasterRank) {
-      std::cerr << "\n=== CRITICAL CONFIGURATION FAILURE ===" << std::endl;
-      std::cerr << "All " << mpi_size_ << " processes have invalid configurations!" << std::endl;
-      std::cerr << "No rescue possible - this indicates a fundamental parameter issue." << std::endl;
-      std::cerr << "\n TROUBLESHOOTING GUIDE:" << std::endl;
-      std::cerr << "1. TPS Bond Dimension: Try increasing bond dimension" << std::endl;
-      std::cerr << "2. Truncation: reduce truncation cutoff parameters" << std::endl;
-      std::cerr << "3. Initial Configuration: Try different initial configuration" << std::endl;
-      std::cerr << "4. Parameters: Check physical parameters (couplings, fields)" << std::endl;
-      std::cerr << "5. System Size: Consider smaller system for testing" << std::endl;
-      std::cerr << "\n DETAILED DIAGNOSTICS:" << std::endl;
-    }
-    
-    // Collect comprehensive diagnostic information
     std::ostringstream oss;
-    oss << "Rank " << rank_ << " diagnostics:" << std::endl;
-    oss << "  - Amplitude: " << tps_sample_.amplitude << std::endl;
-    oss << "  - Magnitude: " << std::abs(tps_sample_.amplitude) << std::endl;
-    oss << "  - Is finite: " << std::isfinite(std::abs(tps_sample_.amplitude)) << std::endl;
-    oss << "  - Configuration:" << std::endl;
-    oss << tps_sample_.config << std::endl;
-
-    std::string local_msg = oss.str();
-    hp_numeric::GatherAndPrintErrorMessages(local_msg, comm_);
-
-    if (rank_ == kMPIMasterRank) {
-      std::cerr << "\n TIP: Save this diagnostic output for parameter tuning" << std::endl;
-    }
-
+    oss << "Rank " << rank_ << ": amplitude=" << tps_sample_.amplitude
+        << ", magnitude=" << std::abs(tps_sample_.amplitude) << std::endl;
+    hp_numeric::GatherAndPrintErrorMessages(oss.str(), comm_);
     MPI_Abort(comm_, EXIT_FAILURE);
+  }
+  
+  // 5. Execute rescue operation
+  int source_rank = static_cast<int>(valid_iter - global_valid.begin());
+  Configuration config_valid(ly_, lx_);
+  
+  if (rank_ == source_rank) {
+    config_valid = tps_sample_.config;
+  }
+  MPI_BCast(config_valid, source_rank, comm_);
+  
+  if (local_valid == 0) {  
+    tps_sample_ = WaveFunctionComponentT(split_index_tps_, config_valid, tps_sample_.trun_para);
+    warm_up_ = false;  // Reset warm-up for rescued processes
+    std::cout << "Rank " << rank_ << ": rescued from rank " << source_rank 
+              << " (new amplitude: " << std::abs(tps_sample_.amplitude) << ")" << std::endl;
+  }
+  
+  // 6. Log rescue completion summary
+  if (rank_ == kMPIMasterRank) {
+    std::cout << " Configuration rescue completed: " << (mpi_size_ - num_valid) << "/" << mpi_size_ 
+              << " processes rescued from rank " << source_rank << std::endl;
   }
 }
 
@@ -458,14 +417,14 @@ MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
 void MonteCarloPEPSBaseExecutor<TenElemT,
                                 QNT,
                                 MonteCarloSweepUpdater>::NormTPSForOrder1Amplitude_() {
-  TenElemT *gather_amplitude;
+  std::unique_ptr<TenElemT[]> gather_amplitude;
   if (rank_ == kMPIMasterRank) {
-    gather_amplitude = new TenElemT[mpi_size_];
+    gather_amplitude = std::make_unique<TenElemT[]>(mpi_size_);
   }
   HANDLE_MPI_ERROR(::MPI_Gather(&tps_sample_.amplitude,
                                 1,
                                 hp_numeric::GetMPIDataType<TenElemT>(),
-                                (void *) gather_amplitude,
+                                gather_amplitude.get(),
                                 1,
                                 hp_numeric::GetMPIDataType<TenElemT>(),
                                 kMPIMasterRank,
@@ -473,13 +432,12 @@ void MonteCarloPEPSBaseExecutor<TenElemT,
   double scale_factor;
   if (rank_ == kMPIMasterRank) {
     std::cout << std::endl;
-    auto max_it = std::max_element(gather_amplitude, gather_amplitude + mpi_size_,
+    auto max_it = std::max_element(gather_amplitude.get(), gather_amplitude.get() + mpi_size_,
                                    [](const TenElemT &a, const TenElemT &b) {
                                      return std::abs(a) < std::abs(b);
                                    });
     double max_abs = std::abs(*max_it);
     scale_factor = 1.0 / max_abs;
-    delete gather_amplitude;
   }
   HANDLE_MPI_ERROR(::MPI_Bcast(&scale_factor, 1, MPI_DOUBLE, kMPIMasterRank, comm_));
   double scale_factor_on_site = std::pow(scale_factor, 1.0 / double(lx_ * ly_));
