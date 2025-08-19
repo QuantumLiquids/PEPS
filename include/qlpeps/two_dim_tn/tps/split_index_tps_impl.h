@@ -13,6 +13,65 @@
 namespace qlpeps {
 using namespace qlten;
 
+// Helper function implementations
+template<typename TenElemT, typename QNT>
+template<typename Func>
+void SplitIndexTPS<TenElemT, QNT>::ForEachValidTensor_(Func&& func) const {
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      for (size_t i = 0; i < phy_dim; ++i) {
+        if (!(*this)({row, col})[i].IsDefault()) {
+          func(row, col, i, (*this)({row, col})[i]);
+        }
+      }
+    }
+  }
+}
+
+template<typename TenElemT, typename QNT>
+template<typename Func>
+void SplitIndexTPS<TenElemT, QNT>::ForEachValidTensor_(Func&& func) {
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      for (size_t i = 0; i < phy_dim; ++i) {
+        if (!(*this)({row, col})[i].IsDefault()) {
+          func(row, col, i, (*this)({row, col})[i]);
+        }
+      }
+    }
+  }
+}
+
+template<typename TenElemT, typename QNT>
+template<typename Func>
+SplitIndexTPS<TenElemT, QNT> SplitIndexTPS<TenElemT, QNT>::ApplyBinaryOp_(const SplitIndexTPS &right, Func&& func) const {
+  SplitIndexTPS res(this->rows(), this->cols());
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      res({row, col}) = std::vector<Tensor>(phy_dim);
+      for (size_t i = 0; i < phy_dim; ++i) {
+        func((*this)({row, col})[i], right({row, col})[i], res({row, col})[i]);
+      }
+    }
+  }
+  return res;
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT> SplitIndexTPS<TenElemT, QNT>::CreateInitializedResult_() const {
+  SplitIndexTPS res(this->rows(), this->cols());
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      res({row, col}) = std::vector<Tensor>(phy_dim);
+    }
+  }
+  return res;
+}
+
 template<typename TenElemT, typename QNT>
 size_t SplitIndexTPS<TenElemT, QNT>::GetMaxBondDimension() const {
   size_t dmax = 0;
@@ -74,23 +133,71 @@ bool SplitIndexTPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
   return true;
 }
 
+/**
+ * @brief Calculate the sum of squared quasi-2-norms of all tensor components
+ * 
+ * This function computes the sum of squared quasi-2-norms across all tensor
+ * components and lattice sites. This is NOT the physical wave function norm.
+ * 
+ * The quasi-2-norm is defined as:
+ * \f[
+ *   \|A\|_{2,\mathrm{quasi}} = \sqrt{\sum_i |a_i|^2}
+ * \f]
+ * 
+ * For fermionic tensors, this differs from the graded 2-norm:
+ * \f[
+ *   \|A\|_{2,\mathrm{graded}} = \sqrt{\sum_{i\in E} |a_i|^2\; - \; \sum_{i\in O} |a_i|^2}
+ * \f]
+ * where \f$E\f$ denotes even blocks and \f$O\f$ denotes odd blocks.
+ * 
+ * The quasi-2-norm is always well-defined and non-negative for both bosonic
+ * and fermionic tensors, while the graded 2-norm can be ill-defined when
+ * the odd contribution exceeds the even one.
+ * 
+ * @return Sum of squared quasi-2-norms: \f$\sum_{r,c,i} \|T_{r,c}^{(i)}\|_{2,\mathrm{quasi}}^2\f$
+ * 
+ * @note Uses `GetQuasi2Norm()` which is always well-defined for fermionic tensors
+ * @see TensorToolkit documentation on fermionic tensor norms
+ */
 template<typename TenElemT, typename QNT>
 double SplitIndexTPS<TenElemT, QNT>::NormSquare() const {
   double norm_square = 0;
-  const size_t phy_dim = PhysicalDim();
-  for (size_t row = 0; row < this->rows(); ++row) {
-    for (size_t col = 0; col < this->cols(); ++col) {
-      for (size_t i = 0; i < phy_dim; i++) {
-        if (!(*this)({row, col})[i].IsDefault()) {
-          double norm_local = (*this)({row, col})[i].GetQuasi2Norm();
-          norm_square += norm_local * norm_local;
-        }
-      }
-    }
-  }
+  ForEachValidTensor_([&norm_square](size_t, size_t, size_t, const Tensor& ten) {
+    double norm_local = ten.GetQuasi2Norm();
+    norm_square += norm_local * norm_local;
+  });
   return norm_square;
 }
 
+/**
+ * @brief Normalize all tensor components at a specific site using quasi-2-norm
+ * 
+ * This function normalizes all tensor components at the given site such that
+ * the sum of their squared quasi-2-norms equals 1:
+ * \f[
+ *   \sum_{i=0}^{d-1} \|T_{r,c}^{(i)}\|_{2,\mathrm{quasi}}^2 = 1
+ * \f]
+ * 
+ * The normalization factor is computed as:
+ * \f[
+ *   \mathcal{N} = \sqrt{\sum_{i=0}^{d-1} \|T_{r,c}^{(i)}\|_{2,\mathrm{quasi}}^2}
+ * \f]
+ * 
+ * Each tensor component is then scaled by \f$1/\mathcal{N}\f$:
+ * \f[
+ *   T_{r,c}^{(i)} \leftarrow \frac{T_{r,c}^{(i)}}{\mathcal{N}}
+ * \f]
+ * 
+ * For fermionic tensors, this uses the quasi-2-norm which is always well-defined,
+ * rather than the graded 2-norm which can be problematic when odd blocks dominate.
+ * 
+ * @param site The lattice site \f$(r,c)\f$ to normalize
+ * @return The normalization factor \f$\mathcal{N}\f$ that was applied
+ * 
+ * @note Uses `GetQuasi2Norm()` for robust fermionic tensor handling
+ * @note Default tensors are not affected by normalization
+ * @see QuasiNormalize() in TensorToolkit for single tensor normalization
+ */
 template<typename TenElemT, typename QNT>
 double SplitIndexTPS<TenElemT, QNT>::NormalizeSite(const SiteIdx &site) {
   const size_t phy_dim = PhysicalDim(site);
@@ -111,7 +218,7 @@ double SplitIndexTPS<TenElemT, QNT>::NormalizeSite(const SiteIdx &site) {
   return norm;
 }
 
-/// scale the single site tensor on TPS to make the max abs of element equal to `aiming_max_abs`
+// Scale the single site tensor on TPS to make the max abs of element equal to `aiming_max_abs`
 template<typename TenElemT, typename QNT>
 double SplitIndexTPS<TenElemT, QNT>::ScaleMaxAbsForSite(const qlpeps::SiteIdx &site, double aiming_max_abs) {
   const size_t phy_dim = PhysicalDim(site);
@@ -140,7 +247,7 @@ void SplitIndexTPS<TenElemT, QNT>::NormalizeAllSite() {
   }
 }
 
-///< Normalize split index tps according to the max abs of tensors in each site
+// Normalize split index tps according to the max abs of tensors in each site
 template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::ScaleMaxAbsForAllSite(double aiming_max_abs) {
   for (size_t row = 0; row < this->rows(); ++row) {
