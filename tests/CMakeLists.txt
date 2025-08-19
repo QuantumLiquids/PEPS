@@ -118,13 +118,16 @@ endmacro()
 
 macro(add_mpi_unittest_run
         TEST_NAME PROCESSOR_NUM INPUT_ARGS)
-    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
+    # Check if we have enough processors to run the requested number of MPI processes
+    if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL ${PROCESSOR_NUM})
         add_test(NAME ${TEST_NAME}_mpi
                 COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} ${PROCESSOR_NUM}
                 $<TARGET_FILE:${TEST_NAME}>
                 ${INPUT_ARGS}
                 WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    else()
+        message(STATUS "Skipping MPI test ${TEST_NAME}_mpi: requires ${PROCESSOR_NUM} processes, but only ${MPIEXEC_MAX_NUMPROCS} available")
     endif ()
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
 endmacro()
@@ -171,6 +174,12 @@ add_unittest(test_peps
 add_unittest(test_split_index_tps
         "test_2d_tn/test_split_index_tps.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+
+# MPI functionality tests for SplitIndexTPS
+add_mpi_unittest(test_split_index_tps_mpi
+        "test_2d_tn/test_split_index_tps_mpi.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
@@ -254,6 +263,12 @@ add_two_type_unittest(test_exact_sum_optimization
         "test_algorithm/test_exact_sum_optimization.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+
+# Add MPI test runs for exact summation optimization to verify MPI-aware ExactSumEnergyEvaluator
+add_mpi_unittest_run(test_exact_sum_optimization_double "4" " ")
+add_mpi_unittest_run(test_exact_sum_optimization_complex "4" " ")
+
+
 
 # Fast tests (2x2 systems, quick execution)
 add_two_type_unittest(test_mc_peps_measure

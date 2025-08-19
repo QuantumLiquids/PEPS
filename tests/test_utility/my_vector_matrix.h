@@ -195,7 +195,7 @@ class MySquareMatrix {
 };
 
 template<typename ElemT>
-void CGSolverBroadCastVector(
+void MPI_Bcast(
     MyVector<ElemT> &x0,
     const MPI_Comm &comm
 ) {
@@ -214,11 +214,11 @@ void CGSolverBroadCastVector(
 }
 
 template<typename ElemT>
-void CGSolverSendVector(
-    const MPI_Comm &comm,
+void MPI_Send(
     const MyVector<ElemT> &v,
     const int dest,
-    const int tag
+    const MPI_Comm &comm,
+    const int tag = 0
 ) {
   size_t length = v.GetSize();
   hp_numeric::MPI_Send(length, dest, tag, comm);
@@ -226,11 +226,11 @@ void CGSolverSendVector(
 }
 
 template<typename ElemT>
-MPI_Status CGSolverRecvVector(
-    const MPI_Comm &comm,
+MPI_Status MPI_Recv(
     MyVector<ElemT> &v,
     int src,
-    int tag
+    const MPI_Comm &comm,
+    int tag = 0
 ) {
   size_t length;
   auto status = hp_numeric::MPI_Recv(length, src, tag, comm);

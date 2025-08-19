@@ -12,8 +12,8 @@
 #include <fstream>
 #include <algorithm>
 #include <memory>
+#include <numeric>
 #include "qlten/framework/hp_numeric/mpi_fun.h"
-#include "qlpeps/consts.h"                        //kMPIMasterRank
 
 namespace qlpeps {
 using namespace qlten;

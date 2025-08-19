@@ -22,23 +22,85 @@ namespace qlpeps {
 using namespace qlten;
 
 /**
- * @brief Optimizer for VMC PEPS that handles different optimization strategies
+ * @brief Optimizer for VMC PEPS that handles different optimization strategies with MPI support
  * 
  * This class provides a unified interface for different optimization strategies.
  * It supports line search and iterative optimization, with or without energy error support.
  * 
  * The optimization strategies are:
- * 1. Gradient line search
- * 2. Natural gradient line search
- * 3. Stochastic reconfiguration
+ * 1. SGD (with momentum and Nesterov acceleration)
+ * 2. AdaGrad (Adaptive Gradient)
+ * 3. Stochastic reconfiguration (natural gradient)
  * 4. Bounded gradient element update
  * 5. Random gradient element update
- * 6. AdaGrad (Adaptive Gradient)
+ * 6. Adam (planned)
+ * 7. L-BFGS (planned)
  * 
- * The optimization strategies are selected based on the update scheme parameter.
+ * ⚠️ CRITICAL MPI RESPONSIBILITY SEPARATION:
  * 
- * The optimization result is returned as an OptimizationResult object, which contains the optimized state,
- * the final energy, the minimum energy, the energy trajectory, the energy error trajectory, the gradient norm trajectory,
+ * 【CORE PRINCIPLE】: Clear MPI responsibility separation between state distribution and algorithm computation.
+ * 
+ * This design eliminates triple redundant broadcasts and follows "good taste" principles:
+ * "Good taste is about eliminating special cases and making the normal case work correctly."
+ * 
+ * ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+ * │   Optimizer     │    │ Energy Evaluator │    │  VMC Executor   │
+ * │                 │    │                  │    │                 │
+ * │ • Algorithm logic│───▶│ • Receives state │    │ • Final sync    │
+ * │ • SR uses MPI   │    │ • Broadcasts     │    │ • End guarantee │
+ * │ • NO state bcast│    │ • Manages MC     │    │ • Cleanup       │
+ * └─────────────────┘    └──────────────────┘    └─────────────────┘
+ *                               │
+ *                               ▼
+ *                       All ranks synchronized
+ *                       for Monte Carlo sampling
+ * 
+ * 【RESPONSIBILITY MATRIX】:
+ * | Component         | Responsibility              | MPI Behavior                    |
+ * |-------------------|----------------------------|---------------------------------|
+ * | Optimizer         | Algorithm logic & updates  | ✅ SR/CG solver, ❌ NO state bcast|
+ * | Energy Evaluator  | MC sampling coordination   | ✅ Sole state broadcast owner    |
+ * | VMC Executor      | High-level orchestration   | ✅ Final state guarantee         |
+ * 
+ * 【MPI DATA DISTRIBUTION】:
+ * 
+ * INPUT (to energy_evaluator):
+ * - current_state: Valid ONLY on master rank (optimizer output)
+ * 
+ * OUTPUT (from energy_evaluator):  
+ * - energy: Valid on ALL ranks (broadcast by energy_evaluator)
+ * - gradient: Valid ONLY on master rank (gathered by energy_evaluator)
+ * - energy_error: Valid ONLY on master rank
+ * 
+ * INTERNAL STATE:
+ * - algorithm_state (velocity, accumulated_gradients): Master rank ONLY
+ * - optimization_statistics: Master rank ONLY
+ * 
+ * OUTPUT:
+ * - optimized_state: Valid on all ranks (final broadcast by executor)
+ * - trajectories: Master rank ONLY
+ * 
+ * 【ITERATION FLOW】:
+ * 1. Optimizer updates state on master rank           ← NO state broadcast
+ * 2. SR algorithm: MPI-distributed CG solving         ← Optimizer internal MPI
+ * 3. Energy evaluator receives state (master only)    ← NO state broadcast yet
+ * 4. Energy evaluator broadcasts for MC sampling      ← SINGLE state broadcast  
+ * 5. Distributed Monte Carlo execution                ← All ranks
+ * 6. Energy evaluator gathers gradients to master     ← Standard gather
+ * 7. Energy evaluator broadcasts energy to all ranks  ← Standard broadcast
+ * 8. Return to step 1                                 ← Loop continues
+ * 
+ * 【DESIGN BENEFITS】:
+ * - 67% reduction in state broadcast overhead (3→1 broadcasts per iteration)
+ * - Clear responsibility separation (single responsibility principle)
+ * - Eliminates "special cases" and redundant MPI calls
+ * - Better scalability for large MPI configurations
+ * 
+ * THREAD SAFETY:
+ * - All gradient updates are performed only on master rank
+ * - Updated states are broadcast to all ranks after each iteration
+ * - This ensures deterministic behavior across different MPI configurations
+ * 
  * @tparam TenElemT Tensor element type
  * @tparam QNT Quantum number type
  */
@@ -118,12 +180,23 @@ class Optimizer {
       const WaveFunctionT* gten_average = nullptr);
 
   /**
-   * @brief Update TPS using gradient descent
+   * @brief Update TPS using gradient descent - CORE building block for all algorithms
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient direction
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * 
+   * The energy evaluator is solely responsible for broadcasting state for Monte Carlo sampling.
+   * This eliminates duplicate broadcasts and maintains clear responsibility separation.
+   * 
+   * MPI Behavior:
+   * - INPUT current_state: Valid on all ranks (should be synchronized)  
+   * - INPUT gradient: Valid ONLY on master rank (gathered by energy_evaluator)
+   * - UPDATE: Performed ONLY on master rank
+   * - OUTPUT: Updated state valid ONLY on master rank (energy_evaluator will broadcast)
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient direction (valid ONLY on master rank)  
    * @param step_length Step length for update
-   * @return Updated TPS state
+   * @return Updated TPS state (valid ONLY on master rank, will be broadcast by energy_evaluator)
    */
   WaveFunctionT UpdateTPSByGradient(const WaveFunctionT& current_state, 
                              const WaveFunctionT& gradient, 
@@ -132,11 +205,21 @@ class Optimizer {
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
    * 
-   * @param gradient Standard gradient
-   * @param gten_samples Gradient tensor samples
-   * @param gten_average Average gradient tensor
+   * ✅ MPI COMMUNICATION REQUIRED: This function DOES use MPI for distributed CG solving!
+   * 
+   * Unlike state update functions, SR natural gradient calculation requires distributed
+   * computation across all ranks:
+   * - Master rank coordinates CG iterations 
+   * - All ranks participate in matrix-vector multiplications
+   * - Broadcast/gather operations for CG algorithm convergence
+   * 
+   * This is algorithm-internal MPI communication, NOT state distribution.
+   * 
+   * @param gradient Standard gradient (valid ONLY on master rank)
+   * @param gten_samples Gradient tensor samples (distributed across ranks)
+   * @param gten_average Average gradient tensor (valid ONLY on master rank)
    * @param init_guess Initial guess for conjugate gradient solver
-   * @return Natural gradient and number of CG iterations
+   * @return Natural gradient and number of CG iterations (valid ONLY on master rank)
    */
   std::pair<WaveFunctionT, size_t> CalculateNaturalGradient(
       const WaveFunctionT& gradient,
@@ -168,10 +251,13 @@ class Optimizer {
   /**
    * @brief Apply bounded gradient element update
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
    * @param step_length Step length
-   * @return Updated TPS state
+   * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT BoundedGradientUpdate(const WaveFunctionT& current_state,
                                const WaveFunctionT& gradient,
@@ -180,23 +266,28 @@ class Optimizer {
   /**
    * @brief Apply random gradient element update
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
    * @param step_length Step length
-   * @return Updated TPS state
+   * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT RandomGradientUpdate(const WaveFunctionT& current_state,
                               const WaveFunctionT& gradient,
                               double step_length);
 
   /**
-   * @brief Apply AdaGrad update
+   * @brief Apply AdaGrad update with adaptive learning rates
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient
-   * @param step_length Step length (learning rate)
-   * @param epsilon Small constant for numerical stability
-   * @return Updated TPS state
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
+   * @param step_length Step length (base learning rate)
+   * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT AdaGradUpdate(const WaveFunctionT& current_state,
                        const WaveFunctionT& gradient,
@@ -255,9 +346,12 @@ class Optimizer {
   // AdaGrad state
   WaveFunctionT accumulated_gradients_;
   bool adagrad_initialized_;
+  
+  // SGD Momentum state
+  WaveFunctionT velocity_;
+  bool sgd_momentum_initialized_;
 
-  // Helper methods
-  WaveFunctionT BroadcastState(const WaveFunctionT& state);
+  // Helper methods (none needed - keep it simple)
   void LogOptimizationStep(size_t iteration, 
                           double energy, 
                           double energy_error, 
@@ -276,6 +370,24 @@ class Optimizer {
       UpdateFunc update_func,
       const OptimizationCallback& callback);
 
+  // Algorithm-specific update methods
+  
+  /**
+   * @brief SGD with momentum and Nesterov acceleration support
+   * 
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * Unified implementation naturally handles all SGD variants:
+   * - momentum = 0.0: reduces to vanilla SGD 
+   * - momentum > 0.0 + nesterov = false: standard momentum SGD
+   * - momentum > 0.0 + nesterov = true: Nesterov accelerated gradient
+   */
+  WaveFunctionT SGDUpdate(const WaveFunctionT& current_state,
+                         const WaveFunctionT& gradient,
+                         double step_length,
+                         const SGDParams& params);
+  
   // Tensor operations for AdaGrad
   WaveFunctionT ElementWiseSquare(const WaveFunctionT& tensor);
   WaveFunctionT ElementWiseSqrt(const WaveFunctionT& tensor);

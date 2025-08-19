@@ -131,7 +131,7 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   }
   
   // Broadcast the final optimized state to all ranks
-  BroadCast(this->split_index_tps_, this->comm_);
+  MPI_Bcast(this->split_index_tps_, this->comm_);
   
   // Update wavefunction component and normalize after final state update
   UpdateWavefunctionComponent_();
@@ -189,7 +189,7 @@ VMCPEPSOptimizerExecutor<TenElemT,
   
   // CRITICAL: Broadcast the updated state to all ranks
   // This ensures all ranks have the same state for Monte Carlo sampling
-  BroadCast(this->split_index_tps_, this->comm_);
+  MPI_Bcast(this->split_index_tps_, this->comm_);
 
   // Update wavefunction component after tensor update
   UpdateWavefunctionComponent_();

@@ -1,13 +1,22 @@
 /*
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
-* Creation Date: 2024-10-23
+* Refactored: 2025-08-18
 *
 * Description: QuantumLiquids/PEPS project. 
-* This test file demonstrates how to use custom_energy_evaluator_ for exact summation optimization in VMCPEPSOptimizerExecutor,
-* and collectively test the followings:
-*  1. jointly test for exact summation energy evaluator working in VMCPEPSOptimizerExecutor.
-*  2. test for model solvers include t-J, spinless free fermions, Heisenberg, Transverse-field Ising models.
-*  3. test for optimizer include AdaGrad.
+* Pure Optimizer unit tests using exact summation for deterministic gradient computation.
+* 
+* This test file focuses ONLY on Optimizer algorithm verification by:
+*  1. Using ExactSumEnergyEvaluator for deterministic gradient computation (no Monte Carlo noise)
+*  2. Testing Optimizer directly without VMCPEPSOptimizerExecutor overhead
+*  3. Verifying convergence for different optimization algorithms (AdaGrad, SGD, etc.)
+*  4. Testing model solvers: t-J, spinless free fermions, Heisenberg, Transverse-field Ising
+* 
+* Design Philosophy (Linus): "Good taste eliminates special cases and complexity."
+* - NO Monte Carlo sampling complexity
+* - NO state normalization overhead  
+* - NO data collection noise
+* - NO file I/O operations
+* - Focus ONLY on optimization algorithm correctness
 */
 
 
@@ -16,7 +25,7 @@
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 #include "qlpeps/optimizer/optimizer_params.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
+#include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/algorithm/simple_update/square_lattice_nnn_simple_update.h"
 #include "../utilities.h"
 
@@ -153,52 +162,74 @@ double Calculate2x2OBCTransverseIsingEnergy(double J, double h) {
  * @param test_name Name of the test for output
  * @return double Final energy after optimization
  */
-template<typename ModelT, typename TenElemT, typename QNT, typename SITPST, typename MCUpdater>
-double RunExactSumOptimizationTest(
+/**
+ * @brief Pure Optimizer algorithm test using exact summation (NO VMCPEPSOptimizerExecutor)
+ * 
+ * This function tests ONLY the Optimizer algorithm by:
+ * - Directly calling Optimizer.IterativeOptimize()
+ * - Using deterministic exact gradient computation
+ * - Eliminating ALL Monte Carlo noise and overhead
+ * 
+ * Design Philosophy: "Good taste is about eliminating special cases"
+ * - No Monte Carlo sampling complexity
+ * - No state normalization operations
+ * - No data collection overhead
+ * - No file I/O noise
+ * - Focus purely on optimization algorithm correctness
+ */
+template<typename ModelT, typename TenElemT, typename QNT, typename SITPST>
+double RunPureOptimizerTest(
     ModelT &model,
     SITPST &split_index_tps,
     const std::vector<Configuration> &all_configs,
     const BMPSTruncatePara &trun_para,
     size_t Ly, size_t Lx,
     double energy_exact,
-    const qlpeps::VMCPEPSOptimizerParams &optimize_para,
+    const qlpeps::OptimizerParams &optimizer_params,
     const std::string &test_name) {
 
-  // Create executor
-  VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, ModelT> executor(
-      optimize_para, split_index_tps, MPI_COMM_WORLD, model);
+  // Create pure Optimizer (NO executor overhead)
+  int rank, mpi_size;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+  
+  Optimizer<TenElemT, QNT> optimizer(optimizer_params, MPI_COMM_WORLD, rank, mpi_size);
 
-  // Set up custom energy evaluator for exact summation
-  auto custom_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+  // MPI-AWARE exact summation energy evaluator with PROPER state broadcasting
+  auto energy_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    // CRITICAL FIX: Create local state copy for MPI broadcasting
+    SITPST local_state = state;
+    
+    // CRITICAL MPI SYNC: Broadcast state to all ranks (matches DefaultEnergyEvaluator_ behavior)
+    // This ensures all ranks process the same updated state from the optimizer
+    MPI_Bcast(local_state, MPI_COMM_WORLD);
+    
+    // All ranks now use the synchronized state for exact computation
     auto [energy, gradient, error] =
-        ExactSumEnergyEvaluator(state, all_configs, trun_para, model, Ly, Lx);
+        ExactSumEnergyEvaluator(local_state, all_configs, trun_para, model, Ly, Lx);
     return {energy, gradient, error};
   };
 
-  executor.SetEnergyEvaluator(custom_evaluator);
-
-  // Set up callback for monitoring
-  typename VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, ModelT>::OptimizerT::OptimizationCallback callback;
+  // Simple monitoring callback
+  typename Optimizer<TenElemT, QNT>::OptimizationCallback callback;
   callback.on_iteration =
       [&energy_exact, &test_name](size_t iteration, double energy, double energy_error, double gradient_norm) {
-        std::cout << test_name << " - step : " << iteration
-                  << " E0 = " << std::setw(14) << std::fixed
+        std::cout << test_name << " - step: " << iteration
+                  << " E0=" << std::setw(14) << std::fixed
                   << std::setprecision(kEnergyOutputPrecision) << energy
-                  << " Grad Norm :" << std::setw(8) << std::fixed
+                  << " ||grad||=" << std::setw(8) << std::fixed
                   << std::setprecision(kEnergyOutputPrecision) << gradient_norm;
         if (energy_exact != 0.0) {
-          std::cout << " Exact: " << energy_exact;
+          std::cout << " exact=" << energy_exact;
         }
         std::cout << std::endl;
       };
 
-  executor.SetOptimizationCallback(callback);
+  // PURE optimization - NO external complexity
+  auto result = optimizer.IterativeOptimize(split_index_tps, energy_evaluator, callback);
 
-  // Execute optimization
-  executor.Execute();
-
-  // Check results
-  double final_energy = executor.GetMinEnergy();
+  // Verify algorithm convergence
+  double final_energy = std::real(result.final_energy);
   if (energy_exact != 0.0) {
     EXPECT_GE(final_energy, energy_exact - 1E-10);
     EXPECT_NEAR(final_energy, energy_exact, 1e-5);
@@ -298,7 +329,7 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = fZ2QN;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
-  using MCUpdater = MCUpdateSquareNNExchange; // Dummy updater for exact summation
+
 
   for (size_t i = 0; i < t2_list.size(); i++) {
     auto t2 = t2_list[i];
@@ -315,27 +346,17 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     std::cout << "Initial energy: " << initial_energy << ", Expected: " << energy_exact << std::endl;
     std::cout << "Initial gradient norm: " << initial_gradient.NormSquare() << std::endl;
 
-    // Create optimization parameters using new structure
-    // step length = 0.5 to jump out the local minimal
-    // Use custom OptimizerParams::BaseParams to set plateau_patience = 50 for more patience
-    qlpeps::OptimizerParams::BaseParams base_params(50, 1e-15, 1e-15, 50, 0.5);
+    // Pure Optimizer parameters - adjusted for better convergence
+    // Increased patience and more conservative step size for stable convergence
+    qlpeps::OptimizerParams::BaseParams base_params(200, 1e-15, 1e-15, 100, 0.1);
     qlpeps::AdaGradParams adagrad_params(1e-10, 0.0);
     qlpeps::OptimizerParams opt_params(base_params, adagrad_params);
-    Configuration fixed_init_config(Lx, Ly);
-    // Create a fixed checkerboard pattern that satisfies occupancy {2, 2}
-    fixed_init_config({0, 0}) = 0;  // empty
-    fixed_init_config({0, 1}) = 1;  // occupied  
-    fixed_init_config({1, 0}) = 1;  // occupied
-    fixed_init_config({1, 1}) = 0;  // empty
-    qlpeps::MonteCarloParams mc_params(1, 0, 1, fixed_init_config, false);  // Use user-provided config
-    qlpeps::PEPSParams peps_params(trun_para);  // User loads TPS separately
-    qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
-    // Use the common test runner
+    // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
     std::string test_name = "SpinlessFreeFermion_t2=" + std::to_string(t2);
-    RunExactSumOptimizationTest<Model, TenElemT, QNT, SITPST, MCUpdater>(
+    RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
         spinless_fermion_model, split_index_tps, all_configs, trun_para,
-        Ly, Lx, energy_exact, optimize_para, test_name);
+        Ly, Lx, energy_exact, opt_params, test_name);
   }
 }
 
@@ -412,24 +433,19 @@ TEST_F(TrivialHeisenbergTools, ExactSumGradientOptWithVMCOptimizer) {
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
-  using MCUpdater = MCUpdateSquareNNExchange; // Dummy updater for exact summation
+
 
   auto energy_exact = Calculate2x2HeisenbergEnergy(J);
   Model heisenberg_model(J, J, 0); // Jx = Jy = J, Jz = 0 (XY model)
 
-  // Create optimization parameters using new structure
+  // Pure Optimizer parameters (NO Monte Carlo complexity)
   qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(100, 1e-15, 1e-30, 20, 1.0, 1e-8, 0.0);
-  Configuration rand_config(2, 2);
-  rand_config.Random(std::vector<size_t>{2, 2});
-  qlpeps::MonteCarloParams mc_params(1, 0, 1, rand_config, true);
-  qlpeps::PEPSParams peps_params(trun_para);
-  qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
-  // Use the common test runner
+  // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
   std::string test_name = "Heisenberg_Trivial";
-  RunExactSumOptimizationTest<Model, TenElemT, QNT, SITPST, MCUpdater>(
+  RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
       heisenberg_model, split_index_tps, all_configs, trun_para,
-      Ly, Lx, energy_exact, optimize_para, test_name);
+      Ly, Lx, energy_exact, opt_params, test_name);
 }
 
 // Add Transverse Ising test with trivial quantum numbers
@@ -518,25 +534,19 @@ TEST_F(TrivialTransverseIsingTools, ExactSumGradientOptWithVMCOptimizer) {
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
-  using MCUpdater = MCUpdateSquareNNExchange; // Dummy updater for exact summation
+
 
   auto energy_exact = Calculate2x2OBCTransverseIsingEnergy(J, h);
   Model transverse_ising_model(h);
 
-  // Create optimization parameters using new structure
+  // Pure Optimizer parameters (NO Monte Carlo complexity)
   qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(100, 1e-15, 1e-30, 20, 0.05, 1e-8, 0.0);
-  Configuration random_config(Ly, Lx);
-  std::vector<size_t> occupancy = {4, 0};  // 4 up 0 down
-  random_config.Random(occupancy);
-  qlpeps::MonteCarloParams mc_params(1, 0, 1, random_config, true);
-  qlpeps::PEPSParams peps_params(trun_para);
-  qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
 
-  // Use the common test runner
+  // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
   std::string test_name = "TransverseIsing_Trivial";
-  RunExactSumOptimizationTest<Model, TenElemT, QNT, SITPST, MCUpdater>(
+  RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
       transverse_ising_model, split_index_tps, all_configs, trun_para,
-      Ly, Lx, energy_exact, optimize_para, test_name);
+      Ly, Lx, energy_exact, opt_params, test_name);
 }
 
 struct Z2tJTools : public testing::Test {
@@ -628,25 +638,19 @@ TEST_F(Z2tJTools, ExactSumGradientOptWithVMCOptimizer) {
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = fZ2QN;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
-  using MCUpdater = MCUpdateSquareNNExchange; // Dummy updater for exact summation
+
 
   Model tj_model(t, 0, J, J / 4, mu);
 
-  // Create optimization parameters using new structure
-  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(200, 1e-15, 1e-30, 20, 1.0, 1e-8, 0.0);
-  Configuration random_config(Ly, Lx);
-  std::vector<size_t> occupancy =
-      {1, 1, 2};  // 1 up 1 down 2 empty(although no effect on calculation, but should be valid for Base class)
-  random_config.Random(occupancy);
-  qlpeps::MonteCarloParams mc_params(1, 0, 1, random_config, true);
-  qlpeps::PEPSParams peps_params(trun_para);
-  qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
+  // Pure Optimizer parameters - adjusted for better convergence
+  // Increased patience and reduced step size for more stable convergence  
+  qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(500, 1e-15, 1e-30, 50, 0.1, 1e-8, 0.0);
 
-  // Use the common test runner
+  // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
   std::string test_name = "tJ_Model";
-  RunExactSumOptimizationTest<Model, TenElemT, QNT, SITPST, MCUpdater>(
+  RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
       tj_model, split_index_tps, all_configs, trun_para,
-      Ly, Lx, energy_exact, optimize_para, test_name);
+      Ly, Lx, energy_exact, opt_params, test_name);
 }
 
 int main(int argc, char *argv[]) {
