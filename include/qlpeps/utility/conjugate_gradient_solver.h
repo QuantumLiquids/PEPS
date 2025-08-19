@@ -145,6 +145,11 @@ VectorType ConjugateGradientSolverMaster(
  * Solves the linear system A * x = b using the conjugate gradient method
  * in a distributed MPI environment. The matrix A is distributed across processors.
  * 
+ * @warning Result distribution behavior:
+ *   - Master rank (rank 0): Returns the actual solution vector
+ *   - Slave ranks: Return the initial guess x0 (unchanged)
+ *   - If you need the solution on all ranks, manually broadcast after calling this function
+ * 
  * @tparam MatrixType Matrix type supporting operator*(VectorType)
  * @tparam VectorType Vector type with required MPI communication functions
  * @param matrix_a Self-adjoint matrix/operator (distributed)
@@ -153,9 +158,9 @@ VectorType ConjugateGradientSolverMaster(
  * @param max_iter Maximum number of iterations
  * @param tolerance Convergence tolerance
  * @param residue_restart_step Residue restart interval (0 to disable)
- * @param iter [out] Number of iterations performed
+ * @param iter [out] Number of iterations performed (valid on master rank only)
  * @param comm MPI communicator
- * @return Solution vector (valid only on master rank)
+ * @return Solution vector on master rank, initial guess x0 on slave ranks
  */
 template<typename MatrixType, typename VectorType>
 VectorType ConjugateGradientSolver(

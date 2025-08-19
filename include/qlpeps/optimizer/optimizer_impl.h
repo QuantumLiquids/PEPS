@@ -131,7 +131,10 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     Timer update_timer("line_search_update");
 
     // Update state along search direction
-    SITPST test_state = UpdateTPSByGradient(initial_state, search_direction, cumulative_step);
+    SITPST test_state = initial_state;
+    if (rank_ == kMPIMasterRank) {
+      test_state += (-cumulative_step) * search_direction;
+    }
 
     // Get elapsed time for update step
     double update_time = update_timer.Elapsed();
@@ -258,7 +261,10 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     Timer update_timer("line_search_update");
 
     // Update state along search direction
-    SITPST test_state = UpdateTPSByGradient(initial_state, search_direction, cumulative_step);
+    SITPST test_state = initial_state;
+    if (rank_ == kMPIMasterRank) {
+      test_state += (-cumulative_step) * search_direction;
+    }
 
     // Get elapsed time for update step
     double update_time = update_timer.Elapsed();
@@ -534,66 +540,13 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   return result;
 }
 
-/**
- * @brief Basic gradient update (vanilla SGD) with MPI support
- * 
- * 🏗️ FUNDAMENTAL BUILDING BLOCK for all optimization algorithms:
- * - Line search optimization
- * - Stochastic reconfiguration (after natural gradient calculation)  
- * - Random gradient updates
- * - As building block for momentum SGD
- * 
- * 🚫 CRITICAL MPI RESPONSIBILITY SEPARATION:
- * This function implements the core principle: "Optimizer NEVER broadcasts STATES"
- * 
- * MPI Contract:
- * - INPUT current_state: Valid on all ranks (synchronized by previous energy_evaluator)
- * - INPUT gradient: Valid ONLY on master rank (gathered by energy_evaluator)
- * - UPDATE operation: Performed ONLY on master rank  
- * - OUTPUT: Updated state valid ONLY on master rank
- * - BROADCAST: Energy evaluator's responsibility (NOT this function's!)
- * 
- * Design Rationale:
- * Eliminates the 67% overhead from triple redundant broadcasts per iteration.
- * Follows "good taste": removes special cases, makes normal case work correctly.
- * 
- * @param current_state Current TPS state (valid on all ranks)
- * @param gradient Gradient tensor (valid ONLY on master rank)
- * @param step_length Learning rate
- * @return Updated state (valid ONLY on master rank, will be broadcast by energy_evaluator)
- */
-template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::UpdateTPSByGradient(const SITPST &current_state,
-                                              const SITPST &gradient,
-                                              double step_length) {
-  SITPST updated_state = current_state;
 
-  if (rank_ == kMPIMasterRank) {
-    // ✅ MPI VERIFICATION: Only master rank processes gradients
-    // Gradient is only valid here after energy_evaluator gathered it from all ranks
-    updated_state += (-step_length) * gradient;
-    
-    // 🔍 DEBUG: Verify state update occurred only on master rank
-    // (Other ranks maintain unchanged current_state copy)
-  }
-
-  // 🚫 CRITICAL MPI DESIGN: Do NOT broadcast here!
-  // 
-  // RESPONSIBILITY SEPARATION:
-  // - Optimizer: Pure algorithm logic, master-rank updates only
-  // - Energy Evaluator: Owns state distribution for Monte Carlo sampling
-  // 
-  // This design eliminates triple redundant broadcasts and follows the 
-  // "good taste" principle of removing special cases and redundancy.
-  return updated_state;
-}
 
 /**
  * @brief Unified SGD implementation with momentum and Nesterov support
  * 
  * 🎯 ELEGANT UNIFICATION: Single implementation handles all SGD variants:
- * - momentum = 0.0: reduces to vanilla SGD (delegates to UpdateTPSByGradient)
+ * - momentum = 0.0: reduces to vanilla SGD (direct inline update)
  * - momentum > 0.0 + nesterov = false: standard momentum SGD
  * - momentum > 0.0 + nesterov = true: Nesterov accelerated gradient
  * 
@@ -609,7 +562,7 @@ Optimizer<TenElemT, QNT>::UpdateTPSByGradient(const SITPST &current_state,
  * θ_{t+1} = θ_t - α * v_{t+1}              [if standard momentum]
  * 
  * Special case (μ=0): v_{t+1} = g_t → both reduce to θ_{t+1} = θ_t - α * g_t
- * This case delegates to UpdateTPSByGradient for consistency and code reuse.
+ * This case uses direct inline update for simplicity.
  */
 template<typename TenElemT, typename QNT>
 typename Optimizer<TenElemT, QNT>::SITPST
@@ -646,16 +599,16 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
         updated_state += (-step_length) * velocity_;
       }
     } else {
-      // Vanilla SGD: delegate to fundamental update function
-      // This avoids code duplication and uses the same MPI pattern
-      return UpdateTPSByGradient(current_state, gradient, step_length);
+      // Vanilla SGD: direct inline update
+      if (rank_ == kMPIMasterRank) {
+        updated_state += (-step_length) * gradient;
+      }
     }
   }
   
   // 🚫 CRITICAL MPI DESIGN: Do NOT broadcast here!
   // 
-  // RESPONSIBILITY SEPARATION: Maintains consistent behavior with UpdateTPSByGradient()
-  // Energy evaluator owns all state distribution for Monte Carlo sampling.
+  // RESPONSIBILITY SEPARATION: Energy evaluator owns all state distribution for Monte Carlo sampling.
   return updated_state;
 }
 
@@ -722,8 +675,10 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
   }
 
   // Apply the update using the natural gradient
-  // The update is done on master rank and broadcast to all ranks
-  SITPST updated_state = UpdateTPSByGradient(current_state, natural_gradient, step_length);
+  SITPST updated_state = current_state;
+  if (rank_ == kMPIMasterRank) {
+    updated_state += (-step_length) * natural_gradient;
+  }
 
   return {updated_state, natural_grad_norm, cg_iterations};
 }
@@ -774,7 +729,12 @@ Optimizer<TenElemT, QNT>::RandomGradientUpdate(const SITPST &current_state,
     }
   }
 
-  return UpdateTPSByGradient(current_state, random_gradient, step_length);
+  // Apply random gradient update
+  SITPST updated_state = current_state;
+  if (rank_ == kMPIMasterRank) {
+    updated_state += (-step_length) * random_gradient;
+  }
+  return updated_state;
 }
 
 template<typename TenElemT, typename QNT>

@@ -179,28 +179,7 @@ class Optimizer {
       const std::vector<WaveFunctionT>* gten_samples = nullptr,
       const WaveFunctionT* gten_average = nullptr);
 
-  /**
-   * @brief Update TPS using gradient descent - CORE building block for all algorithms
-   * 
-   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
-   * 
-   * The energy evaluator is solely responsible for broadcasting state for Monte Carlo sampling.
-   * This eliminates duplicate broadcasts and maintains clear responsibility separation.
-   * 
-   * MPI Behavior:
-   * - INPUT current_state: Valid on all ranks (should be synchronized)  
-   * - INPUT gradient: Valid ONLY on master rank (gathered by energy_evaluator)
-   * - UPDATE: Performed ONLY on master rank
-   * - OUTPUT: Updated state valid ONLY on master rank (energy_evaluator will broadcast)
-   * 
-   * @param current_state Current TPS state (valid on all ranks)
-   * @param gradient Gradient direction (valid ONLY on master rank)  
-   * @param step_length Step length for update
-   * @return Updated TPS state (valid ONLY on master rank, will be broadcast by energy_evaluator)
-   */
-  WaveFunctionT UpdateTPSByGradient(const WaveFunctionT& current_state, 
-                             const WaveFunctionT& gradient, 
-                             double step_length);
+
 
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
