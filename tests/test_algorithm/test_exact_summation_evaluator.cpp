@@ -172,13 +172,14 @@ bool RunExactSummationTest(
               << " (expected energy: " << energy_expect << ")" << std::endl;
   }
   
-  // REMOVED: ExactSumEnergyEvaluatorMPI (caused 6-7GB memory leaks)
-  static_assert(false, 
-    "ExactSumEnergyEvaluatorMPI removed due to severe memory leaks. "
-    "This test file needs complete rewrite using single-process ExactSumEnergyEvaluator.");
-  
-  // Placeholder (this code will never be reached due to static_assert above)
-  auto result = std::make_tuple(TEN_ELEM_TYPE(0), SplitIndexTPS<TEN_ELEM_TYPE, U1QN>(Ly, Lx), 0.0);
+  // RESTORED: Single-process ExactSumEnergyEvaluator (memory-safe)
+  auto result = ExactSumEnergyEvaluator(
+      split_index_tps,
+      all_configs,
+      trun_para,
+      model,
+      Ly,
+      Lx);
   
   auto [computed_energy, gradient, error] = result;
   double final_energy = std::real(computed_energy);

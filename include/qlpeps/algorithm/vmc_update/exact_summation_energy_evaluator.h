@@ -92,9 +92,90 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
   return all_configs;
 }
 
-// TODO: MPI configuration distribution removed - caused memory leaks in single-process mode
-// DistributeConfigurations function deleted due to untested MPI code that crashed during testing
-// When MPI parallel evaluation is needed, rewrite with proper memory management and testing
+/**
+ * @brief Single-process exact summation energy evaluator (RESTORED after MPI cleanup)
+ * 
+ * This function implements exact summation over all configurations for both fermion and boson systems.
+ * It automatically handles the differences between fermion and boson systems:
+ * - Fermion systems: Uses complex tensor contractions and applies fermion parity operators
+ * - Boson systems: Uses direct gradient calculation without fermion parity operations
+ * 
+ * @tparam ModelT The model type (must have CalEnergyAndHoles method)
+ * @tparam TenElemT Tensor element type (double or complex)
+ * @tparam QNT Quantum number type (fZ2QN for fermions, U1QN for bosons)
+ * @param split_index_tps The current PEPS state
+ * @param all_configs All possible configurations to sum over
+ * @param trun_para BMPS truncation parameters
+ * @param model The physical model
+ * @param Ly Number of rows in the lattice
+ * @param Lx Number of columns in the lattice
+ * @return Tuple of (energy, gradient, error) where error is always 0 for exact summation
+ */
+template<typename ModelT, typename TenElemT, typename QNT>
+std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluator(
+    const SplitIndexTPS<TenElemT, QNT> &split_index_tps,
+    const std::vector<Configuration> &all_configs,
+    const BMPSTruncatePara &trun_para,
+    ModelT &model,
+    size_t Ly, size_t Lx
+) {
+  using SplitIndexTPSType = SplitIndexTPS<TenElemT, QNT>;
+
+  std::vector<double> weights;
+  std::vector<TenElemT> e_loc_set;
+  SplitIndexTPSType g_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());
+  SplitIndexTPSType g_times_e_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());
+
+  // Exact summation over all configurations
+  for (auto &config : all_configs) {
+    TPSWaveFunctionComponent<TenElemT, QNT>
+        tps_sample(split_index_tps, config, trun_para);
+    weights.push_back(std::norm(tps_sample.amplitude));
+    TensorNetwork2D<TenElemT, QNT> holes_dag(Ly, Lx);// \partial_{theta^*} \Psi^*
+    TenElemT e_loc =
+        model.template CalEnergyAndHoles<TenElemT, QNT, true>(
+            &split_index_tps, &tps_sample, holes_dag);
+    e_loc_set.push_back(e_loc);
+
+    SplitIndexTPSType gradient_sample(Ly, Lx, split_index_tps.PhysicalDim());
+    for (size_t row = 0; row < Ly; row++) {
+      for (size_t col = 0; col < Lx; col++) {
+        size_t basis = tps_sample.config({row, col});
+
+        // Handle gradient calculation based on particle type
+        if constexpr (Index<QNT>::IsFermionic()) {
+          // Fermion system: Use complex tensor contractions
+          auto psi_partial_psi_dag = EvaluateLocalPsiPartialPsiDag(holes_dag({row, col}), tps_sample.tn({row, col}));
+          gradient_sample({row, col})[basis] = psi_partial_psi_dag;
+        } else {
+          // Boson system: |Psi|^2 * \Delta, where \Delta = \partial_{\theta^*} ln(\Psi^*)
+          gradient_sample({row, col})[basis] = tps_sample.amplitude * holes_dag({row, col});
+        }
+      }
+    }
+    g_weighted_sum += gradient_sample;
+    g_times_e_weighted_sum += e_loc * gradient_sample;
+  }
+
+  // Calculate weighted averages
+  double weight_sum = 0.0;
+  TenElemT e_loc_sum = TenElemT(0.0);
+  for (size_t j = 0; j < e_loc_set.size(); j++) {
+    e_loc_sum += e_loc_set[j] * weights[j];
+    weight_sum += weights[j];
+  }
+  TenElemT energy = e_loc_sum / weight_sum;
+
+  // Calculate gradient
+  SplitIndexTPSType gradient = (g_times_e_weighted_sum - energy * g_weighted_sum) * (1.0 / weight_sum);
+
+  // Apply fermion parity operations only for fermion systems
+  if constexpr (Index<QNT>::IsFermionic()) {
+    gradient.ActFermionPOps();
+  }
+
+  return {energy, gradient, 0.0}; // Error is 0 for exact summation
+}
 
 // TODO: ExactSumEnergyEvaluatorMPI function removed - caused 6-7GB memory leaks
 // 
