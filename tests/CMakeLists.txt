@@ -268,6 +268,16 @@ add_two_type_unittest(test_exact_sum_optimization
 add_mpi_unittest_run(test_exact_sum_optimization_double "4" " ")
 add_mpi_unittest_run(test_exact_sum_optimization_complex "4" " ")
 
+# Test pure exact summation evaluator (separated from optimizer complexity)
+add_two_type_unittest(test_exact_summation_evaluator
+        "test_algorithm/test_exact_summation_evaluator.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+
+# Add MPI test runs for exact summation evaluator to verify MPI-aware computation
+add_mpi_unittest_run(test_exact_summation_evaluator_double "4" " ")
+add_mpi_unittest_run(test_exact_summation_evaluator_complex "4" " ")
+
 
 
 # Fast tests (2x2 systems, quick execution)
