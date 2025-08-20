@@ -11,7 +11,8 @@
 #define QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_TENSOR_NETWORK_2D_BTEN_OPERATION_H
 
 namespace qlpeps {
-using namespace qlten;
+using qlmps::IN;
+using qlmps::OUT;
 
 /**
  * @brief Initialize the boundary tensor for a given position and slice number.

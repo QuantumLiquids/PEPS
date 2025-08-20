@@ -26,7 +26,8 @@
 #include "qlten/framework/hp_numeric/mpi_fun.h"
 
 namespace qlpeps {
-using namespace qlten;
+using qlten::kMPIMasterRank;
+namespace hp_numeric = qlten::hp_numeric;
 /**
  * solve the equation
  *          A * x = b

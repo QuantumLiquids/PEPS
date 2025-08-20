@@ -15,7 +15,6 @@
 #include <string>
 
 namespace qlpeps {
-using namespace qlten;
 
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t cols)

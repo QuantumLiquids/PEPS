@@ -20,26 +20,34 @@
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 
 namespace qlpeps {
-using namespace qlten;
 
 /**
- * @brief Elegant VMC PEPS executor that uses the optimizer for clean separation of concerns
- * 
- * This executor is designed as a drop-in replacement for VMCPEPSExecutor, providing
- * the same interface while using the optimizer for all optimization logic. It offers
- * better modularity, testability, and maintainability.
- * 
- * MPI Behavior:
- * - Monte Carlo sampling is performed on all ranks in parallel
- * - Gradient calculation is performed on all ranks and gathered to master
- * - State updates (gradient descent, stochastic reconfiguration) are performed only on master rank
- * - Updated states are broadcast to all ranks to maintain synchronization
- * - Stochastic reconfiguration equation solving involves all cores working together
- * 
+ * @brief VMC PEPS optimization executor with clear separation from the optimizer.
+ *
+ * Design: drop-in replacement of the legacy VMCPEPSExecutor. This class owns Monte Carlo
+ * sampling and MPI gathering/broadcast, while the Optimizer owns update logic.
+ *
+ * Math (consistent with tutorials):
+ * - Wavefunction and weights: \f$\Psi(S;\theta),\; w_{\text{raw}}(S)=|\Psi(S)|^2,\; w = w_{\text{raw}}/Z\,.\f$
+ * - Local energy: \f$ E_{\mathrm{loc}}(S) = \sum_{S'} \dfrac{\Psi^*(S')}{\Psi^*(S)}\, \langle S'|H|S\rangle. \f$
+ * - Log-derivative: \f$ O_i^*(S) = \dfrac{\partial \ln \Psi^*(S)}{\partial \theta_i^*}. \f$
+ * - Energy and complex gradient: \f$ E = \langle E_{\mathrm{loc}} \rangle,\; \partial E/\partial \theta_i^*
+ *   = \langle E_{\mathrm{loc}}^* O_i^* \rangle - E^* \langle O_i^* \rangle. \f$
+ *
+ * Accumulators during MC sampling:
+ * - \f$\sum O_i^*\Rightarrow\f$ `Ostar_sum_`
+ * - \f$\sum E_{\mathrm{loc}}^* O_i^*\Rightarrow\f$ `ELocConj_Ostar_sum_`
+ * Master rank computes the final gradient; SR uses `Ostar_samples_` and `Ostar_mean_`.
+ *
+ * MPI behavior:
+ * - MC sampling and local quantity evaluation on all ranks;
+ * - Gradient gathering and parameter updates on master only;
+ * - SR system solving on all ranks; single state broadcast in the evaluator, final broadcast on completion.
+ *
  * @tparam TenElemT Tensor element type
  * @tparam QNT Quantum number type
- * @tparam MonteCarloSweepUpdater Monte Carlo updater type
- * @tparam EnergySolver Energy solver type
+ * @tparam MonteCarloSweepUpdater MC sweep updater strategy
+ * @tparam EnergySolver Model energy solver
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
@@ -140,19 +148,36 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
 
  protected:
   // Monte Carlo sampling methods
+  /**
+   * @brief Compute local energy and hole tensors for the current configuration,
+   * and accumulate O^* and E_loc^* O^*.
+   *
+   * Mapping:
+   * - E_loc from EnergySolver::CalEnergyAndHoles();
+   * - O^*(S): boson uses inverse_amplitude * holes; fermion uses CalGTenForFermionicTensors(...);
+   * - Accumulators: Ostar_sum_ += O^*, ELocConj_Ostar_sum_ += E_loc^* · O^*;
+   * - SR: append per-sample O^*(S) to Ostar_samples_ when enabled.
+   */
   void SampleEnergyAndHoles_(void);
   TenElemT SampleEnergy_(void);
   void ClearEnergyAndHoleSamples_(void);
 
   // Statistics gathering
+  /**
+   * @brief Gather energy and gradient over MPI and return (energy, gradient, energy_error).
+   *
+   * - energy: average over ranks and broadcast;
+   * - gradient: computed on master as ⟨E_loc^* O^*⟩ − E^* ⟨O^*⟩;
+   * - energy_error: valid on master only.
+   */
   std::tuple<TenElemT, SITPST, double> GatherStatisticEnergyAndGrad_(void);
 
   // Acceptance rate checking
   bool AcceptanceRateCheck(const std::vector<double> &accept_rate) const;
 
   // Data dumping helpers
-  void DumpVecData(const std::string &path, const std::vector<TenElemT> &data);
-  void DumpVecDataDouble(const std::string &path, const std::vector<double> &data);
+  void DumpVecData_(const std::string &path, const std::vector<TenElemT> &data);
+  void DumpVecDataDouble_(const std::string &path, const std::vector<double> &data);
 
  private:
   VMCPEPSOptimizerParams params_;  // New parameter structure
@@ -174,17 +199,38 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
   std::vector<double> grad_norm_;
 
   // Gradient calculation storage
-  SITPST gten_sum_;
-  SITPST g_times_energy_sum_;
+  /**
+   * @brief Accumulator of O_i^* over MC samples (Σ O_i^*)
+   *
+   * Mathematical mapping: O_i^*(S) = ∂ ln Ψ^*(S) / ∂ θ_i^*. Under MC sampling,
+   * averaging by the number of samples yields ⟨O^*⟩.
+   */
+  SITPST Ostar_sum_;
+  /**
+   * @brief Accumulator of E_loc^* · O_i^* over MC samples (Σ E_loc^* O_i^*)
+   *
+   * Used to compute the complex gradient via
+   * ∂E/∂θ_i^* = ⟨E_loc^* O_i^*⟩ − E^* ⟨O_i^*⟩.
+   */
+  SITPST ELocConj_Ostar_sum_;
+  /**
+   * @brief Final gradient tensor (valid on master after gather)
+   */
   SITPST grad_;
-  SITPST gten_ave_;
+  /**
+   * @brief Mean of O_i^* under MC sampling: ⟨O^*⟩
+   */
+  SITPST Ostar_mean_;
 
   // Best state tracking
   double en_min_;
   SITPST tps_lowest_;
 
   // Stochastic reconfiguration storage
-  std::vector<SITPST> gten_samples_;
+  /**
+   * @brief Per-sample O^*(S) tensors for SR S-matrix construction
+   */
+  std::vector<SITPST> Ostar_samples_;
   bool stochastic_reconfiguration_update_class_;
 
   // Current energy error for optimizer access

@@ -27,89 +27,11 @@ class VMCPEPSOptimizerExecutor
 
 ## 组件一：蒙特卡洛更新器
 
-### 概念：配置演化策略
+一句话定义：更新器决定采样中“组态如何演化”，直接影响遍历性与接受率。接口与内置类型请见专门文档：
 
-蒙特卡洛更新器定义**组态如何变化**的采样过程。它是一个函子，在保持detailed balance的前提下更新配置，确保正确的统计采样。
+- 详见《蒙特卡洛更新器指南》：`MONTE_CARLO_UPDATER_GUIDE.md`
 
-### 为什么重要
-
-更新器策略决定了采样效率和遍历性。
-
-### 内置更新器类型
-
-位于：`include/qlpeps/vmc_basic/configuration_update_strategies/`
-
-#### 1. 最近邻交换 (`MCUpdateSquareNNExchange`)
-```cpp
-// 适用于：spin-1/2 海森堡模型，t-J模型等具有自旋-粒子数守恒的系统，
-// 不适用于Hubbard model, Spin-1 Heisenberg model
-using UpdaterType = MCUpdateSquareNNExchange;
-```
-
-**算法**：依次遍历所有相邻格点对，先遍历所有横向的键，再遍历所有纵向的键。对于每一对相邻格点，提出粒子交换的更新提议，并根据波函数振幅的比值决定是否接受该交换，从而实现详细平衡和有效采样。
-
-**使用场景**：
-- 具有U(1)对称性的自旋1/2海森堡模型
-- 粒子数守恒的t-J模型
-
-#### 2. 全配置空间 (`MCUpdateSquareNNFullSpaceUpdate`)
-```cpp
-// 适用于：几乎所有模型，尤其是没有严格守恒律的模型, e.g. Transever Ising model.
-using UpdaterType = MCUpdateSquareNNFullSpaceUpdate;
-```
-
-**算法**：对每个键，考虑所有可能的局域配置，按概率权重采样。顺序也是先遍历所有横向的键，再遍历所有纵向的键。
-
-**使用场景**：
-- 几乎所有模型
-
-**不适用场景**
-- 严格投影掉最近邻sites上同时激发的PXP model
-
-**注意**
-对于spin-1/2 海森堡模型，t-J模型而言，虽然也可以使用MCUpdateSquareNNFullSpaceUpdate，
-采用MCUpdateSquareNNExchange相当于在U1 conserved subspace来采样，可能可以增加采样效率，并因为波函数投影的原因降低TPS最后优化的能量结果。
-
-
-#### 3. 三格点三角更新 (`MCUpdateSquareTNN3SiteExchange`)  
-```cpp
-using UpdaterType = MCUpdateSquareTNN3SiteExchange;
-```
-
-**算法**：每次更新依次遍历所有相邻三格点，先遍历所有横向的三格点组元，再遍历所有纵向的键三格点组元。
-
-**使用场景**：
-提高MCUpdateSquareNNExchange的接受率
-
-### 更新器接口契约
-
-所有更新器必须实现：
-```cpp
-template<typename TenElemT, typename QNT>
-void operator()(const SplitIndexTPS<TenElemT, QNT>& sitps,
-                TPSWaveFunctionComponent<TenElemT, QNT>& tps_component,
-                std::vector<double>& accept_rates);
-```
-
-**职责**：
-- 更新 `tps_component.config` (粒子配置)
-- 更新 `tps_component.amplitude` (波函数振幅)
-- 更新 `tps_component.tn` （代表波函数分量的单层二维张量网络）
-- 记录接受率用于诊断
-- 维持detailed balance以保证正确采样
-
-### 选择合适的更新器
-
-**决策树**：
-```
-你的模型的组态只需要做交换就可以遍历基态子空间的基矢吗？
-├── 是 → 接受效率高吗？
-│   ├── 是 → MCUpdateSquareNNExchange 
-│   └── 否 → MCUpdateSquareTNN3SiteExchange (一定程度提高接受效率)
-└── 否 → MCUpdateSquareNNFullSpaceUpdate (全配置空间)
-```
-
----
+本执行器文档仅保留选型原则与集成方式，避免重复。
 
 ## 组件二：模型能量求解器
 
@@ -150,84 +72,13 @@ MyExecutor executor(params, tps, comm, solver);
 
 ---
 
-## VMC中的梯度计算数学原理
+## 梯度与 SR（简述）
 
-变分蒙特卡洛(VMC)优化的核心是寻找最优变分参数 $\{\theta_i\}$ 以最小化能量期望值。本节详细推导复数参数情况下的梯度计算公式。
+梯度、对数导数与随机重构(SR)的数学与实现细节已统一收敛到优化器文档，避免在此重复推导：
 
-### 问题设置
+- 请见《优化器指南》：`OPTIMIZER_GUIDE.md`
 
-设变分波函数为 $|\Psi(\theta)\rangle = \sum_S \Psi(S; \theta) |S\rangle$，其中：
-- $\{S\}$ 是配置空间的基矢
-- $\{\theta_i\}$ 是变分参数（在PEPS中是张量元素）
-- 目标：最小化 $E(\theta) = \frac{\langle \Psi(\theta)| H |\Psi(\theta)\rangle}{\langle \Psi(\theta)|\Psi(\theta)\rangle}$
-
-### 复数参数的微积分
-
-当参数 $\theta_i$ 是复数时，将 $\theta_i$ 和 $\theta_i^*$ 视为独立变量：
-- $\Psi(S; \theta)$ 是 $\{\theta_i\}$ 的全纯函数
-- $\Psi^*(S; \theta^*)$ 是 $\{\theta_i^*\}$ 的全纯函数
-
-梯度下降的方向是 $-\frac{\partial E}{\partial \theta_i^*}$。
-
-### 梯度公式推导
-
-从能量期望值的定义开始：
-\[
-E = \frac{\sum_S |\Psi(S)|^2 E_{\mathrm{loc}}(S)}{\sum_S |\Psi(S)|^2}
-\]
-
-其中局域能量为：
-\[
-E_{\mathrm{loc}}(S) = \sum_{S'} \frac{\Psi^*(S')}{\Psi^*(S)} \langle S'| H | S\rangle
-\]
-
-应用链式法则计算梯度：
-\[
-\frac{\partial E}{\partial \theta_i^*} = \frac{\partial_{\theta_i^*}(\langle \Psi|H|\Psi\rangle)}{\langle \Psi|\Psi\rangle} - E \frac{\partial_{\theta_i^*} (\langle \Psi|\Psi\rangle)}{\langle \Psi|\Psi\rangle}
-\]
-
-通过变分分析，可以证明：
-\[
-\frac{\partial E}{\partial \theta_i^*} = \langle E_{\mathrm{loc}}^* \cdot O_i^* \rangle - \langle E_{\mathrm{loc}}^* \rangle \langle O_i^* \rangle
-\]
-
-其中：
-- $O_i^*(S) = \frac{\partial \ln \Psi^*(S; \theta_i^*)}{\partial \theta_i^*}$ 是对数导数
-- $E_{\mathrm{loc}}^*$ 是局域能量的复共轭
-
-### 实现细节
-
-**梯度计算的关键点**：
-
-1. **局域能量**：使用 $E_{\mathrm{loc}}(S) = \sum_{S'} \frac{\Psi^*(S')}{\Psi^*(S)} \langle S'| H | S\rangle$
-
-2. **复共轭处理**：在代码中通过 `ComplexConjugate(local_energy)` 实现 $E_{\mathrm{loc}}^*$
-
-3. **对数导数**：通过张量网络的"洞"计算 $O_i^*$
-
-**为什么需要复共轭**：
-- **数学要求**：复数微积分的自然结果
-- **数值稳定性**：在随机重构(SR)中提供更好的收敛性
-- **物理一致性**：保证优化过程中能量期望值始终为实数
-
-### 算法实现
-
-代码中的梯度累积：
-```cpp
-// 每个蒙特卡洛样本
-TenElemT local_energy_conjugate = ComplexConjugate(local_energy);
-gten_sum_ += gradient_tensor;                              // ∑ O_i*
-g_times_energy_sum_ += local_energy_conjugate * gradient_tensor;  // ∑ E_loc* · O_i*
-```
-
-最终梯度：
-```cpp
-gradient = (g_times_energy_sum_ - mean_energy * gten_sum_) / n_samples;
-```
-
-这精确实现了理论公式 $\frac{\partial E}{\partial \theta_i^*} = \langle E_{\mathrm{loc}}^* \cdot O_i^* \rangle - \langle E_{\mathrm{loc}}^* \rangle \langle O_i^* \rangle$。
-
----
+要点：复数参数下的梯度使用共轭形式，SR 需要样本级统计量并在优化阶段聚合处理。
 
 ## 组件三：优化算法
 
@@ -394,6 +245,7 @@ template<typename MonteCarloUpdater, typename EnergySolver>
 2. **数据持久化**：I/O控制参见[VMC数据持久化指南](VMC_DATA_PERSISTENCE_GUIDE.md)
 3. **API模式**：构造模式参见[蒙特卡洛PEPS API指南](MONTE_CARLO_PEPS_API_GUIDE.md)
 4. **高层概述**：生态系统上下文参见[顶级API](TOP_LEVEL_APIs.md)
+5. **采样策略**：更新器细节参见[蒙特卡洛更新器指南](MONTE_CARLO_UPDATER_GUIDE.md)
 
 ### 测量集成
 

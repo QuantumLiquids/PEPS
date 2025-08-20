@@ -11,7 +11,6 @@
 #include "qlpeps/utility/filesystem_utils.h"
 
 namespace qlpeps {
-using namespace qlten;
 
 // Helper function implementations
 template<typename TenElemT, typename QNT>

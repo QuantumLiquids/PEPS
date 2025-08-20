@@ -19,7 +19,9 @@
 #include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
 
 namespace qlpeps {
-using namespace qlten;
+
+// Narrow import: prefer direct symbol using over local alias
+using qlten::QLTensor;
 
 /**
  * @brief Optimizer for VMC PEPS that handles different optimization strategies with MPI support
@@ -168,16 +170,16 @@ class Optimizer {
    * @param initial_state Initial TPS state
    * @param energy_evaluator Function to evaluate energy, gradient, and error
    * @param callback Optional callback for monitoring progress
-   * @param gten_samples Optional gradient samples for stochastic reconfiguration
-   * @param gten_average Optional average gradient tensor for stochastic reconfiguration
+   * @param Ostar_samples Optional O^*(S) samples for stochastic reconfiguration
+   * @param Ostar_mean Optional average O^* tensor for stochastic reconfiguration
    * @return Optimization result
    */
   OptimizationResult IterativeOptimize(
       const WaveFunctionT& initial_state,
       std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT&)> energy_evaluator,
       const OptimizationCallback& callback = OptimizationCallback{},
-      const std::vector<WaveFunctionT>* gten_samples = nullptr,
-      const WaveFunctionT* gten_average = nullptr);
+      const std::vector<WaveFunctionT>* Ostar_samples = nullptr,
+      const WaveFunctionT* Ostar_mean = nullptr);
 
 
 
@@ -195,15 +197,15 @@ class Optimizer {
    * This is algorithm-internal MPI communication, NOT state distribution.
    * 
    * @param gradient Standard gradient (valid ONLY on master rank)
-   * @param gten_samples Gradient tensor samples (distributed across ranks)
-   * @param gten_average Average gradient tensor (valid ONLY on master rank)
+   * @param Ostar_samples O^*(S) tensor samples (distributed across ranks)
+   * @param Ostar_mean Average O^* tensor (valid ONLY on master rank)
    * @param init_guess Initial guess for conjugate gradient solver
    * @return Natural gradient and number of CG iterations (valid ONLY on master rank)
    */
   std::pair<WaveFunctionT, size_t> CalculateNaturalGradient(
       const WaveFunctionT& gradient,
-      const std::vector<WaveFunctionT>& gten_samples,
-      const WaveFunctionT& gten_average,
+      const std::vector<WaveFunctionT>& Ostar_samples,
+      const WaveFunctionT& Ostar_mean,
       const WaveFunctionT& init_guess);
 
   /**
@@ -211,8 +213,8 @@ class Optimizer {
    * 
    * @param current_state Current TPS state
    * @param gradient Standard gradient
-   * @param gten_samples Gradient tensor samples
-   * @param gten_average Average gradient tensor
+   * @param Ostar_samples O^*(S) tensor samples
+   * @param Ostar_mean Average O^* tensor
    * @param step_length Step length
    * @param init_guess Initial guess for CG solver
    * @param normalize Whether to normalize the natural gradient
@@ -221,8 +223,8 @@ class Optimizer {
   std::tuple<WaveFunctionT, double, size_t> StochasticReconfigurationUpdate(
       const WaveFunctionT& current_state,
       const WaveFunctionT& gradient,
-      const std::vector<WaveFunctionT>& gten_samples,
-      const WaveFunctionT& gten_average,
+      const std::vector<WaveFunctionT>& Ostar_samples,
+      const WaveFunctionT& Ostar_mean,
       double step_length,
       const WaveFunctionT& init_guess,
       bool normalize = false);

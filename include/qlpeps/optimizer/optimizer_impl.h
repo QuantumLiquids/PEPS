@@ -41,13 +41,14 @@
 
 #include <iomanip>
 #include <algorithm>
+#include <complex>
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/utility/helpers.h"
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlten/utility/timer.h"
 
 namespace qlpeps {
-using namespace qlten;
+using qlten::Timer;
 
 template<typename TenElemT, typename QNT>
 Optimizer<TenElemT, QNT>::Optimizer(const OptimizerParams &params,
@@ -344,8 +345,8 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
  * @param initial_state Initial TPS state (valid ONLY on master rank)
  * @param energy_evaluator Function returning (energy, gradient, energy_error)
  * @param callback Optional callback for monitoring progress
- * @param gten_samples Gradient samples for stochastic reconfiguration (if used)
- * @param gten_average Average gradient for stochastic reconfiguration (if used)
+ * @param Ostar_samples O^*(S) samples for stochastic reconfiguration (if used)
+ * @param Ostar_mean Average O^* for stochastic reconfiguration (if used)
  * @return Optimization result with final state valid on all ranks
  */
 template<typename TenElemT, typename QNT>
@@ -354,8 +355,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     const SITPST &initial_state,
     std::function<std::tuple<TenElemT, SITPST, double>(const SITPST &)> energy_evaluator,
     const OptimizationCallback &callback,
-    const std::vector<SITPST> *gten_samples,
-    const SITPST *gten_average) {
+    const std::vector<SITPST> *Ostar_samples,
+    const SITPST *Ostar_mean) {
 
   OptimizationResult result;
   result.optimized_state = initial_state;
@@ -468,8 +469,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         // Stochastic Reconfiguration variants
         auto [new_state, ng_norm, sr_iters] = StochasticReconfigurationUpdate(
             current_state, current_gradient,
-            gten_samples ? *gten_samples : std::vector<SITPST>{},
-            gten_average ? *gten_average : SITPST{},
+            Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
+            Ostar_mean ? *Ostar_mean : SITPST{},
             step_length, sr_init_guess, algo_params.normalize_update);
         updated_state = new_state;
         sr_iterations = sr_iters;
@@ -616,8 +617,8 @@ template<typename TenElemT, typename QNT>
 std::pair<typename Optimizer<TenElemT, QNT>::SITPST, size_t>
 Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
     const SITPST &gradient,
-    const std::vector<SITPST> &gten_samples,
-    const SITPST &gten_average,
+    const std::vector<SITPST> &Ostar_samples,
+    const SITPST &Ostar_mean,
     const SITPST &init_guess) {
 
   // Get CG parameters from StochasticReconfigurationParams
@@ -625,12 +626,12 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
   const ConjugateGradientParams &cg_params = sr_params.cg_params;
 
   // Create S-matrix for stochastic reconfiguration
-  SITPST *pgten_average = nullptr;
+  SITPST *pOstar_mean = nullptr;
   if (rank_ == kMPIMasterRank) {
-    pgten_average = const_cast<SITPST *>(&gten_average);
+    pOstar_mean = const_cast<SITPST *>(&Ostar_mean);
   }
 
-  SRSMatrix s_matrix(const_cast<std::vector<SITPST> *>(&gten_samples), pgten_average, mpi_size_);
+  SRSMatrix s_matrix(const_cast<std::vector<SITPST> *>(&Ostar_samples), pOstar_mean, mpi_size_);
   s_matrix.diag_shift = cg_params.diag_shift;
 
   SITPST natural_gradient;
@@ -657,8 +658,8 @@ std::tuple<typename Optimizer<TenElemT, QNT>::SITPST, double, size_t>
 Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
     const SITPST &current_state,
     const SITPST &gradient,
-    const std::vector<SITPST> &gten_samples,
-    const SITPST &gten_average,
+    const std::vector<SITPST> &Ostar_samples,
+    const SITPST &Ostar_mean,
     double step_length,
     const SITPST &init_guess,
     bool normalize) {
@@ -666,7 +667,7 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
   // Calculate natural gradient using stochastic reconfiguration
   // This involves solving the SR equation which should be done by all cores together
   auto [natural_gradient, cg_iterations] = CalculateNaturalGradient(
-      gradient, gten_samples, gten_average, init_guess);
+      gradient, Ostar_samples, Ostar_mean, init_guess);
 
   double natural_grad_norm = std::sqrt(natural_gradient.NormSquare());
 

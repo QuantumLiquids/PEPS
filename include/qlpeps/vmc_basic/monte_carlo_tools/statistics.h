@@ -16,7 +16,8 @@
 #include "qlten/framework/hp_numeric/mpi_fun.h"
 
 namespace qlpeps {
-using namespace qlten;
+namespace hp_numeric = qlten::hp_numeric;
+using qlten::kMPIMasterRank;
 
 template<typename DataType>
 void DumpVecData(

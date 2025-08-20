@@ -44,15 +44,15 @@ E = \frac{\langle \Psi| H|\Psi\rangle}{\langle \Psi| \Psi\rangle}  = \frac{\sum_
 E_{\mathrm{loc}}(S) = \sum_{S'} \frac{\Psi^*(S')}{\Psi^*(S)} \langle S'| H | S\rangle
 \]
 
-这个定义的关键点是复共轭$\frac{\Psi^*(S')}{\Psi^*(S)}$ 要在这里加进去。我们的代码遵循了这一定义，并且这一责任交由能量求解器而而非外部的变分蒙卡PEPS的优化器组合来完成。其中`ComplexConjugate`函数可以帮助用户在扩展自定义模型时。
+这个定义的关键点是需要对波函数振幅的比值做**复共轭**。我们的实现将这项**复共轭**的责任放在能量求解器内部，而非外部的变分蒙特卡洛 PEPS 优化器组合。其中函数 `ComplexConjugate` 可辅助用户扩展自定义模型；关于最近邻/次近邻键能的幅度比实现，见《自定义能量求解器开发指南》中 EvaluateBondEnergy/EvaluateNNNEnergy。
 
-优化器中日志中输出的能量 $E = \langle (E_{\mathrm{loc}}) \rangle$ 按计算（特别对于复数的情况）。
+优化器日志中输出的能量 $E = \langle E_{\mathrm{loc}} \rangle$ 按上述定义计算（尤其在复数情形）。
 
 ### 梯度计算的数学定义
 
 当参数 $\theta_i$ 是复数时，根据复变函数理论，我们需要对 $\theta_i^*$ 求导来获得最速下降方向。
 
-Anyway (自己推吧)
+下面公式请读者自行推导。
 
 代码中采用的**最终梯度公式**：
 \[

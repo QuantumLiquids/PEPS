@@ -160,10 +160,10 @@ void VMCPEPSOptimizerExecutor::DumpData(const std::string& tps_base_name, bool r
   }
   
   // Per-process energy samples
-  DumpVecData(energy_data_path + "/energy_sample" + std::to_string(rank_), energy_samples_);
+  DumpVecData_(energy_data_path + "/energy_sample" + std::to_string(rank_), energy_samples_);
   
   if (rank_ == kMPIMasterRank) {
-    DumpVecData(energy_data_path + "/energy_trajectory", energy_trajectory_);
+    DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
     DumpVecDataDouble(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
   }
 }

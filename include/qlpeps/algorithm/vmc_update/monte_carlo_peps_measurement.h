@@ -8,21 +8,21 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_MEASUREMENT_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_MEASUREMENT_H
 
-#include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS
-#include "qlpeps/two_dim_tn/tps/split_index_tps.h"                //SplitIndexTPS
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  //MCMeasurementParams
-#include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" //ObservablesLocal
-#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"                  // Mean, Variance, DumpVecData, ...
+#include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS data structure
+#include "qlpeps/two_dim_tn/tps/split_index_tps.h"                // SplitIndexTPS state
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  // MCMeasurementParams
+#include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ObservablesLocal solver
+#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"        // Mean, Variance, DumpVecData, ...
+#include "qlpeps/utility/helpers.h"                               // Real helpers
 #include "monte_carlo_peps_base.h"
 #include "qlpeps/base/mpi_signal_guard.h"
 
 
 namespace qlpeps {
-using namespace qlten;
 
 
 
-///< sum (config1 * config2)
+///< Sum over element-wise product of two spin configurations
 template<typename ElemT>
 ElemT SpinConfigurationOverlap(
     const std::vector<ElemT> &sz1,

@@ -10,7 +10,6 @@
 #define QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_TENSOR_NETWORK_2D_TRACE_IMPL_H
 
 namespace qlpeps {
-using namespace qlten;
 
 template<typename TenElemT, typename QNT>
 TenElemT TensorNetwork2D<TenElemT, QNT>::Trace(const SiteIdx &site_a, const BondOrientation bond_dir) const {

@@ -12,32 +12,30 @@
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 
 namespace qlpeps {
-using namespace qlten;
 
 /*
- * For the complex number case,
+ * For the complex number case:
  *
- * gten_samples, gten_ave_ \sim \partial_\theta^* \Psi
- * SRSMatrix \sim gten_samples /\ gten_samples^* \sim  \partial_\theta^* \Psi  \partial_\theta \Psi
- *
+ * Ostar_samples, Ostar_mean ~ ∂_{θ^*} ln Ψ^*
+ * SRSMatrix ~ ⟨ O^* O ⟩ − ⟨ O^* ⟩ ⟨ O ⟩ implemented via sample tensors
  */
 template<typename TenElemT, typename QNT>
 class SRSMatrix {
   using SITPS = SplitIndexTPS<TenElemT, QNT>;
  public:
-  SRSMatrix(std::vector<SITPS> *gten_samples, SITPS *gten_ave,
+  SRSMatrix(std::vector<SITPS> *Ostar_samples, SITPS *Ostar_mean,
             size_t world_size) :
-      gten_samples_(gten_samples), gten_ave_(gten_ave),
+      Ostar_samples_(Ostar_samples), Ostar_mean_(Ostar_mean),
       world_size_(world_size) {}
 
   SITPS operator*(const SITPS &v0) const {
-    SITPS res = (*gten_samples_)[0] * ((*gten_samples_)[0] * v0);
-    for (size_t i = 1; i < gten_samples_->size(); i++) {
-      res += (*gten_samples_)[i] * ((*gten_samples_)[i] * v0);
+    SITPS res = (*Ostar_samples_)[0] * ((*Ostar_samples_)[0] * v0);
+    for (size_t i = 1; i < Ostar_samples_->size(); i++) {
+      res += (*Ostar_samples_)[i] * ((*Ostar_samples_)[i] * v0);
     }
-    res *= 1.0 / double(gten_samples_->size() * world_size_);
-    if (gten_ave_ != nullptr) { //kMPIMasterRank
-      res += (-((*gten_ave_) * v0)) * (*gten_ave_);
+    res *= 1.0 / double(Ostar_samples_->size() * world_size_);
+    if (Ostar_mean_ != nullptr) { //kMPIMasterRank
+      res += (-((*Ostar_mean_) * v0)) * (*Ostar_mean_);
       if (diag_shift != 0.0) {
         res += (diag_shift * v0);
       }
@@ -47,8 +45,8 @@ class SRSMatrix {
 
   TenElemT diag_shift = 0.0;
  private:
-  std::vector<SITPS> *gten_samples_;
-  SITPS *gten_ave_;
+  std::vector<SITPS> *Ostar_samples_;
+  SITPS *Ostar_mean_;
   size_t world_size_;
 };
 

@@ -22,7 +22,6 @@
 #include "qlpeps/optimizer/optimizer_params.h"                   //ConjugateGradientParams
 #include "arnoldi_solver.h"
 namespace qlpeps {
-using namespace qlten;
 
 template<typename QNT>
 using HilbertSpaces = std::vector<std::vector<Index<QNT>>>;

@@ -26,7 +26,7 @@
 #include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
 
 namespace qlpeps {
-using namespace qlten;
+using qlten::Timer;
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOptimizerExecutor(
@@ -38,8 +38,8 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::V
       params_(params),
       energy_solver_(solver),
       optimizer_(params.optimizer_params, comm, this->rank_, this->mpi_size_),
-      gten_sum_(this->ly_, this->lx_),
-      g_times_energy_sum_(this->ly_, this->lx_),
+      Ostar_sum_(this->ly_, this->lx_),
+      ELocConj_Ostar_sum_(this->ly_, this->lx_),
       grad_(this->ly_, this->lx_),
       en_min_(std::numeric_limits<double>::max()),
       tps_lowest_(this->split_index_tps_),
@@ -118,7 +118,7 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   // Line search support can be added as enhancement later
   if (stochastic_reconfiguration_update_class_) {
     result = optimizer_.IterativeOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_,
-                                          &gten_samples_, &gten_ave_);
+                                          &Ostar_samples_, &Ostar_mean_);
   } else {
     result = optimizer_.IterativeOptimize(this->split_index_tps_, energy_evaluator, optimization_callback_);
   }
@@ -229,6 +229,9 @@ VMCPEPSOptimizerExecutor<TenElemT,
   return std::make_tuple(energy, gradient, energy_error);
 }
 
+/**
+ * @brief Pre-allocate storage for energy samples, accumulators, and SR buffers.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::ReserveSamplesDataSpace_(void) {
   const size_t mc_samples = params_.mc_params.num_samples;
@@ -246,12 +249,12 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
             std::to_string(row) + ", " + std::to_string(col) + ")");
       }
 
-      gten_sum_({row, col}) = std::vector<Tensor>(dim);
+      Ostar_sum_({row, col}) = std::vector<Tensor>(dim);
       for (size_t compt = 0; compt < dim; compt++) {
-        gten_sum_({row, col})[compt] = Tensor(this->split_index_tps_({row, col})[compt].GetIndexes());
+        Ostar_sum_({row, col})[compt] = Tensor(this->split_index_tps_({row, col})[compt].GetIndexes());
       }
 
-      g_times_energy_sum_({row, col}) = gten_sum_({row, col});
+      ELocConj_Ostar_sum_({row, col}) = Ostar_sum_({row, col});
     }
   }
 
@@ -273,11 +276,14 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   }
 
   if (stochastic_reconfiguration_update_class_) {
-    gten_samples_.reserve(mc_samples);
-    // Note: gten_ave_ will be initialized in GatherStatisticEnergyAndGrad_ when needed
+    Ostar_samples_.reserve(mc_samples);
+    // Note: Ostar_mean_ will be initialized in GatherStatisticEnergyAndGrad_ when needed
   }
 }
 
+/**
+ * @brief Print human-readable configuration of the executor (algorithm name, SR params, tech info).
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::PrintExecutorInfo_(void) {
   this->PrintCommonInfo_("VMC PEPS OPTIMIZER EXECUTOR");
@@ -314,6 +320,9 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   this->PrintTechInfo_();
 }
 
+/**
+ * @brief Core per-sample path: compute E_loc and O^*; update accumulators and SR buffers.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergyAndHoles_(void) {
 #ifdef QLPEPS_TIMING_MODE
@@ -353,18 +362,18 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
       // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
       // ∂E/∂θ* = <E_loc * O*> - <E_loc> <O*>
       // where O* = ∂ln(Ψ*)/∂θ* is the complex conjugate of log-derivative
-      gten_sum_({row, col})[basis_index] += gradient_tensor;
-      g_times_energy_sum_({row, col})[basis_index] += local_energy_conjugate * gradient_tensor;
+      Ostar_sum_({row, col})[basis_index] += gradient_tensor; // Σ O^*
+      ELocConj_Ostar_sum_({row, col})[basis_index] += local_energy_conjugate * gradient_tensor; // Σ E_loc^* O^*
 
       // Store for stochastic reconfiguration if needed
       if (stochastic_reconfiguration_update_class_) {
-        gradient_tensor_sample({row, col})[basis_index] = gradient_tensor;
+        gradient_tensor_sample({row, col})[basis_index] = gradient_tensor; // O^*(S)
       }
     }
   }
 
   if (stochastic_reconfiguration_update_class_) {
-    gten_samples_.emplace_back(gradient_tensor_sample);
+    Ostar_samples_.emplace_back(gradient_tensor_sample);
   }
 
 #ifdef QLPEPS_TIMING_MODE
@@ -372,6 +381,9 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
 #endif
 }
 
+/**
+ * @brief Energy-only sampling (no gradient accumulation).
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 TenElemT VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergy_(void) {
   TenElemT energy_loc = energy_solver_.CalEnergy(&this->split_index_tps_, &this->tps_sample_);
@@ -379,6 +391,9 @@ TenElemT VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergyS
   return energy_loc;
 }
 
+/**
+ * @brief Clear per-iteration energy samples and gradient accumulators.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::ClearEnergyAndHoleSamples_(void) {
   energy_samples_.clear();
@@ -386,16 +401,16 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
   for (size_t row = 0; row < this->ly_; row++) {
     for (size_t col = 0; col < this->lx_; col++) {
       size_t dim = this->split_index_tps_.PhysicalDim({row, col});
-      gten_sum_({row, col}) = std::vector<Tensor>(dim);
+      Ostar_sum_({row, col}) = std::vector<Tensor>(dim);
       for (size_t compt = 0; compt < dim; compt++) {
-        gten_sum_({row, col})[compt] = Tensor(this->split_index_tps_({row, col})[compt].GetIndexes());
+        Ostar_sum_({row, col})[compt] = Tensor(this->split_index_tps_({row, col})[compt].GetIndexes());
       }
-      g_times_energy_sum_({row, col}) = gten_sum_({row, col});
+      ELocConj_Ostar_sum_({row, col}) = Ostar_sum_({row, col});
     }
   }
 
   if (stochastic_reconfiguration_update_class_) {
-    gten_samples_.clear();
+    Ostar_samples_.clear();
   }
 }
 
@@ -423,8 +438,8 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::G
 
   //calculate grad in each processor
   const size_t sample_num = params_.mc_params.num_samples;
-  gten_ave_ = gten_sum_ * (1.0 / sample_num);
-  grad_ = g_times_energy_sum_ * (1.0 / sample_num) + ComplexConjugate(-energy) * gten_ave_;
+  Ostar_mean_ = Ostar_sum_ * (1.0 / sample_num);
+  grad_ = ELocConj_Ostar_sum_ * (1.0 / sample_num) + ComplexConjugate(-energy) * Ostar_mean_;
 
   for (size_t row = 0; row < this->ly_; row++) {
     for (size_t col = 0; col < this->lx_; col++) {
@@ -434,7 +449,7 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::G
         grad_({row, col})[compt] = MPIMeanTensor(grad_({row, col})[compt], this->comm_);
         // note here the grad data except in master are clear
         if (stochastic_reconfiguration_update_class_) {
-          gten_ave_({row, col})[compt] = MPIMeanTensor(gten_ave_({row, col})[compt], this->comm_);
+          Ostar_mean_({row, col})[compt] = MPIMeanTensor(Ostar_mean_({row, col})[compt], this->comm_);
         }
       }
     }
@@ -451,6 +466,9 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::G
   return std::make_tuple(energy, grad_, energy_error);
 }
 
+/**
+ * @brief Detect anomalously low acceptance rates relative to global maxima and report.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 bool VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::AcceptanceRateCheck(
     const std::vector<double> &accept_rate) const {
@@ -474,11 +492,17 @@ bool VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
 }
 
 
+/**
+ * @brief Dump energy samples/trajectory and TPS using configured base name.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpData(const bool release_mem) {
   DumpData(params_.tps_dump_base_name, release_mem);  // Use base name from parameters
 }
 
+/**
+ * @brief Implementation of the dumping routine with explicit base path.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizerExecutor<TenElemT,
                               QNT,
@@ -503,15 +527,18 @@ void VMCPEPSOptimizerExecutor<TenElemT,
   if (!params_.mc_params.config_dump_path.empty()) {
     this->tps_sample_.config.Dump(params_.mc_params.config_dump_path, this->rank_);
   }
-  DumpVecData(energy_data_path + "/energy_sample" + std::to_string(this->rank_), energy_samples_);
+  DumpVecData_(energy_data_path + "/energy_sample" + std::to_string(this->rank_), energy_samples_);
   if (this->rank_ == kMPIMasterRank) {
-    DumpVecData(energy_data_path + "/energy_trajectory", energy_trajectory_);
-    DumpVecDataDouble(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
+    DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
+    DumpVecDataDouble_(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
   }
 }
 
+/**
+ * @brief Binary dump of a vector of tensor elements.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpVecData(
+void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpVecData_(
     const std::string &path, const std::vector<TenElemT> &data) {
   std::ofstream ofs(path, std::ofstream::binary);
   if (ofs) {
@@ -555,8 +582,11 @@ void VMCPEPSOptimizerExecutor<TenElemT,
   }
 }
 
+/**
+ * @brief Binary dump of a vector of doubles.
+ */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpVecDataDouble(
+void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpVecDataDouble_(
     const std::string &path, const std::vector<double> &data) {
   std::ofstream ofs(path, std::ofstream::binary);
   if (ofs) {

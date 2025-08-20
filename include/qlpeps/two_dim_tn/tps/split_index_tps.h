@@ -13,7 +13,6 @@
 #include "qlpeps/two_dim_tn/tps/tps.h"                  // TPS
 
 namespace qlpeps {
-using namespace qlten;
 
 // Helpers
 inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,

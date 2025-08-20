@@ -9,14 +9,15 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_EXACT_SUMMATION_ENERGY_EVALUATOR_H
 
 #include "qlten/qlten.h"
-#include "qlpeps/qlpeps.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
+#include "qlpeps/two_dim_tn/tps/split_index_tps.h"
+#include "qlpeps/vmc_basic/wave_function_component.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
+#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/utility/helpers.h" // ComplexConjugate
 #include <mpi.h>
 #include <numeric>  // for std::accumulate
 
 namespace qlpeps {
-using namespace qlten;
 
 /**
  * @brief Helper function to evaluate local psi partial psi dagger for fermion systems

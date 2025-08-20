@@ -10,7 +10,80 @@ PEPS optimizer支持多种优化算法，用于VMC-PEPS (Variational Monte Carlo
 2. **梯度噪声**：Monte Carlo sampling引入statistical noise  
 3. **收敛缓慢**：能量landscape平坦
 
+## 数学与适用场景（从易到难）
+
+先给出核心算法的数学与适用场景，再在后文介绍API与用法。这样做可以让读者先建立“何时用什么”的直觉，再落到代码。
+
+### 1. SGD 与 Momentum / Nesterov
+
+更新：
+```
+标准SGD：θ_{t+1} = θ_t - η g_t
+动量：    v_t = μ v_{t-1} + η g_t;  θ_{t+1} = θ_t - v_t
+Nesterov：v_t = μ v_{t-1} + η ∇f(θ_t - μ v_{t-1}); θ_{t+1} = θ_t - v_t
+```
+适用场景：
+- 梯度噪声不大、需要稳定基线的场合；凸或弱非凸问题；生产环境偏好可控性。
+默认参数起点：μ=0.9；η ∈ [1e-4, 1e-2]。
+
+### 2. AdaGrad（自适应梯度）
+
+更新：
+```
+G_t = G_{t-1} + g_t ⊙ g_t
+θ_{t+1} = θ_t - η g_t / (√G_t + ε)
+```
+适用场景：
+- 稀疏梯度或各坐标尺度差异大；早期探索阶段。
+注意：学习率单调递减，后期可能过保守。
+
+### 3. Adam（Adaptive Moment Estimation）
+
+更新：
+```
+m_t = β₁ m_{t-1} + (1-β₁) g_t
+v_t = β₂ v_{t-1} + (1-β₂) g_t²
+m̂_t = m_t / (1-β₁^t)
+v̂_t = v_t / (1-β₂^t)
+θ_{t+1} = θ_t - η m̂_t / (√v̂_t + ε)
+```
+适用场景：
+- 噪声较大、非平稳梯度、快速原型开发。
+默认参数起点：β₁=0.9, β₂=0.999, ε=1e-8；η ∈ [1e-4, 1e-3]。
+
+### 4. L-BFGS（有限内存BFGS）
+
+思想：
+```
+H_k ≈ ∇²f(x_k);  d_k = -H_k^{-1} ∇f(x_k);  x_{k+1} = x_k + α_k d_k
+```
+适用场景：
+- 梯度噪声较小、目标较平滑的中小规模问题；希望更快（准二阶）收敛。
+注意：VMC 噪声会影响线搜索与方向质量。
+
+### 5. Stochastic Reconfiguration（SR，自然梯度）
+
+自然梯度：
+```
+θ_{n+1} = θ_n - η S^{-1} ∇E(θ)
+S_{ij} = ⟨O_i^* O_j⟩ - ⟨O_i^*⟩⟨O_j⟩
+∇E_i  = ⟨E_loc O_i^*⟩ - ⟨E_loc⟩⟨O_i^*⟩
+```
+适用场景：
+- 高精度优化，考虑参数几何；每步需解线性方程（常用CG），计算代价高，需正则（diag_shift）稳住病态条件数。
+默认参数起点：CG max_iter≥100, tol≤1e-5, diag_shift≈1e-3；η 保守（≤1e-1）。
+
+### 常见默认参数速查（建议起点）
+
+- SGD+Momentum：μ=0.9；η ∈ [1e-4, 1e-2]
+- Adam：β₁=0.9, β₂=0.999, ε=1e-8；η ∈ [1e-4, 1e-3]
+- AdaGrad：ε=1e-8；η 通常不大于 SGD 的取值
+- L-BFGS：线搜索参数用实现默认值作为起点
+- SR：CG 较大迭代数、较小容差、合适 diag_shift；η 保守
+
 ## 核心架构
+
+注意：本节API处于开发阶段（部分模块“待开发”），示例假设接口已存在，以保证讲述连续性。
 
 ### 类型安全的参数系统
 
@@ -54,146 +127,17 @@ OptimizerParams
     └── AdaGradParams        // 自适应梯度
 ```
 
-## 优化算法详解
+## 算法速览与实现映射
 
-### 1. Stochastic Reconfiguration (自然梯度)
+为避免重复数学，本节仅做“原理到实现”的快速映射：
 
-**数学原理**：
+- SR（自然梯度）：见前文“数学与适用场景”。实现用 `StochasticReconfigurationParams` 配置 CG 与正则；学习率取保守值。
+- Adam：见前文更新式。实现用 `AdamParams` 或 Factory，默认 β₁=0.9, β₂=0.999, ε=1e-8。
+- SGD+Momentum/Nesterov：见前文。实现用 `SGDParams`/Factory，μ≈0.9。
+- AdaGrad：见前文。实现用 `AdaGradParams`，常用于早期探索或稀疏梯度。
+- L-BFGS：见前文。实现用 `LBFGSParams`，注意噪声对线搜索的影响。
 
-Stochastic Reconfiguration是PEPS优化的金标准，基于自然梯度的思想：
-
-```
-普通梯度下降：θ_{n+1} = θ_n - η ∇E(θ)
-自然梯度下降：θ_{n+1} = θ_n - η S^{-1} ∇E(θ)
-```
-
-其中S是Fisher信息矩阵（在VMC中称为S-matrix）：
-
-```
-S_{ij} = ⟨O_i^* O_j⟩ - ⟨O_i^*⟩⟨O_j⟩
-∇E_i = ⟨E_{loc} O_i^*⟩ - ⟨E_{loc}⟩⟨O_i^*⟩
-```
-
-这里 O_i = ∂ln|ψ⟩/∂θ_i 是对数导数算子。
-
-原理：
-- 考虑参数空间几何结构
-- S-matrix表征参数间相关性
-- 避免普通梯度的病态行为
-
-**参数设置**：
-
-```cpp
-// CG求解器参数（关键！）
-ConjugateGradientParams cg_params{
-  100,      // max_iter: S-matrix通常ill-conditioned，需要更多迭代
-  1e-5,     // tolerance: 平衡精度与计算成本
-  20,       // restart_step: 避免数值积累误差
-  0.001     // diag_shift: 正则化防止singular matrix
-};
-
-// SR特定参数
-StochasticReconfigurationParams sr_params{
-  cg_params,
-  false,    // normalize_update: 是否归一化更新
-  0.0       // adaptive_diagonal_shift: 动态正则化
-};
-```
-
-**收敛特性**：
-- **优点**：理论上optimal的收敛率，对复杂能量landscape robust
-- **缺点**：每步需要求解线性方程组，计算成本高O(N³)
-- **适用场景**：高精度优化，parameter数量适中的系统
-
-### 2. Adam (Adaptive Moment Estimation)
-
-**数学原理**：
-
-Adam结合了momentum和adaptive learning rate：
-
-```
-m_t = β₁ m_{t-1} + (1-β₁) g_t        // First moment (momentum)
-v_t = β₂ v_{t-1} + (1-β₂) g_t²       // Second moment (adaptive rate)
-m̂_t = m_t / (1-β₁^t)                // Bias correction
-v̂_t = v_t / (1-β₂^t)                // Bias correction
-θ_{t+1} = θ_t - η m̂_t / (√v̂_t + ε)  // Parameter update
-```
-
-参数说明：
-- **β₁**：momentum参数，记忆历史梯度
-- **β₂**：自适应学习率参数
-- **Bias correction**：修正初始偏差
-
-**参数设置指南**：
-
-```cpp
-AdamParams adam_params{
-  0.9,      // beta1: 一阶矩衰减率，控制momentum强度
-  0.999,    // beta2: 二阶矩衰减率，控制自适应程度
-  1e-8,     // epsilon: 数值稳定性，防止除零
-  0.0       // weight_decay: L2正则化强度
-};
-```
-
-**调参策略**：
-- **学习率**：PEPS通常需要较小的学习率 (1e-4 ~ 1e-2)
-- **β₁**: 默认0.9通常有效，noise较大时可减小到0.8
-- **β₂**: 默认0.999，对于non-stationary problems可减小到0.99
-- **ε**: 如果出现numerical instability，可增大到1e-6
-
-### 3. SGD with Momentum
-
-**数学原理**：
-
-经典的带动量随机梯度下降：
-
-```
-标准SGD：θ_{t+1} = θ_t - η g_t
-带动量：v_t = μ v_{t-1} + η g_t
-        θ_{t+1} = θ_t - v_t
-
-Nesterov变种：v_t = μ v_{t-1} + η ∇f(θ_t - μ v_{t-1})
-             θ_{t+1} = θ_t - v_t
-```
-
-**参数理解**：
-- **μ (momentum)**：通常0.9，控制历史梯度的影响
-- **Nesterov**: 提供"预见性"的梯度计算，通常收敛更快
-
-### 4. AdaGrad (Adaptive Gradient)
-
-**数学原理**：
-
-根据历史梯度自动调整学习率：
-
-```
-G_t = G_{t-1} + g_t ⊙ g_t          // 累积梯度平方
-θ_{t+1} = θ_t - η g_t / (√G_t + ε)  // 参数更新
-```
-
-**特点**：
-- **自适应**：频繁更新的参数学习率自动减小
-- **问题**：学习率单调递减，可能过早停止
-- **适用**：稀疏梯度场景，或初期探索阶段
-
-### 5. L-BFGS (Limited-memory BFGS)
-
-**数学原理**：
-
-基于Hessian近似的准牛顿法：
-
-```
-H_k ≈ ∇²f(x_k)                    // Hessian近似
-d_k = -H_k^{-1} ∇f(x_k)           // 搜索方向
-x_{k+1} = x_k + α_k d_k            // 线搜索更新
-```
-
-L-BFGS用有限历史构造Hessian近似，避免存储完整矩阵。
-
-**适用场景**：
-- 确定性优化问题
-- 梯度noise较小的情况
-- 需要superlinear收敛率
+参数结构与工厂方法示例见后文“学习率调度策略”和“实际使用指南”。
 
 ## 学习率调度策略
 
@@ -209,7 +153,7 @@ auto scheduler = std::make_unique<ExponentialDecayLR>(
 
 **使用场景**：稳定收敛，适合长期训练
 
-### 2. Step Decay
+### 2. Step Decay  （待开发）
 
 ```cpp
 auto scheduler = std::make_unique<StepLR>(
@@ -221,7 +165,7 @@ auto scheduler = std::make_unique<StepLR>(
 
 **使用场景**：阶段性调整，适合有明确training phase的场景
 
-### 3. Plateau-based (能量平台检测)
+### 3. Plateau-based (能量平台检测)  （待开发）
 
 ```cpp
 auto scheduler = std::make_unique<PlateauLR>(

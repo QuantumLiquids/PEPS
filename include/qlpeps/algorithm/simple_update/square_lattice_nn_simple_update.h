@@ -298,7 +298,7 @@ double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(vo
             << " TruncErr = " << std::setprecision(2) << std::scientific << middle_bond_trunc_err << std::fixed
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  return Real(e0);
+  return qlmps::Real(e0);
 }
 }
 

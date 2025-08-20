@@ -9,8 +9,12 @@
 #define QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_IMPL_H
 
 namespace qlpeps {
-using namespace qlten;
-using namespace qlmps;
+using qlten::QLTEN_Double;
+using qlmps::DuoVector;
+using qlmps::kUncentralizedCenterIdx;
+using qlmps::IN;
+using qlmps::OUT;
+namespace mock_qlten = qlmps::mock_qlten;
 
 ///< Initial the bmps of the boundary of the OBC tensor network
 template<typename TenElemT, typename QNT>
@@ -169,7 +173,7 @@ void BMPS<TenElemT, QNT>::LeftCanonicalizeTen(const size_t site_idx) {
 }
 
 template<typename TenElemT, typename QNT>
-QLTensor<QLTEN_Double, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
+qlten::QLTensor<qlten::QLTEN_Double, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
   ///< TODO: using LU decomposition
   assert(site_idx > 0);
   size_t ldims = 1;

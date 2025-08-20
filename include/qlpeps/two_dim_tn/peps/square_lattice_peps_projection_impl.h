@@ -14,7 +14,6 @@
 #include "qlmps/utilities.h"       //mock_qlten::SVD
 
 namespace qlpeps {
-using namespace qlten;
 using qlmps::mock_qlten::SVD;
 
 template<typename TenElemT, typename QNT>

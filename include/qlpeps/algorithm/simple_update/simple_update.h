@@ -15,7 +15,6 @@
 
 namespace qlpeps {
 
-using namespace qlten;
 
 struct SimpleUpdatePara {
   size_t steps;

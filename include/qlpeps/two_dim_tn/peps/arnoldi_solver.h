@@ -20,8 +20,9 @@
 #include <memory>
 #include "qlmps/algorithm/lanczos_params.h"           //LanczosParams
 namespace qlpeps {
-using namespace qlten;
 using ArnoldiParams = qlmps::LanczosParams;
+using qlten::QLTensor;
+using qlten::QLTEN_Double;
 
 template<typename TenElemT, typename QNT>
 struct ArnoldiRes {
