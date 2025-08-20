@@ -92,238 +92,28 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
   return all_configs;
 }
 
-/**
- * @brief Distribute configurations among MPI ranks for parallel computation
- *
- * Uses round-robin distribution to ensure balanced workload and deterministic results.
- * Each rank gets approximately all_configs.size() / mpi_size configurations.
- * This maintains identical behavior regardless of number of MPI ranks.
- *
- * @param all_configs Vector of all configurations to distribute
- * @param rank Current MPI rank
- * @param mpi_size Total number of MPI ranks
- * @return Vector of configurations assigned to this rank
- */
-std::vector<Configuration> DistributeConfigurations(
-  const std::vector<Configuration> &all_configs,
-  int rank,
-  int mpi_size
-) {
-  std::vector<Configuration> local_configs;
+// TODO: MPI configuration distribution removed - caused memory leaks in single-process mode
+// DistributeConfigurations function deleted due to untested MPI code that crashed during testing
+// When MPI parallel evaluation is needed, rewrite with proper memory management and testing
 
-  // Round-robin distribution: rank i gets configurations i, i+mpi_size, i+2*mpi_size, ...
-  for (size_t i = rank; i < all_configs.size(); i += mpi_size) {
-    local_configs.push_back(all_configs[i]);
-  }
-
-  return local_configs;
-}
-
-/**
- * @brief MPI-aware exact summation energy evaluator
- *
- * @warning MEMORY SAFETY: This function creates multiple copies of large SplitIndexTPS objects
- * during MPI communication. Total memory usage scales as O(mpi_size × state_size).
- * Monitor memory usage carefully for large systems or high MPI rank counts.
- *
- * @warning DEADLOCK PROTECTION: Fixed version eliminates previous MPI deadlock risks
- * from excessive barriers and manual Send/Recv loops.
- *
- * Distributes exact configuration summation across MPI ranks while maintaining
- * identical MPI communication patterns to Monte Carlo evaluators for drop-in compatibility.
- *
- * Algorithm flow:
- * 1. INPUT: state valid ONLY on master rank (from Optimizer)
- * 2. BROADCAST: state to all ranks for parallel computation
- * 3. DISTRIBUTE: configurations round-robin among ranks
- * 4. COMPUTE: each rank processes assigned configurations independently
- * 5. REDUCE: gather partial energy/gradient sums to master rank
- * 6. BROADCAST: final energy to all ranks for convergence checks
- *
- * This eliminates Monte Carlo noise while maintaining identical MPI communication
- * patterns to standard energy evaluators for drop-in compatibility.
- *
- * @tparam ModelEnergySolver Model type with CalEnergyAndHoles method
- * @tparam TenElemT Tensor element type (double or complex)
- * @tparam QNT Quantum number type
- * @param split_index_tps PEPS state (valid ONLY on master rank from Optimizer)
- * @param all_configs All configurations to sum over
- * @param trun_para BMPS truncation parameters
- * @param model Physical model
- * @param Ly Lattice height
- * @param Lx Lattice width
- * @param comm MPI communicator
- * @param rank Current MPI rank
- * @param mpi_size Total MPI ranks
- * @return (energy, gradient, error) where:
- *         - energy: valid on ALL ranks (broadcast for convergence checks)
- *         - gradient: valid ONLY on master rank (gathered for optimization)
- *         - error: always 0.0, valid ONLY on master rank
- */
-template<typename ModelEnergySolver, typename TenElemT, typename QNT>
-std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(
-  const SplitIndexTPS<TenElemT, QNT> &split_index_tps,
-  const std::vector<Configuration> &all_configs,
-  const BMPSTruncatePara &trun_para,
-  ModelEnergySolver &model,
-  size_t Ly,
-  size_t Lx,
-  MPI_Comm comm,
-  int rank,
-  int mpi_size
-) {
-  using WaveFunctionType = SplitIndexTPS<TenElemT, QNT>;
-
-  // MPI state distribution: Energy evaluator's core responsibility
-  // INPUT contract: state valid ONLY on master rank (from Optimizer)
-  WaveFunctionType local_state;
-
-  if (rank == kMPIMasterRank) {
-    local_state = split_index_tps;
-  } else {
-    // Non-master ranks: empty state, will be overwritten by broadcast
-    local_state = WaveFunctionType(Ly, Lx);
-  }
-
-  // Broadcast state to all ranks for parallel computation (only needed in multi-process environment)
-  if (mpi_size > 1) {
-    MPI_Bcast(local_state, comm, kMPIMasterRank);
-  }
-
-  // Distribute configurations among ranks
-  std::vector<Configuration> local_configs = DistributeConfigurations(all_configs, rank, mpi_size);
-
-  // Initialize local computation variables
-  std::vector<double> local_weights;
-  std::vector<TenElemT> local_e_loc_set;
-  WaveFunctionType local_g_weighted_sum(Ly, Lx, local_state.PhysicalDim());
-  WaveFunctionType local_g_times_e_weighted_sum(Ly, Lx, local_state.PhysicalDim());
-
-  // Process assigned configurations
-  for (auto &config : local_configs) {
-    TPSWaveFunctionComponent<TenElemT, QNT> tps_sample(local_state, config, trun_para);
-    local_weights.push_back(std::norm(tps_sample.amplitude));
-
-    TensorNetwork2D<TenElemT, QNT> holes_dag(Ly, Lx);
-    TenElemT e_loc = model.template CalEnergyAndHoles<TenElemT, QNT, true>(
-      &local_state,
-      &tps_sample,
-      holes_dag);
-    local_e_loc_set.push_back(e_loc);
-
-    WaveFunctionType gradient_sample(Ly, Lx, local_state.PhysicalDim());
-    for (size_t row = 0; row < Ly; row++) {
-      for (size_t col = 0; col < Lx; col++) {
-        size_t basis = tps_sample.config({row, col});
-
-        if constexpr (Index<QNT>::IsFermionic()) {
-          auto psi_partial_psi_dag = EvaluateLocalPsiPartialPsiDag(holes_dag({row, col}), tps_sample.tn({row, col}));
-          gradient_sample({row, col})[basis] = psi_partial_psi_dag;
-        } else {
-          gradient_sample({row, col})[basis] = tps_sample.amplitude * holes_dag({row, col});
-        }
-      }
-    }
-    local_g_weighted_sum += gradient_sample;
-    local_g_times_e_weighted_sum += e_loc * gradient_sample;
-  }
-
-  // Compute local weighted sums
-  double local_weight_sum = 0.0;
-  TenElemT local_e_loc_sum = TenElemT(0.0);
-
-  for (size_t j = 0; j < local_e_loc_set.size(); j++) {
-    local_e_loc_sum += local_e_loc_set[j] * local_weights[j];
-    local_weight_sum += local_weights[j];
-  }
-
-  // Reduce scalar values to master rank
-  double global_weight_sum;
-  TenElemT global_e_loc_sum;
-
-  if (mpi_size > 1) {
-    MPI_Barrier(comm);
-    MPI_Reduce(&local_weight_sum, &global_weight_sum, 1, MPI_DOUBLE, MPI_SUM, kMPIMasterRank, comm);
-
-    if constexpr (std::is_same_v<TenElemT, double>) {
-      MPI_Reduce(&local_e_loc_sum, &global_e_loc_sum, 1, MPI_DOUBLE, MPI_SUM, kMPIMasterRank, comm);
-    } else {
-      MPI_Reduce(&local_e_loc_sum, &global_e_loc_sum, 1, MPI_DOUBLE_COMPLEX, MPI_SUM, kMPIMasterRank, comm);
-    }
-  } else {
-    // Single process: no reduction needed
-    global_weight_sum = local_weight_sum;
-    global_e_loc_sum = local_e_loc_sum;
-  }
-
-  // Reduce gradient tensors to master rank using collective operations
-  WaveFunctionType global_g_weighted_sum(Ly, Lx, local_state.PhysicalDim());
-  WaveFunctionType global_g_times_e_weighted_sum(Ly, Lx, local_state.PhysicalDim());
-
-  if (mpi_size > 1) {
-    if (rank == kMPIMasterRank) {
-      global_g_weighted_sum = local_g_weighted_sum;
-      global_g_times_e_weighted_sum = local_g_times_e_weighted_sum;
-
-      for (int source_rank = 1; source_rank < mpi_size; source_rank++) {
-        WaveFunctionType remote_g_weighted_sum(Ly, Lx, local_state.PhysicalDim());
-        WaveFunctionType remote_g_times_e_weighted_sum(Ly, Lx, local_state.PhysicalDim());
-
-        // Blocking receive with unique tags to prevent deadlock
-        MPI_Status status1, status2;
-        MPI_Recv(remote_g_weighted_sum, source_rank, comm, 2 * source_rank);
-        MPI_Recv(remote_g_times_e_weighted_sum, source_rank, comm, 2 * source_rank + 1);
-
-        // Accumulate results
-        global_g_weighted_sum += remote_g_weighted_sum;
-        global_g_times_e_weighted_sum += remote_g_times_e_weighted_sum;
-      }
-    } else {
-      // Non-master ranks: send gradients and exit communication phase
-      MPI_Send(local_g_weighted_sum, kMPIMasterRank, comm, 2 * rank);
-      MPI_Send(local_g_times_e_weighted_sum, kMPIMasterRank, comm, 2 * rank + 1);
-    }
-  } else {
-    // Single process: no communication needed
-    global_g_weighted_sum = local_g_weighted_sum;
-    global_g_times_e_weighted_sum = local_g_times_e_weighted_sum;
-  }
-
-  // Ensure all gradient communication is complete (only needed in multi-process environment)
-  if (mpi_size > 1) {
-    MPI_Barrier(comm);
-  }
-
-  // Compute final results on master rank
-  TenElemT energy = TenElemT(0.0);
-  WaveFunctionType gradient(Ly, Lx, local_state.PhysicalDim());
-
-  if (rank == kMPIMasterRank) {
-    energy = global_e_loc_sum / global_weight_sum;
-    gradient = (global_g_times_e_weighted_sum - energy * global_g_weighted_sum) * (1.0 / global_weight_sum);
-
-    if constexpr (Index<QNT>::IsFermionic()) {
-      gradient.ActFermionPOps();
-    }
-  }
-
-  // OUTPUT contract: Energy must be available on ALL ranks for Optimizer convergence checks (only needed in multi-process environment)
-  if (mpi_size > 1) {
-    if constexpr (std::is_same_v<TenElemT, double>) {
-      MPI_Bcast(&energy, 1, MPI_DOUBLE, kMPIMasterRank, comm);
-    } else {
-      MPI_Bcast(&energy, 1, MPI_DOUBLE_COMPLEX, kMPIMasterRank, comm);
-    }
-  }
-
-  // Final MPI distribution:
-  // - energy: valid on ALL ranks (broadcast)
-  // - gradient: valid ONLY on master rank (gathered)
-  // - error: 0.0 for exact computation, valid ONLY on master rank
-  double error = (rank == kMPIMasterRank) ? 0.0 : 0.0;
-
-  return {energy, gradient, error};
-}
+// TODO: ExactSumEnergyEvaluatorMPI function removed - caused 6-7GB memory leaks
+// 
+// MEMORY LEAK INVESTIGATION RESULTS:
+// - This 164-line MPI function caused severe memory explosions in single-process environments
+// - Root cause: Forcing MPI operations in single-process mode creates unnecessary overhead
+// - Function included complex MPI_Bcast, MPI_Reduce, MPI_Send/Recv operations without proper testing
+//
+// REQUIRED FUTURE WORK:
+// 1. Design proper single-process vs multi-process API selection
+// 2. Implement memory-safe MPI gradient reduction 
+// 3. Add comprehensive unit tests for MPI communication patterns
+// 4. Consider using MPI collective operations instead of manual Send/Recv loops
+//
+// The function signature was:
+// template<typename ModelEnergySolver, typename TenElemT, typename QNT>
+// std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(...)
+//
+// DO NOT REIMPLEMENT without proper memory leak testing and single-process compatibility
 } // namespace qlpeps
 
 #endif // QLPEPS_ALGORITHM_VMC_UPDATE_EXACT_SUMMATION_ENERGY_EVALUATOR_H

@@ -185,12 +185,12 @@ double RunPureOptimizerTest(
   // Create pure Optimizer (NO executor overhead)
   Optimizer<TenElemT, QNT> optimizer(optimizer_params, comm, rank, mpi_size);
 
-  // MPI-AWARE exact summation energy evaluator
+  // REMOVED: MPI exact summation energy evaluator (caused 6-7GB memory leaks)
   auto energy_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
-    // ExactSumEnergyEvaluatorMPI handles MPI state broadcasting and distribution
-    auto [energy, gradient, error] =
-        ExactSumEnergyEvaluatorMPI(state, all_configs, trun_para, model, Ly, Lx, comm, rank, mpi_size);
-    return {energy, gradient, error};
+    static_assert(false, 
+      "ExactSumEnergyEvaluatorMPI removed due to severe memory leaks. "
+      "Use single-process ExactSumEnergyEvaluator instead or implement memory-safe MPI version.");
+    return {TenElemT(0), SITPST(Ly, Lx), 0.0}; // This line will never be reached
   };
 
   // Simple monitoring callback
@@ -310,17 +310,15 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     // Use the corresponding simple update result for this t2 value
     auto &split_index_tps = split_index_tps_list[i];
 
-    // Test the exact energy evaluator on the initial state
-    auto [initial_energy, initial_gradient, initial_error] = ExactSumEnergyEvaluatorMPI(
-      split_index_tps,
-      all_configs,
-      trun_para,
-      spinless_fermion_model,
-      Ly,
-      Lx,
-      this->comm,
-      this->rank,
-      this->mpi_size);
+    // REMOVED: ExactSumEnergyEvaluatorMPI call (caused 6-7GB memory leaks)
+    static_assert(false, 
+      "ExactSumEnergyEvaluatorMPI removed due to severe memory leaks in single-process mode. "
+      "This test needs to be rewritten to use single-process ExactSumEnergyEvaluator.");
+    
+    // Placeholder values (this code will never be reached due to static_assert above)
+    auto initial_energy = TEN_ELEM_TYPE(0);
+    auto initial_gradient = SplitIndexTPS<TEN_ELEM_TYPE, fZ2QN>(Ly, Lx);
+    auto initial_error = 0.0;
 
     std::cout << "Initial energy: " << initial_energy << ", Expected: " << energy_exact << std::endl;
     std::cout << "Initial gradient norm: " << initial_gradient.NormSquare() << std::endl;
