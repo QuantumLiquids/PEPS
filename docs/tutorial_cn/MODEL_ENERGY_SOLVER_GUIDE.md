@@ -83,6 +83,32 @@ TenElemT CalEnergyAndHoles(
 **返回值**：
 - `TenElemT`: 当前配置的局域能量 $E_{\mathrm{loc}}(S)$，类型和张量网络的数据类型一致，即可能是复数
 
+### hole_res 的数学定义（玻色子）
+
+对每个组态 $S$ 与每个站点（以及其物理基底索引）定义对应的局部参数 $\theta_i$（等价为局部张量元 $A_{\text{site},\text{basis}}$）。在玻色子情况下，能量求解器返回的
+$\texttt{hole\_res}$ 满足：
+\[
+  (\text{hole\_res})_i(S) 
+  \;\equiv\; \frac{\partial \, \Psi^*(S)}{\partial \, \theta_i^*}
+  \;=\; \frac{\partial \, \Psi^*(S)}{\partial \, A_{\text{site},\text{basis}}^*} .
+\]
+这与对数导数算符 $O_i^*(S)$ 的关系为：
+\[
+  O_i^*(S) 
+  \,=\, \frac{\partial \, \ln \Psi^*(S)}{\partial \, \theta_i^*}
+  \,=\, \frac{1}{\Psi^*(S)}\, (\text{hole\_res})_i(S) .
+\]
+因此：
+- 在 MC 采样路径中使用 $O_i^*(S)$ 时，会计算 $\frac{1}{\Psi^*(S)}\,(\text{hole\_res})_i(S)$；
+- 在“精确求和”路径中累加 $\langle O_i^* \rangle$ 的加权和时，利用
+  \[ \sum_S |\Psi(S)|^2\, O_i^*(S) = \sum_S \Psi(S)\, (\text{hole\_res})_i(S), \]
+  即直接将 $\Psi(S)$ 与 $\text{hole\_res}$ 相乘再求和，可避免显式除法与数值不稳定。
+
+实现提示：在代码中 `hole_res(site)` 由 `Dag(tn.PunchHole(site, ...))` 得到，正对应
+$\partial \Psi^*(S)/\partial \theta_i^*$ 的“洞”张量；后续按照上式进行规一化或加权求和。
+
+注：费米子情形由于奇偶算符与符号的参与更为复杂，代码中通过 `EvaluateLocalPsiPartialPsiDag` 与最终的 `gradient.ActFermionPOps()` 处理。本文档此处先给出玻色子精确定义，费米子细节将在专门章节讨论。
+
 ## 用法
 在VMCPEPSOptimizerExecutor中作为最后一个模版参数EnergySolver传入，并在构造函数中，传入其具体的对象。其对象可能包含物理模型的参数。
 

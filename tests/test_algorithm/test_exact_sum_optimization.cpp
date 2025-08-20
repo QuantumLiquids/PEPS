@@ -324,7 +324,7 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
 
     // Pure Optimizer parameters - adjusted for better convergence
     // Increased patience and more conservative step size for stable convergence
-    qlpeps::OptimizerParams::BaseParams base_params(200, 1e-15, 1e-15, 100, 0.1);
+    qlpeps::OptimizerParams::BaseParams base_params(200, 1e-15, 1e-15, 100, 0.03);
     qlpeps::AdaGradParams adagrad_params(1e-10, 0.0);
     qlpeps::OptimizerParams opt_params(base_params, adagrad_params);
 
@@ -424,10 +424,10 @@ TEST_F(TrivialHeisenbergTools, ExactSumGradientOptWithVMCOptimizer) {
 
   // Pure Optimizer parameters (NO Monte Carlo complexity)
   qlpeps::OptimizerParams opt_params = qlpeps::OptimizerFactory::CreateAdaGradAdvanced(
-    100,
+    800,
     1e-15,
     1e-30,
-    20,
+    800,
     0.1,
     1e-8,
     0.0);

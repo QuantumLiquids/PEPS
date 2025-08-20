@@ -11,6 +11,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
+#include "qlpeps/utility/helpers.h" // ComplexConjugate
 #include <mpi.h>
 #include <numeric>  // for std::accumulate
 
@@ -94,15 +95,50 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
 
 /**
  * @brief Single-process exact summation energy evaluator (RESTORED after MPI cleanup)
- * 
- * This function implements exact summation over all configurations for both fermion and boson systems.
- * It automatically handles the differences between fermion and boson systems:
- * - Fermion systems: Uses complex tensor contractions and applies fermion parity operators
- * - Boson systems: Uses direct gradient calculation without fermion parity operations
- * 
+ *
+ * Mathematical convention (consistent with the MC-based evaluator):
+ * \f[
+ *   \Psi(S;\,\theta),\quad w(S) = \frac{|\Psi(S)|^2}{Z},\quad Z = \sum_S |\Psi(S)|^2.
+ * \f]
+ * Local energy
+ * \f[
+ *   E_{\mathrm{loc}}(S) = \sum_{S'} \frac{\Psi^*(S')}{\Psi^*(S)}\, \langle S'|H|S \rangle.
+ * \f]
+ * Log-derivative operator
+ * \f[
+ *   O_i^*(S) = \frac{\partial \ln \Psi^*(S)}{\partial \theta_i^*}.
+ * \f]
+ * Energy and gradient (treating \(\theta\) and \(\theta^*\) as independent):
+ * \f[
+ *   E = \langle E_{\mathrm{loc}} \rangle_{w},\quad
+ *   \frac{\partial E}{\partial \theta_i^*} = \langle E_{\mathrm{loc}}^* O_i^* \rangle_{w}
+ *   - \langle E_{\mathrm{loc}} \rangle_{w}^*\, \langle O_i^* \rangle_{w}.
+ * \f]
+ * Implementation mapping (using raw weights \(w_{\text{raw}}(S)=|\Psi(S)|^2\)):
+ * \f[
+ *   S_{O} = \sum_S w_{\text{raw}}(S)\, O^*(S),\quad
+ *   S_{EO} = \sum_S w_{\text{raw}}(S)\, E_{\mathrm{loc}}^*(S)\, O^*(S),
+ * \f]
+ * \f[
+ *   E = \frac{\sum_S w_{\text{raw}}(S)\, E_{\mathrm{loc}}(S)}{\sum_S w_{\text{raw}}(S)},\quad
+ *   \nabla_{\theta^*} E = \frac{S_{EO} - E^*\, S_{O}}{\sum_S w_{\text{raw}}(S)}.
+ * \f]
+ * Boson vs Fermion:
+ * - Boson: \(O^*(S)\) is formed from the amplitude and \(\text{hole\_dag}\) tensors (consistent with \(\Psi^*\)).
+ * - Fermion: \(O^*(S)\) is built via EvaluateLocalPsiPartialPsiDag, and \c gradient.ActFermionPOps() is applied once
+ *   at the end to enforce parity.
+ *
+ * Notes:
+ * - Mirrors VMCPEPSOptimizerExecutor::SampleEnergyAndHoles_: use \(E_{\mathrm{loc}}^*\) when multiplying gradient
+ *   samples and use \(E^*\) in the covariance subtraction.
+ * - For real types, \c ComplexConjugate is a no-op.
+ * - Symbol ↔ Code mapping in this function:
+ *   - \(S_O\)  ↔  Ostar_weighted_sum
+ *   - \(S_{EO}\)  ↔  ELocConj_Ostar_weighted_sum
+ *
  * @tparam ModelT The model type (must have CalEnergyAndHoles method)
  * @tparam TenElemT Tensor element type (double or complex)
- * @tparam QNT Quantum number type (fZ2QN for fermions, U1QN for bosons)
+ * @tparam QNT Quantum number type (fZ2QN-like for fermions, TrivialRepQN/U1 variants for bosons)
  * @param split_index_tps The current PEPS state
  * @param all_configs All possible configurations to sum over
  * @param trun_para BMPS truncation parameters
@@ -123,8 +159,9 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 
   std::vector<double> weights;
   std::vector<TenElemT> e_loc_set;
-  SplitIndexTPSType g_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());
-  SplitIndexTPSType g_times_e_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());
+  // Accumulators: S_O and S_{EO} (see Doxygen above)
+  SplitIndexTPSType Ostar_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());            // S_O
+  SplitIndexTPSType ELocConj_Ostar_weighted_sum(Ly, Lx, split_index_tps.PhysicalDim());   // S_{EO}
 
   // Exact summation over all configurations
   for (auto &config : all_configs) {
@@ -137,7 +174,8 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
             &split_index_tps, &tps_sample, holes_dag);
     e_loc_set.push_back(e_loc);
 
-    SplitIndexTPSType gradient_sample(Ly, Lx, split_index_tps.PhysicalDim());
+    // Per-configuration increment to S_O (see Doxygen mapping): O^*(S) weighted by |Ψ(S)|^2
+    SplitIndexTPSType Ostar_weighted_increment(Ly, Lx, split_index_tps.PhysicalDim());
     for (size_t row = 0; row < Ly; row++) {
       for (size_t col = 0; col < Lx; col++) {
         size_t basis = tps_sample.config({row, col});
@@ -146,15 +184,17 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
         if constexpr (Index<QNT>::IsFermionic()) {
           // Fermion system: Use complex tensor contractions
           auto psi_partial_psi_dag = EvaluateLocalPsiPartialPsiDag(holes_dag({row, col}), tps_sample.tn({row, col}));
-          gradient_sample({row, col})[basis] = psi_partial_psi_dag;
+          Ostar_weighted_increment({row, col})[basis] = psi_partial_psi_dag;
         } else {
           // Boson system: |Psi|^2 * \Delta, where \Delta = \partial_{\theta^*} ln(\Psi^*)
-          gradient_sample({row, col})[basis] = tps_sample.amplitude * holes_dag({row, col});
+          Ostar_weighted_increment({row, col})[basis] = tps_sample.amplitude * holes_dag({row, col});
         }
       }
     }
-    g_weighted_sum += gradient_sample;
-    g_times_e_weighted_sum += e_loc * gradient_sample;
+    // S_O += w_raw(S) · O*(S)
+    Ostar_weighted_sum += Ostar_weighted_increment;
+    // S_{EO} += w_raw(S) · E_loc*(S) · O*(S)
+    ELocConj_Ostar_weighted_sum += ComplexConjugate(e_loc) * Ostar_weighted_increment;
   }
 
   // Calculate weighted averages
@@ -167,7 +207,8 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
   TenElemT energy = e_loc_sum / weight_sum;
 
   // Calculate gradient
-  SplitIndexTPSType gradient = (g_times_e_weighted_sum - energy * g_weighted_sum) * (1.0 / weight_sum);
+  // (S_{EO} − E^* S_O) / W_sum
+  SplitIndexTPSType gradient = (ELocConj_Ostar_weighted_sum - ComplexConjugate(energy) * Ostar_weighted_sum) * (1.0 / weight_sum);
 
   // Apply fermion parity operations only for fermion systems
   if constexpr (Index<QNT>::IsFermionic()) {
