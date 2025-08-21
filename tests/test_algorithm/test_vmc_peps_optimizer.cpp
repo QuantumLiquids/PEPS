@@ -57,11 +57,11 @@ using SITPST = SplitIndexTPS<TenElemT, QNT>;
  */
 std::string GetTPSDataPath(const std::string &base_name) {
   if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double>) {
-    return "test_algorithm/test_data/" + base_name + "_doublelowest";
+    return "test_data/" + base_name + "_doublelowest";
   } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
-    return "test_algorithm/test_data/" + base_name + "_complexlowest";
+    return "test_data/" + base_name + "_complexlowest";
   } else {
-    return "test_algorithm/test_data/" + base_name + "_unknownlowest";
+    return "test_data/" + base_name + "_unknownlowest";
   }
 }
 

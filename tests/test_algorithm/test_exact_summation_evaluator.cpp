@@ -172,14 +172,17 @@ bool RunExactSummationTest(
               << " (expected energy: " << energy_expect << ")" << std::endl;
   }
   
-  // RESTORED: Single-process ExactSumEnergyEvaluator (memory-safe)
-  auto result = ExactSumEnergyEvaluator(
+  // MPI API (Phase 1: fake-parallel)
+  auto result = ExactSumEnergyEvaluatorMPI<ModelT, TEN_ELEM_TYPE, QNT>(
       split_index_tps,
       all_configs,
       trun_para,
       model,
       Ly,
-      Lx);
+      Lx,
+      comm,
+      rank,
+      mpi_size);
   
   auto [computed_energy, gradient, error] = result;
   double final_energy = std::real(computed_energy);
@@ -189,6 +192,7 @@ bool RunExactSummationTest(
     std::cout << "  Computed energy: " << std::setprecision(12) << final_energy << std::endl;
     std::cout << "  Expected energy: " << std::setprecision(12) << energy_expect << std::endl;
     std::cout << "  Gradient norm:   " << std::setprecision(6) << gradient.NormSquare() << std::endl;
+    //todo: Grandient benchmark. For lowest state, gradient expected to be zero; for SU, compare single process and MPI.
     std::cout << "  Error:          " << error << std::endl;
     
     // Validate energy accuracy (strict tolerance for high-precision converged TPS states)
@@ -248,7 +252,7 @@ struct Z2SpinlessFreeFermionTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_doublelowest" : "_complexlowest";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "spinless_fermion_tps_t2_" + std::to_string(t2) + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -268,7 +272,7 @@ struct Z2SpinlessFreeFermionTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_double_from_simple_update" : "_complex_from_simple_update";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "spinless_fermion_tps_t2_" + std::to_string(t2) + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -380,7 +384,7 @@ struct TrivialHeisenbergTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_doublelowest" : "_complexlowest";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "heisenberg_tps" + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -400,7 +404,7 @@ struct TrivialHeisenbergTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_double_from_simple_update" : "_complex_from_simple_update";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "heisenberg_tps" + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -498,7 +502,7 @@ struct TrivialTransverseIsingTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_doublelowest" : "_complexlowest";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "transverse_ising_tps" + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -518,7 +522,7 @@ struct TrivialTransverseIsingTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_double_from_simple_update" : "_complex_from_simple_update";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "transverse_ising_tps" + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -624,7 +628,7 @@ struct Z2tJTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_doublelowest" : "_complexlowest";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "tj_model_tps" + type_suffix;
     
     SITPST sitps(Ly, Lx);
@@ -644,7 +648,7 @@ struct Z2tJTest : public MPITest {
     std::string type_suffix = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ?
                              "_double_from_simple_update" : "_complex_from_simple_update";
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "tj_model_tps" + type_suffix;
     
     SITPST sitps(Ly, Lx);

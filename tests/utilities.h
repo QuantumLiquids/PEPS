@@ -41,7 +41,7 @@ std::string GetTestOutputPath(const std::string& test_name, const std::string& d
  * @return Path to source test data
  */
 std::string GetTestDataPath(const std::string& data_subdir) {
-  return std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" + data_subdir;
+  return std::string(TEST_SOURCE_DIR) + "/test_data/" + data_subdir;
 }
 
 std::string GenTPSPath(std::string model_name, size_t Dmax, size_t Lx, size_t Ly) {

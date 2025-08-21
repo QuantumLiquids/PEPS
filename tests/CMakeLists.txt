@@ -242,7 +242,7 @@ add_two_type_unittest(test_fermion_simple_update
 
 # Test optimizer
 add_two_type_unittest(test_optimizer
-        "test_algorithm/test_optimizer.cpp"
+        "test_optimizer/test_optimizer.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
@@ -258,15 +258,15 @@ add_mpi_unittest_run(test_vmc_peps_optimizer_double "4" " ")
 add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
 
 
-# Test exact summation optimization using VMCPEPSOptimizerExecutor with custom energy evaluator
-add_two_type_unittest(test_exact_sum_optimization
-        "test_algorithm/test_exact_sum_optimization.cpp"
+## Optimizer exact-sum AdaGrad test (pure optimizer, deterministic gradients)
+add_two_type_unittest(test_optimizer_adagrad_exact_sum
+        "test_optimizer/test_optimizer_adagrad_exact_sum.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 
-# Add MPI test runs for exact summation optimization to verify MPI-aware ExactSumEnergyEvaluator
-add_mpi_unittest_run(test_exact_sum_optimization_double "4" " ")
-add_mpi_unittest_run(test_exact_sum_optimization_complex "4" " ")
+# Add MPI test runs for optimizer exact-sum AdaGrad to verify MPI-aware ExactSumEnergyEvaluator
+add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_double "4" " ")
+add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_complex "4" " ")
 
 # Test pure exact summation evaluator (separated from optimizer complexity)
 add_two_type_unittest(test_exact_summation_evaluator
@@ -284,7 +284,7 @@ add_mpi_unittest_run(test_exact_summation_evaluator_complex "4" " ")
 add_two_type_unittest(test_mc_peps_measure
         "test_algorithm/test_mc_peps_measure.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "test_algorithm/test_data/tps_square_heisenberg2x2D4Double"
+        "test_data/tps_square_heisenberg2x2D4Double"
 )
 
 

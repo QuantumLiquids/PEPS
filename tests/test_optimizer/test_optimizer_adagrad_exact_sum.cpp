@@ -50,7 +50,7 @@ std::string GetTypeSpecificPath(const std::string &base_name) {
     type_suffix = "_unknown";
   }
 
-  // Extract just the model name from the base_name (remove "test_algorithm/test_data/" prefix if present)
+  // Extract just the model name from the base_name (remove "test_data/" prefix if present)
   std::string model_name = base_name;
   size_t pos = model_name.find_last_of('/');
   if (pos != std::string::npos) {
@@ -187,25 +187,34 @@ double RunPureOptimizerTest(
 
   // RESTORED: Single-process exact summation energy evaluator (memory-safe)
   auto energy_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
-    // Use single-process ExactSumEnergyEvaluator (MPI version removed due to memory leaks)
-    auto [energy, gradient, error] =
-        ExactSumEnergyEvaluator(state, all_configs, trun_para, model, Ly, Lx);
+    auto [energy, gradient, error] = ExactSumEnergyEvaluatorMPI<ModelT, TenElemT, QNT>(
+        state,
+        all_configs,
+        trun_para,
+        model,
+        Ly,
+        Lx,
+        comm,
+        rank,
+        mpi_size);
     return {energy, gradient, error};
   };
 
   // Simple monitoring callback
   typename Optimizer<TenElemT, QNT>::OptimizationCallback callback;
   callback.on_iteration =
-      [&energy_exact, &test_name](size_t iteration, double energy, double energy_error, double gradient_norm) {
-        std::cout << test_name << " - step: " << iteration
-            << " E0=" << std::setw(14) << std::fixed
-            << std::setprecision(kEnergyOutputPrecision) << energy
-            << " ||grad||=" << std::setw(8) << std::fixed
-            << std::setprecision(kEnergyOutputPrecision) << gradient_norm;
-        if (energy_exact != 0.0) {
-          std::cout << " exact=" << energy_exact;
+      [&energy_exact, &test_name, rank](size_t iteration, double energy, double energy_error, double gradient_norm) {
+        if (rank == kMPIMasterRank) {
+          std::cout << test_name << " - step: " << iteration
+              << " E0=" << std::setw(14) << std::fixed
+              << std::setprecision(kEnergyOutputPrecision) << energy
+              << " ||grad||=" << std::setw(8) << std::fixed
+              << std::setprecision(kEnergyOutputPrecision) << gradient_norm;
+          if (energy_exact != 0.0) {
+            std::cout << " exact=" << energy_exact;
+          }
+          std::cout << std::endl;
         }
-        std::cout << std::endl;
       };
 
   // PURE optimization - NO external complexity
@@ -213,7 +222,7 @@ double RunPureOptimizerTest(
 
   // Verify algorithm convergence
   double final_energy = std::real(result.final_energy);
-  if (energy_exact != 0.0) {
+  if (rank == kMPIMasterRank && energy_exact != 0.0) {
     EXPECT_GE(final_energy, energy_exact - 1E-10);
     EXPECT_NEAR(final_energy, energy_exact, 1e-5);
   }
@@ -261,7 +270,7 @@ struct Z2SpinlessFreeFermionTools : public MPITest {
       type_suffix = "_complex_from_simple_update";
     }
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "spinless_fermion_tps_t2_" + std::to_string(t2) + type_suffix;
     
     SplitIndexTPS<TEN_ELEM_TYPE, fZ2QN> sitps(Ly, Lx);
@@ -378,7 +387,7 @@ struct TrivialHeisenbergTools : public MPITest {
       type_suffix = "_complex_from_simple_update";
     }
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "heisenberg_tps" + type_suffix;
     
     SplitIndexTPS<TEN_ELEM_TYPE, TrivialRepQN> sitps(Ly, Lx);
@@ -482,7 +491,7 @@ struct TrivialTransverseIsingTools : public MPITest {
       type_suffix = "_complex_from_simple_update";
     }
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "transverse_ising_tps" + type_suffix;
     
     SplitIndexTPS<TEN_ELEM_TYPE, TrivialRepQN> sitps(Ly, Lx);
@@ -591,7 +600,7 @@ struct Z2tJTools : public MPITest {
       type_suffix = "_complex_from_simple_update";
     }
     
-    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_algorithm/test_data/" +
+    std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
                            "tj_model_tps" + type_suffix;
     
     SplitIndexTPS<TEN_ELEM_TYPE, fZ2QN> sitps(Ly, Lx);
@@ -674,3 +683,5 @@ int main(int argc, char *argv[]) {
   hp_numeric::SetTensorManipulationThreads(1);
   return RUN_ALL_TESTS();
 }
+
+

@@ -1,5 +1,6 @@
 ---
 title: Exact Summation Evaluator – Mathematical Principles
+last_updated: 2025-08-21
 ---
 
 Purpose

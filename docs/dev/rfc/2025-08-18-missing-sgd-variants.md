@@ -1,6 +1,14 @@
+---
+title: Missing SGD Variants and Line Search
+status: documented
+date: 2025-08-18
+last_updated: 2025-08-18
+applies_to: [module/optimizer]
+tags: [rfc, optimizer]
+---
+
 # Missing Optimization Algorithms from Legacy VMCPEPSExecutor
 
-## Date: 2025-01-29
 ## Status: DOCUMENTED - To be implemented in future releases
 
 ## 概述
@@ -265,3 +273,5 @@ class OptimizerParamsBuilder {
 **作者**: Linus-style Code Review  
 **创建日期**: 2025-01-29  
 **状态**: 等待实现
+
+

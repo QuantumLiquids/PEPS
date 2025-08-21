@@ -1,6 +1,6 @@
 /*
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
-* Creation Date: 2024-10-23
+* Creation Date: 2025-08-10
 *
 * Description: QuantumLiquids/PEPS project. Exact summation energy evaluator.
 */
@@ -219,24 +219,77 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
   return {energy, gradient, 0.0}; // Error is 0 for exact summation
 }
 
-// TODO: ExactSumEnergyEvaluatorMPI function removed - caused 6-7GB memory leaks
-// 
-// MEMORY LEAK INVESTIGATION RESULTS:
-// - This 164-line MPI function caused severe memory explosions in single-process environments
-// - Root cause: Forcing MPI operations in single-process mode creates unnecessary overhead
-// - Function included complex MPI_Bcast, MPI_Reduce, MPI_Send/Recv operations without proper testing
-//
-// REQUIRED FUTURE WORK:
-// 1. Design proper single-process vs multi-process API selection
-// 2. Implement memory-safe MPI gradient reduction 
-// 3. Add comprehensive unit tests for MPI communication patterns
-// 4. Consider using MPI collective operations instead of manual Send/Recv loops
-//
-// The function signature was:
-// template<typename ModelEnergySolver, typename TenElemT, typename QNT>
-// std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(...)
-//
-// DO NOT REIMPLEMENT without proper memory leak testing and single-process compatibility
+/**
+ * @brief MPI-enabled exact summation energy evaluator (Fake-parallel per contract)
+ *
+ * Contract (per docs/dev/design/arch/mpi-contracts.md):
+ * - Input state is valid only on the master rank. The evaluator broadcasts the state to all ranks.
+ * - Return values (energy, gradient, error) are valid only on the master rank.
+ * - For mpi_size == 1, this function degenerates to the single-process evaluator.
+ *
+ * Implementation (fake-parallel for testing):
+ * - Broadcast the state once to satisfy "who uses, who distributes".
+ * - Only master rank performs the full exact summation by calling the single-process evaluator.
+ * - Non-master ranks return placeholder gradient tensors (zeros). Index compatibility is not guaranteed on placeholders,
+ *   because downstream Optimizer contracts require gradient validity only on master rank.
+ * - No static partitioning or point-to-point communication is used here.
+ *
+ * Rationale:
+ * - This helper is designed for tests to verify Evaluator correctness independently of MC sampling.
+ * - It enforces the MPI contracts without adding performance complexity, minimizing maintenance risk.
+ * - For true distributed enumeration, implement a separate parallel version guarded by tests and profiling.
+ *
+ * @tparam ModelT The model type (must have CalEnergyAndHoles method)
+ * @tparam TenElemT Tensor element type (double or complex)
+ * @tparam QNT Quantum number type
+ * @param split_index_tps_master_only State valid only on master
+ * @param all_configs All configurations to enumerate
+ * @param trun_para BMPS truncation parameters
+ * @param model Physical model
+ * @param Ly Lattice rows
+ * @param Lx Lattice cols
+ * @param comm MPI communicator
+ * @param rank MPI rank
+ * @param mpi_size MPI world size
+ * @return (energy, gradient, error) valid only at master rank. Others return placeholders.
+ */
+template<typename ModelT, typename TenElemT, typename QNT>
+std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(
+    const SplitIndexTPS<TenElemT, QNT> &split_index_tps_master_only,
+    const std::vector<Configuration> &all_configs,
+    const BMPSTruncatePara &trun_para,
+    ModelT &model,
+    size_t Ly,
+    size_t Lx,
+    const MPI_Comm &comm,
+    int rank,
+    int mpi_size
+) {
+  using SplitIndexTPSType = SplitIndexTPS<TenElemT, QNT>;
+
+  // Degenerate to single-process evaluator when mpi_size == 1
+  if (mpi_size == 1) {
+    return ExactSumEnergyEvaluator<ModelT, TenElemT, QNT>(
+        split_index_tps_master_only, all_configs, trun_para, model, Ly, Lx);
+  }
+
+  // Broadcast input state from master to all ranks (to satisfy contract; computation remains master-only)
+  SplitIndexTPSType split_index_tps_bcast;
+  if (rank == qlten::kMPIMasterRank) {
+    split_index_tps_bcast = split_index_tps_master_only;
+  }
+  qlpeps::MPI_Bcast(split_index_tps_bcast, comm, qlten::kMPIMasterRank);
+
+  if (rank == qlten::kMPIMasterRank) {
+    // Master computes using single-process evaluator on the broadcasted state
+    return ExactSumEnergyEvaluator<ModelT, TenElemT, QNT>(
+        split_index_tps_bcast, all_configs, trun_para, model, Ly, Lx);
+  } else {
+    // Non-master returns placeholders(zeros)
+    SplitIndexTPSType zero_grad(Ly, Lx, split_index_tps_bcast.PhysicalDim());
+    return {TenElemT(0.0), zero_grad, 0.0};
+  }
+}
 } // namespace qlpeps
 
 #endif // QLPEPS_ALGORITHM_VMC_UPDATE_EXACT_SUMMATION_ENERGY_EVALUATOR_H

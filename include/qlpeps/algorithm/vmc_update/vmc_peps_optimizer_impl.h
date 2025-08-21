@@ -342,38 +342,32 @@ void VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolve
 
   energy_samples_.push_back(local_energy);
 
-  // Prepare gradient tensor sample for stochastic reconfiguration
-  SITPST gradient_tensor_sample(this->ly_, this->lx_, this->split_index_tps_.PhysicalDim());
-
+  // Gradient accumulation uses:
+  // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
+  // ∂E/∂θ* = <E_loc^* O*> − E^* <O*>, where O* = ∂ln(Ψ*)/∂θ*
+  // SR: store per-sample O*(S) when enabled
+  SITPST Ostar_sample(this->ly_, this->lx_, this->split_index_tps_.PhysicalDim());
   for (size_t row = 0; row < this->ly_; row++) {
     for (size_t col = 0; col < this->lx_; col++) {
       const size_t basis_index = this->tps_sample_.GetConfiguration({row, col});
 
-      Tensor gradient_tensor;
+      Tensor Ostar_tensor;
       if constexpr (Tensor::IsFermionic()) {
-        // For fermionic systems, use specialized gradient calculation
-        gradient_tensor = CalGTenForFermionicTensors(holes({row, col}), this->tps_sample_.tn({row, col}));
+        Ostar_tensor = CalGTenForFermionicTensors(holes({row, col}), this->tps_sample_.tn({row, col}));
       } else {
-        // For bosonic systems, use standard gradient calculation
-        gradient_tensor = inverse_amplitude * holes({row, col});
+        Ostar_tensor = inverse_amplitude * holes({row, col});
       }
 
-      // Accumulate gradient tensors for VMC optimization
-      // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
-      // ∂E/∂θ* = <E_loc * O*> - <E_loc> <O*>
-      // where O* = ∂ln(Ψ*)/∂θ* is the complex conjugate of log-derivative
-      Ostar_sum_({row, col})[basis_index] += gradient_tensor; // Σ O^*
-      ELocConj_Ostar_sum_({row, col})[basis_index] += local_energy_conjugate * gradient_tensor; // Σ E_loc^* O^*
+      Ostar_sum_({row, col})[basis_index] += Ostar_tensor; // Σ O^*
+      ELocConj_Ostar_sum_({row, col})[basis_index] += local_energy_conjugate * Ostar_tensor; // Σ E_loc^* O^*
 
-      // Store for stochastic reconfiguration if needed
       if (stochastic_reconfiguration_update_class_) {
-        gradient_tensor_sample({row, col})[basis_index] = gradient_tensor; // O^*(S)
+        Ostar_sample({row, col})[basis_index] = Ostar_tensor; // O^*(S)
       }
     }
   }
-
   if (stochastic_reconfiguration_update_class_) {
-    Ostar_samples_.emplace_back(gradient_tensor_sample);
+    Ostar_samples_.emplace_back(Ostar_sample); // SR: push one O* sample for S-matrix
   }
 
 #ifdef QLPEPS_TIMING_MODE

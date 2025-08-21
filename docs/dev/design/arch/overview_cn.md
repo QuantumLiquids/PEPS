@@ -2,6 +2,7 @@
 
 本页给出 PEPS 项目核心模块的职责边界、调用关系、依赖层级与关键代码索引，帮助新开发者（含 AI/自动化工具）在最短时间内建立整体认知并准确落点到代码。
 
+
 ## 一、顶层入口与聚合
 
 - 顶层聚合头：`include/qlpeps/qlpeps.h`
@@ -102,18 +103,6 @@
   - optimizer（算法策略与调度）
   - 顶层聚合（`qlpeps.h`）
 
-- 发现的问题（需要“清洁化”）：
-  - 循环包含风险：`exact_summation_energy_evaluator.h` 包含 `qlpeps/qlpeps.h`，而 `qlpeps.h` 又通过 `algorithm_all.h` 聚合回 `exact_summation_energy_evaluator.h`。
-    - 虽然 include guard 可避免致命循环，但这是不必要耦合，建议：
-      - 移除评估器对顶层聚合头的包含，改为最小必要头（`split_index_tps.h`、`model_energy_solver.h`、所需模型 solver、MPI 包装等）。
-      - 保持“叶子模块→聚合头”的单向禁令：叶子模块不应包含顶层聚合。
-  - 头文件 `using namespace qlten;`：出现在多个公共头中（例如 `simple_update.h`、`optimizer.h` 等）。
-    - 建议移除头文件中的 `using namespace`，改为最小限定名或在 `.cpp/.impl.h` 内部使用，减少命名污染。
-  - `optimizer_impl.h` 依赖 `vmc_basic/monte_carlo_tools/statistics.h`
-    - 优化器本应与 MC 统计解耦；若仅为打印/统计辅助，应迁移到上层执行器或抽出更通用的 utility 组件。
-  - `two_dim_tn/peps/peps.h` 是空壳：
-    - 若为历史过渡，建议补齐注释说明或移除/合并，以避免“名存实亡”的 API 误导。
-
 ## 六、关键代码定位索引（按主题速查）
 
 - 顶层 API 与聚合
@@ -146,23 +135,15 @@
 
 - 示例与测试（理解用法最直接）
   - `examples/`（整体流程示例）
-  - `tests/test_algorithm/test_exact_sum_optimization.cpp`
+  - `tests/test_optimizer/test_optimizer_adagrad_exact_sum.cpp`
   - `tests/test_algorithm/test_exact_summation_evaluator.cpp`
   - 其余 `tests/` 下集成/单元测试：查看如何拼装参数、模型与执行器。
 
 ## 七、开发建议（可操作）
 
-- 依赖清洁化
-  - 叶子模块（评估器/solver/具体算法实现）避免包含 `qlpeps.h`；只引入所需具体头。
-  - 去除公共头文件的 `using namespace`。
-  - 优化器层避免直接依赖 MC 统计；将“仅用于打印/统计”的功能上移到执行器或抽取至通用工具。
-
 - API 一致性
   - 统一 MPI 包装接口命名与职责（广播/归约的所有权由评估器承担，优化器仅进行算法内部并行）。
   - 新增/修改接口时，明确“主进程有效/全进程有效”的返回约定（代码注释已采用此规范，新增处保持一致）。
-
-- 文档化
-  - 在 `two_dim_tn/peps/peps.h` 增加文件级注释，说明其状态（占位/过渡/计划）。
 
 ## 八、快速上手（开发者）
 
@@ -172,9 +153,5 @@
   - 通过 `OptimizerFactory` 或 `OptimizerParamsBuilder` 构造优化器参数
   - 创建 `VMCPEPSOptimizerExecutor`，注入自定义能量评估器或采用默认
   - 调用 `Execute()`，读取 `GetEnergyTrajectory()`、`GetBestState()` 并落盘
-
----
-
-若需要我对“循环包含清理方案”、“优化器与 MC 统计解耦”提供具体 edits，请告诉我当前对外 API 的兼容性要求（Never break userspace）与可接受的最小改动范围，我会给出最短路径的安全改造方案与对应提交。
 
 

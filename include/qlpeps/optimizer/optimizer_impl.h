@@ -44,7 +44,6 @@
 #include <complex>
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/utility/helpers.h"
-#include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlten/utility/timer.h"
 
 namespace qlpeps {
@@ -546,12 +545,12 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 /**
  * @brief Unified SGD implementation with momentum and Nesterov support
  * 
- * 🎯 ELEGANT UNIFICATION: Single implementation handles all SGD variants:
+ * ELEGANT UNIFICATION: Single implementation handles all SGD variants:
  * - momentum = 0.0: reduces to vanilla SGD (direct inline update)
  * - momentum > 0.0 + nesterov = false: standard momentum SGD
  * - momentum > 0.0 + nesterov = true: Nesterov accelerated gradient
  * 
- * 🚫 MPI RESPONSIBILITY: Follows the same "no state broadcast" contract as vanilla SGD
+ * MPI RESPONSIBILITY: Follows the same "no state broadcast" contract as vanilla SGD
  * - gradient: Valid ONLY on master rank (gathered by energy_evaluator)
  * - velocity_: Maintained ONLY on master rank (algorithm state isolation)
  * - Update: Performed ONLY on master rank 
@@ -574,7 +573,7 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
   
   SITPST updated_state = current_state;
   
-  // ✅ MPI VERIFICATION: Only master rank processes gradients and algorithm state
+  // MPI VERIFICATION: Only master rank processes gradients and algorithm state
   if (rank_ == kMPIMasterRank) {
     // ⚙️ LAZY INITIALIZATION: Initialize velocity on first use (master rank only)
     if (!sgd_momentum_initialized_) {
@@ -600,14 +599,12 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
         updated_state += (-step_length) * velocity_;
       }
     } else {
-      // Vanilla SGD: direct inline update
-      if (rank_ == kMPIMasterRank) {
-        updated_state += (-step_length) * gradient;
-      }
+      // Vanilla SGD: direct inline update (already inside master-only block)
+      updated_state += (-step_length) * gradient;
     }
   }
   
-  // 🚫 CRITICAL MPI DESIGN: Do NOT broadcast here!
+  // CRITICAL MPI DESIGN: Do NOT broadcast here!
   // 
   // RESPONSIBILITY SEPARATION: Energy evaluator owns all state distribution for Monte Carlo sampling.
   return updated_state;
@@ -743,47 +740,47 @@ typename Optimizer<TenElemT, QNT>::SITPST
 Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
                                         const SITPST &gradient,
                                         double step_length) {
-  // Get AdaGrad parameters from the algorithm params
-  const auto& adagrad_params = params_.GetAlgorithmParams<AdaGradParams>();
+  // MPI VERIFICATION: Only master rank processes gradients and algorithm state
+  SITPST updated_state = current_state;
   
-  // Initialize AdaGrad state if not already done
-  if (!adagrad_initialized_) {
-    accumulated_gradients_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
-    // Initialize with small values to avoid division by zero
-    for (size_t row = 0; row < accumulated_gradients_.rows(); ++row) {
-      for (size_t col = 0; col < accumulated_gradients_.cols(); ++col) {
-        for (size_t i = 0; i < accumulated_gradients_({row, col}).size(); ++i) {
-          accumulated_gradients_({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
-          QNT div = gradient({row, col})[i].Div();
-          accumulated_gradients_({row, col})[i].Fill(div, adagrad_params.initial_accumulator_value);
-          // Note here for fermionic tensor, positive and negative are relatively define, 
-          // In the AdaGrad, we fix the order of indexes to make it make sense.
+  if (rank_ == kMPIMasterRank) {
+    // Get AdaGrad parameters from the algorithm params
+    const auto& adagrad_params = params_.GetAlgorithmParams<AdaGradParams>();
+    
+    // LAZY INITIALIZATION: Initialize AdaGrad state on first use (master rank only)
+    if (!adagrad_initialized_) {
+      accumulated_gradients_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      // Initialize with small values to avoid division by zero
+      for (size_t row = 0; row < accumulated_gradients_.rows(); ++row) {
+        for (size_t col = 0; col < accumulated_gradients_.cols(); ++col) {
+          for (size_t i = 0; i < accumulated_gradients_({row, col}).size(); ++i) {
+            accumulated_gradients_({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
+            QNT div = gradient({row, col})[i].Div();
+            accumulated_gradients_({row, col})[i].Fill(div, adagrad_params.initial_accumulator_value);
+            // Note here for fermionic tensor, positive and negative are relatively define, 
+            // In the AdaGrad, we fix the order of indexes to make it make sense.
+          }
         }
       }
+      adagrad_initialized_ = true;
+      
+      // DEBUG: AdaGrad state exists only on master rank
+      // Non-master ranks never initialize or access accumulated_gradients_
     }
-    adagrad_initialized_ = true;
-  }
 
-  // Update accumulated gradients: G_k = G_{k-1} + (gradient)^2
-  SITPST squared_gradient = ElementWiseSquare(gradient);
-  accumulated_gradients_ += squared_gradient;
+    // Update accumulated gradients: G_k = G_{k-1} + (gradient)^2
+    SITPST squared_gradient = ElementWiseSquare(gradient);
+    accumulated_gradients_ += squared_gradient;
 
-  // Compute adaptive learning rates: 1/sqrt(G_k) for |G_k| > epsilon
-  SITPST
-      adaptive_rates = ElementWiseInverse(ElementWiseSqrt(accumulated_gradients_), adagrad_params.epsilon);
+    // Compute adaptive learning rates: 1/sqrt(G_k) for |G_k| > epsilon
+    SITPST adaptive_rates = ElementWiseInverse(ElementWiseSqrt(accumulated_gradients_), adagrad_params.epsilon);
 
-  // Apply AdaGrad update: θ_{k+1} = θ_k - η * adaptive_rates * gradient
-  SITPST updated_state = current_state;
-
-  if (rank_ == kMPIMasterRank) {
-    // Apply AdaGrad update only on master rank
-    // This matches the behavior of the original VMCPEPSExecutor
+    // Apply AdaGrad update: θ_{k+1} = θ_k - η * adaptive_rates * gradient
     for (size_t row = 0; row < current_state.rows(); ++row) {
       for (size_t col = 0; col < current_state.cols(); ++col) {
         for (size_t i = 0; i < current_state({row, col}).size(); ++i) {
           // Compute adaptive step: step_length * adaptive_rate * gradient
-          Tensor
-              adaptive_step = ElementWiseMultiply(adaptive_rates({row, col})[i], gradient({row, col})[i]) * step_length;
+          Tensor adaptive_step = ElementWiseMultiply(adaptive_rates({row, col})[i], gradient({row, col})[i]) * step_length;
 
           // Update state: θ_{k+1} = θ_k - adaptive_step
           updated_state({row, col})[i] += (-adaptive_step);
@@ -792,7 +789,7 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
     }
   }
 
-  // 🚫 CRITICAL MPI DESIGN: Do NOT broadcast here!
+  // CRITICAL MPI DESIGN: Do NOT broadcast here!
   // Energy evaluator owns all state distribution for Monte Carlo sampling.
   return updated_state;
 }

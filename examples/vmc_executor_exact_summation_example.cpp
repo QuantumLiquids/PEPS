@@ -18,7 +18,7 @@
 * - Pure Optimizer tests: Focus only on optimization algorithm correctness
 * 
 * Design Philosophy: "Use the right tool for the job"
-* - For algorithm verification: Use pure Optimizer tests (see test_exact_sum_optimization.cpp)
+* - For algorithm verification: Use pure Optimizer tests (see tests/test_optimizer/test_optimizer_adagrad_exact_sum.cpp)
 * - For system integration: Use VMCPEPSOptimizerExecutor (this example)
 */
 

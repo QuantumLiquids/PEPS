@@ -1,3 +1,8 @@
+---
+title: Optimizer Testing Strategy
+last_updated: 2025-08-21
+---
+
 # Optimizer 测试策略：消除 Monte-Carlo 复杂性
 
 ## 问题分析
@@ -26,12 +31,28 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
     size_t Ly, size_t Lx
 )
 ```
-+ MPI 支持
++ MPI (即将支持）
 这从算法和代码的测试都有帮助。
 
 优势：
-- ✅ 完全确定性，无随机误差
-- ✅ 可在小系统上更快计算
+- 1. 完全确定性，无随机误差
+- 2 可在小系统上更快计算
 
 这一接口的测试：
- test_exact_summation_evaluator.h
+ `tests/test_algorithm/test_exact_summation_evaluator.cpp`
+
+## 纯 Optimizer 测试布局与命名
+
+- 目录：`tests/test_optimizer/`
+- AdaGrad 用例：`tests/test_optimizer/test_optimizer_adagrad_exact_sum.cpp`
+- 命名规则：`test_optimizer_<algorithm>_exact_sum.cpp`
+  - 未来每个优化算法新增一个独立的纯优化器测试文件
+  - 统一采用 ExactSumEnergyEvaluator，确保梯度确定性，隔离 Monte-Carlo 噪声
+
+备注：CMake 中对应的双类型目标命名为 `test_optimizer_adagrad_exact_sum_double` 与 `test_optimizer_adagrad_exact_sum_complex`，并提供 MPI 运行用例。
+
+
+### 缺口
+对SR的支持不是那么直接。虽然也有可能可以，但是还需要一些数学推导工作。
+
+

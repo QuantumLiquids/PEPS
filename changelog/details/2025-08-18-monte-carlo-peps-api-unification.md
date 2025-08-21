@@ -145,7 +145,7 @@ VMCPEPSOptimizerExecutor<> optimizer(vmc_params, tps, comm, solver);
 ### Test Files (All Updated)
 - `test_algorithm/test_mc_peps_measure.cpp`
 - `test_algorithm/test_vmc_peps_optimizer.cpp`
-- `test_algorithm/test_exact_sum_optimization.cpp`
+- `test_optimizer/test_optimizer_adagrad_exact_sum.cpp`
 - `integration_tests/` (6 files)
 - `slow_tests/` (3 files)  
 - `test_deprecated/test_loop_update_deprecated.cpp`
