@@ -10,7 +10,7 @@
 #include "qlten/qlten.h"
 
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 

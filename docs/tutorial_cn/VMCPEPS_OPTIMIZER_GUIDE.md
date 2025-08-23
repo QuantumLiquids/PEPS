@@ -2,7 +2,7 @@
 
 ## 概述
 
-`VMCPEPSOptimizer` 是用于 PEPS (Projected Entangled Pair States) 变分蒙特卡洛优化的**统一执行引擎**。它通过清晰的模板化架构协调三个基础组件，消除复杂性而非管理复杂性。
+`VMCPEPSOptimizer` 是用于 TPS (Tensor Product States) 变分蒙特卡洛优化的**执行引擎**。它通过清晰的模板化架构协调三个基础组件，消除复杂性而非管理复杂性。
 
 **核心设计哲学**：一个执行器，三种策略，零特殊情况。
 

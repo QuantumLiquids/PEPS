@@ -32,10 +32,12 @@
   - Loop Update：`algorithm/loop_update/`(暂时遗弃这一模块，算法效率不行)
   - VMC Update：`algorithm/vmc_update/`
     - 优化执行器：`vmc_peps_optimizer.h`（`VMCPEPSOptimizer<T>`）
-    - 测量执行器：`monte_carlo_peps_measurement.h`（`MCPEPSMeasurer<T>`）
+    - 测量执行器：`monte_carlo_peps_measurer.h`（`MCPEPSMeasurer<T>`，通过组合 `MonteCarloEngine` 执行抽样）
     - 能量评估器：`exact_summation_energy_evaluator.h`（精确求和，MPI 并行枚举）（非外部暴露接口，对测试十分有效，可消除蒙卡不确定性。）
     - 物理模型求解器（能量/观测）：`model_energy_solver.h` 与 `model_solvers/*`
     - 采样更新器（用户入参）：`MCSweepUpdater`（详见 VMCPEPSOptimizer 中文用户文档）
+    - Monte Carlo 引擎：`monte_carlo_engine.h`（抽样循环、配置管理、统计累积；被测量器以组合方式复用）
+    - 模型观测求解器：`model_measurement_solver.h`
 
 - 优化器层
   - 参数系统：`optimizer/optimizer_params.h`
@@ -93,6 +95,34 @@
 
 参考实现位置：`optimizer/optimizer_impl.h`（类注释与实现中有清晰约束）与 `algorithm/vmc_update/exact_summation_energy_evaluator.h`（通信流程注释完整）。
 
+## 四点五、VMCPEPSOptimizer 与 MCPEPSMeasurer 架构（概念图）
+
+关键理念：Monte Carlo 从“继承基类”重构为“组合引擎”。测量器 `MCPEPSMeasurer` 持有并复用 `MonteCarloEngine`；优化器在能量评估路径上不直接耦合测量器。
+
+```mermaid
+graph TD
+  U[User] --> O[VMCPEPSOptimizer]
+  U[User] --> M[MCPEPSMeasurer]
+  O -- owns --> Opt[Optimizer]
+  O -- calls --> Eval[EnergyEvaluator]
+  Eval -- calls --> MS2[ModelEnergySolver]
+  M -- owns --> MSSolver[ModelMeasurementSolver]
+  O -- owns --> Eng[MonteCarloEngine]
+  M -- owns --> Eng
+  Eval -- calls --> Eng
+  Eng -- strategy --> Upd[MCSweepUpdater]
+  Eng -- manages --> Cfg[config/sampling/stats]
+```
+
+- owns: 成员持有，生命周期由持有方管理
+- calls: 纯调用，不持有
+- strategy: 策略注入（引擎内部拥有的更新器策略对象）
+- manages: 运行时管理的内部子模块或数据
+
+EnergyEvaluator 为概念组件：当前尚未独立成类，默认实现位于 `VMCPEPSOptimizer` 内部；其职责是调用 `MonteCarloEngine` 完成采样，并结合 `ModelEnergySolver` 计算能量与梯度。`VMCPEPSOptimizer` 与 `MCPEPSMeasurer` 为同层 API，无相互调用，各自拥有各自的 `MonteCarloEngine`。
+
+两者为同层 API，无直接调用关系。优化路径通过 `EnergyEvaluator` 与 `ModelEnergySolver` 协作；测量路径通过 `ModelMeasurementSolver` 协作。二者各自持有 `MonteCarloEngine`，并基于同一种 `MCSweepUpdater` 策略进行采样。
+
 ## 五、依赖分层与“依赖卫生”评审
 
 - 建议的分层（下层被上层依赖）：
@@ -116,8 +146,9 @@
 
 - VMC 执行与测量
   - 优化执行器：`algorithm/vmc_update/vmc_peps_optimizer.h`（及 `vmc_peps_optimizer_impl.h`）
-  - 测量执行器：`algorithm/vmc_update/monte_carlo_peps_measurement.h`
-  - Monte Carlo 基类/参数：`monte_carlo_peps_base.h`、`monte_carlo_peps_params.h`
+  - 测量执行器：`algorithm/vmc_update/monte_carlo_peps_measurer.h`
+  - Monte Carlo 引擎/参数：`monte_carlo_engine.h`、`monte_carlo_peps_params.h`
+  - 模型观测求解器：`algorithm/vmc_update/model_measurement_solver.h`
 
 - 能量评估与模型
   - 精确求和评估器：`algorithm/vmc_update/exact_summation_energy_evaluator.h`
@@ -152,6 +183,4 @@
   - 构造 `SplitIndexTPS` 初态与模型 solver
   - 通过 `OptimizerFactory` 或 `OptimizerParamsBuilder` 构造优化器参数
   - 创建 `VMCPEPSOptimizer`，注入自定义能量评估器或采用默认
-  - 调用 `Execute()`，读取 `GetEnergyTrajectory()`、`GetBestState()` 并落盘
-
-
+  - 调用 `Execute()`，读取 `GetEnergyTrajectory()`、`
