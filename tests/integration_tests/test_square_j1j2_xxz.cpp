@@ -159,7 +159,7 @@ protected:
     SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto executor = new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
+    auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(
         params, tps, comm, model);
     
     size_t start_flop = flop;
@@ -186,7 +186,7 @@ protected:
     SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto measure_exe = new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdaterT, ModelT>(
+    auto measure_exe = new MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT>(
         tps, measure_para, comm, model);
     
     size_t start_flop = flop;

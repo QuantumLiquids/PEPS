@@ -9,7 +9,7 @@
 ### Removed
 - WAVEFUNCTION_UPDATE_SCHEME enum → std::variant
 - VMCOptimizePara struct → VMCPEPSOptimizerParams  
-- VMCPEPSExecutor class → VMCPEPSOptimizerExecutor
+- VMCPEPSExecutor class → VMCPEPSOptimizer
 - Default parameter constructors (Google C++ style compliance)
 - Legacy compatibility fields in OptimizerParams
 
@@ -33,7 +33,7 @@ VMCPEPSExecutor<TenElemT, QNT, Updater, Model> executor(params, tps, comm, model
 OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfiguration(
   1000, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.01);
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
-VMCPEPSOptimizerExecutor<TenElemT, QNT, Updater, Model> executor(params, tps, comm, model);
+VMCPEPSOptimizer<TenElemT, QNT, Updater, Model> executor(params, tps, comm, model);
 ```
 
 ## Files Modified
@@ -63,6 +63,6 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, Updater, Model> executor(params, tps, co
 ## Migration
 
 1. Replace `VMCOptimizePara` → `VMCPEPSOptimizerParams`
-2. Replace `VMCPEPSExecutor` → `VMCPEPSOptimizerExecutor`
+2. Replace `VMCPEPSExecutor` → `VMCPEPSOptimizer`
 3. Use `OptimizerFactory` for common configurations  
 4. Specify all parameters explicitly

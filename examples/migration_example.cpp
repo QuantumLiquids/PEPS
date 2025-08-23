@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 /*
-* Migration Example: From VMCPEPSExecutor to VMCPEPSOptimizerExecutor
+* Migration Example: From VMCPEPSExecutor to VMCPEPSOptimizer
 * 
 * This file demonstrates the complete migration process with working code examples.
 */
@@ -52,7 +52,7 @@ void demonstrate_legacy_problems() {
     std::cout << "  - Legacy enum-based algorithm selection" << std::endl;
     std::cout << "" << std::endl;
     
-    std::cout << "✅ Modern VMCPEPSOptimizerExecutor solutions:" << std::endl;
+    std::cout << "✅ Modern VMCPEPSOptimizer solutions:" << std::endl;
     std::cout << "  - Clean separation of parameter types" << std::endl;
     std::cout << "  - Modular Optimizer class design" << std::endl;
     std::cout << "  - Type-safe algorithm selection with std::variant" << std::endl;
@@ -62,7 +62,7 @@ void demonstrate_legacy_problems() {
 }
 
 // ============================================================================
-// NEW CODE: Using VMCPEPSOptimizerExecutor (Modern)
+// NEW CODE: Using VMCPEPSOptimizer (Modern)
 // ============================================================================
 
 void new_modern_approach() {
@@ -100,7 +100,7 @@ void new_modern_approach() {
     Model model;
     
     // Note: This would be the new executor (commented out for demonstration)
-    // VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+    // VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     //     params, 4, 4, MPI_COMM_WORLD, model);
     
     std::cout << "Modern parameter structure created successfully" << std::endl;
@@ -167,7 +167,7 @@ int main(int argc, char* argv[]) {
         VMCPEPSOptimizerParams modern_params = create_modern_parameters();
         
         std::cout << "\n=== MIGRATION COMPLETE ===" << std::endl;
-        std::cout << "You can now use VMCPEPSOptimizerExecutor with the converted parameters!" << std::endl;
+        std::cout << "You can now use VMCPEPSOptimizer with the converted parameters!" << std::endl;
     }
     
     MPI_Finalize();

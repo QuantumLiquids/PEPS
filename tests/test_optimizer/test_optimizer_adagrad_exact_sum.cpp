@@ -7,7 +7,7 @@
 * 
 * This test file focuses ONLY on Optimizer algorithm verification by:
 *  1. Using ExactSumEnergyEvaluator for deterministic gradient computation (no Monte Carlo noise)
-*  2. Testing Optimizer directly without VMCPEPSOptimizerExecutor overhead
+*  2. Testing Optimizer directly without VMCPEPSOptimizer overhead
 *  3. Verifying convergence for different optimization algorithms (AdaGrad, SGD, etc.)
 *  4. Testing model solvers: t-J, spinless free fermions, Heisenberg, Transverse-field Ising
 * 
@@ -154,7 +154,7 @@ double Calculate2x2OBCTransverseIsingEnergy(double J, double h) {
  * @return double Final energy after optimization
  */
 /**
- * @brief Pure Optimizer algorithm test using exact summation (NO VMCPEPSOptimizerExecutor)
+ * @brief Pure Optimizer algorithm test using exact summation (NO VMCPEPSOptimizer)
  *
  * This function tests ONLY the Optimizer algorithm by:
  * - Directly calling Optimizer.IterativeOptimize()
@@ -337,7 +337,7 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     qlpeps::AdaGradParams adagrad_params(1e-10, 0.0);
     qlpeps::OptimizerParams opt_params(base_params, adagrad_params);
 
-    // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
+    // Pure algorithm test (NO VMCPEPSOptimizer overhead)
     std::string test_name = "SpinlessFreeFermion_t2=" + std::to_string(t2);
     RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
       spinless_fermion_model,
@@ -441,7 +441,7 @@ TEST_F(TrivialHeisenbergTools, ExactSumGradientOptWithVMCOptimizer) {
     1e-8,
     0.0);
 
-  // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
+  // Pure algorithm test (NO VMCPEPSOptimizer overhead)
   std::string test_name = "Heisenberg_Trivial";
   RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
     heisenberg_model,
@@ -548,7 +548,7 @@ TEST_F(TrivialTransverseIsingTools, ExactSumGradientOptWithVMCOptimizer) {
     1e-8,
     0.0);
 
-  // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
+  // Pure algorithm test (NO VMCPEPSOptimizer overhead)
   std::string test_name = "TransverseIsing_Trivial";
   RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
     transverse_ising_model,
@@ -660,7 +660,7 @@ TEST_F(Z2tJTools, ExactSumGradientOptWithVMCOptimizer) {
     1e-8,
     0.0);
 
-  // Pure algorithm test (NO VMCPEPSOptimizerExecutor overhead)
+  // Pure algorithm test (NO VMCPEPSOptimizer overhead)
   std::string test_name = "tJ_Model";
   RunPureOptimizerTest<Model, TenElemT, QNT, SITPST>(
     tj_model,

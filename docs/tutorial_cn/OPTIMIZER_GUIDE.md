@@ -235,7 +235,7 @@ VMCPEPSOptimizerParams vmc_params{
 };
 
 // 创建并执行optimizer
-VMCPEPSOptimizerExecutor<ComplexDouble, QNZ2> executor(
+VMCPEPSOptimizer<ComplexDouble, QNZ2> executor(
   vmc_params, initial_tps, comm, energy_solver
 );
 executor.Execute();
@@ -597,7 +597,7 @@ void OptimizeHeisenbergModel() {
   
   // 6. 创建并执行优化器
   try {
-    VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, 
+    VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, 
                             SpinOneHalfHeisenbergSquare> executor(
       vmc_params, 
       "initial_state_dir/",  // 初始state路径
@@ -713,7 +713,7 @@ private:
     // 实现单阶段优化...
     VMCPEPSOptimizerParams vmc_params{opt_params, mc_params_, peps_params_, stage_name};
     
-    VMCPEPSOptimizerExecutor executor(vmc_params, input_path, MPI_COMM_WORLD, energy_solver_);
+    VMCPEPSOptimizer executor(vmc_params, input_path, MPI_COMM_WORLD, energy_solver_);
     executor.Execute();
     
     return {executor.GetMinimumEnergy(), stage_name + "_final"};
@@ -845,7 +845,7 @@ int main(int argc, char* argv[]) {
     };
     
     // 6. 创建和执行优化器
-    VMCPEPSOptimizerExecutor<qlten::QLTEN_Complex, qlten::QNZ2, 
+    VMCPEPSOptimizer<qlten::QLTEN_Complex, qlten::QNZ2, 
                             SquareNNUpdater, SpinOneHalfHeisenbergSquare> 
         executor(vmc_params, "random_init/", MPI_COMM_WORLD, energy_solver);
     
@@ -914,7 +914,7 @@ public:
                                        "lr_sweep_" + std::to_string(lr)};
       
       try {
-        VMCPEPSOptimizerExecutor executor(vmc_params, initial_state_path_, 
+        VMCPEPSOptimizer executor(vmc_params, initial_state_path_, 
                                          MPI_COMM_WORLD, energy_solver_);
         executor.Execute();
         

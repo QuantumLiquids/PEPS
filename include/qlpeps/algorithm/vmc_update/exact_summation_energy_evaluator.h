@@ -130,7 +130,7 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
  *   at the end to enforce parity.
  *
  * Notes:
- * - Mirrors VMCPEPSOptimizerExecutor::SampleEnergyAndHoles_: use \(E_{\mathrm{loc}}^*\) when multiplying gradient
+ * - Mirrors VMCPEPSOptimizer::SampleEnergyAndHoles_: use \(E_{\mathrm{loc}}^*\) when multiplying gradient
  *   samples and use \(E^*\) in the covariance subtraction.
  * - For real types, \c ComplexConjugate is a no-op.
  * - Symbol ↔ Code mapping in this function:

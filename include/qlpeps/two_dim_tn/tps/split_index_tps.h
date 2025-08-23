@@ -5,6 +5,10 @@
 * Description: QuantumLiquids/PEPS project. The split index TPS class, where the tensor are stored in tensors splited in physical index
 */
 
+/**
+@file split_index_tps.h
+@brief Split-index TPS class API.
+*/
 #ifndef QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H
 #define QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H
 
@@ -38,6 +42,14 @@ inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,
  * - MPI communication (Send/Recv/Broadcast)
  * - Site-wise normalization and scaling
  * 
+ * Bosonic vs. fermionic conventions:
+ * - Bosonic tensors have 4 virtual indices; contractions typically use index set {0,1,2,3}.
+ * - Fermionic tensors carry an extra 1-dim parity index (as the last index). When contracting
+ *   or forming inner products, use index set {0,1,2,3,4} and apply `ActFermionPOps()`
+ *   to ensure correct graded algebra.
+ * - When converting from a regular TPS, fermionic components are projected by matching
+ *   quantum number sectors, while bosonic components use a simple Kronecker projection.
+ *
  * @note The operator() method from the base class TenMatrix will automatically
  * allocate memory for elements when accessed if they haven't been initialized.
  * For std::vector<Tensor> elements, this means creating an empty vector.
@@ -245,13 +257,34 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     return TN2D((*this), config);
   }
 
+  /**
+   * @brief Get minimal inner bond dimension across the network
+   * @return Minimal dimension among all inner bonds
+   */
   size_t GetMinBondDimension(void) const;
+
+  /**
+   * @brief Get maximal inner bond dimension across the network
+   * @return Maximal dimension among all inner bonds
+   */
   size_t GetMaxBondDimension(void) const;
 
+  /**
+   * @brief Get both minimal and maximal inner bond dimensions
+   * @return A pair {min_dim, max_dim}
+   */
   std::pair<size_t, size_t> GetMinMaxBondDimension(void) const;
 
+  /**
+   * @brief Collect all inner bond dimensions
+   * @return Vector of inner bond dimensions in scan order
+   */
   std::vector<size_t> GetAllInnerBondDimensions(void) const;
 
+  /**
+   * @brief Check if inner bond dimensions are uniform (even) on the bulk bonds
+   * @return true if all inner bonds share the same dimension
+   */
   bool IsBondDimensionEven(void) const;
 
   /**
@@ -430,13 +463,48 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    */
   void ScaleMaxAbsForAllSite(double aiming_max_abs);
 
+  /**
+   * @brief Dump one split tensor component to a file
+   * @param row Lattice row
+   * @param col Lattice column
+   * @param compt Physical component index (0..d-1)
+   * @param file Target file path
+   * @return true if succeeded
+   */
   bool DumpTen(const size_t row, const size_t col, const size_t compt, const std::string &file) const;
 
   // Assumes memory has been allocated
+  /**
+   * @brief Load one split tensor component from a file
+   * @param row Lattice row
+   * @param col Lattice column
+   * @param compt Physical component index (0..d-1)
+   * @param file Source file path
+   * @return true if succeeded
+   */
   bool LoadTen(const size_t row, const size_t col, const size_t compt, const std::string &file);
 
+  /**
+   * @brief Dump the whole SplitIndexTPS to a directory
+   * 
+   * Layout:
+   * - Tensor files: kTpsTenBaseName + "row_col_compt" + "." + kQLTenFileSuffix
+   * - Metadata:     tps_meta.txt containing: rows cols phy_dim
+   *
+   * @param tps_path Target directory path (created if absent)
+   * @param release_mem Whether to deallocate site tensors after dumping
+   */
   void Dump(const std::string &tps_path = kTpsPath, const bool release_mem = false);
 
+  /**
+   * @brief Load the whole SplitIndexTPS from a directory
+   * 
+   * Accepts both new format (with tps_meta.txt) and old format (with file "phys_dim").
+   * For the old format, the matrix size must be already set by the caller.
+   *
+   * @param tps_path Source directory path
+   * @return true if succeeded
+   */
   bool Load(const std::string &tps_path = kTpsPath);
 
 private:

@@ -90,7 +90,7 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
+      new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
           sitps,
           mc_measurement_para,
           comm,
@@ -110,7 +110,7 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
+      new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
                                                                                                 mc_measurement_para,
                                                                                                 comm,
                                                                                                 spinless_fermion_solver);
@@ -174,7 +174,7 @@ TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJNNModel>(sitps,
+      new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJNNModel>(sitps,
                                                                                                     mc_measurement_para,
                                                                                                     comm,
                                                                                                     tj_solver);
@@ -193,7 +193,7 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
   auto tps = TPS<TenElemT, fZ2QN>(peps);
   auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
+      new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
                                                                                                 mc_measurement_para,
                                                                                                 comm,
                                                                                                 tj_solver);

@@ -50,7 +50,7 @@ concept MonteCarloSweepUpdaterConcept = requires(
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater> requires
 MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
-class MonteCarloPEPSBaseExecutor : public Executor {
+class MonteCarloPEPSBaseExecutor : public qlten::Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;

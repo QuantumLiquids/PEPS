@@ -61,17 +61,17 @@ if (error_condition) {
 #### Before: Complex Constructors with Hidden I/O
 ```cpp
 // Constructor secretly loads files from disk
-MonteCarloMeasurementExecutor executor(tps_path, measurement_params, comm);
+MCPEPSMeasurer executor(tps_path, measurement_params, comm);
 ```
 
 #### After: Explicit User Control
 ```cpp
 // User explicitly loads TPS data
 auto tps = SplitIndexTPS<>::LoadFromFile(tps_path);
-MonteCarloMeasurementExecutor executor(tps, measurement_params, comm);
+MCPEPSMeasurer executor(tps, measurement_params, comm);
 
 // OR: Use convenience factory if preferred
-auto executor = MonteCarloMeasurementExecutor::CreateByLoadingTPS(
+auto executor = MCPEPSMeasurer::CreateByLoadingTPS(
     tps_path, measurement_params, comm, solver);
 ```
 
@@ -107,18 +107,18 @@ MCMeasurementParams params(mc_params, peps_params);
 
 #### Before
 ```cpp
-MonteCarloMeasurementExecutor<> executor(tps_path, params, comm, solver);
+MCPEPSMeasurer<> executor(tps_path, params, comm, solver);
 ```
 
 #### After (Explicit TPS loading)
 ```cpp
 auto tps = SplitIndexTPS<>::LoadFromFile(tps_path);
-MonteCarloMeasurementExecutor<> executor(tps, params, comm, solver);
+MCPEPSMeasurer<> executor(tps, params, comm, solver);
 ```
 
 #### After (Factory convenience)
 ```cpp
-auto executor = MonteCarloMeasurementExecutor<>::CreateByLoadingTPS(
+auto executor = MCPEPSMeasurer<>::CreateByLoadingTPS(
     tps_path, params, comm, solver);
 ```
 
@@ -131,7 +131,7 @@ VMCPEPSExecutor<> optimizer(vmc_params, tps, comm, solver);
 
 #### After
 ```cpp
-VMCPEPSOptimizerExecutor<> optimizer(vmc_params, tps, comm, solver);
+VMCPEPSOptimizer<> optimizer(vmc_params, tps, comm, solver);
 ```
 
 ## Files Modified (48 total)
@@ -176,7 +176,7 @@ VMCPEPSOptimizerExecutor<> optimizer(vmc_params, tps, comm, solver);
 2. **Implicit conversions removed** - Must use explicit getter methods
 3. **Constructor signatures changed** - TPS loading now explicit or via factory
 4. **Error handling changed** - Library throws exceptions instead of exit()
-5. **Class names changed** - `VMCPEPSExecutor` → `VMCPEPSOptimizerExecutor`
+5. **Class names changed** - `VMCPEPSExecutor` → `VMCPEPSOptimizer`
 
 ## Migration Support
 

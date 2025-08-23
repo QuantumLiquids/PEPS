@@ -1,8 +1,8 @@
-# VMCPEPSOptimizerExecutor 完整指南
+# VMCPEPSOptimizer 完整指南
 
 ## 概述
 
-`VMCPEPSOptimizerExecutor` 是用于 PEPS (Projected Entangled Pair States) 变分蒙特卡洛优化的**统一执行引擎**。它通过清晰的模板化架构协调三个基础组件，消除复杂性而非管理复杂性。
+`VMCPEPSOptimizer` 是用于 PEPS (Projected Entangled Pair States) 变分蒙特卡洛优化的**统一执行引擎**。它通过清晰的模板化架构协调三个基础组件，消除复杂性而非管理复杂性。
 
 **核心设计哲学**：一个执行器，三种策略，零特殊情况。
 
@@ -12,7 +12,7 @@
 
 ```cpp
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-class VMCPEPSOptimizerExecutor
+class VMCPEPSOptimizer
 ```
 
 执行器精确组合了三个策略组件：
@@ -43,11 +43,11 @@ VMC优化的核心是最小化能量期望值 $\langle H \rangle$，这需要计
 
 ### 使用方式：模板参数注入
 
-与蒙特卡洛更新器一样，能量求解器也是一个**策略对象**，通过模板参数注入到 `VMCPEPSOptimizerExecutor` 中：
+与蒙特卡洛更新器一样，能量求解器也是一个**策略对象**，通过模板参数注入到 `VMCPEPSOptimizer` 中：
 
 ```cpp
 // 声明一个使用特定求解器的执行器类型
-using MyExecutor = VMCPEPSOptimizerExecutor<TenElemT, QNT, MyUpdater, MyEnergySolver>;
+using MyExecutor = VMCPEPSOptimizer<TenElemT, QNT, MyUpdater, MyEnergySolver>;
 
 // 实例化求解器并传入
 MyEnergySolver solver(...);
@@ -131,7 +131,7 @@ VMCPEPSOptimizerParams vmc_params{opt_params, mc_params, peps_params, "output"};
 EnergySolver energy_solver(ly, lx, J_coupling);
 
 // 4. 创建并执行
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloUpdater, EnergySolver> 
+VMCPEPSOptimizer<TenElemT, QNT, MonteCarloUpdater, EnergySolver> 
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, energy_solver);
 
 executor.Execute();
@@ -151,7 +151,7 @@ auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
   1000, cg_params, 0.1
 );
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, CustomUpdater, CustomSolver>
+VMCPEPSOptimizer<TenElemT, QNT, CustomUpdater, CustomSolver>
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, custom_solver);
 ```
 
@@ -253,12 +253,12 @@ template<typename MonteCarloUpdater, typename EnergySolver>
 
 ```cpp
 // 优化阶段
-VMCPEPSOptimizerExecutor<TenElemT, QNT, UpdaterType, SolverType> 
+VMCPEPSOptimizer<TenElemT, QNT, UpdaterType, SolverType> 
   optimizer(opt_params, initial_tps, comm, solver);
 optimizer.Execute();
 
 // 使用相同策略的测量阶段
-MonteCarloMeasurementExecutor<TenElemT, QNT, UpdaterType, MeasurementSolverType>
+MCPEPSMeasurer<TenElemT, QNT, UpdaterType, MeasurementSolverType>
   measurement(measurement_params, optimized_tps, comm, measurement_solver);
 measurement.Execute();
 ```
@@ -312,7 +312,7 @@ peps_params.truncate_para = BMPSTruncatePara(/*...*/);
 VMCPEPSOptimizerParams vmc_params{sr_params, mc_params, peps_params, "heisenberg_4x4"};
 SolverType energy_solver(ly, lx, J);
 
-VMCPEPSOptimizerExecutor<QLTEN_Complex, QNZ2, UpdaterType, SolverType> 
+VMCPEPSOptimizer<QLTEN_Complex, QNZ2, UpdaterType, SolverType> 
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, energy_solver);
 
 executor.Execute();
@@ -332,7 +332,7 @@ FrustrationSolver solver(ly, lx, J1, J2);
 // 使用Adam优化器进行快速收敛
 auto adam_params = OptimizerFactory::CreateAdam(1000, 1e-3);
 
-VMCPEPSOptimizerExecutor<QLTEN_Complex, QNZ2, FrustrationUpdater, FrustrationSolver>
+VMCPEPSOptimizer<QLTEN_Complex, QNZ2, FrustrationUpdater, FrustrationSolver>
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, solver);
 ```
 
@@ -363,7 +363,7 @@ MonteCarloParams precise_mc(20000, 5000, 10, config, false, "");
 
 ## 总结
 
-`VMCPEPSOptimizerExecutor` 体现了良好的软件设计：
+`VMCPEPSOptimizer` 体现了良好的软件设计：
 
 - **组合优于继承**：组合三个策略组件
 - **单一职责**：每个组件都有一个明确定义的工作
@@ -380,12 +380,12 @@ MonteCarloParams precise_mc(20000, 5000, 10, config, false, "");
 
 如需更详细的技术信息，请参考英文版文档：
 
-- [VMCPEPSOptimizerExecutor Complete Guide (English)](VMCPEPS_OPTIMIZER_EXECUTOR_GUIDE.md)
+- [VMCPEPSOptimizer Complete Guide (English)](VMCPEPS_OPTIMIZER_EXECUTOR_GUIDE.md)
 - [Optimizer Guide (English)](../OPTIMIZER_GUIDE.md)
 - [Monte Carlo PEPS API Guide (English)](../MONTE_CARLO_PEPS_API_GUIDE.md)
 - [VMC Data Persistence Guide (English)](../VMC_DATA_PERSISTENCE_GUIDE.md)
 
-本指南涵盖了VMCPEPSOptimizerExecutor的核心概念，重点解释了model energy solver和monte carlo updater这两个关键组件的作用和选择策略。
+本指南涵盖了VMCPEPSOptimizer的核心概念，重点解释了model energy solver和monte carlo updater这两个关键组件的作用和选择策略。
 
 
 //TODO for this doc: Paramters

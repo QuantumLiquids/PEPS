@@ -81,7 +81,7 @@ TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
   auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);
   sitps.Load(tps_path);
   
-  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model>(sitps,
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT, TPSSampleFlipT, Model>(sitps,
                                                                                           para,
                                                                                           comm);
   executor->Execute();
@@ -165,14 +165,14 @@ struct SpinSystemMCPEPS : public testing::Test {
 
 TEST_F(SpinSystemMCPEPS, TriHeisenbergD4) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS;
-  MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
   // Load TPS explicitly - this is the new API pattern
   std::string tps_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
   auto sitps = SplitIndexTPS<TenElemT, U1QN>(Ly, Lx);
   sitps.Load(tps_path);
 
-  executor = new MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model>(sitps,
+  executor = new MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model>(sitps,
                                                                                         mc_measurement_para,
                                                                                         comm, triangle_hei_solver);
 
@@ -182,10 +182,10 @@ TEST_F(SpinSystemMCPEPS, TriHeisenbergD4) {
 
 TEST_F(SpinSystemMCPEPS, TriJ1J2HeisenbergD4) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, U1QN>;
-  MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);
   mc_measurement_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
-  executor = new MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+  executor = new MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
                                                                                         Ly,
                                                                                         Lx,
                                                                                         comm,

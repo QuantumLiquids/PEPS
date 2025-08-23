@@ -92,7 +92,7 @@ su.DumpResult("output/peps_", /*release_mem=*/false);
 
 - 头文件：`qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h`
 - 基类（采样核心）：`qlpeps::MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>`
-- 执行器：`qlpeps::VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>`
+- 执行器：`qlpeps::VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>`
 
 ### 功能说明
 
@@ -157,7 +157,7 @@ SplitIndexTPS<TenElemT, QNT> tps_init(/* ly, lx */);
 MPI_Comm comm = MPI_COMM_WORLD;
 EnergySolver solver;
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver> exe(params, tps_init, comm, solver);
+VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver> exe(params, tps_init, comm, solver);
 exe.Execute();
 
 // 访问结果
@@ -173,7 +173,7 @@ exe.DumpData("output/vmc_peps_", /*release_mem=*/false);
 
 - 头文件：`qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h`
 - 基类（采样核心）：`qlpeps::MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>`
-- 执行器：`qlpeps::MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>`
+- 执行器：`qlpeps::MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>`
 
 ### 功能说明
 
@@ -226,7 +226,7 @@ MeasurementSolver solver;
 SplitIndexTPS<TenElemT, QNT> tps(ly, lx);
 tps.Load(meas_para.peps_params.wavefunction_path); // or load from your path
 
-MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
   meas(tps, meas_para, comm, solver);
 meas.Execute();
 

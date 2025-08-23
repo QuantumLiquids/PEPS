@@ -1,8 +1,8 @@
-# VMCPEPSOptimizerExecutor Comprehensive Guide
+# VMCPEPSOptimizer Comprehensive Guide
 
 ## Overview
 
-`VMCPEPSOptimizerExecutor` is the **unified execution engine** for variational Monte Carlo optimization of PEPS (Projected Entangled Pair States). It orchestrates three fundamental components through a clean, template-based architecture that eliminates complexity rather than managing it.
+`VMCPEPSOptimizer` is the **unified execution engine** for variational Monte Carlo optimization of PEPS (Projected Entangled Pair States). It orchestrates three fundamental components through a clean, template-based architecture that eliminates complexity rather than managing it.
 
 **Core Design Philosophy**: One executor, three strategies, zero special cases.
 
@@ -12,7 +12,7 @@
 
 ```cpp
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-class VMCPEPSOptimizerExecutor
+class VMCPEPSOptimizer
 ```
 
 The executor combines exactly three strategic components:
@@ -269,7 +269,7 @@ VMCPEPSOptimizerParams vmc_params{opt_params, mc_params, peps_params, "output"};
 EnergySolver energy_solver(ly, lx, J_coupling);
 
 // 4. Create and execute
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloUpdater, EnergySolver> 
+VMCPEPSOptimizer<TenElemT, QNT, MonteCarloUpdater, EnergySolver> 
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, energy_solver);
 
 executor.Execute();
@@ -289,7 +289,7 @@ auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
   1000, cg_params, 0.1
 );
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, CustomUpdater, CustomSolver>
+VMCPEPSOptimizer<TenElemT, QNT, CustomUpdater, CustomSolver>
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, custom_solver);
 ```
 
@@ -432,12 +432,12 @@ The same Monte Carlo Updater and Energy Solver strategies can be reused for meas
 
 ```cpp
 // Optimization phase
-VMCPEPSOptimizerExecutor<TenElemT, QNT, UpdaterType, SolverType> 
+VMCPEPSOptimizer<TenElemT, QNT, UpdaterType, SolverType> 
   optimizer(opt_params, initial_tps, comm, solver);
 optimizer.Execute();
 
 // Measurement phase using same strategies
-MonteCarloMeasurementExecutor<TenElemT, QNT, UpdaterType, MeasurementSolverType>
+MCPEPSMeasurer<TenElemT, QNT, UpdaterType, MeasurementSolverType>
   measurement(measurement_params, optimized_tps, comm, measurement_solver);
 measurement.Execute();
 ```
@@ -479,7 +479,7 @@ measurement.Execute();
 
 ## Summary
 
-`VMCPEPSOptimizerExecutor` exemplifies good software design:
+`VMCPEPSOptimizer` exemplifies good software design:
 
 - **Composition over inheritance**: Combines three strategy components
 - **Single responsibility**: Each component has one well-defined job

@@ -4,9 +4,9 @@
 *
 * Description: QuantumLiquids/PEPS project.
 * 
-* Example demonstrating VMCPEPSOptimizerExecutor integration with exact summation energy evaluator.
+* Example demonstrating VMCPEPSOptimizer integration with exact summation energy evaluator.
 * 
-* This example shows the "full system integration" approach with VMCPEPSOptimizerExecutor,
+* This example shows the "full system integration" approach with VMCPEPSOptimizer,
 * which includes Monte Carlo sampling infrastructure, state normalization, data collection,
 * and file I/O operations - even when using exact summation for energy evaluation.
 * 
@@ -14,12 +14,12 @@
 *             acceptance rate monitoring, etc.) but want exact gradient computation for small systems.
 * 
 * 📊 COMPARISON WITH PURE OPTIMIZER TESTS:
-* - VMCPEPSOptimizerExecutor: Full integration with all VMC features
+* - VMCPEPSOptimizer: Full integration with all VMC features
 * - Pure Optimizer tests: Focus only on optimization algorithm correctness
 * 
 * Design Philosophy: "Use the right tool for the job"
 * - For algorithm verification: Use pure Optimizer tests (see tests/test_optimizer/test_optimizer_adagrad_exact_sum.cpp)
-* - For system integration: Use VMCPEPSOptimizerExecutor (this example)
+* - For system integration: Use VMCPEPSOptimizer (this example)
 */
 
 #include "qlten/qlten.h"
@@ -35,10 +35,10 @@ using qlten::special_qn::fZ2QN;
 using qlten::special_qn::TrivialRepQN;
 
 /**
- * @brief Demonstrates VMCPEPSOptimizerExecutor with exact summation for 2x2 Heisenberg model
+ * @brief Demonstrates VMCPEPSOptimizer with exact summation for 2x2 Heisenberg model
  * 
  * This example shows how to:
- * 1. Set up VMCPEPSOptimizerExecutor with full VMC infrastructure
+ * 1. Set up VMCPEPSOptimizer with full VMC infrastructure
  * 2. Replace Monte Carlo energy evaluator with exact summation
  * 3. Monitor convergence with detailed callbacks
  * 4. Save optimization trajectory and states
@@ -88,7 +88,7 @@ void DemonstrateVMCExecutorExactSummation() {
     qlpeps::AdaGradParams adagrad_params(1e-8, 0.0);
     qlpeps::OptimizerParams opt_params(base_params, adagrad_params);
     
-    // Monte Carlo parameters (not used for sampling but required for VMCPEPSOptimizerExecutor)
+    // Monte Carlo parameters (not used for sampling but required for VMCPEPSOptimizer)
     Configuration init_config(Ly, Lx);
     init_config.Random(std::vector<size_t>{2, 2}); // 2 up, 2 down
     qlpeps::MonteCarloParams mc_params(1, 0, 1, init_config, true);
@@ -99,8 +99,8 @@ void DemonstrateVMCExecutorExactSummation() {
     // Combined VMC parameters
     qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
     
-    // 🎯 KEY FEATURE: VMCPEPSOptimizerExecutor with full infrastructure
-    VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+    // 🎯 KEY FEATURE: VMCPEPSOptimizer with full infrastructure
+    VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
         optimize_para, split_index_tps, MPI_COMM_WORLD, heisenberg_model);
     
     // 🔧 EXACT SUMMATION INTEGRATION: Replace Monte Carlo with exact computation (unified interface)
@@ -125,7 +125,7 @@ void DemonstrateVMCExecutorExactSummation() {
     executor.SetEnergyEvaluator(exact_energy_evaluator);
     
     // 📊 ADVANCED MONITORING: Detailed callback with convergence tracking
-    typename VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model>::OptimizerT::OptimizationCallback callback;
+    typename VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>::OptimizerT::OptimizationCallback callback;
     callback.on_iteration = [&](size_t iteration, double energy, double energy_error, double gradient_norm) {
         std::cout << "VMC-Executor Step " << iteration 
                   << ": E=" << std::fixed << std::setprecision(12) << energy
@@ -150,7 +150,7 @@ void DemonstrateVMCExecutorExactSummation() {
     executor.SetOptimizationCallback(callback);
     
     // 🚀 EXECUTE FULL VMC INTEGRATION with exact summation
-    std::cout << "🔧 Starting VMCPEPSOptimizerExecutor with exact summation..." << std::endl;
+    std::cout << "🔧 Starting VMCPEPSOptimizer with exact summation..." << std::endl;
     std::cout << "   System: 2x2 Heisenberg XY model" << std::endl;
     std::cout << "   Exact energy: " << energy_exact << std::endl;
     std::cout << "   Features: State saving, data collection, acceptance monitoring" << std::endl;
@@ -177,11 +177,11 @@ void DemonstrateVMCExecutorExactSummation() {
 }
 
 int main(int argc, char* argv[]) {
-    // Initialize MPI for VMCPEPSOptimizerExecutor
+    // Initialize MPI for VMCPEPSOptimizer
     MPI_Init(&argc, &argv);
     
     std::cout << "===========================================" << std::endl;
-    std::cout << "VMCPEPSOptimizerExecutor + Exact Summation" << std::endl;
+    std::cout << "VMCPEPSOptimizer + Exact Summation" << std::endl;
     std::cout << "===========================================" << std::endl;
     std::cout << std::endl;
     

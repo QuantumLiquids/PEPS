@@ -113,7 +113,7 @@ class MCUpdateSquareNNFullSpacePXP : public MCUpdateSquareNNUpdateBase<MCUpdateS
 using UpdaterType = qlpeps::MCUpdateSquareNNFullSpacePXP;
 using SolverType  = /* 你的能量求解器 */;
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, UpdaterType, SolverType>
+VMCPEPSOptimizer<TenElemT, QNT, UpdaterType, SolverType>
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, solver);
 executor.Execute();
 ```

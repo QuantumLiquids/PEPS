@@ -1,8 +1,8 @@
-# Migration Guide: From VMCPEPSExecutor to VMCPEPSOptimizerExecutor
+# Migration Guide: From VMCPEPSExecutor to VMCPEPSOptimizer
 
 ## Overview
 
-This guide helps you migrate from the legacy `VMCPEPSExecutor` to the new `VMCPEPSOptimizerExecutor`. The new executor provides better modularity, cleaner separation of concerns, and improved maintainability while maintaining the same interface.
+This guide helps you migrate from the legacy `VMCPEPSExecutor` to the new `VMCPEPSOptimizer`. The new executor provides better modularity, cleaner separation of concerns, and improved maintainability while maintaining the same interface.
 
 ## TL;DR - What Changes
 
@@ -42,11 +42,11 @@ VMCPEPSExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 
 // NEW: Two clean patterns
 // Pattern A: Explicit TPS provided by user
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params, tps_init, comm, model);
 
 // Pattern B: TPS loaded from file path (ly, lx inferred from initial_config)
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params, "/path/to/tps", comm, model);
 ```
 
@@ -61,22 +61,22 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 
 ### Architecture
 - **VMCPEPSExecutor**: Monolithic design with optimization logic embedded
-- **VMCPEPSOptimizerExecutor**: Clean separation using the `Optimizer` class for all optimization logic
+- **VMCPEPSOptimizer**: Clean separation using the `Optimizer` class for all optimization logic
 
 ### Parameter Structure
 - **VMCPEPSExecutor**: Uses `VMCOptimizePara` (legacy structure with occupancy arrays and lattice dimensions)
-- **VMCPEPSOptimizerExecutor**: Uses `VMCPEPSOptimizerParams` with separate `OptimizerParams`, `MonteCarloParams`, and `PEPSParams`
+- **VMCPEPSOptimizer**: Uses `VMCPEPSOptimizerParams` with separate `OptimizerParams`, `MonteCarloParams`, and `PEPSParams`
 
 ### Configuration Handling
 - **VMCPEPSExecutor**: Used occupancy arrays `{num_up, num_down, ...}` and separate `ly`, `lx` parameters
-- **VMCPEPSOptimizerExecutor**: Uses `Configuration` objects that encapsulate lattice size and occupancy in a unified structure
+- **VMCPEPSOptimizer**: Uses `Configuration` objects that encapsulate lattice size and occupancy in a unified structure
 
 ### Constructor Patterns  
 - **VMCPEPSExecutor**: Multiple overloaded constructors with different parameter combinations
-- **VMCPEPSOptimizerExecutor**: Two clean patterns - explicit TPS vs. file path loading with automatic lattice size inference
+- **VMCPEPSOptimizer**: Two clean patterns - explicit TPS vs. file path loading with automatic lattice size inference
 
 ### MPI Behavior
-- **VMCPEPSOptimizerExecutor**: Better MPI coordination with master rank handling state updates and broadcasting to all ranks
+- **VMCPEPSOptimizer**: Better MPI coordination with master rank handling state updates and broadcasting to all ranks
 
 ## Migration Steps
 
@@ -103,7 +103,7 @@ VMCPEPSExecutor<TenElemT, QNT, MCUpdater, Model> executor(
     optimize_para, tps_init, comm, model);
 ```
 
-#### After (VMCPEPSOptimizerExecutor):
+#### After (VMCPEPSOptimizer):
 ```cpp
 #include "qlpeps/qlpeps.h"
 
@@ -133,7 +133,7 @@ opt_params.cg_params = ConjugateGradientParams();
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "./"); // tps_dump_path
 
 // Step 4: Create executor (same TPS, just new parameters)
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params, tps_init, comm, model);
 ```
 
@@ -143,7 +143,7 @@ The new API provides two clean constructor patterns:
 
 ```cpp
 // Pattern A: Explicit TPS provided by user
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params,        // VMCPEPSOptimizerParams
     sitpst_init,   // SplitIndexTPS provided by user
     comm,          // MPI communicator
@@ -151,7 +151,7 @@ VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 );
 
 // Pattern B: TPS loaded from file path (recommended for saved states)
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params,        // VMCPEPSOptimizerParams (ly, lx inferred from initial_config)
     "/path/to/tps", // TPS path - loaded automatically
     comm,          // MPI communicator
@@ -254,7 +254,7 @@ using Model = SquareSpinOneHalfXXZModel;
 using MCUpdater = MCUpdateSquareNNExchange;
 Model model;
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdater, Model> executor(
+VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params, "wavefunction_data", comm, model);
 
 // Execute optimization
@@ -293,7 +293,7 @@ executor.Execute();
 - [ ] **Parameters**: Convert `VMCOptimizePara` to separate `MonteCarloParams`, `PEPSParams`, and `OptimizerParams`
 - [ ] **Unification**: Combine parameter structures into unified `VMCPEPSOptimizerParams`
 - [ ] **Lattice Size**: Remove explicit `ly`, `lx` parameters - use Configuration object for lattice size
-- [ ] **Executor Type**: Change from `VMCPEPSExecutor` to `VMCPEPSOptimizerExecutor`
+- [ ] **Executor Type**: Change from `VMCPEPSExecutor` to `VMCPEPSOptimizer`
 - [ ] **Constructor Pattern**: Choose explicit TPS vs. file path loading (both patterns work)
 - [ ] **Testing**: Test compilation
 - [ ] **Testing**: Test runtime execution  
@@ -323,7 +323,7 @@ executor.Execute();
 
 ## Backward Compatibility
 
-The `VMCPEPSOptimizerExecutor` maintains the same public interface as `VMCPEPSExecutor`:
+The `VMCPEPSOptimizer` maintains the same public interface as `VMCPEPSExecutor`:
 
 - `Execute()` method
 - `GetState()` method  
@@ -343,6 +343,6 @@ After migration, test that:
 
 ## Conclusion
 
-Migrating to `VMCPEPSOptimizerExecutor` provides significant benefits in terms of code quality, maintainability, and future extensibility. The migration process is straightforward and the new executor maintains backward compatibility while offering improved architecture.
+Migrating to `VMCPEPSOptimizer` provides significant benefits in terms of code quality, maintainability, and future extensibility. The migration process is straightforward and the new executor maintains backward compatibility while offering improved architecture.
 
 For questions or issues during migration, refer to the test files in `tests/test_algorithm/` for working examples.

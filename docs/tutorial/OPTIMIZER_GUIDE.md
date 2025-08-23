@@ -291,7 +291,7 @@ VMCPEPSOptimizerParams vmc_params{
 };
 
 // Create and execute optimizer
-VMCPEPSOptimizerExecutor<ComplexDouble, QNZ2> executor(
+VMCPEPSOptimizer<ComplexDouble, QNZ2> executor(
   vmc_params, initial_tps, comm, energy_solver
 );
 executor.Execute();
@@ -609,7 +609,7 @@ void OptimizeHeisenbergModel() {
   
   // 6. Create and execute optimizer
   try {
-    VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, 
+    VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, 
                             SpinOneHalfHeisenbergSquare> executor(
       vmc_params, 
       "initial_state_dir/",  // initial state path
@@ -690,7 +690,7 @@ int main(int argc, char* argv[]) {
     };
     
     // 6. Create and execute optimizer
-    VMCPEPSOptimizerExecutor<qlten::QLTEN_Complex, qlten::QNZ2, 
+    VMCPEPSOptimizer<qlten::QLTEN_Complex, qlten::QNZ2, 
                             SquareNNUpdater, SpinOneHalfHeisenbergSquare> 
         executor(vmc_params, "random_init/", MPI_COMM_WORLD, energy_solver);
     

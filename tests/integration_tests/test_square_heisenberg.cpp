@@ -123,7 +123,7 @@ TEST_F(HeisenbergSystem, ZeroUpdate) {
   tps.Load(tps_path);
   auto init_tps = tps;
   auto executor =
-      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
+      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
                                                                                                        tps,
                                                                                                        comm,
                                                                                                        SquareSpinOneHalfXXZModel());
@@ -151,7 +151,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //VMC
   auto executor =
-      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
+      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
                                                                                                        tps,
                                                                                                        comm,
                                                                                                        SquareSpinOneHalfXXZModel());
@@ -170,7 +170,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
+      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
           tps,
           measure_para,
           comm);

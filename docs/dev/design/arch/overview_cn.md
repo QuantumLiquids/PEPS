@@ -31,11 +31,11 @@
     - 抽象执行器：`simple_update.h`（`SimpleUpdateExecutor<T>`）。
   - Loop Update：`algorithm/loop_update/`(暂时遗弃这一模块，算法效率不行)
   - VMC Update：`algorithm/vmc_update/`
-    - 优化执行器：`vmc_peps_optimizer.h`（`VMCPEPSOptimizerExecutor<T>`）
-    - 测量执行器：`monte_carlo_peps_measurement.h`（`MonteCarloMeasurementExecutor<T>`）
+    - 优化执行器：`vmc_peps_optimizer.h`（`VMCPEPSOptimizer<T>`）
+    - 测量执行器：`monte_carlo_peps_measurement.h`（`MCPEPSMeasurer<T>`）
     - 能量评估器：`exact_summation_energy_evaluator.h`（精确求和，MPI 并行枚举）（非外部暴露接口，对测试十分有效，可消除蒙卡不确定性。）
     - 物理模型求解器（能量/观测）：`model_energy_solver.h` 与 `model_solvers/*`
-    - 采样更新器（用户入参）：`MCSweepUpdater`（详见 VMCPEPSOptimizerExecutor 中文用户文档）
+    - 采样更新器（用户入参）：`MCSweepUpdater`（详见 VMCPEPSOptimizer 中文用户文档）
 
 - 优化器层
   - 参数系统：`optimizer/optimizer_params.h`
@@ -44,7 +44,7 @@
     - 工厂与 Builder：快速构建常用优化配置。
   - 优化器：`optimizer/optimizer.h` + `optimizer_impl.h`
     - 统一接口：`LineSearchOptimize` / `IterativeOptimize` / `CalculateNaturalGradient` 等。
-    - 关键架构：MPI 责任分离（见下一节“关键调用链”）。本层刻意与执行器解耦，目的是更好地测试，同时避免庞大对象。但其直接服务对象仍是 `VMCPEPSOptimizerExecutor`。其测试可以通过精确能量评估器来测试，以消除蒙卡不确定性。
+    - 关键架构：MPI 责任分离（见下一节“关键调用链”）。本层刻意与执行器解耦，目的是更好地测试，同时避免庞大对象。但其直接服务对象仍是 `VMCPEPSOptimizer`。其测试可以通过精确能量评估器来测试，以消除蒙卡不确定性。
   - SR 矩阵：`optimizer/stochastic_reconfiguration_smatrix.h`
 
 - 通用工具
@@ -53,8 +53,8 @@
 
 ## 三、关键调用链（谁驱动谁）
 
-- VMC 优化主流程（以 `VMCPEPSOptimizerExecutor` 为例）
-  1. 用户通过 `VMCPEPSOptimizerExecutor` 传入：`OptimizerParams` + 初态 `SplitIndexTPS` + 物理模型 solver。
+- VMC 优化主流程（以 `VMCPEPSOptimizer` 为例）
+  1. 用户通过 `VMCPEPSOptimizer` 传入：`OptimizerParams` + 初态 `SplitIndexTPS` + 物理模型 solver。
   2. 执行器内部持有 `Optimizer<T>`，并提供能量评估回调（默认或自定义）。
   3. 每次迭代：
      - Optimizer 在主进程更新状态（绝不在此处广播状态）。
@@ -63,7 +63,7 @@
      - Optimizer 根据梯度更新本地状态（主进程），记录轨迹/判断停止条件。
   4. 结束时由上层（执行器）保证最终态的同步与输出。
 
-说明：项目大部分模块服务于 `VMCPEPSOptimizerExecutor` 及其测量器。`Simple Update` 常作为用户的第一步（生成初态），其结果可经转换用于 VMC 优化。此工作流细节请参考用户教程，而非本架构页。
+说明：项目大部分模块服务于 `VMCPEPSOptimizer` 及其测量器。`Simple Update` 常作为用户的第一步（生成初态），其结果可经转换用于 VMC 优化。此工作流细节请参考用户教程，而非本架构页。
 
 - 精确求和能量评估（`ExactSumEnergyEvaluatorMPI`）
   1. 输入：主进程上的 `SplitIndexTPS`（来自 Optimizer）。
@@ -151,7 +151,7 @@
 - VMC 优化最小骨架：
   - 构造 `SplitIndexTPS` 初态与模型 solver
   - 通过 `OptimizerFactory` 或 `OptimizerParamsBuilder` 构造优化器参数
-  - 创建 `VMCPEPSOptimizerExecutor`，注入自定义能量评估器或采用默认
+  - 创建 `VMCPEPSOptimizer`，注入自定义能量评估器或采用默认
   - 调用 `Execute()`，读取 `GetEnergyTrajectory()`、`GetBestState()` 并落盘
 
 

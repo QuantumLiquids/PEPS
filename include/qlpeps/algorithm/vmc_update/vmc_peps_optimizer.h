@@ -50,7 +50,7 @@ namespace qlpeps {
  * @tparam EnergySolver Model energy solver
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
+class VMCPEPSOptimizer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
@@ -80,7 +80,7 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
    * @param comm MPI communicator
    * @param solver Energy solver for optimization
    */
-  VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
+  VMCPEPSOptimizer(const VMCPEPSOptimizerParams &params,
                            const SITPST &sitpst_init,
                            const MPI_Comm &comm,
                            const EnergySolver &solver);
@@ -102,9 +102,9 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
    * @note This factory automatically loads TPS from disk and initializes the optimization system
    * 
    * Usage:
-   *   auto executor = VMCPEPSOptimizerExecutor::CreateByLoadingTPS(params, tps_path, comm, solver);
+   *   auto executor = VMCPEPSOptimizer::CreateByLoadingTPS(params, tps_path, comm, solver);
    */
-  static std::unique_ptr<VMCPEPSOptimizerExecutor> 
+  static std::unique_ptr<VMCPEPSOptimizer>
   CreateByLoadingTPS(const VMCPEPSOptimizerParams& params,
                      const std::string& tps_path,
                      const MPI_Comm& comm,

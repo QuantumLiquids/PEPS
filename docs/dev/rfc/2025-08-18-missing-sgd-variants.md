@@ -13,7 +13,7 @@ tags: [rfc, optimizer]
 
 ## 概述
 
-在从 `VMCPEPSExecutor` 迁移到 `VMCPEPSOptimizerExecutor` 的过程中，发现有多个特殊的优化算法未在新的优化器架构中实现：
+在从 `VMCPEPSExecutor` 迁移到 `VMCPEPSOptimizer` 的过程中，发现有多个特殊的优化算法未在新的优化器架构中实现：
 
 ### SGD变体：
 1. **RandomGradientElement** - 随机化梯度元素的幅值但保留相位

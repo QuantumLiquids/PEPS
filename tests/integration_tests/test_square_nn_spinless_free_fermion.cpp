@@ -173,7 +173,7 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   //VMC
   SquareSpinlessFermion spinless_fermion_model_solver(1, 0, 0);
   auto executor =
-      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(optimize_para,
+      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(optimize_para,
                                                                                                           tps,
                                                                                                           comm,
                                                                                                           spinless_fermion_model_solver);
@@ -192,7 +192,7 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(
+      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(
           tps,
           measure_para,
           comm,
@@ -212,7 +212,7 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   //Measure2
 
   auto measure_exe2 =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
+      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
           tps,
           measure_para,
           comm,

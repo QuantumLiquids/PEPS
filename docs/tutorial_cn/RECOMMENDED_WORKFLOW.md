@@ -1,4 +1,4 @@
-### 推荐工作流：Simple Update → VMCPEPSOptimizerExecutor → MonteCarloMeasurementExecutor
+### 推荐工作流：Simple Update → VMCPEPSOptimizer → MCPEPSMeasurer
 
 本页提供项目推荐的端到端使用路径，帮助用户用最少的概念实现从初始化到优化、再到测量的完整闭环。
 
@@ -10,8 +10,8 @@
 ## 总览
 1) 用 Simple Update 得到一个“可用”的初始 PEPS （无MPI）
 2) 转成 SplitIndexTPS，做必要的规范化
-3) 通过 VMCPEPSOptimizerExecutor 进行变分优化（SR/SGD/AdaGrad等）
-4) 用 MonteCarloMeasurementExecutor 对优化后态进行可观测量测量
+3) 通过 VMCPEPSOptimizer 进行变分优化（SR/SGD/AdaGrad等）
+4) 用 MCPEPSMeasurer 对优化后态进行可观测量测量
 
 ## 步骤 1：Simple Update 生成初态
 - 入口：`qlpeps/algorithm/simple_update/simple_update.h` 及具体实现（如 Square lattice 最近邻）
@@ -38,7 +38,7 @@ SITPST sitps(peps);   // TPS → SplitIndexTPS
 sitps.NormalizeAllSite();
 ```
 
-## 步骤 3：VMCPEPSOptimizerExecutor 变分优化
+## 步骤 3：VMCPEPSOptimizer 变分优化
 - 入口：`qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h`
 - 参数：`VMCPEPSOptimizerParams{ OptimizerParams, MonteCarloParams, PEPSParams, dump_path }`
 - 模板策略：`MonteCarloSweepUpdater`（用户入参）与 `EnergySolver`
@@ -60,7 +60,7 @@ PEPSParams pepsp     = /* BMPS 截断与波函数路径 */;
 VMCPEPSOptimizerParams vmc_params{opt, mc, pepsp, "output"};
 
 EnergySolv solver(/*ly,lx,模型参数...*/);
-VMCPEPSOptimizerExecutor<TenElemT, QNT, Updater, EnergySolv>
+VMCPEPSOptimizer<TenElemT, QNT, Updater, EnergySolv>
   executor(vmc_params, sitps, MPI_COMM_WORLD, solver);
 executor.Execute();
 ```
@@ -69,7 +69,7 @@ executor.Execute();
 - 仅交换即可遍历的守恒模型：`MCUpdateSquareNNExchange`（必要时 `MCUpdateSquareTNN3SiteExchange` 提升接受率）
 - 非守恒或交换无法遍历的模型：`MCUpdateSquareNNFullSpaceUpdate`
 
-## 步骤 4：MonteCarloMeasurementExecutor 测量
+## 步骤 4：MCPEPSMeasurer 测量
 - 入口：`qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h`
 - 参数：`MCMeasurementParams{ MonteCarloParams, PEPSParams, measurement_data_dump_path }`
 - 模板策略：与优化阶段可共享 `MCSweepUpdater`/选择匹配的 `MeasurementSolver`
@@ -82,7 +82,7 @@ using MeasSolver  = /* 与能量一致的测量求解器 */;
 
 MCMeasurementParams measp = /* 设置样本与 BMPS 截断 */;
 MeasSolver ms;
-MonteCarloMeasurementExecutor<TenElemT, QNT, MeasUpdater, MeasSolver>
+MCPEPSMeasurer<TenElemT, QNT, MeasUpdater, MeasSolver>
   meas(sitps /*或从文件加载优化后态*/, measp, MPI_COMM_WORLD, ms);
 meas.Execute();
 ```

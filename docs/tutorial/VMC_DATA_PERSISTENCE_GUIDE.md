@@ -135,7 +135,7 @@ if (tps_base_name.empty()) {
 
 #### VMC Optimizer Dumping
 ```cpp
-void VMCPEPSOptimizerExecutor::DumpData(const std::string& tps_base_name, bool release_mem) {
+void VMCPEPSOptimizer::DumpData(const std::string& tps_base_name, bool release_mem) {
   // Generate paths with consistent naming
   std::string final_tps_path = tps_base_name + "final";   // Final optimization state
   std::string lowest_tps_path = tps_base_name + "lowest"; // Best energy state found
@@ -171,7 +171,7 @@ void VMCPEPSOptimizerExecutor::DumpData(const std::string& tps_base_name, bool r
 
 ## VMC Dump Mechanisms by Executor Type
 
-### 1. VMC Optimizer (`VMCPEPSOptimizerExecutor`)
+### 1. VMC Optimizer (`VMCPEPSOptimizer`)
 
 The optimizer dumps multiple types of data with different control mechanisms:
 
@@ -202,15 +202,15 @@ params.tps_dump_base_name = "experiment_01";  // → "experiment_01final", "expe
 params.mc_params.config_dump_path = "final_configs/exp01";  // Explicit config path
 // or params.mc_params.config_dump_path = "";               // No config dump
 
-VMCPEPSOptimizerExecutor executor(tps, params, energy_solver, /* comm */);
+VMCPEPSOptimizer executor(tps, params, energy_solver, /* comm */);
 executor.Execute();  // Automatically calls DumpData() at end
 ```
 
-### 2. Measurement Executor (`MonteCarloMeasurementExecutor`)
+### 2. Measurement Executor (`MCPEPSMeasurer`)
 
 #### Configuration Snapshots
 ```cpp
-void MonteCarloMeasurementExecutor::DumpData(const std::string &measurement_data_path) {
+void MCPEPSMeasurer::DumpData(const std::string &measurement_data_path) {
   // Dump configuration if path is specified in MonteCarloParams
   if (!mc_measure_params.mc_params.config_dump_path.empty()) {
     tps_sample_.config.Dump(mc_measure_params.mc_params.config_dump_path, rank_);
@@ -353,7 +353,7 @@ MCMeasurementParams measure_params(
   "analysis_results"              // organized measurement data
 );
 
-MonteCarloMeasurementExecutor executor(
+MCPEPSMeasurer executor(
   "/path/to/converged/tps",       // load existing TPS
   measure_params,
   comm,

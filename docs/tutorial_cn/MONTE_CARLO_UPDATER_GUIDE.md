@@ -77,7 +77,7 @@ void operator()(const SplitIndexTPS<TenElemT, QNT>& sitps,
 ```cpp
 using UpdaterType = MCUpdateSquareNNExchange; // 或 FullSpace / 3Site
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, UpdaterType, EnergySolver>
+VMCPEPSOptimizer<TenElemT, QNT, UpdaterType, EnergySolver>
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, solver);
 executor.Execute();
 ```

@@ -52,7 +52,7 @@
   - 内存控制：边算边累加，避免存储全量临时对象。
 
 - 归约与聚合
-   参考VMCPEPSOptimizerExecutor
+   参考VMCPEPSOptimizer
 
 - 结果计算（master）
 

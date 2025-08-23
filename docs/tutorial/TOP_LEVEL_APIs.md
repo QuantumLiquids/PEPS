@@ -92,7 +92,7 @@ su.DumpResult("output/peps_", /*release_mem=*/false);
 
 - Header: `qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h`
 - Base class (sampling core): `qlpeps::MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>`
-- Executor: `qlpeps::VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>`
+- Executor: `qlpeps::VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>`
 
 ### What it does
 
@@ -157,7 +157,7 @@ SplitIndexTPS<TenElemT, QNT> tps_init(/* ly, lx */);
 MPI_Comm comm = MPI_COMM_WORLD;
 EnergySolver solver;
 
-VMCPEPSOptimizerExecutor<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver> exe(params, tps_init, comm, solver);
+VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver> exe(params, tps_init, comm, solver);
 exe.Execute();
 
 // Access results
@@ -173,7 +173,7 @@ exe.DumpData("output/vmc_peps_", /*release_mem=*/false);
 
 - Header: `qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h`
 - Base class (sampling core): `qlpeps::MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>`
-- Executor: `qlpeps::MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>`
+- Executor: `qlpeps::MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>`
 
 ### What it does
 
@@ -226,7 +226,7 @@ MeasurementSolver solver;
 SplitIndexTPS<TenElemT, QNT> tps(ly, lx);
 tps.Load(meas_para.peps_params.wavefunction_path); // or load from your path
 
-MonteCarloMeasurementExecutor<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
   meas(tps, meas_para, comm, solver);
 meas.Execute();
 

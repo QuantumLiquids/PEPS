@@ -30,7 +30,7 @@ PEPSParams peps_params(BMPSTruncatePara(/*...*/));
 MCMeasurementParams params(mc_params, peps_params, "./output");  // includes dump path
 
 // Clean, explicit constructor
-MonteCarloMeasurementExecutor<TenElemT, QNT, UpdaterType, SolverType> executor(
+MCPEPSMeasurer<TenElemT, QNT, UpdaterType, SolverType> executor(
     user_tps,        // explicit TPS
     params,          // unified parameters
     comm,            // MPI communicator
@@ -64,7 +64,7 @@ PEPSParams peps_params(BMPSTruncatePara(/*...*/));
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 
 // Explicit constructor
-VMCPEPSOptimizerExecutor<TenElemT, QNT, UpdaterType, SolverType> optimizer(
+VMCPEPSOptimizer<TenElemT, QNT, UpdaterType, SolverType> optimizer(
     params,          // unified parameters
     initial_tps,     // explicit TPS
     comm,            // MPI communicator
@@ -113,7 +113,7 @@ PEPSParams peps_params(BMPSTruncatePara(/*...*/));
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 
 // Convenient constructor
-VMCPEPSOptimizerExecutor<TenElemT, QNT, UpdaterType, SolverType> optimizer(
+VMCPEPSOptimizer<TenElemT, QNT, UpdaterType, SolverType> optimizer(
     params,                // unified parameters
     "/path/to/initial/tps", // TPS path - loaded automatically, ly/lx from config
     comm,                  // MPI communicator

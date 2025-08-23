@@ -110,7 +110,7 @@ $\partial \Psi^*(S)/\partial \theta_i^*$ 的“洞”张量；后续按照上式
 注：费米子情形由于奇偶算符与符号的参与更为复杂，代码中通过 `EvaluateLocalPsiPartialPsiDag` 与最终的 `gradient.ActFermionPOps()` 处理。本文档此处先给出玻色子精确定义，费米子细节将在专门章节讨论。
 
 ## 用法
-在VMCPEPSOptimizerExecutor中作为最后一个模版参数EnergySolver传入，并在构造函数中，传入其具体的对象。其对象可能包含物理模型的参数。
+在VMCPEPSOptimizer中作为最后一个模版参数EnergySolver传入，并在构造函数中，传入其具体的对象。其对象可能包含物理模型的参数。
 
 ## 一般约定：
 位于：`include/qlpeps/algorithm/vmc_update/model_energy_solver.h`

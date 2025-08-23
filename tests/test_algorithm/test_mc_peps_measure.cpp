@@ -158,7 +158,7 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
 
   Model heisenberg_model(J, J, 0);
 
-  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+  auto executor = MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
     source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters
     comm,
@@ -214,7 +214,7 @@ TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
 
   Model transverse_ising_model(h);
 
-  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdate, Model>::CreateByLoadingTPS(
+  auto executor = MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdate, Model>::CreateByLoadingTPS(
     source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters  
     comm,
@@ -269,7 +269,7 @@ TEST_F(Test2x2MCPEPSFermion, SpinlessFermionModel) {
 
   Model fermion_model(t, t2, 0);
 
-  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+  auto executor = MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
     source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters
     comm,
@@ -320,7 +320,7 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
 
   Model tj_model(t, 0, J, J / 4, mu);
 
-  auto executor = MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+  auto executor = MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
     source_tps_path,   // TPS path - convenient factory loads automatically
     para,              // Unified parameters
     comm,
