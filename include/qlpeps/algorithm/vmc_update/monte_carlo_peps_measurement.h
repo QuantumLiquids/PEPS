@@ -14,7 +14,8 @@
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ObservablesLocal solver
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"        // Mean, Variance, DumpVecData, ...
 #include "qlpeps/utility/helpers.h"                               // Real helpers
-#include "monte_carlo_peps_base.h"
+#include "qlten/qlten.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/base/mpi_signal_guard.h"
 
 
@@ -142,13 +143,7 @@ void DumpSampleData(const std::vector<std::vector<TenElemT>> sample_data, const 
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-class MCPEPSMeasurer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::comm_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::mpi_size_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::rank_;
-
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::split_index_tps_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::tps_sample_;
+class MCPEPSMeasurer : public qlten::Executor {
   struct Result;
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
@@ -209,7 +204,7 @@ class MCPEPSMeasurer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCar
   MCMeasurementParams mc_measure_params;
 
   std::pair<TenElemT, double> OutputEnergy() const {
-    if (rank_ == kMPIMasterRank) {
+    if (engine_.Rank() == kMPIMasterRank) {
       if (this->GetStatus() == ExecutorStatus::FINISH) {
         std::cout << "Measured energy : "
                   << std::setw(8) << res.energy
@@ -235,7 +230,7 @@ class MCPEPSMeasurer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCar
    * @return Current configuration
    */
   const Configuration& GetCurrentConfiguration() const {
-    return tps_sample_.config;
+    return engine_.WavefuncComp().config;
   }
  private:
   void ReserveSamplesDataSpace_();
@@ -251,6 +246,7 @@ class MCPEPSMeasurer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCar
   void SynchronizeConfiguration_(const size_t root = 0); //for the replica test
 
   MeasurementSolver measurement_solver_;
+  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> engine_;
   struct Result {
     TenElemT energy;
     double en_err;
@@ -502,12 +498,10 @@ MCPEPSMeasurer<TenElemT,
     const MCMeasurementParams &measurement_params,
     const MPI_Comm &comm,
     const MeasurementSolver &solver):
-    MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>(sitpst,
-                                                                      measurement_params.mc_params,
-                                                                      measurement_params.peps_params,
-                                                                      comm),
+    qlten::Executor(),
     mc_measure_params(measurement_params),
-    measurement_solver_(solver) {
+    measurement_solver_(solver),
+    engine_(sitpst, measurement_params.mc_params, measurement_params.peps_params, comm) {
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   qlpeps::MPISignalGuard::Register();
@@ -545,7 +539,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::R
 //  std::cout << "Random number from worker " << rank_ << " : " << u_double_(random_engine) << std::endl;
   std::vector<double> accept_rates_accum;
   for (size_t sweep = 0; sweep < mc_measure_params.mc_params.num_samples; sweep++) {
-    std::vector<double> accept_rates = this->MCSweep_();
+    std::vector<double> accept_rates = engine_.StepSweep();
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
     } else {
@@ -554,16 +548,16 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::R
       }
     }
     // send-recv configuration
-    Configuration config2(this->ly_, this->lx_);
-    size_t dest = (rank_ + 1) % mpi_size_;
-    size_t source = (rank_ + mpi_size_ - 1) % mpi_size_;
+    Configuration config2(engine_.Ly(), engine_.Lx_);
+    size_t dest = (engine_.Rank() + 1) % engine_.MpiSize();
+    size_t source = (engine_.Rank() + engine_.MpiSize() - 1) % engine_.MpiSize();
     MPI_Status status;
-    int err_msg = MPI_Sendrecv(tps_sample_.config, dest, dest, config2, source, rank_, MPI_Comm(comm_),
+    int err_msg = MPI_Sendrecv(engine_.WavefuncComp().config, dest, dest, config2, source, engine_.Rank(), MPI_Comm(engine_.Comm()),
                                &status);
 
     // calculate overlap
-    overlaps.push_back(overlap_func(tps_sample_.config, config2));
-    if (rank_ == kMPIMasterRank && (sweep + 1) % (mc_measure_params.mc_params.num_samples / 10) == 0) {
+    overlaps.push_back(overlap_func(engine_.WavefuncComp().config, config2));
+    if (engine_.Rank() == kMPIMasterRank && (sweep + 1) % (mc_measure_params.mc_params.num_samples / 10) == 0) {
       PrintProgressBar((sweep + 1), mc_measure_params.mc_params.num_samples);
 
       auto accept_rates_avg = accept_rates_accum;
@@ -582,18 +576,18 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::R
   // Create replica overlap directory using EnsureDirectoryExists_ with dummy filename
   // Note: EnsureDirectoryExists_ expects a file path and creates its parent directory.
   // We append "dummy" as a placeholder filename to make it create the target directory itself.
-  this->EnsureDirectoryExists_(replica_overlap_path + "dummy");  // Creates replica_overlap/
-  DumpVecData(replica_overlap_path + "/replica_overlap" + std::to_string(rank_), overlaps);
+  engine_.EnsureDirectoryExists(replica_overlap_path + "dummy");  // Creates replica_overlap/
+  DumpVecData(replica_overlap_path + "/replica_overlap" + std::to_string(engine_.Rank()), overlaps);
   // Dump configuration using path from MonteCarloParams (empty = no dump)
   if (!mc_measure_params.mc_params.config_dump_path.empty()) {
-    tps_sample_.config.Dump(mc_measure_params.mc_params.config_dump_path, rank_);
+    engine_.WavefuncComp().config.Dump(mc_measure_params.mc_params.config_dump_path, engine_.Rank());
   }
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Execute(void) {
   this->SetStatus(ExecutorStatus::EXEING);
-  this->WarmUp_();
+  engine_.WarmUp();
   Measure_();
   DumpData();
   this->SetStatus(ExecutorStatus::FINISH);
@@ -611,10 +605,10 @@ void MCPEPSMeasurer<TenElemT,
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::MeasureSample_() {
 #ifdef QLPEPS_TIMING_MODE
-  Timer evaluate_sample_obsrvb_timer("evaluate_sample_observable (rank " + std::to_string(rank_) + ")");
+  Timer evaluate_sample_obsrvb_timer("evaluate_sample_observable (rank " + std::to_string(engine_.Rank()) + ")");
 #endif
-  ObservablesLocal<TenElemT> observables_local = measurement_solver_(&split_index_tps_, &tps_sample_);
-  sample_data_.PushBack(tps_sample_.amplitude, std::move(observables_local));
+  ObservablesLocal<TenElemT> observables_local = measurement_solver_(&engine_.State(), &engine_.WavefuncComp());
+  sample_data_.PushBack(engine_.WavefuncComp().amplitude, std::move(observables_local));
 #ifdef QLPEPS_TIMING_MODE
   evaluate_sample_obsrvb_timer.PrintElapsed();
 #endif
@@ -623,29 +617,29 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::GatherStatistic_() {
   Result res_thread = sample_data_.Statistic();
-  std::cout << "Rank " << rank_ << ": statistic data finished." << std::endl;
+  std::cout << "Rank " << engine_.Rank() << ": statistic data finished." << std::endl;
 
-  auto [energy, en_err] = GatherStatisticSingleData(res_thread.energy, MPI_Comm(comm_));
+  auto [energy, en_err] = GatherStatisticSingleData(res_thread.energy, MPI_Comm(engine_.Comm()));
   res.energy = energy;
   res.en_err = en_err;
   GatherStatisticListOfData(res_thread.bond_energys,
-                            comm_,
+                            engine_.Comm(),
                             res.bond_energys,
                             res.bond_energy_errs);
   GatherStatisticListOfData(res_thread.one_point_functions,
-                            comm_,
+                            engine_.Comm(),
                             res.one_point_functions,
                             res.one_point_function_errs);
   GatherStatisticListOfData(res_thread.two_point_functions,
-                            comm_,
+                            engine_.Comm(),
                             res.two_point_functions,
                             res.two_point_function_errs);
   GatherStatisticListOfData(res_thread.energy_auto_corr,
-                            comm_,
+                            engine_.Comm(),
                             res.energy_auto_corr,
                             res.energy_auto_corr_err);
   GatherStatisticListOfData(res_thread.one_point_functions_auto_corr,
-                            comm_,
+                            engine_.Comm(),
                             res.one_point_functions_auto_corr,
                             res.one_point_functions_auto_corr_err);
 
@@ -660,11 +654,11 @@ MCPEPSMeasurer<TenElemT,
   // Dump configuration if path is specified in MonteCarloParams
   if (!mc_measure_params.mc_params.config_dump_path.empty()) {
     // Create directory for configuration dump with informative output
-    this->EnsureDirectoryExists_(mc_measure_params.mc_params.config_dump_path);
-    tps_sample_.config.Dump(mc_measure_params.mc_params.config_dump_path, rank_);
+    engine_.EnsureDirectoryExists(mc_measure_params.mc_params.config_dump_path);
+    engine_.WavefuncComp().config.Dump(mc_measure_params.mc_params.config_dump_path, engine_.Rank());
   }
 
-  if (rank_ == kMPIMasterRank) {
+  if (engine_.Rank() == kMPIMasterRank) {
     res.Dump();
     res.DumpCSV(); // Dump data in two forms
   }
@@ -679,16 +673,16 @@ MCPEPSMeasurer<TenElemT,
   // Note: EnsureDirectoryExists_ expects a file path and creates its parent directory.
   // We append "dummy" as a placeholder filename to make it create the target directory itself.
   // This is a common workaround pattern when using file-path-based directory creation functions.
-  this->EnsureDirectoryExists_(energy_raw_path + "dummy");                    // Creates energy_sample_data/
-  this->EnsureDirectoryExists_(wf_amplitude_path + "dummy");                  // Creates wave_function_amplitudes/  
-  this->EnsureDirectoryExists_(one_point_function_raw_data_path + "dummy");   // Creates one_point_function_samples/
-  this->EnsureDirectoryExists_(two_point_function_raw_data_path + "dummy");   // Creates two_point_function_samples/
-  DumpVecData(energy_raw_path + "/energy" + std::to_string(rank_), sample_data_.energy_samples);
-  DumpVecData(wf_amplitude_path + "/psi" + std::to_string(rank_), sample_data_.wave_function_amplitude_samples);
+  engine_.EnsureDirectoryExists(energy_raw_path + "dummy");                    // Creates energy_sample_data/
+  engine_.EnsureDirectoryExists(wf_amplitude_path + "dummy");                  // Creates wave_function_amplitudes/  
+  engine_.EnsureDirectoryExists(one_point_function_raw_data_path + "dummy");   // Creates one_point_function_samples/
+  engine_.EnsureDirectoryExists(two_point_function_raw_data_path + "dummy");   // Creates two_point_function_samples/
+  DumpVecData(energy_raw_path + "/energy" + std::to_string(engine_.Rank()), sample_data_.energy_samples);
+  DumpVecData(wf_amplitude_path + "/psi" + std::to_string(engine_.Rank()), sample_data_.wave_function_amplitude_samples);
   sample_data_.DumpOnePointFunctionSamples(
-      one_point_function_raw_data_path + "/sample" + std::to_string(rank_) + ".csv");
+      one_point_function_raw_data_path + "/sample" + std::to_string(engine_.Rank()) + ".csv");
   sample_data_.DumpTwoPointFunctionSamples(
-      two_point_function_raw_data_path + "/sample" + std::to_string(rank_) + ".csv");
+      two_point_function_raw_data_path + "/sample" + std::to_string(engine_.Rank()) + ".csv");
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
@@ -696,8 +690,8 @@ void MCPEPSMeasurer<TenElemT,
                                    QNT,
                                    MonteCarloSweepUpdater,
                                    MeasurementSolver>::PrintExecutorInfo_(void) {
-  this->PrintCommonInfo_("MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS");
-  this->PrintTechInfo_();
+  engine_.PrintCommonInfo("MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS");
+  engine_.PrintTechInfo();
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
@@ -706,10 +700,11 @@ void MCPEPSMeasurer<TenElemT,
                                    MonteCarloSweepUpdater,
                                    MeasurementSolver>::SynchronizeConfiguration_(
     const size_t root) {
-  Configuration config(tps_sample_.config);
-  MPI_BCast(config, root, MPI_Comm(comm_));
-  if (rank_ != root) {
-    tps_sample_ = MonteCarloSweepUpdater(split_index_tps_, config);
+  Configuration config(engine_.WavefuncComp().config);
+  MPI_BCast(config, root, MPI_Comm(engine_.Comm()));
+  if (engine_.Rank() != root) {
+    engine_.WavefuncComp() = typename MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater>::WaveFunctionComponentT(
+        engine_.State(), config, engine_.WavefuncComp().trun_para);
   }
 }
 
@@ -724,14 +719,14 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
   const size_t print_bar_length = (mc_measure_params.mc_params.num_samples / 10) > 0 ? (mc_measure_params.mc_params.num_samples / 10) : 1;
   for (size_t sweep = 0; sweep < mc_measure_params.mc_params.num_samples; sweep++) {
     // Emergency stop check (MPI-aware)
-    if (qlpeps::MPISignalGuard::EmergencyStopRequested(comm_)) {
-      if (rank_ == kMPIMasterRank) {
+    if (qlpeps::MPISignalGuard::EmergencyStopRequested(engine_.Comm())) {
+      if (engine_.Rank() == kMPIMasterRank) {
         std::cout << "\n[Emergency Stop] Signal received. Dumping current results and exiting gracefully.\n";
       }
       break;
     }
 
-    std::vector<double> accept_rates = this->MCSweep_();
+    std::vector<double> accept_rates = engine_.StepSweep();
     // Accept rates accumulation
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
@@ -741,7 +736,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
       }
     }
     MeasureSample_();
-    if (rank_ == kMPIMasterRank && (sweep + 1) % print_bar_length == 0) {
+    if (engine_.Rank() == kMPIMasterRank && (sweep + 1) % print_bar_length == 0) {
       PrintProgressBar((sweep + 1), mc_measure_params.mc_params.num_samples);
     }
   }

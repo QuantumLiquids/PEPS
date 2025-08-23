@@ -13,9 +13,9 @@
 #include <vector>
 #include <memory>
 #include <functional>
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_base.h"
+#include "qlten/qlten.h"
 #include "qlpeps/optimizer/optimizer.h"
-// Removed circular include - vmc_peps.h is deprecated
+#include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 
@@ -50,24 +50,13 @@ namespace qlpeps {
  * @tparam EnergySolver Model energy solver
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-class VMCPEPSOptimizer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
+class VMCPEPSOptimizer : public qlten::Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using OptimizerT = Optimizer<TenElemT, QNT>;
-  using BaseExecutor = MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>;
-
   using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
-
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::comm_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::mpi_size_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::rank_;
-
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::split_index_tps_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::tps_sample_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::ly_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::lx_;
 
   /**
    * @brief Constructor with explicit TPS provided by user.
@@ -114,8 +103,8 @@ class VMCPEPSOptimizer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteC
   void Execute(void) override;
 
   // Data access methods - matching VMCPEPSExecutor interface
-  const SITPST &GetState() const noexcept { return this->split_index_tps_; }
-  const SITPST &GetOptimizedState() const { return this->split_index_tps_; }
+  const SITPST &GetState() const noexcept { return monte_carlo_engine_.State(); }
+  const SITPST &GetOptimizedState() const { return monte_carlo_engine_.State(); }
   const SITPST &GetBestState() const { return tps_lowest_; }
   double GetMinEnergy() const noexcept { return en_min_; }
   double GetCurrentEnergy() const noexcept {
@@ -180,6 +169,7 @@ class VMCPEPSOptimizer : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteC
   void DumpVecDataDouble_(const std::string &path, const std::vector<double> &data);
 
  private:
+  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> monte_carlo_engine_;
   VMCPEPSOptimizerParams params_;  // New parameter structure
   EnergySolver energy_solver_;
 
