@@ -22,163 +22,14 @@
 #include <limits>
 #include <cmath>
 
+// =============================================================================
+// LEARNING RATE SCHEDULERS (moved to dedicated header)
+// =============================================================================
+#include "qlpeps/optimizer/lr_schedulers.h"
+
 namespace qlpeps {
 
 // Legacy WAVEFUNCTION_UPDATE_SCHEME enum removed - use modern variant-based algorithm parameters instead
-
-// =============================================================================
-// LEARNING RATE SCHEDULER INTERFACE
-// =============================================================================
-
-/**
- * @class LearningRateScheduler
- * @brief Abstract base class for learning rate scheduling algorithms.
- * 
- * Learning rate scheduling is crucial for PEPS optimization convergence.
- * This interface provides PyTorch-style scheduling capabilities with 
- * physics-aware features like energy plateau detection.
- */
-class LearningRateScheduler {
-public:
-  virtual ~LearningRateScheduler() = default;
-  
-  /**
-   * @brief Get the learning rate for the current iteration
-   * @param iteration Current optimization iteration (0-based)
-   * @param current_energy Current energy value (for energy-aware schedulers)
-   * @return Learning rate for this iteration
-   */
-  virtual double GetLearningRate(size_t iteration, double current_energy = 0.0) const = 0;
-  
-  /**
-   * @brief Called after each optimization step to update scheduler state
-   */
-  virtual void Step() {}
-  
-  /**
-   * @brief Create a deep copy of the scheduler
-   * @return Unique pointer to a cloned scheduler
-   */
-  virtual std::unique_ptr<LearningRateScheduler> Clone() const = 0;
-};
-
-/**
- * @class ConstantLR
- * @brief Constant learning rate scheduler
- */
-class ConstantLR : public LearningRateScheduler {
-private:
-  double learning_rate_;
-  
-public:
-  explicit ConstantLR(double lr) : learning_rate_(lr) {}
-  
-  double GetLearningRate(size_t iteration, double current_energy) const override {
-    return learning_rate_;
-  }
-  
-  std::unique_ptr<LearningRateScheduler> Clone() const override {
-    return std::make_unique<ConstantLR>(learning_rate_);
-  }
-};
-
-/**
- * @class ExponentialDecayLR
- * @brief Exponential decay learning rate scheduler
- * 
- * Learning rate decays exponentially: lr = initial_lr * decay_rate^(iteration/decay_steps)
- */
-class ExponentialDecayLR : public LearningRateScheduler {
-private:
-  double initial_lr_;
-  double decay_rate_;
-  size_t decay_steps_;
-  
-public:
-  ExponentialDecayLR(double initial_lr, double decay_rate, size_t decay_steps)
-    : initial_lr_(initial_lr), decay_rate_(decay_rate), decay_steps_(decay_steps) {}
-    
-  double GetLearningRate(size_t iteration, double current_energy) const override {
-    return initial_lr_ * std::pow(decay_rate_, iteration / static_cast<double>(decay_steps_));
-  }
-  
-  std::unique_ptr<LearningRateScheduler> Clone() const override {
-    return std::make_unique<ExponentialDecayLR>(initial_lr_, decay_rate_, decay_steps_);
-  }
-};
-
-/**
- * @class StepLR
- * @brief Step-wise learning rate scheduler
- * 
- * Learning rate is multiplied by gamma every step_size iterations
- */
-class StepLR : public LearningRateScheduler {
-private:
-  double initial_lr_;
-  double gamma_;
-  size_t step_size_;
-  
-public:
-  StepLR(double initial_lr, size_t step_size, double gamma = 0.1)
-    : initial_lr_(initial_lr), step_size_(step_size), gamma_(gamma) {}
-    
-  double GetLearningRate(size_t iteration, double current_energy) const override {
-    return initial_lr_ * std::pow(gamma_, iteration / step_size_);
-  }
-  
-  std::unique_ptr<LearningRateScheduler> Clone() const override {
-    return std::make_unique<StepLR>(initial_lr_, step_size_, gamma_);
-  }
-};
-
-/**
- * @class PlateauLR
- * @brief Energy plateau-aware learning rate scheduler
- * 
- * Reduces learning rate when energy plateaus, essential for PEPS optimization
- */
-class PlateauLR : public LearningRateScheduler {
-private:
-  mutable double current_lr_;
-  double factor_;
-  size_t patience_;
-  mutable size_t patience_counter_;
-  mutable double best_energy_;
-  double threshold_;
-  
-public:
-  PlateauLR(double initial_lr, double factor = 0.5, size_t patience = 10, double threshold = 1e-4)
-    : current_lr_(initial_lr), factor_(factor), patience_(patience), 
-      patience_counter_(0), best_energy_(std::numeric_limits<double>::max()), threshold_(threshold) {}
-      
-  double GetLearningRate(size_t iteration, double current_energy) const override {
-    // Update learning rate based on energy plateau detection
-    if (current_energy < best_energy_ - threshold_) {
-      best_energy_ = current_energy;
-      patience_counter_ = 0;
-    } else {
-      patience_counter_++;
-      if (patience_counter_ >= patience_) {
-        current_lr_ *= factor_;
-        patience_counter_ = 0;
-        best_energy_ = current_energy;  // Reset reference
-      }
-    }
-    return current_lr_;
-  }
-  
-  std::unique_ptr<LearningRateScheduler> Clone() const override {
-    auto clone = std::make_unique<PlateauLR>(current_lr_, factor_, patience_, threshold_);
-    clone->best_energy_ = best_energy_;
-    clone->patience_counter_ = patience_counter_;
-    return clone;
-  }
-};
-
-// =============================================================================
-// CORE PARAMETER STRUCTURES
-// =============================================================================
 
 /**
  * @struct ConjugateGradientParams
@@ -210,11 +61,12 @@ struct ConjugateGradientParams {
  * @brief Parameters for Stochastic Gradient Descent algorithm
  */
 struct SGDParams {
-  double momentum;          // For future SGD with momentum
-  bool nesterov;           // For Nesterov acceleration
+  double momentum;          // Momentum strength μ
+  bool nesterov;           // Nesterov acceleration flag
+  double weight_decay;     // L2 regularization λ (decoupled off scheduler)
   
-  SGDParams(double momentum = 0.0, bool nesterov = false) 
-    : momentum(momentum), nesterov(nesterov) {}
+  SGDParams(double momentum = 0.0, bool nesterov = false, double weight_decay = 0.0) 
+    : momentum(momentum), nesterov(nesterov), weight_decay(weight_decay) {}
 };
 
 /**

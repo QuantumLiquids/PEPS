@@ -18,13 +18,20 @@ PEPS optimizer支持多种优化算法，用于VMC-PEPS (Variational Monte Carlo
 
 更新：
 ```
-标准SGD：θ_{t+1} = θ_t - η g_t
-动量：    v_t = μ v_{t-1} + η g_t;  θ_{t+1} = θ_t - v_t
-Nesterov：v_t = μ v_{t-1} + η ∇f(θ_t - μ v_{t-1}); θ_{t+1} = θ_t - v_t
+标准SGD（无正则）：      θ_{t+1} = θ_t - η g_t
+带L2正则（解耦式）：     θ_{t+1} = (1 - ηλ) θ_t - η g_t
+动量：                    v_t = μ v_{t-1} + g_t;  θ_{t+1} = (1 - ηλ) θ_t - η v_t
+Nesterov：                v_t = μ v_{t-1} + g_t;  θ_{t+1} = (1 - ηλ) θ_t - η (μ v_{t+1} + g_t)
 ```
 适用场景：
 - 梯度噪声不大、需要稳定基线的场合；凸或弱非凸问题；生产环境偏好可控性。
-默认参数起点：μ=0.9；η ∈ [1e-4, 1e-2]。
+默认参数起点：μ=0.9；η ∈ [1e-4, 1e-2]；λ（weight_decay）默认0。
+
+【说明｜dampening】当前实现不提供 dampening；建议直接通过学习率策略（固定/调度）达到同等效果，无需单独 dampening 参数。
+
+【说明｜weight decay】weight decay 指 L2 正则（θ ← θ − η·λ·θ），本质是正则化项，不属于学习率调度器职责。实现采用解耦式衰减（AdamW风格）：先对参数乘以 (1−ηλ)，再应用梯度相关更新。参数接口：`SGDParams{momentum, nesterov, weight_decay}`，默认 `weight_decay=0`。
+
+【PEPS 语境】在波函数优化中，解耦式 L2 衰减对参数的作用等价于对 |ψ> 的scale。因此在工程实践中，也可通过“指数衰减学习率（ExponentialDecayLR）”达到等价效果。当前实现保留了显式 `weight_decay`（默认 0）与学习率调度两条路径，用户可依据需求二选一或组合使用。
 
 ### 2. AdaGrad（自适应梯度）
 
@@ -153,17 +160,42 @@ auto scheduler = std::make_unique<ExponentialDecayLR>(
 
 **使用场景**：稳定收敛，适合长期训练
 
-### 2. Step Decay  （待开发）
+### 2. Step Decay
 
 ```cpp
 auto scheduler = std::make_unique<StepLR>(
   0.01,     // initial_lr
-  200,      // step_size: 每200步降低一次
-  0.5       // gamma: 每次减半
+  200,      // step_size: 每200步衰减一次（离散阶梯）
+  0.5       // gamma: 每次乘以 0.5
 );
 ```
 
-**使用场景**：阶段性调整，适合有明确training phase的场景
+**使用场景**：阶段性调整，适合有明确 training phase 的场景
+
+### 3. Plateau-based (Energy Plateau Detection)
+
+```cpp
+auto scheduler = std::make_unique<PlateauLR>(
+  0.01,     // initial_lr
+  0.5,      // factor: 检测到平台时减半
+  20,       // patience: 连续20步无改进
+  1e-5      // threshold: 认为有改进的能量阈值
+);
+```
+
+**使用场景**：PEPS 优化强推荐；可根据能量收敛自动降低学习率
+
+### 4. Cosine Annealing
+
+```cpp
+auto scheduler = std::make_unique<CosineAnnealingLR>(
+  0.01,   // eta_max（初始最大学习率）
+  1000,   // T_max（退火总步数）
+  0.0     // eta_min（最小学习率）
+);
+```
+
+**使用场景**：平滑退火，避免突变；常用于大步长探索到细粒度收敛的过渡
 
 ### 3. Plateau-based (能量平台检测)  （待开发）
 
@@ -177,6 +209,8 @@ auto scheduler = std::make_unique<PlateauLR>(
 ```
 
 **使用场景**：PEPS优化的最佳选择，根据物理收敛自动调整
+
+注意：学习率调度器只负责产生 η（学习率）序列；诸如 weight decay（L2 正则）属于参数更新中的正则化策略，不应在调度器中实现或混入其返回值。
 
 ## 实际使用指南
 
@@ -470,7 +504,7 @@ if (iteration % restart_period == 0) {
 
 ### 3. Learning Rate Warmup
 
-Gradually increase learning rate from 0：
+Gradually increase learning rate from 0（示例，尚未内置为调度器）：
 
 ```cpp
 double warmup_lr = base_lr * min(1.0, iteration / warmup_steps);
@@ -507,7 +541,7 @@ preconditioned_grad[i] = gradient[i] / (abs(parameter[i]) + epsilon);
 ```cpp
 // 1. 更好的initialization
 // 2. 多次random restart
-// 3. Simulated annealing style learning rate
+// 3. Simulated annealing-style learning rate（连续指数平滑衰减）
 auto scheduler = std::make_unique<ExponentialDecayLR>(0.1, 0.99, 50);
 ```
 

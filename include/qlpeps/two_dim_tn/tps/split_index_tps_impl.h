@@ -383,6 +383,109 @@ operator*(const QLTEN_Double scalar, const SplitIndexTPS<QLTEN_Complex, QNT> &sp
   return split_idx_tps * QLTEN_Complex(scalar, 0.0);
 }
 
+// =============================
+// Free out-of-place operations
+// =============================
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseSquare(const SplitIndexTPS<TenElemT, QNT> &tps) {
+  return tps.ElementWiseSquare();
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseSqrt(const SplitIndexTPS<TenElemT, QNT> &tps) {
+  return tps.ElementWiseSqrt();
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseInverse(const SplitIndexTPS<TenElemT, QNT> &tps, double epsilon) {
+  return tps.ElementWiseInverse(epsilon);
+}
+
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+SplitIndexTPS<TenElemT, QNT>::ElementWiseSquare() const {
+  SplitIndexTPS result = CreateInitializedResult_();
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      result({row, col}) = std::vector<Tensor>(phy_dim);
+      for (size_t i = 0; i < phy_dim; ++i) {
+        const Tensor &src = (*this)({row, col})[i];
+        if (!src.IsDefault()) {
+          result({row, col})[i] = src;
+          result({row, col})[i].ElementWiseSquare();
+        }
+      }
+    }
+  }
+  return result;
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+SplitIndexTPS<TenElemT, QNT>::ElementWiseSqrt() const {
+  SplitIndexTPS result = CreateInitializedResult_();
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      result({row, col}) = std::vector<Tensor>(phy_dim);
+      for (size_t i = 0; i < phy_dim; ++i) {
+        const Tensor &src = (*this)({row, col})[i];
+        if (!src.IsDefault()) {
+          result({row, col})[i] = src;
+          result({row, col})[i].ElementWiseSqrt();
+        }
+      }
+    }
+  }
+  return result;
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+SplitIndexTPS<TenElemT, QNT>::ElementWiseInverse(double epsilon) const {
+  SplitIndexTPS result = CreateInitializedResult_();
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      result({row, col}) = std::vector<Tensor>(phy_dim);
+      for (size_t i = 0; i < phy_dim; ++i) {
+        const Tensor &src = (*this)({row, col})[i];
+        if (!src.IsDefault()) {
+          result({row, col})[i] = src;
+          result({row, col})[i].ElementWiseInv(epsilon);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ElementWiseSquareInPlace() {
+  ForEachValidTensor_([](size_t, size_t, size_t, Tensor &ten) {
+    ten.ElementWiseSquare();
+  });
+}
+
+template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ElementWiseSqrtInPlace() {
+  ForEachValidTensor_([](size_t, size_t, size_t, Tensor &ten) {
+    ten.ElementWiseSqrt();
+  });
+}
+
+template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ElementWiseInverseInPlace(double epsilon) {
+  ForEachValidTensor_([epsilon](size_t, size_t, size_t, Tensor &ten) {
+    ten.ElementWiseInv(epsilon);
+  });
+}
+
 
 
 

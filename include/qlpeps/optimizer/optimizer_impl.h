@@ -378,9 +378,6 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
   size_t total_iterations_performed = 0;
   for (size_t iter = 0; iter < params_.base_params.max_iterations; ++iter) {
-    // Get current learning rate based on iteration and scheduler
-    double step_length = GetCurrentLearningRate(iter, best_energy);
-
     // Start timer for energy evaluation (the dominant computational cost)
     Timer energy_eval_timer("energy_evaluation");
     
@@ -415,6 +412,10 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       iterations_without_improvement++;
     }
 
+    // Determine learning rate after we have energy info
+    // Use previous iteration energy for scheduler when iter>0; otherwise use current energy
+    double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? Real(current_energy) : previous_energy);
+
     // Advanced stopping criteria checks (skip for first iteration)
     if (iter > 0) {
       double current_energy_real = Real(current_energy);
@@ -430,7 +431,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                              current_energy_real,
                              current_error,
                              gradient_norm,
-                             step_length,
+                             learning_rate,
                              {},
                              0, // sr_iterations
                              0.0, // sr_natural_grad_norm
@@ -462,7 +463,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       
       if constexpr (std::is_same_v<T, SGDParams>) {
         // SGD with momentum and Nesterov acceleration support
-        updated_state = SGDUpdate(current_state, current_gradient, step_length, algo_params);
+        updated_state = SGDUpdate(current_state, current_gradient, learning_rate, algo_params);
       }
       else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
         // Stochastic Reconfiguration variants
@@ -470,14 +471,14 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             current_state, current_gradient,
             Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
             Ostar_mean ? *Ostar_mean : SITPST{},
-            step_length, sr_init_guess, algo_params.normalize_update);
+            learning_rate, sr_init_guess, algo_params.normalize_update);
         updated_state = new_state;
         sr_iterations = sr_iters;
         sr_natural_grad_norm = ng_norm;
         sr_init_guess = new_state; // Use as initial guess for next iteration
       }
       else if constexpr (std::is_same_v<T, AdaGradParams>) {
-        updated_state = AdaGradUpdate(current_state, current_gradient, step_length);
+        updated_state = AdaGradUpdate(current_state, current_gradient, learning_rate);
       }
       else if constexpr (std::is_same_v<T, AdamParams>) {
         // TODO: Implement Adam when needed
@@ -505,7 +506,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                         Real(current_energy),
                         current_error,
                         std::sqrt(current_gradient.NormSquare()),
-                        step_length,
+                        learning_rate,
                         {},
                         sr_iterations,
                         sr_natural_grad_norm,
@@ -558,8 +559,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
  * 
  * Algorithm (unified mathematical formulation):
  * v_{t+1} = μ * v_t + g_t
- * θ_{t+1} = θ_t - α * (μ * v_{t+1} + g_t)  [if Nesterov]
- * θ_{t+1} = θ_t - α * v_{t+1}              [if standard momentum]
+ * θ_{t+1} = (1 - αλ) θ_t - α * (μ * v_{t+1} + g_t)  [if Nesterov, decoupled L2 (λ)]
+ * θ_{t+1} = (1 - αλ) θ_t - α * v_{t+1}              [if standard momentum, decoupled L2]
  * 
  * Special case (μ=0): v_{t+1} = g_t → both reduce to θ_{t+1} = θ_t - α * g_t
  * This case uses direct inline update for simplicity.
@@ -585,6 +586,12 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
       // Non-master ranks never initialize or access velocity_
     }
     
+    // Apply decoupled L2 weight decay (AdamW-style) to parameters
+    if (params.weight_decay > 0.0) {
+      const double decay_factor = 1.0 - step_length * params.weight_decay;
+      updated_state *= decay_factor;
+    }
+
     if (params.momentum > 0.0) {
       // Momentum SGD: maintain velocity state
       // v_{t+1} = μ * v_t + g_t
@@ -794,59 +801,7 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
   return updated_state;
 }
 
-template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::ElementWiseSquare(const SITPST &tps) {
-  SITPST result = tps;
-
-  for (size_t row = 0; row < tps.rows(); ++row) {
-    for (size_t col = 0; col < tps.cols(); ++col) {
-      for (size_t i = 0; i < tps({row, col}).size(); ++i) {
-        if (!result({row, col})[i].IsDefault()) {
-          result({row, col})[i].ElementWiseSquare();
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::ElementWiseSqrt(const SITPST &tps) {
-  SITPST result = tps;
-
-  for (size_t row = 0; row < result.rows(); ++row) {
-    for (size_t col = 0; col < result.cols(); ++col) {
-      for (size_t i = 0; i < result({row, col}).size(); ++i) {
-        if (!result({row, col})[i].IsDefault()) {
-          result({row, col})[i].ElementWiseSqrt();
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::ElementWiseInverse(const SITPST &tps, double epsilon) {
-  SITPST result = tps;
-
-  for (size_t row = 0; row < tps.rows(); ++row) {
-    for (size_t col = 0; col < tps.cols(); ++col) {
-      for (size_t i = 0; i < tps({row, col}).size(); ++i) {
-        if (!tps({row, col})[i].IsDefault()) {
-          result({row, col})[i].ElementWiseInv(epsilon);
-        }
-      }
-    }
-  }
-
-  return result;
-}
+// Element-wise helpers are now defined on SplitIndexTPS; Optimizer no longer owns them.
 
 
 
@@ -864,7 +819,7 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
   if (rank_ == kMPIMasterRank) {
     std::cout << "Iter " << std::setw(4) << iteration;
     if (step_length > 0.0) {
-      std::cout << "Alpha = " << std::setw(9) << std::scientific << std::setprecision(1) << step_length;
+      std::cout << "LR = " << std::setw(9) << std::scientific << std::setprecision(1) << step_length;
     }
     std::cout << "E0 = " << std::setw(14) << std::fixed << std::setprecision(6) << energy;
     if (energy_error > 0.0) {

@@ -42,7 +42,7 @@
 - 优化器层
   - 参数系统：`optimizer/optimizer_params.h`
     - 现代化参数：`OptimizerParams` + `AlgorithmParams(std::variant)`，支持 `SGD/AdaGrad/SR/Adam/L-BFGS` 等。
-    - 学习率调度：`LearningRateScheduler`（`ConstantLR/ExponentialDecayLR/StepLR/PlateauLR`）
+    - 学习率调度：`LearningRateScheduler`（`ConstantLR/ExponentialDecayLR/StepLR/PlateauLR/CosineAnnealingLR`，定义于 `optimizer/lr_schedulers.h`）
     - 工厂与 Builder：快速构建常用优化配置。
   - 优化器：`optimizer/optimizer.h` + `optimizer_impl.h`
     - 统一接口：`LineSearchOptimize` / `IterativeOptimize` / `CalculateNaturalGradient` 等。
@@ -104,7 +104,8 @@ graph TD
   U[User] --> O[VMCPEPSOptimizer]
   U[User] --> M[MCPEPSMeasurer]
   O -- owns --> Opt[Optimizer]
-  O -- calls --> Eval[EnergyEvaluator]
+  O -- owns --> Eval[EnergyEvaluator]
+  Opt -- calls --> Eval[EnergyEvaluator]
   Eval -- calls --> MS2[ModelEnergySolver]
   M -- owns --> MSSolver[ModelMeasurementSolver]
   O -- owns --> Eng[MonteCarloEngine]
@@ -119,9 +120,9 @@ graph TD
 - strategy: 策略注入（引擎内部拥有的更新器策略对象）
 - manages: 运行时管理的内部子模块或数据
 
-EnergyEvaluator 为概念组件：当前尚未独立成类，默认实现位于 `VMCPEPSOptimizer` 内部；其职责是调用 `MonteCarloEngine` 完成采样，并结合 `ModelEnergySolver` 计算能量与梯度。`VMCPEPSOptimizer` 与 `MCPEPSMeasurer` 为同层 API，无相互调用，各自拥有各自的 `MonteCarloEngine`。
+EnergyEvaluator 为概念组件：当前尚未独立成类，默认实现位于 `VMCPEPSOptimizer` 内部；`Optimizer` 以回调的形式调用 EnergyEvaluator（见 `optimizer.h` 中 `LineSearchOptimize/IterativeOptimize` 的 `energy_evaluator` 参数），而 EnergyEvaluator 通过 `MonteCarloEngine` 完成采样，并结合 `ModelEnergySolver` 计算能量与梯度。`VMCPEPSOptimizer` 与 `MCPEPSMeasurer` 为同层 API，无相互调用，各自拥有自己的 `MonteCarloEngine`。
 
-两者为同层 API，无直接调用关系。优化路径通过 `EnergyEvaluator` 与 `ModelEnergySolver` 协作；测量路径通过 `ModelMeasurementSolver` 协作。二者各自持有 `MonteCarloEngine`，并基于同一种 `MCSweepUpdater` 策略进行采样。
+两者为同层 API，无直接调用关系。优化路径通过 `EnergyEvaluator` 与 `ModelEnergySolver` 协作；测量路径通过 `ModelMeasurementSolver` 协作。二者各自持有 `MonteCarloEngine`，并基于某一种 `MCSweepUpdater` 策略进行采样。
 
 ## 五、依赖分层与“依赖卫生”评审
 

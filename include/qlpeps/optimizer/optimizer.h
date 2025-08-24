@@ -369,11 +369,6 @@ class Optimizer {
                          double step_length,
                          const SGDParams& params);
   
-  // Tensor operations for AdaGrad
-  WaveFunctionT ElementWiseSquare(const WaveFunctionT& tensor);
-  WaveFunctionT ElementWiseSqrt(const WaveFunctionT& tensor);
-  WaveFunctionT ElementWiseInverse(const WaveFunctionT& tensor, double epsilon = 1e-8);
-  
  };
 
 

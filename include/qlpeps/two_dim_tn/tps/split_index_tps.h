@@ -41,6 +41,9 @@ inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,
  * - Serialization and deserialization (Dump/Load)
  * - MPI communication (Send/Recv/Broadcast)
  * - Site-wise normalization and scaling
+ * - Element-wise transforms (square, sqrt, safe-inverse with epsilon)
+ *   - In-place member operations: mutate tensors in this object
+ *   - Out-of-place free functions: return a new `SplitIndexTPS` with transform
  * 
  * Bosonic vs. fermionic conventions:
  * - Bosonic tensors have 4 virtual indices; contractions typically use index set {0,1,2,3}.
@@ -464,6 +467,52 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   void ScaleMaxAbsForAllSite(double aiming_max_abs);
 
   /**
+   * @brief Return a SplitIndexTPS with element-wise square applied
+   *
+   * Applies for every site (r,c) and component i the transform
+   * \( T_{r,c}^{(i)} \leftarrow T_{r,c}^{(i)} \odot T_{r,c}^{(i)} \),
+   * where \(\odot\) denotes element-wise product. Delegates to
+   * `QLTensor::ElementWiseSquare()` for each tensor.
+   */
+  SplitIndexTPS ElementWiseSquare() const;
+
+  /**
+   * @brief Return a SplitIndexTPS with element-wise square root applied
+   *
+   * Applies for every site (r,c) and component i the transform
+   * \( T_{r,c}^{(i)} \leftarrow \sqrt{T_{r,c}^{(i)}} \)
+   * element-wise. Delegates to `QLTensor::ElementWiseSqrt()`.
+   */
+  SplitIndexTPS ElementWiseSqrt() const;
+
+  /**
+   * @brief Return a SplitIndexTPS with element-wise safe inverse applied
+   *
+   * Applies for every site (r,c) and component i the transform
+   * element-wise safe reciprocal with epsilon guard. Delegates to
+   * `QLTensor::ElementWiseInv(epsilon)`.
+   *
+   * @param epsilon Small positive guard to avoid division by near-zero values
+   */
+  SplitIndexTPS ElementWiseInverse(double epsilon) const;
+
+  /**
+   * @brief In-place element-wise square on all non-default tensors
+   */
+  void ElementWiseSquareInPlace();
+
+  /**
+   * @brief In-place element-wise square root on all non-default tensors
+   */
+  void ElementWiseSqrtInPlace();
+
+  /**
+   * @brief In-place element-wise safe inverse with epsilon guard
+   * @param epsilon Small positive guard to avoid division by near-zero values
+   */
+  void ElementWiseInverseInPlace(double epsilon);
+
+  /**
    * @brief Dump one split tensor component to a file
    * @param row Lattice row
    * @param col Lattice column
@@ -525,6 +574,22 @@ private:
 };
 
 }//qlpeps
+
+// Out-of-place free functions for element-wise operations
+// These are defined in the impl header after the class template definitions
+// to avoid circular dependencies in templates.
+
+template<typename TenElemT, typename QNT>
+qlpeps::SplitIndexTPS<TenElemT, QNT>
+ElementWiseSquare(const qlpeps::SplitIndexTPS<TenElemT, QNT> &tps);
+
+template<typename TenElemT, typename QNT>
+qlpeps::SplitIndexTPS<TenElemT, QNT>
+ElementWiseSqrt(const qlpeps::SplitIndexTPS<TenElemT, QNT> &tps);
+
+template<typename TenElemT, typename QNT>
+qlpeps::SplitIndexTPS<TenElemT, QNT>
+ElementWiseInverse(const qlpeps::SplitIndexTPS<TenElemT, QNT> &tps, double epsilon);
 
 #include "qlpeps/two_dim_tn/tps/split_index_tps_impl.h"
 #endif //QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H

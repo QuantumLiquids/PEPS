@@ -279,6 +279,23 @@ add_mpi_unittest_run(test_exact_summation_evaluator_double "4" " ")
 add_mpi_unittest_run(test_exact_summation_evaluator_complex "4" " ")
 
 
+## Optimizer exact-sum SGD test (pure optimizer, deterministic gradients)
+add_two_type_unittest(test_optimizer_sgd_exact_sum
+        "test_optimizer/test_optimizer_sgd_exact_sum.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+add_mpi_unittest_run(test_optimizer_sgd_exact_sum_double "4" " ")
+add_mpi_unittest_run(test_optimizer_sgd_exact_sum_complex "4" " ")
+
+
+# Learning rate scheduler unit tests (header-only, no extra libs)
+add_unittest(test_lr_schedulers
+        "test_optimizer/test_lr_schedulers.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
+
 
 # Fast tests (2x2 systems, quick execution)
 add_two_type_unittest(test_mc_peps_measure
