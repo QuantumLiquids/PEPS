@@ -174,20 +174,25 @@ struct OptimizerParams {
     size_t plateau_patience;
     double learning_rate;                                    // Universal parameter for all algorithms
     std::unique_ptr<LearningRateScheduler> lr_scheduler;     // Optional learning rate scheduling
+    // Optional gradient clipping (first-order optimizers only)
+    std::optional<double> clip_value;   // Per-element magnitude clip (complex-safe, preserve phase)
+    std::optional<double> clip_norm;    // Global L2 norm clip threshold
     
     // No default constructor - force explicit specification
     BaseParams(size_t max_iter, double energy_tol, double grad_tol,
                size_t patience, double learning_rate,
                std::unique_ptr<LearningRateScheduler> scheduler = nullptr)
       : max_iterations(max_iter), energy_tolerance(energy_tol), gradient_tolerance(grad_tol),
-        plateau_patience(patience), learning_rate(learning_rate), lr_scheduler(std::move(scheduler)) {}
+        plateau_patience(patience), learning_rate(learning_rate), lr_scheduler(std::move(scheduler)),
+        clip_value(std::nullopt), clip_norm(std::nullopt) {}
         
     // Copy constructor
     BaseParams(const BaseParams& other)
       : max_iterations(other.max_iterations), energy_tolerance(other.energy_tolerance), 
         gradient_tolerance(other.gradient_tolerance), plateau_patience(other.plateau_patience),
         learning_rate(other.learning_rate),
-        lr_scheduler(other.lr_scheduler ? other.lr_scheduler->Clone() : nullptr) {}
+        lr_scheduler(other.lr_scheduler ? other.lr_scheduler->Clone() : nullptr),
+        clip_value(other.clip_value), clip_norm(other.clip_norm) {}
         
     // Copy assignment operator
     BaseParams& operator=(const BaseParams& other) {
@@ -198,6 +203,8 @@ struct OptimizerParams {
         plateau_patience = other.plateau_patience;
         learning_rate = other.learning_rate;
         lr_scheduler = other.lr_scheduler ? other.lr_scheduler->Clone() : nullptr;
+        clip_value = other.clip_value;
+        clip_norm = other.clip_norm;
       }
       return *this;
     }
@@ -234,6 +241,13 @@ public:
   template<typename T>
   bool IsAlgorithm() const {
     return std::holds_alternative<T>(algorithm_params);
+  }
+
+  /**
+   * @brief Check whether the selected algorithm is first-order (SGD/AdaGrad/Adam)
+   */
+  bool IsFirstOrder() const {
+    return IsAlgorithm<SGDParams>() || IsAlgorithm<AdaGradParams>() || IsAlgorithm<AdamParams>();
   }
 };
 
@@ -532,6 +546,28 @@ public:
   OptimizerParamsBuilder& WithAdaGrad(double epsilon = 1e-8, double initial_accumulator = 0.0) {
     AdaGradParams adagrad_params(epsilon, initial_accumulator);
     algorithm_params_ = adagrad_params;
+    return *this;
+  }
+
+  /**
+   * @brief Enable per-element magnitude clipping (complex-safe, preserve phase)
+   */
+  OptimizerParamsBuilder& SetClipValue(double clip_value) {
+    if (!base_params_) {
+      throw std::invalid_argument("BaseParams must be set before SetClipValue");
+    }
+    base_params_->clip_value = clip_value;
+    return *this;
+  }
+
+  /**
+   * @brief Enable global L2 norm clipping
+   */
+  OptimizerParamsBuilder& SetClipNorm(double clip_norm) {
+    if (!base_params_) {
+      throw std::invalid_argument("BaseParams must be set before SetClipNorm");
+    }
+    base_params_->clip_norm = clip_norm;
     return *this;
   }
   

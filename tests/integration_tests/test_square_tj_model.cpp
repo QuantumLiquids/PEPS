@@ -81,7 +81,7 @@ protected:
 
 // Test simple update optimization
 TEST_F(SquaretJModelSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
     
     // Initialize with checkerboard pattern

@@ -204,7 +204,7 @@ class MCPEPSMeasurer : public qlten::Executor {
   MCMeasurementParams mc_measure_params;
 
   std::pair<TenElemT, double> OutputEnergy() const {
-    if (engine_.Rank() == kMPIMasterRank) {
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
       if (this->GetStatus() == ExecutorStatus::FINISH) {
         std::cout << "Measured energy : "
                   << std::setw(8) << res.energy

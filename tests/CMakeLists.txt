@@ -296,6 +296,19 @@ add_unittest(test_lr_schedulers
 )
 
 
+# Optimizer params utility tests
+add_unittest(test_optimizer_params
+        "test_optimizer/test_optimizer_params.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
+# Optimizer gradient preprocessing integration (single-rank)
+add_unittest(test_optimizer_gradient_preprocessing
+        "test_optimizer/test_optimizer_gradient_preprocessing.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
 
 # Fast tests (2x2 systems, quick execution)
 add_two_type_unittest(test_mc_peps_measure

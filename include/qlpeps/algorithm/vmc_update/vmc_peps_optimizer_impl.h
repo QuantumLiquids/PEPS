@@ -84,7 +84,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Exec
   // Set up optimization callback to track progress
   optimization_callback_.on_iteration =
       [this](size_t iteration, double energy, double energy_error, double gradient_norm) {
-        if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+        if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
           energy_trajectory_.push_back(energy);
           energy_error_traj_.push_back(energy_error);
           grad_norm_.push_back(gradient_norm);
@@ -97,7 +97,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Exec
       };
 
   optimization_callback_.on_best_state_found = [this](const SITPST &state, double energy) {
-    if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+    if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
       tps_lowest_ = state;
       en_min_ = energy;
     }
@@ -125,7 +125,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Exec
   }
 
   // CRITICAL: Update final state and synchronize across all ranks
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     // Validate the final state to prevent segmentation faults
     ValidateState_(result.optimized_state);
     monte_carlo_engine_.AssignState(result.optimized_state);
@@ -181,7 +181,7 @@ VMCPEPSOptimizer<TenElemT,
                          MonteCarloSweepUpdater,
                          EnergySolver>::DefaultEnergyEvaluator_(const SITPST &state) {
   // Update internal state - avoid self-assignment
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     // Check if this is a self-assignment to avoid issues
     if (&state != &monte_carlo_engine_.State()) {
       monte_carlo_engine_.AssignState(state);
@@ -272,7 +272,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Rese
     energy_error_traj_.reserve(step_count);
   }
 
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     grad_norm_.reserve(params_.optimizer_params.base_params.max_iterations);
   }
 
@@ -288,7 +288,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Rese
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::PrintExecutorInfo_(void) {
   monte_carlo_engine_.PrintCommonInfo("VMC PEPS OPTIMIZER EXECUTOR");
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     size_t indent = 40;
     std::cout << std::setw(indent) << "PEPS update times:" << params_.optimizer_params.base_params.max_iterations
               << "\n";
@@ -425,8 +425,8 @@ std::tuple<TenElemT,
 VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::GatherStatisticEnergyAndGrad_(void) {
   TenElemT en_self = Mean(energy_samples_); //energy value in each processor
   auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(monte_carlo_engine_.Comm()));
-  qlten::hp_numeric::MPI_Bcast(&energy, 1, kMPIMasterRank, MPI_Comm(monte_carlo_engine_.Comm()));
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  qlten::hp_numeric::MPI_Bcast(&energy, 1, qlten::hp_numeric::kMPIMasterRank, MPI_Comm(monte_carlo_engine_.Comm()));
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     energy_trajectory_.push_back(energy);
     energy_error_traj_.push_back(en_err);
   }
@@ -450,12 +450,12 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::GatherSta
     }
   }
   grad_.ActFermionPOps();
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     grad_norm_.push_back(grad_.NormSquare());
   }
   //do not broadcast because only broadcast the updated TPS
   double energy_error = 0.0;
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank && !energy_error_traj_.empty()) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && !energy_error_traj_.empty()) {
     energy_error = energy_error_traj_.back();
   }
   return std::make_tuple(energy, grad_, energy_error);
@@ -509,7 +509,7 @@ void VMCPEPSOptimizer<TenElemT,
   std::string lowest_tps_path = tps_base_name + "lowest";
   std::string energy_data_path = "./energy";
 
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     // Only dump TPS if base name is not empty
     if (!tps_base_name.empty()) {
       monte_carlo_engine_.State().Dump(final_tps_path, release_mem);
@@ -523,7 +523,7 @@ void VMCPEPSOptimizer<TenElemT,
     monte_carlo_engine_.WavefuncComp().config.Dump(params_.mc_params.config_dump_path, monte_carlo_engine_.Rank());
   }
   DumpVecData_(energy_data_path + "/energy_sample" + std::to_string(monte_carlo_engine_.Rank()), energy_samples_);
-  if (monte_carlo_engine_.Rank() == kMPIMasterRank) {
+  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
     DumpVecDataDouble_(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
   }

@@ -70,7 +70,7 @@ protected:
   // Common simple update workflow
   template<typename SimpleUpdateExecutorT>
   void RunSimpleUpdate(SimpleUpdateExecutorT* executor) {
-    if (rank == kMPIMasterRank) {
+    if (rank == hp_numeric::kMPIMasterRank) {
       executor->Execute();
       
       // Refine with smaller step lengths

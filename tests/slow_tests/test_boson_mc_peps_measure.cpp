@@ -73,7 +73,7 @@ struct SqrHeiMCPEPS : MPITest {
 TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
   using Model = SquareSpinOneHalfXXZModel;
 
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     std::cout << "Starting Monte Carlo measurement test on 4 by 4 Heisenberg Model (expected time: ~5 minutes)..." << std::endl;
   }
   // Load TPS explicitly - this is the new API pattern
@@ -86,14 +86,14 @@ TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
                                                                                           comm);
   executor->Execute();
 
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     std::cout << "Measurement completed, analyzing results..." << std::endl;
   }
 
   auto [energy, en_err] = executor->OutputEnergy();
   auto measure_results = executor->GetMeasureResult();
 
-  if (rank == kMPIMasterRank && mpi_size > 1) {
+  if (rank == hp_numeric::kMPIMasterRank && mpi_size > 1) {
     //Justify whether as expected
     EXPECT_NEAR(Real(energy), e0_state, 1.5 * en_err);
   } else {

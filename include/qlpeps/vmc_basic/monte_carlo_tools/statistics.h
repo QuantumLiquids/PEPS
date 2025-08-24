@@ -17,7 +17,7 @@
 
 namespace qlpeps {
 namespace hp_numeric = qlten::hp_numeric;
-using qlten::kMPIMasterRank;
+using qlten::hp_numeric::kMPIMasterRank;
 
 template<typename DataType>
 void DumpVecData(
@@ -131,7 +131,7 @@ std::pair<ElemT, double> GatherStatisticSingleData(
   double standard_err(0);
 
   std::unique_ptr<ElemT[]> gather_data;
-  if (comm_rank == kMPIMasterRank) {
+  if (comm_rank == qlten::hp_numeric::kMPIMasterRank) {
     gather_data = std::make_unique<ElemT[]>(comm_size);
   }
 
@@ -141,10 +141,10 @@ std::pair<ElemT, double> GatherStatisticSingleData(
                                 (void *) gather_data.get(),
                                 1,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                kMPIMasterRank,
+                                qlten::hp_numeric::kMPIMasterRank,
                                 comm));
 
-  if (comm_rank == kMPIMasterRank) {
+  if (comm_rank == qlten::hp_numeric::kMPIMasterRank) {
     ElemT sum = 0.0;
     for (size_t i = 0; i < comm_size; i++) {
       sum += gather_data[i];
@@ -198,19 +198,19 @@ void GatherStatisticListOfData(
     return;
   }
   std::vector<ElemT> all_data;
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     all_data.resize(world_size * data_size);
   }
   HANDLE_MPI_ERROR(::MPI_Gather(data.data(),
                                 data_size,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                rank == kMPIMasterRank ? all_data.data() : nullptr,
+                                rank == qlten::hp_numeric::kMPIMasterRank ? all_data.data() : nullptr,
                                 data_size,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                kMPIMasterRank,
+                                qlten::hp_numeric::kMPIMasterRank,
                                 comm));
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     std::vector<std::vector<ElemT>> data_gather_transposed(data_size, std::vector<ElemT>(world_size));
     for (size_t i = 0; i < world_size; i++) {
       for (size_t j = 0; j < data_size; j++) {

@@ -188,15 +188,15 @@ double RunPureOptimizerTest(
   // RESTORED: Single-process exact summation energy evaluator (memory-safe)
   auto energy_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
     auto [energy, gradient, error] = ExactSumEnergyEvaluatorMPI<ModelT, TenElemT, QNT>(
-        state,
-        all_configs,
-        trun_para,
-        model,
-        Ly,
-        Lx,
-        comm,
-        rank,
-        mpi_size);
+      state,
+      all_configs,
+      trun_para,
+      model,
+      Ly,
+      Lx,
+      comm,
+      rank,
+      mpi_size);
     return {energy, gradient, error};
   };
 
@@ -204,7 +204,7 @@ double RunPureOptimizerTest(
   typename Optimizer<TenElemT, QNT>::OptimizationCallback callback;
   callback.on_iteration =
       [&energy_exact, &test_name, rank](size_t iteration, double energy, double energy_error, double gradient_norm) {
-        if (rank == kMPIMasterRank) {
+        if (rank == hp_numeric::kMPIMasterRank) {
           std::cout << test_name << " - step: " << iteration
               << " E0=" << std::setw(14) << std::fixed
               << std::setprecision(kEnergyOutputPrecision) << energy
@@ -222,7 +222,7 @@ double RunPureOptimizerTest(
 
   // Verify algorithm convergence
   double final_energy = std::real(result.final_energy);
-  if (rank == kMPIMasterRank && energy_exact != 0.0) {
+  if (rank == hp_numeric::kMPIMasterRank && energy_exact != 0.0) {
     EXPECT_GE(final_energy, energy_exact - 1E-10);
     EXPECT_NEAR(final_energy, energy_exact, 1e-5);
   }
@@ -269,12 +269,12 @@ struct Z2SpinlessFreeFermionTools : public MPITest {
     } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
       type_suffix = "_complex_from_simple_update";
     }
-    
+
     std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
-                           "spinless_fermion_tps_t2_" + std::to_string(t2) + type_suffix;
-    
+        "spinless_fermion_tps_t2_" + std::to_string(t2) + type_suffix;
+
     SplitIndexTPS<TEN_ELEM_TYPE, fZ2QN> sitps(Ly, Lx);
-    
+
     // In MPI environment, only rank 0 loads from disk, then broadcasts
     if (this->rank == 0) {
       bool success = sitps.Load(data_path);
@@ -283,12 +283,12 @@ struct Z2SpinlessFreeFermionTools : public MPITest {
       }
       std::cout << "Loaded spinless fermion TPS data (t2=" << t2 << ") from: " << data_path << std::endl;
     }
-    
+
     // Broadcast TPS data from rank 0 to all MPI ranks (only needed in multi-process environment)
     if (this->mpi_size > 1) {
       qlpeps::MPI_Bcast(sitps, this->comm, 0);
     }
-    
+
     return sitps;
   }
 
@@ -386,12 +386,12 @@ struct TrivialHeisenbergTools : public MPITest {
     } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
       type_suffix = "_complex_from_simple_update";
     }
-    
+
     std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
-                           "heisenberg_tps" + type_suffix;
-    
+        "heisenberg_tps" + type_suffix;
+
     SplitIndexTPS<TEN_ELEM_TYPE, TrivialRepQN> sitps(Ly, Lx);
-    
+
     // In MPI environment, only rank 0 loads from disk, then broadcasts
     if (this->rank == 0) {
       bool success = sitps.Load(data_path);
@@ -400,12 +400,12 @@ struct TrivialHeisenbergTools : public MPITest {
       }
       std::cout << "Loaded Heisenberg TPS data from: " << data_path << std::endl;
     }
-    
+
     // Broadcast TPS data from rank 0 to all MPI ranks (only needed in multi-process environment)
     if (this->mpi_size > 1) {
       qlpeps::MPI_Bcast(sitps, this->comm, 0);
     }
-    
+
     return sitps;
   }
 
@@ -490,12 +490,12 @@ struct TrivialTransverseIsingTools : public MPITest {
     } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
       type_suffix = "_complex_from_simple_update";
     }
-    
+
     std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
-                           "transverse_ising_tps" + type_suffix;
-    
+        "transverse_ising_tps" + type_suffix;
+
     SplitIndexTPS<TEN_ELEM_TYPE, TrivialRepQN> sitps(Ly, Lx);
-    
+
     // In MPI environment, only rank 0 loads from disk, then broadcasts
     if (this->rank == 0) {
       bool success = sitps.Load(data_path);
@@ -504,12 +504,12 @@ struct TrivialTransverseIsingTools : public MPITest {
       }
       std::cout << "Loaded Transverse Ising TPS data from: " << data_path << std::endl;
     }
-    
+
     // Broadcast TPS data from rank 0 to all MPI ranks (only needed in multi-process environment)
     if (this->mpi_size > 1) {
       qlpeps::MPI_Bcast(sitps, this->comm, 0);
     }
-    
+
     return sitps;
   }
 
@@ -599,12 +599,12 @@ struct Z2tJTools : public MPITest {
     } else if constexpr (std::is_same_v<TEN_ELEM_TYPE, QLTEN_Complex>) {
       type_suffix = "_complex_from_simple_update";
     }
-    
+
     std::string data_path = std::string(TEST_SOURCE_DIR) + "/test_data/" +
-                           "tj_model_tps" + type_suffix;
-    
+        "tj_model_tps" + type_suffix;
+
     SplitIndexTPS<TEN_ELEM_TYPE, fZ2QN> sitps(Ly, Lx);
-    
+
     // In MPI environment, only rank 0 loads from disk, then broadcasts
     if (this->rank == 0) {
       bool success = sitps.Load(data_path);
@@ -613,12 +613,12 @@ struct Z2tJTools : public MPITest {
       }
       std::cout << "Loaded t-J model TPS data from: " << data_path << std::endl;
     }
-    
+
     // Broadcast TPS data from rank 0 to all MPI ranks (only needed in multi-process environment)
     if (this->mpi_size > 1) {
       qlpeps::MPI_Bcast(sitps, this->comm, 0);
     }
-    
+
     return sitps;
   }
 
@@ -683,5 +683,3 @@ int main(int argc, char *argv[]) {
   hp_numeric::SetTensorManipulationThreads(1);
   return RUN_ALL_TESTS();
 }
-
-

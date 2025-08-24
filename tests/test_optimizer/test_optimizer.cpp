@@ -48,7 +48,7 @@ class OptimizerTest : public ::testing::Test {
       MPI_Comm_size(comm_, &mpi_size_);
 
       // Disable output from non-master ranks
-      if (rank_ != kMPIMasterRank) {
+      if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
         std::cout.setstate(std::ios_base::failbit);
       }
 
@@ -63,7 +63,7 @@ class OptimizerTest : public ::testing::Test {
     }
 
     void TearDown() override {
-      if (rank_ != kMPIMasterRank) {
+      if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
         std::cout.clear();
       }
     }
@@ -186,7 +186,7 @@ TEST_F(OptimizerTest, BasicOptimizationFunctionality) {
     SITPST gradient = state; // Use same structure for gradient
     
     // Fill gradient with some fixed values for reproducible testing
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       for (size_t row = 0; row < gradient.rows(); ++row) {
         for (size_t col = 0; col < gradient.cols(); ++col) {
           for (size_t i = 0; i < gradient({row, col}).size(); ++i) {
@@ -299,7 +299,7 @@ TEST_F(OptimizerTest, TimeLogging) {
   std::stringstream captured_output;
   std::streambuf *original_cout = nullptr;
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     original_cout = std::cout.rdbuf();
     std::cout.rdbuf(captured_output.rdbuf());
   }
@@ -307,7 +307,7 @@ TEST_F(OptimizerTest, TimeLogging) {
   auto result = optimizer.IterativeOptimize(test_tps_,
                                             [this](const SITPST &state) { return MockEnergyEvaluator(state); });
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     std::cout.rdbuf(original_cout);
 
     // Verify that the output contains time logging
@@ -346,7 +346,7 @@ TEST_F(OptimizerTest, TimeLoggingImposeStoppingAdvance) {
   std::stringstream captured_output;
   std::streambuf *original_cout = nullptr;
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     original_cout = std::cout.rdbuf();
     std::cout.rdbuf(captured_output.rdbuf());
   }
@@ -354,7 +354,7 @@ TEST_F(OptimizerTest, TimeLoggingImposeStoppingAdvance) {
   auto result = optimizer.IterativeOptimize(test_tps_,
                                             [this](const SITPST &state) { return MockEnergyEvaluator(state); });
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     std::cout.rdbuf(original_cout);
 
     // Verify that the output contains time logging

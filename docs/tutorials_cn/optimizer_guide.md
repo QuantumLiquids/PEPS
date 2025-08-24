@@ -1,8 +1,13 @@
-# 用于变分蒙卡优化PEPS的 优化器（Optimizer） 使用指南
+# 优化器（Optimizer） 使用指南：用于基于蒙特卡洛采样的TPS优化
+
+## 
+
+
 
 ## 概述
 
-PEPS optimizer支持多种优化算法，用于VMC-PEPS (Variational Monte Carlo PEPS) 优化。采用variant-based类型安全设计，API与常用库相似。
+optimizer支持多种优化算法，用于VMC-PEPS (Variational Monte Carlo PEPS) 优化。
+采用variant-based类型安全设计，API与常用库相似。
 
 ### PEPS优化的挑战
 

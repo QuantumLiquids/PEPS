@@ -118,7 +118,7 @@ TEST_F(SplitIndexTPSMPITest, TestMPIBroadcastDouble) {
   DSITPS master_sitps, local_sitps;
   
   // Master rank creates the original data
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     DTPS master_tps = CreateRandTestTPS();
     master_sitps = DSITPS(master_tps);
   }
@@ -160,7 +160,7 @@ TEST_F(SplitIndexTPSMPITest, TestMPIBroadcastComplex) {
   CSITPS master_sitps, local_sitps;
   
   // Master rank creates the original data
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     master_sitps = CreateRandTestComplexSITPS();
   }
   
@@ -280,7 +280,7 @@ TEST_F(SplitIndexTPSMPITest, TestEdgeCases) {
   // Test with empty TPS
   DSITPS empty_sitps;
   
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     empty_sitps = DSITPS(2, 2, 2);  // Small but valid TPS
   }
   
@@ -300,7 +300,7 @@ TEST_F(SplitIndexTPSMPITest, TestGroupIndicesConsistency) {
   DSITPS sitps;
   DTPS original_tps(0, 0), reconstructed_tps(0, 0);
   
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     original_tps = CreateRandTestTPS();
     sitps = DSITPS(original_tps);
   }
@@ -316,7 +316,7 @@ TEST_F(SplitIndexTPSMPITest, TestGroupIndicesConsistency) {
   EXPECT_EQ(reconstructed_tps.cols(), Lx);
   
   // Cross-rank validation
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // Master can compare with original
     for (size_t row = 0; row < Ly; ++row) {
       for (size_t col = 0; col < Lx; ++col) {

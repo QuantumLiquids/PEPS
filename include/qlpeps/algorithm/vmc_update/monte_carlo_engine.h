@@ -176,7 +176,7 @@ class MonteCarloEngine {
    */
   void NormalizeStateOrder1() {
     std::unique_ptr<TenElemT[]> gather_amplitude;
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       gather_amplitude = std::make_unique<TenElemT[]>(mpi_size_);
     }
     HANDLE_MPI_ERROR(::MPI_Gather(&tps_sample_.amplitude,
@@ -185,10 +185,10 @@ class MonteCarloEngine {
                                   gather_amplitude.get(),
                                   1,
                                   hp_numeric::GetMPIDataType<TenElemT>(),
-                                  kMPIMasterRank,
+                                  qlten::hp_numeric::kMPIMasterRank,
                                   comm_));
     double scale_factor;
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       std::cout << std::endl;
       auto max_it = std::max_element(gather_amplitude.get(), gather_amplitude.get() + mpi_size_,
                                      [](const TenElemT &a, const TenElemT &b) {
@@ -197,12 +197,12 @@ class MonteCarloEngine {
       double max_abs = std::abs(*max_it);
       scale_factor = 1.0 / max_abs;
     }
-    HANDLE_MPI_ERROR(::MPI_Bcast(&scale_factor, 1, MPI_DOUBLE, kMPIMasterRank, comm_));
+    HANDLE_MPI_ERROR(::MPI_Bcast(&scale_factor, 1, MPI_DOUBLE, qlten::hp_numeric::kMPIMasterRank, comm_));
     double scale_factor_on_site = std::pow(scale_factor, 1.0 / double(lx_ * ly_));
     split_index_tps_ *= scale_factor_on_site;
     Configuration config = tps_sample_.config;
     tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       std::cout << "Normalization TPS For Order 1 Amplitude info: " << std::endl;
       std::cout << "Overall scale factor: " << scale_factor << std::endl;
       std::cout << "Scale factor on site: " << scale_factor_on_site << std::endl;
@@ -216,14 +216,14 @@ class MonteCarloEngine {
    */
   void EnsureDirectoryExists(const std::string &file_path) const {
     if (file_path.empty()) {
-      if (rank_ == kMPIMasterRank) {
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         std::cerr << "Warning: File path is empty. No directory will be created." << std::endl;
       }
       return;
     }
     std::filesystem::path parent_dir = std::filesystem::path(file_path).parent_path();
     if (parent_dir.empty()) return;
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       try {
         if (!std::filesystem::exists(parent_dir)) {
           std::cout << "Creating directory: " << parent_dir.string() << std::endl;
@@ -241,7 +241,7 @@ class MonteCarloEngine {
    * @param header Title header.
    */
   void PrintCommonInfo(const std::string &header) const {
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       const size_t indent = 40;
       std::cout << std::left;
       std::cout << "\n";
@@ -262,7 +262,7 @@ class MonteCarloEngine {
    * @brief Print technical runtime info (MPI size, thread count) on master rank.
    */
   void PrintTechInfo() const {
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       const size_t indent = 40;
       std::cout << std::left;
       std::cout << "\n";
@@ -286,7 +286,7 @@ class MonteCarloEngine {
                                    global_valid.data(), 1, MPI_INT, comm_));
     int num_valid = std::accumulate(global_valid.begin(), global_valid.end(), 0);
     if (num_valid == mpi_size_) {
-      if (rank_ == kMPIMasterRank) {
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         std::cout << "\u2713 Configuration validation: All " << mpi_size_
                   << " processes have valid configurations." << std::endl;
       }
@@ -294,7 +294,7 @@ class MonteCarloEngine {
     }
     auto valid_iter = std::find(global_valid.begin(), global_valid.end(), 1);
     if (valid_iter == global_valid.end()) {
-      if (rank_ == kMPIMasterRank) {
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         std::cerr << "\n=== CRITICAL CONFIGURATION FAILURE ===\n"
                   << "All " << mpi_size_ << " processes have invalid configurations!\n"
                   << "Check: bond dimension, truncation cutoff, initial configuration\n";
@@ -317,7 +317,7 @@ class MonteCarloEngine {
       std::cout << "Rank " << rank_ << ": rescued from rank " << source_rank
                 << " (new amplitude: " << std::abs(tps_sample_.amplitude) << ")" << std::endl;
     }
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       std::cout << " Configuration rescue completed: " << (mpi_size_ - num_valid) << "/" << mpi_size_
                 << " processes rescued from rank " << source_rank << std::endl;
     }

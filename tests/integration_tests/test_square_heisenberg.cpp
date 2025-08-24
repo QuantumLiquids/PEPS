@@ -74,7 +74,7 @@ struct HeisenbergSystem : public MPITest {
 };
 
 TEST_F(HeisenbergSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(pb_out, Ly, Lx);
     std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
     for (size_t y = 0; y < Ly; y++) {

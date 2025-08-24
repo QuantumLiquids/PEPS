@@ -497,6 +497,27 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   SplitIndexTPS ElementWiseInverse(double epsilon) const;
 
   /**
+   * @brief In-place per-element magnitude clipping (complex-safe)
+   *
+   * Clip each element's magnitude to clip_value while preserving phase/sign.
+   * Delegates to `QLTensor::ElementWiseBoundTo(clip_value)`.
+   *
+   * @param clip_value Per-element magnitude clip threshold (>0)
+   */
+  void ElementWiseClipTo(double clip_value);
+
+  /**
+   * @brief In-place global L2 norm clipping
+   *
+   * Let r = sqrt(Σ |g_j|^2) across all elements and components. If r > clip_norm,
+   * uniformly scale all tensors by (clip_norm / r); otherwise unchanged.
+   *
+   * For fermion tensor, norm use quasi-norm.
+   * @param clip_norm Global L2 norm threshold (>0)
+   */
+  void ClipByGlobalNorm(double clip_norm);
+
+  /**
    * @brief In-place element-wise square on all non-default tensors
    */
   void ElementWiseSquareInPlace();
@@ -511,6 +532,8 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @param epsilon Small positive guard to avoid division by near-zero values
    */
   void ElementWiseInverseInPlace(double epsilon);
+
+  // (Names aligned with free functions: member versions are in-place)
 
   /**
    * @brief Dump one split tensor component to a file
@@ -573,23 +596,31 @@ private:
   SplitIndexTPS CreateInitializedResult_() const;
 };
 
-}//qlpeps
-
 // Out-of-place free functions for element-wise operations
 // These are defined in the impl header after the class template definitions
 // to avoid circular dependencies in templates.
 
 template<typename TenElemT, typename QNT>
-qlpeps::SplitIndexTPS<TenElemT, QNT>
-ElementWiseSquare(const qlpeps::SplitIndexTPS<TenElemT, QNT> &tps);
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseSquare(const SplitIndexTPS<TenElemT, QNT> &tps);
 
 template<typename TenElemT, typename QNT>
-qlpeps::SplitIndexTPS<TenElemT, QNT>
-ElementWiseSqrt(const qlpeps::SplitIndexTPS<TenElemT, QNT> &tps);
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseSqrt(const SplitIndexTPS<TenElemT, QNT> &tps);
 
 template<typename TenElemT, typename QNT>
-qlpeps::SplitIndexTPS<TenElemT, QNT>
-ElementWiseInverse(const qlpeps::SplitIndexTPS<TenElemT, QNT> &tps, double epsilon);
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseInverse(const SplitIndexTPS<TenElemT, QNT> &tps, double epsilon);
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseClipTo(const SplitIndexTPS<TenElemT, QNT> &tps, double clip_value);
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ClipByGlobalNorm(const SplitIndexTPS<TenElemT, QNT> &tps, double clip_norm);
+
+}//qlpeps
 
 #include "qlpeps/two_dim_tn/tps/split_index_tps_impl.h"
 #endif //QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_H

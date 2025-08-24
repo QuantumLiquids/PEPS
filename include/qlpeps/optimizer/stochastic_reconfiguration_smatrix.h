@@ -34,7 +34,7 @@ class SRSMatrix {
       res += (*Ostar_samples_)[i] * ((*Ostar_samples_)[i] * v0);
     }
     res *= 1.0 / double(Ostar_samples_->size() * world_size_);
-    if (Ostar_mean_ != nullptr) { //kMPIMasterRank
+    if (Ostar_mean_ != nullptr) { //qlten::hp_numeric::kMPIMasterRank
       res += (-((*Ostar_mean_) * v0)) * (*Ostar_mean_);
       if (diag_shift != 0.0) {
         res += (diag_shift * v0);

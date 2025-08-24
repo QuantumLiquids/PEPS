@@ -129,7 +129,7 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
 };
 
 TEST_F(Z2SpinlessFreeFermionSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
 
     std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));

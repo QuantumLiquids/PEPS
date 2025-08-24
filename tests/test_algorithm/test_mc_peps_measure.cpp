@@ -179,7 +179,7 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
 
   auto [energy, en_err] = executor->OutputEnergy();
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Relaxed tolerance for fast test
   }
 
@@ -223,7 +223,7 @@ TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
   executor->Execute();
   auto [energy, en_err] = executor->OutputEnergy();
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     // For single process, use tight tolerance; for MPI, use error estimate
     if (mpi_size == 1) {
       EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Tight tolerance for single process
@@ -278,7 +278,7 @@ TEST_F(Test2x2MCPEPSFermion, SpinlessFermionModel) {
   executor->Execute();
   auto [energy, en_err] = executor->OutputEnergy();
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Relaxed tolerance for fast test
   }
 
@@ -329,7 +329,7 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
   executor->Execute();
   auto [energy, en_err] = executor->OutputEnergy();
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     // For single process, use tight tolerance; for MPI, use error estimate
     if (mpi_size == 1) {
       EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Tight tolerance for single process

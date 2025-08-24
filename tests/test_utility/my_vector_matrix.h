@@ -203,13 +203,13 @@ void MPI_Bcast(
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &mpi_size);
   size_t length;
-  if (rank == kMPIMasterRank) { length = x0.GetSize(); }
-  HANDLE_MPI_ERROR(::MPI_Bcast(&length, 1, MPI_UNSIGNED_LONG_LONG, kMPIMasterRank, comm));
-  if (rank != kMPIMasterRank) { x0.GetElements().resize(length); }
+  if (rank == qlten::hp_numeric::kMPIMasterRank) { length = x0.GetSize(); }
+  HANDLE_MPI_ERROR(::MPI_Bcast(&length, 1, MPI_UNSIGNED_LONG_LONG, qlten::hp_numeric::kMPIMasterRank, comm));
+  if (rank != qlten::hp_numeric::kMPIMasterRank) { x0.GetElements().resize(length); }
   HANDLE_MPI_ERROR(::MPI_Bcast(x0.GetElements().data(),
                                length,
                                hp_numeric::GetMPIDataType<ElemT>(),
-                               kMPIMasterRank,
+                               qlten::hp_numeric::kMPIMasterRank,
                                comm));
 }
 

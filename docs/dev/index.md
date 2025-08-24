@@ -16,7 +16,7 @@
 - RFC：`rfc/2025-08-21-energy-evaluator-concept.md`、`rfc/2025-01-29-missing-sgd-variants.md`
 - 设计：`design/arch/overview_cn.md`、`design/arch/mpi-contracts.md`、`design/math/exact-summation.md`
 - 测试：`testing/optimizer-testing-strategy.md`、`testing/monte-carlo-testing-best-practices.md`
-- 规范：`practices/code-review-findings.md`
+- 规范：`practices/coding-standards.md`、`practices/code-review-findings.md`
 
 约定（简要）：
 - 文件命名：`YYYY-MM-DD-title.md` 用于 RFC；其余用主题名。

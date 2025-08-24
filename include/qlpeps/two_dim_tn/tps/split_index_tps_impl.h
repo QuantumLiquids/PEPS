@@ -466,6 +466,23 @@ SplitIndexTPS<TenElemT, QNT>::ElementWiseInverse(double epsilon) const {
 }
 
 template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ElementWiseClipTo(double clip_value) {
+  ForEachValidTensor_([clip_value](size_t, size_t, size_t, Tensor &ten) {
+    ten.ElementWiseClipTo(clip_value);
+  });
+}
+
+template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ClipByGlobalNorm(double clip_norm) {
+  double norm_square = this->NormSquare();
+  double r = std::sqrt(norm_square);
+  if (r > 0.0 && r > clip_norm) {
+    double scale = clip_norm / r;
+    (*this) *= TenElemT(scale);
+  }
+}
+
+template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::ElementWiseSquareInPlace() {
   ForEachValidTensor_([](size_t, size_t, size_t, Tensor &ten) {
     ten.ElementWiseSquare();
@@ -484,6 +501,24 @@ void SplitIndexTPS<TenElemT, QNT>::ElementWiseInverseInPlace(double epsilon) {
   ForEachValidTensor_([epsilon](size_t, size_t, size_t, Tensor &ten) {
     ten.ElementWiseInv(epsilon);
   });
+}
+
+// removed old InPlace aliases (now the primary member names)
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseClipTo(const SplitIndexTPS<TenElemT, QNT> &tps, double clip_value) {
+  SplitIndexTPS<TenElemT, QNT> result = tps;
+  result.ElementWiseClipTo(clip_value);
+  return result;
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ClipByGlobalNorm(const SplitIndexTPS<TenElemT, QNT> &tps, double clip_norm) {
+  SplitIndexTPS<TenElemT, QNT> result = tps;
+  result.ClipByGlobalNorm(clip_norm);
+  return result;
 }
 
 

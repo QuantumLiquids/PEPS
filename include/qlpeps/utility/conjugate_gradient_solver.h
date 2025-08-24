@@ -26,7 +26,7 @@
 #include "qlten/framework/hp_numeric/mpi_fun.h"
 
 namespace qlpeps {
-using qlten::kMPIMasterRank;
+using qlten::hp_numeric::kMPIMasterRank;
 namespace hp_numeric = qlten::hp_numeric;
 /**
  * solve the equation
@@ -176,7 +176,7 @@ VectorType ConjugateGradientSolver(
 ) {
   int rank;
   MPI_Comm_rank(comm, &rank);
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     return ConjugateGradientSolverMaster(
         matrix_a, b, x0, max_iter, tolerance, residue_restart_step, iter, comm
     );
@@ -200,7 +200,7 @@ inline void MasterBroadcastInstruction(
   HANDLE_MPI_ERROR(::MPI_Bcast(const_cast<ConjugateGradientSolverInstruction *>(&instruction),
                                1,
                                MPI_INT,
-                               kMPIMasterRank,
+                               qlten::hp_numeric::kMPIMasterRank,
                                comm));
 }
 
@@ -210,7 +210,7 @@ SlaveReceiveBroadcastInstruction(const MPI_Comm &comm) {
   HANDLE_MPI_ERROR(::MPI_Bcast(&instruction,
                                1,
                                MPI_INT,
-                               kMPIMasterRank,
+                               qlten::hp_numeric::kMPIMasterRank,
                                comm));
   return instruction;
 }
@@ -374,7 +374,7 @@ void MatrixMultiplyVectorSlave(
   VectorType v;
   MPI_Bcast(v, comm);
   VectorType res = mat * v;
-  MPI_Send(res, kMPIMasterRank, comm, 0);
+  MPI_Send(res, qlten::hp_numeric::kMPIMasterRank, comm, 0);
 }
 
 }//qlpeps

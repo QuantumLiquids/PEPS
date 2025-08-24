@@ -78,7 +78,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::R
 
     // calculate overlap
     overlaps.push_back(overlap_func(engine_.WavefuncComp().config, config2));
-    if (engine_.Rank() == kMPIMasterRank && (sweep + 1) % (mc_measure_params.mc_params.num_samples / 10) == 0) {
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && (sweep + 1) % (mc_measure_params.mc_params.num_samples / 10) == 0) {
       PrintProgressBar((sweep + 1), mc_measure_params.mc_params.num_samples);
 
       auto accept_rates_avg = accept_rates_accum;
@@ -179,7 +179,7 @@ MCPEPSMeasurer<TenElemT,
     engine_.WavefuncComp().config.Dump(mc_measure_params.mc_params.config_dump_path, engine_.Rank());
   }
 
-  if (engine_.Rank() == kMPIMasterRank) {
+  if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     res.Dump();
     res.DumpCSV(); // Dump data in two forms
   }
@@ -241,7 +241,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
   for (size_t sweep = 0; sweep < mc_measure_params.mc_params.num_samples; sweep++) {
     // Emergency stop check (MPI-aware)
     if (qlpeps::MPISignalGuard::EmergencyStopRequested(engine_.Comm())) {
-      if (engine_.Rank() == kMPIMasterRank) {
+      if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
         std::cout << "\n[Emergency Stop] Signal received. Dumping current results and exiting gracefully.\n";
       }
       break;
@@ -257,7 +257,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
       }
     }
     MeasureSample_();
-    if (engine_.Rank() == kMPIMasterRank && (sweep + 1) % print_bar_length == 0) {
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && (sweep + 1) % print_bar_length == 0) {
       PrintProgressBar((sweep + 1), mc_measure_params.mc_params.num_samples);
     }
   }

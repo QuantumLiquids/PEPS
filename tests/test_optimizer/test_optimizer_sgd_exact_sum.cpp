@@ -75,7 +75,7 @@ double RunPureOptimizerSGD(
 
   typename Optimizer<TenElemT, QNT>::OptimizationCallback callback;
   callback.on_iteration = [&energy_exact, &test_name, rank](size_t iteration, double energy, double error, double gradnorm) {
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       std::cout << test_name << " - step: " << iteration
                 << " E0=" << std::setw(14) << std::fixed << std::setprecision(kEnergyOutputPrecision) << energy
                 << " ||grad||=" << std::setw(8) << std::fixed << std::setprecision(kEnergyOutputPrecision) << gradnorm;
@@ -87,7 +87,7 @@ double RunPureOptimizerSGD(
   auto result = optimizer.IterativeOptimize(split_index_tps, energy_evaluator, callback);
 
   double final_energy = std::real(result.final_energy);
-  if (rank == kMPIMasterRank && energy_exact != 0.0) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank && energy_exact != 0.0) {
     EXPECT_GE(final_energy, energy_exact - 1E-10);
     EXPECT_NEAR(final_energy, energy_exact, 1e-5);
   }

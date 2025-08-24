@@ -28,7 +28,7 @@ void RunTestPlainCGSolverParallelCase(
   MPI_Comm_size(comm, &mpi_size);
   size_t iter;
   auto x = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 20, iter, comm);
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     x.Print();
     auto diff_vec = x - x_res;
     EXPECT_NEAR(diff_vec.NormSquare(), 0.0, 1e-13);

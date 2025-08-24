@@ -41,13 +41,13 @@ QLTensor<TenElemT, QNT> MPIMeanTensor(const QLTensor<TenElemT, QNT> &tensor,
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &mpi_size);
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     std::vector<std::unique_ptr<Tensor>> ten_list;
     ten_list.reserve(mpi_size);
     
     // Gather tensors from all processes
     for (size_t proc = 0; proc < mpi_size; proc++) {
-      if (proc != kMPIMasterRank) {
+      if (proc != qlten::hp_numeric::kMPIMasterRank) {
         ten_list.emplace_back(std::make_unique<Tensor>());
         ten_list.back()->MPI_Recv(proc, 2 * proc, comm);
       } else {
@@ -64,7 +64,7 @@ QLTensor<TenElemT, QNT> MPIMeanTensor(const QLTensor<TenElemT, QNT> &tensor,
     
     return Mean(tensor_ptrs, mpi_size);
   } else {
-    tensor.MPI_Send(kMPIMasterRank, 2 * rank, comm);
+    tensor.MPI_Send(qlten::hp_numeric::kMPIMasterRank, 2 * rank, comm);
     return Tensor();
   }
 }

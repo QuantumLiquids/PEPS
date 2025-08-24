@@ -89,7 +89,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   result.energy_trajectory.push_back(initial_energy);
   result.min_energy = Real(initial_energy);
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
   }
 
@@ -132,7 +132,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
     // Update state along search direction
     SITPST test_state = initial_state;
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       test_state += (-cumulative_step) * search_direction;
     }
 
@@ -151,7 +151,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
     // Extract energy error from the energy evaluator if available
     double energy_error = 0.0;
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       // The energy error should be calculated by the energy evaluator
       // For now, we'll use a placeholder
       result.energy_error_trajectory.push_back(energy_error);
@@ -218,7 +218,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   result.energy_trajectory.push_back(initial_energy);
   result.min_energy = Real(initial_energy);
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     result.energy_error_trajectory.push_back(initial_error);
     result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
   }
@@ -262,7 +262,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
     // Update state along search direction
     SITPST test_state = initial_state;
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       test_state += (-cumulative_step) * search_direction;
     }
 
@@ -280,7 +280,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     double energy_eval_time = energy_eval_timer.Elapsed();
 
     // Store energy error and gradient norm only on master rank
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       result.energy_error_trajectory.push_back(test_error);
       result.gradient_norms.push_back(std::sqrt(test_gradient.NormSquare()));
     }
@@ -389,7 +389,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     double energy_eval_time = energy_eval_timer.Elapsed();
 
     // Store energy error and gradient norm only on master rank
-    if (rank_ == kMPIMasterRank) {
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       result.energy_error_trajectory.push_back(current_error);
       result.gradient_norms.push_back(std::sqrt(current_gradient.NormSquare()));
     }
@@ -426,7 +426,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       
       if (should_stop) {
         // Log the final iteration before stopping (only on master rank)
-        if (rank_ == kMPIMasterRank) {
+        if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
           LogOptimizationStep(iter,
                              current_energy_real,
                              current_error,
@@ -452,6 +452,20 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     // Start timer for optimization update step
     Timer update_timer("optimization_update");
 
+    // Apply gradient preprocessing (clipping) for first-order methods only (master rank only)
+    SITPST preprocessed_gradient = current_gradient;
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+      // Only apply to first-order optimizers: SGD, AdaGrad, Adam
+      if (params_.IsFirstOrder()) {
+        if (params_.base_params.clip_value && *(params_.base_params.clip_value) > 0.0) {
+          preprocessed_gradient.ElementWiseClipTo(*(params_.base_params.clip_value));
+        }
+        if (params_.base_params.clip_norm && *(params_.base_params.clip_norm) > 0.0) {
+          preprocessed_gradient.ClipByGlobalNorm(*(params_.base_params.clip_norm));
+        }
+      }
+    }
+
     // Apply optimization update based on algorithm type
     SITPST updated_state;
     size_t sr_iterations = 0;
@@ -463,7 +477,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       
       if constexpr (std::is_same_v<T, SGDParams>) {
         // SGD with momentum and Nesterov acceleration support
-        updated_state = SGDUpdate(current_state, current_gradient, learning_rate, algo_params);
+        updated_state = SGDUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
       }
       else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
         // Stochastic Reconfiguration variants
@@ -478,7 +492,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         sr_init_guess = new_state; // Use as initial guess for next iteration
       }
       else if constexpr (std::is_same_v<T, AdaGradParams>) {
-        updated_state = AdaGradUpdate(current_state, current_gradient, learning_rate);
+        updated_state = AdaGradUpdate(current_state, preprocessed_gradient, learning_rate);
       }
       else if constexpr (std::is_same_v<T, AdamParams>) {
         // TODO: Implement Adam when needed
@@ -527,7 +541,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   result.total_iterations = total_iterations_performed;
 
   // Ensure the final state is valid
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // Check that the state has the correct dimensions
     if (result.optimized_state.rows() != initial_state.rows() ||
         result.optimized_state.cols() != initial_state.cols()) {
@@ -575,7 +589,7 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
   SITPST updated_state = current_state;
   
   // MPI VERIFICATION: Only master rank processes gradients and algorithm state
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // ⚙️ LAZY INITIALIZATION: Initialize velocity on first use (master rank only)
     if (!sgd_momentum_initialized_) {
       velocity_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
@@ -631,7 +645,7 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
 
   // Create S-matrix for stochastic reconfiguration
   SITPST *pOstar_mean = nullptr;
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     pOstar_mean = const_cast<SITPST *>(&Ostar_mean);
   }
 
@@ -681,7 +695,7 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
 
   // Apply the update using the natural gradient
   SITPST updated_state = current_state;
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     updated_state += (-step_length) * natural_gradient;
   }
 
@@ -695,7 +709,7 @@ Optimizer<TenElemT, QNT>::BoundedGradientUpdate(const SITPST &current_state,
                                                 double step_length) {
   SITPST updated_state = current_state;
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // Apply bounded gradient update only on master rank
     // This matches the behavior of the original VMCPEPSExecutor
     for (size_t row = 0; row < current_state.rows(); ++row) {
@@ -722,7 +736,7 @@ Optimizer<TenElemT, QNT>::RandomGradientUpdate(const SITPST &current_state,
                                                double step_length) {
   SITPST random_gradient = gradient;
 
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     for (size_t row = 0; row < random_gradient.rows(); ++row) {
       for (size_t col = 0; col < random_gradient.cols(); ++col) {
         for (size_t i = 0; i < random_gradient({row, col}).size(); ++i) {
@@ -736,7 +750,7 @@ Optimizer<TenElemT, QNT>::RandomGradientUpdate(const SITPST &current_state,
 
   // Apply random gradient update
   SITPST updated_state = current_state;
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     updated_state += (-step_length) * random_gradient;
   }
   return updated_state;
@@ -750,7 +764,7 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
   // MPI VERIFICATION: Only master rank processes gradients and algorithm state
   SITPST updated_state = current_state;
   
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // Get AdaGrad parameters from the algorithm params
     const auto& adagrad_params = params_.GetAlgorithmParams<AdaGradParams>();
     
@@ -816,7 +830,7 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
                                                    double sr_natural_grad_norm,
                                                    double energy_eval_time,
                                                    double update_time) {
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     std::cout << "Iter " << std::setw(4) << iteration;
     if (step_length > 0.0) {
       std::cout << "LR = " << std::setw(9) << std::scientific << std::setprecision(1) << step_length;
@@ -858,7 +872,7 @@ bool Optimizer<TenElemT, QNT>::ShouldStop(double current_energy, double previous
   // EFFICIENT APPROACH: Only master rank evaluates stopping criteria, then broadcasts decision
   bool should_stop = false;
   
-  if (rank_ == kMPIMasterRank) {
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // Check gradient norm convergence
     if (gradient_norm < params_.base_params.gradient_tolerance) {
       std::cout << "Stopping: Gradient norm converged (" << std::scientific << std::setprecision(1) << gradient_norm
@@ -886,7 +900,7 @@ bool Optimizer<TenElemT, QNT>::ShouldStop(double current_energy, double previous
 
   // Broadcast the stopping decision to all ranks
   int stop_flag = should_stop ? 1 : 0;
-  HANDLE_MPI_ERROR(::MPI_Bcast(&stop_flag, 1, MPI_INT, kMPIMasterRank, comm_));
+  HANDLE_MPI_ERROR(::MPI_Bcast(&stop_flag, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_));
   
   return stop_flag == 1;
 }

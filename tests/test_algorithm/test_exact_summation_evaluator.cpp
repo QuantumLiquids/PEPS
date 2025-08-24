@@ -167,7 +167,7 @@ bool RunExactSummationTest(
   
   g_test_start_time = std::chrono::steady_clock::now();
   
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     std::cout << "Testing exact summation for " << test_name 
               << " (expected energy: " << energy_expect << ")" << std::endl;
   }
@@ -187,7 +187,7 @@ bool RunExactSummationTest(
   auto [computed_energy, gradient, error] = result;
   double final_energy = std::real(computed_energy);
   
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     std::cout << test_name << " results:" << std::endl;
     std::cout << "  Computed energy: " << std::setprecision(12) << final_energy << std::endl;
     std::cout << "  Expected energy: " << std::setprecision(12) << energy_expect << std::endl;
@@ -257,14 +257,14 @@ struct Z2SpinlessFreeFermionTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load spinless fermion TPS data from: " + data_path);
       }
       std::cout << "Loaded spinless fermion lowest TPS data (t2=" << t2 << ") from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -277,14 +277,14 @@ struct Z2SpinlessFreeFermionTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load spinless fermion TPS data from: " + data_path);
       }
       std::cout << "Loaded spinless fermion simple_update TPS data (t2=" << t2 << ") from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -389,14 +389,14 @@ struct TrivialHeisenbergTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load Heisenberg TPS data from: " + data_path);
       }
       std::cout << "Loaded Heisenberg lowest TPS data from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -409,14 +409,14 @@ struct TrivialHeisenbergTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load Heisenberg TPS data from: " + data_path);
       }
       std::cout << "Loaded Heisenberg simple_update TPS data from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -507,14 +507,14 @@ struct TrivialTransverseIsingTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load Transverse Ising TPS data from: " + data_path);
       }
       std::cout << "Loaded Transverse Ising lowest TPS data from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -527,14 +527,14 @@ struct TrivialTransverseIsingTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load Transverse Ising TPS data from: " + data_path);
       }
       std::cout << "Loaded Transverse Ising simple_update TPS data from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -633,14 +633,14 @@ struct Z2tJTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load t-J model TPS data from: " + data_path);
       }
       std::cout << "Loaded t-J model lowest TPS data from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   
@@ -653,14 +653,14 @@ struct Z2tJTest : public MPITest {
     
     SITPST sitps(Ly, Lx);
     
-    if (rank == kMPIMasterRank) {
+    if (rank == qlten::hp_numeric::kMPIMasterRank) {
       if (!sitps.Load(data_path)) {
         throw std::runtime_error("Failed to load t-J model TPS data from: " + data_path);
       }
       std::cout << "Loaded t-J model simple_update TPS data from: " << data_path << std::endl;
     }
     
-    qlpeps::MPI_Bcast(sitps, comm, kMPIMasterRank);
+    qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
     return sitps;
   }
   

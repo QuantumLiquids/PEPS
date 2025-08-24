@@ -275,12 +275,12 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 
   // Broadcast input state from master to all ranks (to satisfy contract; computation remains master-only)
   SplitIndexTPSType split_index_tps_bcast;
-  if (rank == qlten::kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     split_index_tps_bcast = split_index_tps_master_only;
   }
-  qlpeps::MPI_Bcast(split_index_tps_bcast, comm, qlten::kMPIMasterRank);
+  qlpeps::MPI_Bcast(split_index_tps_bcast, comm, qlten::hp_numeric::kMPIMasterRank);
 
-  if (rank == qlten::kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     // Master computes using single-process evaluator on the broadcasted state
     return ExactSumEnergyEvaluator<ModelT, TenElemT, QNT>(
         split_index_tps_bcast, all_configs, trun_para, model, Ly, Lx);
