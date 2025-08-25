@@ -2,14 +2,18 @@
 title: Missing SGD Variants and Line Search
 status: documented
 date: 2025-08-18
-last_updated: 2025-08-18
+last_updated: 2025-08-24
 applies_to: [module/optimizer]
 tags: [rfc, optimizer]
 ---
 
+## 变更记录
+
+- 2025-08-24: 已实现 Clip-by-Value 梯度预处理；删除相关提案段落（原“2. ClipValueSGD(rename from legacy BoundGradientElement)”以及文末“独立实现计划：梯度预处理（裁剪）”）。
+
 # Missing Optimization Algorithms from Legacy VMCPEPSExecutor
 
-## Status: DOCUMENTED - To be implemented in future releases
+## Status: PARTIALLY IMPLEMENTED — 已完成 Clip-by-Value；其余项待实现
 
 ## 概述
 
@@ -17,11 +21,10 @@ tags: [rfc, optimizer]
 
 ### SGD变体与梯度预处理：
 1. **RandomGradientElement** - 随机化梯度元素的幅值但保留相位
-2. **Clip-by-value 梯度预处理（rename 自 legacy BoundGradientElement）** - 在更新前对梯度做按值裁剪；`clip_value` 独立于学习率，可与任何算法组合
 
 ### Line Search算法：
-3. **GradientLineSearch** - 梯度方向的线搜索优化
-4. **NaturalGradientLineSearch** - 自然梯度方向的线搜索优化
+2. **GradientLineSearch** - 梯度方向的线搜索优化
+3. **NaturalGradientLineSearch** - 自然梯度方向的线搜索优化
 
 ## 详细功能说明
 
@@ -55,48 +58,7 @@ case RandomGradientElement: {
 }
 ```
 
-### 2. ClipValueSGD（legacy BoundGradientElement 的现代命名）
-
-**功能**: 对梯度进行按元素“值裁剪”（clip-by-value），将每个元素限制在 [-clip_value, clip_value] 区间，然后按 SGD（可含 Momentum/Nesterov）更新。`clip_value` 是独立超参数，不与 `learning_rate` 混用。
-
-**原始实现（legacy 参考）** (来自 `vmc_peps_impl.h:691-708`):
-```cpp
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSExecutor<TenElemT, QNT,
-                     MonteCarloSweepUpdater,
-                     EnergySolver>::BoundGradElementUpdateTPS_(VMCPEPSExecutor::SITPST &grad,
-                                                               double step_len) {
-  if (rank_ == kMPIMasterRank) {
-    for (size_t row = 0; row < ly_; row++)
-      for (size_t col = 0; col < lx_; col++) {
-        const size_t phy_dim = grad_({row, col}).size();
-        for (size_t compt = 0; compt < phy_dim; compt++) {
-          Tensor &grad_ten = grad({row, col})[compt];
-          grad_ten.ElementWiseBoundTo(step_len);  // 核心操作：限制element幅值
-          split_index_tps_({row, col})[compt] += (-step_len) * grad_ten;
-        }
-      }
-  }
-  BroadCast(split_index_tps_, comm_);
-  Configuration config = tps_sample_.config;
-  tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
-  this->NormTPSForOrder1Amplitude_();
-}
-```
-
-**使用场景**: 防止梯度爆炸，特别是在某些 tensor elements 出现异常大的梯度时。现代命名“ClipValueSGD”对齐 PyTorch/Keras/Optax 的“clip by value”术语。
-
-**实现方式** :
-现代实现顺序建议：裁剪梯度作为梯度预处理步骤，再按 SGD（含 Momentum/Nesterov），Adagrad，Adam等一阶方法更新
-
-
-**复数语义与默认行为**:
-- 复数按“幅值裁剪保相位”：若 |g|>clip_value，则 g←std::polar(clip_value, arg(g))；否则不变。与 `ElementWiseClipTo` 一致。
-- 实数等价为“限制绝对值”且保留符号。
-- `clip_value`、`clip_norm` 为可选项，默认未设置即“不裁剪”。
-- 预处理默认仅对一阶方法（SGD/AdaGrad/Adam）生效；对 SR/L-BFGS 默认不应用。
-
-### 3. GradientLineSearch
+### 2. GradientLineSearch
 
 **功能**: 沿着梯度方向进行线搜索优化，寻找最优步长。
 
@@ -120,7 +82,7 @@ void VMCPEPSExecutor<TenElemT, QNT,
 - 停止策略：第一次改善即停（first improvement），避免无谓探测；
 - 方向选择：目前仅用梯度方向，未来可选“动量方向”线搜索（需维护 look-ahead 的 velocity 状态）。
 
-### 4. NaturalGradientLineSearch
+### 3. NaturalGradientLineSearch
 
 **功能**: 沿着自然梯度(natural gradient)方向进行线搜索优化。
 
@@ -256,10 +218,8 @@ class OptimizerParamsBuilder {
 
 需要添加相应的单元测试：
 1. 测试RandomizedSGD的随机性效果
-2. 测试裁剪预处理（ElementWiseClipTo）的逐元素幅值限制与复数保相位
-3. 测试全局范数裁剪（ClipByGlobalNorm）对步幅的统一缩放
-4. 对比新实现与legacy实现的数值一致性
-5. 验证MPI环境下的正确性
+2. 对比新实现与legacy实现的数值一致性
+3. 验证MPI环境下的正确性
 
 ## 注意事项
 
@@ -271,63 +231,4 @@ class OptimizerParamsBuilder {
 ---
 
 **作者**: Linus-style Code Review  
-**创建日期**: 2025-01-29  
-**状态**: 等待实现
-
-
-
-## 独立实现计划：梯度预处理（裁剪）
-
-本章节将“梯度裁剪”作为与其他算法变体解耦的独立功能，单独定义语义、API 与落地步骤。此计划可独立推进与上线，不依赖 RandomizedSGD/Line Search 等实现。
-
-### 目标与范围
-- 目标：提供可选的梯度预处理（裁剪）能力，以提高一阶优化器在数值不稳场景下的鲁棒性。
-- 适用范围：默认仅对一阶方法（SGD/AdaGrad/Adam）生效；SR/L-BFGS 默认不应用。
-
-### 数学与语义
-- 元素幅值裁剪（complex-safe，默认）：若 |g| > clip_value，则 g ← std::polar(clip_value, arg(g))，否则不变；对实数等价于“限制绝对值且保留符号”。
-- 全局范数裁剪（complex-safe）：令 r = sqrt(Σ_i |g_i|^2)。若 r > clip_norm，则对所有元素 g_i ← (clip_norm / r) · g_i，否则不变。
-
-### API 变更（仅新增，可选，默认禁用）
-- `OptimizerParams::BaseParams` 中新增两可选字段：
-  - `std::optional<double> clip_value;`  // 元素级幅值裁剪阈值
-  - `std::optional<double> clip_norm;`   // 全局 L2 范数裁剪阈值
-- 不需要： `clip_mode/clip_eps`；`clip_scope` 作为内部开关，固定为“仅一阶方法”。
-
-示意：
-```cpp
-// struct OptimizerParams::BaseParams {
-//   ...
-//   std::optional<double> clip_value;  // unset -> 不裁剪
-//   std::optional<double> clip_norm;   // unset -> 不裁剪
-// };
-```
-
-### Builder 接口（示意）
-```cpp
-class OptimizerParamsBuilder {
-  // ...
-  OptimizerParamsBuilder& SetClipValue(double clip_value);
-  OptimizerParamsBuilder& SetClipNorm(double clip_norm);
-};
-```
-
-### 实现顺序（优化器通用路径）
-1) 若 `clip_value`：对梯度调用 `ElementWiseClipTo(clip_value)`（幅值裁剪，保相位）。
-2) 若 `clip_norm`：对梯度调用 `ClipByGlobalNorm(clip_norm)` 统一缩放。
-3) 进入一阶优化器更新（SGD/AdaGrad/Adam），动量/Nesterov/自适应在裁剪之后应用。
-4) SR/L-BFGS：默认跳过裁剪（内部 `clip_scope` 控制）。
-
-### MPI 与Complex number/费米张量
-- MPI：裁剪与一阶更新保持一致，仅在 Master 进程执行。
-- 复杂数/费米张量：幅值裁剪保相位语义与 `ElementWiseClipTo` 保持一致；全局范数裁剪对模长操作，天然适配。
-
-### 回溯兼容与命名
-- `ElementWiseBoundTo` 无需保留向后兼容。文档与新代码统一使用 `ElementWiseClipTo`。
-
-### 测试清单
-1. 复数张量幅值裁剪：|g|>c 时幅值被裁剪且相位不变；|g|≤c 时不变。
-2. 实数张量幅值裁剪：|g|>c 时被裁剪为 ±c，符号正确；未超界时不变。
-3. 全局范数裁剪：当 ||g||2>c 时统一缩放，缩放比准确；保持方向不变。
-4. 与一阶法集成：裁剪发生在动量/自适应之前；数值稳定性改善。
-5. MPI 一致性：仅 Master 裁剪，行为与现有分工一致。
+**状态**: 部分实现

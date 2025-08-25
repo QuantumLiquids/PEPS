@@ -260,6 +260,30 @@ auto params = OptimizerParamsBuilder()
   .Build();
 ```
 
+### 梯度裁剪（Gradient Clipping）
+
+为了一阶优化器（SGD/AdaGrad/Adam）的数值稳定性，支持两种可选的梯度预处理：
+
+- 元素幅值裁剪（complex-safe，保相位）：若 |g|>c，则 g ← polar(c, arg(g))；实数退化为“保符号的绝对值裁剪”。
+- 全局范数裁剪：令 r = sqrt(Σ |g_j|^2)。若 r> C，则统一缩放 g ← (C/r)·g。
+
+使用方法（Builder）：
+
+```cpp
+auto params = OptimizerParamsBuilder()
+  .SetMaxIterations(2000)
+  .SetLearningRate(0.01)
+  .WithSGD(0.9, false)
+  .SetClipValue(0.1)   // 元素幅值阈值
+  .SetClipNorm(10.0)   // 全局L2阈值
+  .Build();
+```
+
+注意：
+- 裁剪仅对一阶方法生效（SGD/AdaGrad/Adam），SR/L-BFGS 默认不应用。
+- `SetClipValue/SetClipNorm` 需要先设置 BaseParams（例如通过 SetMaxIterations/SetLearningRate 等）。
+- MPI 语义与一阶更新一致：仅 Master 进程执行裁剪。
+
 ### VMCPEPS集成
 
 ```cpp

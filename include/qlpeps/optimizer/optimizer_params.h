@@ -165,6 +165,15 @@ struct OptimizerParams {
    * @brief Core optimization parameters shared by all algorithms.
    * 
    * Contains unified learning_rate parameter and optional learning rate scheduler.
+   * Also provides optional gradient clipping for first-order optimizers (SGD/AdaGrad/Adam).
+   *
+   * Gradient clipping semantics:
+   * - Per-element magnitude clipping (complex-safe): if |g| > c then g ← polar(c, arg(g)); otherwise unchanged.
+   * - Global L2 norm clipping: let r = sqrt(Σ |g_j|^2). If r > C then g_j ← (C/r) g_j for all elements; otherwise unchanged.
+   *
+   * Scope and defaults:
+   * - Clipping applies only to first-order optimizers (SGD/AdaGrad/Adam). SR/L-BFGS do not use clipping.
+   * - Clipping is disabled by default (std::nullopt values).
    * No default constructor following Google C++ style.
    */
   struct BaseParams {
@@ -174,9 +183,11 @@ struct OptimizerParams {
     size_t plateau_patience;
     double learning_rate;                                    // Universal parameter for all algorithms
     std::unique_ptr<LearningRateScheduler> lr_scheduler;     // Optional learning rate scheduling
-    // Optional gradient clipping (first-order optimizers only)
-    std::optional<double> clip_value;   // Per-element magnitude clip (complex-safe, preserve phase)
-    std::optional<double> clip_norm;    // Global L2 norm clip threshold
+    /// Optional gradient clipping (first-order optimizers only)
+    /// Per-element magnitude clip (complex-safe, preserve phase). unset -> no clipping
+    std::optional<double> clip_value;
+    /// Optional global L2 norm clipping threshold. unset -> no clipping
+    std::optional<double> clip_norm;
     
     // No default constructor - force explicit specification
     BaseParams(size_t max_iter, double energy_tol, double grad_tol,
@@ -245,6 +256,9 @@ public:
 
   /**
    * @brief Check whether the selected algorithm is first-order (SGD/AdaGrad/Adam)
+   * 
+   * Clipping scope relies on this check: if true, gradient pre-processing
+   * (clip_value/clip_norm) may be applied by the optimizer implementation.
    */
   bool IsFirstOrder() const {
     return IsAlgorithm<SGDParams>() || IsAlgorithm<AdaGradParams>() || IsAlgorithm<AdamParams>();
@@ -551,6 +565,17 @@ public:
 
   /**
    * @brief Enable per-element magnitude clipping (complex-safe, preserve phase)
+   * 
+   * Mathematical definition:
+   * - For each element g: if |g| > c then g ← polar(c, arg(g)); otherwise unchanged.
+   * - Real-valued tensors reduce to sign-preserving absolute value clipping.
+   *
+   * Constraints and scope:
+   * - Requires BaseParams to be created first; throws std::invalid_argument otherwise.
+   * - Applied only for first-order optimizers (SGD/AdaGrad/Adam) by the optimizer implementation.
+   *
+   * @param clip_value Per-element magnitude threshold (>0)
+   * @return Builder reference for chaining
    */
   OptimizerParamsBuilder& SetClipValue(double clip_value) {
     if (!base_params_) {
@@ -562,6 +587,17 @@ public:
 
   /**
    * @brief Enable global L2 norm clipping
+   * 
+   * Mathematical definition:
+   * - Let r = sqrt(Σ |g_j|^2) across all parameters. If r > C, then scale g ← (C/r) g.
+   * - Preserves direction while limiting update magnitude.
+   *
+   * Constraints and scope:
+   * - Requires BaseParams to be created first; throws std::invalid_argument otherwise.
+   * - Applied only for first-order optimizers (SGD/AdaGrad/Adam) by the optimizer implementation.
+   *
+   * @param clip_norm Global L2 norm threshold (>0)
+   * @return Builder reference for chaining
    */
   OptimizerParamsBuilder& SetClipNorm(double clip_norm) {
     if (!base_params_) {

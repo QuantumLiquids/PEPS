@@ -277,6 +277,30 @@ auto params = OptimizerParamsBuilder()
   .Build();
 ```
 
+### Gradient Clipping
+
+To improve numerical stability for first-order optimizers (SGD/AdaGrad/Adam), two optional preprocessing steps are provided:
+
+- Per-element magnitude clipping (complex-safe, preserve phase): if |g| > c then g ← polar(c, arg(g)); for real tensors this reduces to sign-preserving absolute clipping.
+- Global L2 norm clipping: let r = sqrt(Σ |g_j|^2). If r > C, scale g ← (C/r)·g uniformly.
+
+Usage via Builder:
+
+```cpp
+auto params = OptimizerParamsBuilder()
+  .SetMaxIterations(2000)
+  .SetLearningRate(0.01)
+  .WithSGD(0.9, false)
+  .SetClipValue(0.1)   // per-element magnitude threshold
+  .SetClipNorm(10.0)   // global L2 threshold
+  .Build();
+```
+
+Notes:
+- Clipping applies only to first-order methods; SR/L-BFGS do not use clipping by default.
+- SetClipValue/SetClipNorm require BaseParams to be initialized first (e.g., via SetMaxIterations/SetLearningRate).
+- MPI semantics follow first-order updates: clipping is performed on master rank only.
+
 ### VMCPEPS Integration
 
 ```cpp

@@ -500,7 +500,9 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @brief In-place per-element magnitude clipping (complex-safe)
    *
    * Clip each element's magnitude to clip_value while preserving phase/sign.
-   * Delegates to `QLTensor::ElementWiseBoundTo(clip_value)`.
+   *
+   * Definition (complex-safe): if |g| > c then g ← polar(c, arg(g)); otherwise unchanged.
+   * For real tensors, this reduces to sign-preserving absolute value clipping.
    *
    * @param clip_value Per-element magnitude clip threshold (>0)
    */
@@ -512,7 +514,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * Let r = sqrt(Σ |g_j|^2) across all elements and components. If r > clip_norm,
    * uniformly scale all tensors by (clip_norm / r); otherwise unchanged.
    *
-   * For fermion tensor, norm use quasi-norm.
+   * For fermionic tensors, the norm uses the quasi-2-norm convention.
    * @param clip_norm Global L2 norm threshold (>0)
    */
   void ClipByGlobalNorm(double clip_norm);
