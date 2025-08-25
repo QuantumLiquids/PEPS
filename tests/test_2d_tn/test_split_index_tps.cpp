@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
+#include "qlpeps/two_dim_tn/tps/split_index_tps_impl.h"
 #include "qlpeps/consts.h"
 #include <filesystem>
 
@@ -199,4 +200,80 @@ TEST_F(SplitIdxTPSData, MoveSemantics) {
   EXPECT_EQ(d.cols(), b.cols());
   EXPECT_NEAR((d - b).NormSquare(), 0.0, 1e-12);
   EXPECT_TRUE(c.empty() || c.rows() == 0);
+}
+
+// =============================
+// Clipping API tests (merged)
+// =============================
+
+static DSITPS CreateSimpleSITPS_Clip(size_t Ly, size_t Lx) {
+  IndexT pb_out = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), 1), QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), 1)}, TenIndexDirType::OUT);
+  IndexT pb_in = InverseIndex(pb_out);
+  IndexT v = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)}, TenIndexDirType::OUT);
+  IndexT vin = InverseIndex(v);
+  DSITPS t(Ly, Lx, 2);
+  for (size_t r=0;r<Ly;++r) {
+    for (size_t c=0;c<Lx;++c) {
+      for (size_t i=0;i<2;++i) {
+        t({r,c})[i] = DTensor({vin, v, v, vin});
+        t({r,c})[i].Fill(U1QN({QNCard("Sz", U1QNVal(0))}), (i==0) ? 10.0 : -0.5);
+      }
+    }
+  }
+  return t;
+}
+
+TEST_F(SplitIdxTPSData, ElementWiseClipToInPlace) {
+  DSITPS t = CreateSimpleSITPS_Clip(1,1);
+  t.ElementWiseClipTo(1.0);
+  // All elements must be within [-1,1]
+  for (auto &vec : t) {
+    for (auto &ten : vec) {
+      EXPECT_LE(ten.GetMaxAbs(), 1.0 + 1e-12);
+    }
+  }
+}
+
+TEST_F(SplitIdxTPSData, ElementWiseClipToOutOfPlace) {
+  DSITPS t = CreateSimpleSITPS_Clip(1,1);
+  DSITPS t_orig = t;
+  DSITPS clipped = ElementWiseClipTo(t, 0.2);
+  // Original unchanged
+  for (size_t r = 0; r < t.rows(); ++r) {
+    for (size_t c = 0; c < t.cols(); ++c) {
+      for (size_t i = 0; i < t.PhysicalDim(); ++i) {
+        auto diff = t({r, c})[i] + (-t_orig({r, c})[i]);
+        EXPECT_LE(diff.GetMaxAbs(), 1e-12);
+      }
+    }
+  }
+  for (auto &vec : clipped) {
+    for (auto &ten : vec) {
+      EXPECT_LE(ten.GetMaxAbs(), 0.2 + 1e-12);
+    }
+  }
+}
+
+TEST_F(SplitIdxTPSData, ClipByGlobalNormInPlace) {
+  DSITPS t = CreateSimpleSITPS_Clip(1,1);
+  // Compute current quasi-norm
+  double nsq = 0.0;
+  for (auto &vec : t) {
+    for (auto &ten : vec) {
+      double q = ten.GetQuasi2Norm();
+      nsq += q*q;
+    }
+  }
+  double r = std::sqrt(nsq);
+  double target = r * 0.1;
+  t.ClipByGlobalNorm(target);
+  // New global quasi-norm should be ~ target (within tolerance)
+  double nsq2 = 0.0;
+  for (auto &vec : t) {
+    for (auto &ten : vec) {
+      double q = ten.GetQuasi2Norm();
+      nsq2 += q*q;
+    }
+  }
+  EXPECT_NEAR(std::sqrt(nsq2), target, 1e-9);
 }

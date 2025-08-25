@@ -11,6 +11,7 @@
 #define QLPEPS_VMC_PEPS_TWO_DIM_TN_TPS_TPS_IMPL_H
 
 #include "qlpeps/two_dim_tn/tps/tps.h"
+#include "qlpeps/utility/filesystem_utils.h"
 
 namespace qlpeps {
 
@@ -97,7 +98,7 @@ bool TPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
 
 template<typename TenElemT, typename QNT>
 void TPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool release_mem) {
-  if (!qlmps::IsPathExist(tps_path)) { qlmps::CreatPath(tps_path); }
+  EnsureDirectoryExists(tps_path);
   std::string file;
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {

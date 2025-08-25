@@ -22,7 +22,7 @@ class MPISignalGuard {
   static bool EmergencyStopRequested(MPI_Comm comm) {
     int local_flag = g_emergency_stop_flag_.load() ? 1 : 0;
     int global_flag = 0;
-    MPI_Allreduce(&local_flag, &global_flag, 1, MPI_INT, MPI_MAX, comm);
+    HANDLE_MPI_ERROR(MPI_Allreduce(&local_flag, &global_flag, 1, MPI_INT, MPI_MAX, comm));
     return global_flag != 0;
   }
 

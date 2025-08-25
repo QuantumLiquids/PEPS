@@ -11,7 +11,6 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlmps/case_params_parser.h"
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
@@ -45,22 +44,23 @@ struct HeisenbergSystem : public MPITest {
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
 
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
-      OptimizerParams::CreateStochasticReconfiguration({0.3}, ConjugateGradientParams(100, 1e-5, 20, 0.001), 40),
-      MonteCarloParams(100, 100, 1, tps_path,
+      OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
+      MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2}))), // Sz = 0
+                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
+                       false), // Sz = 0, not warmed up initially
       PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                  std::make_optional<double>(1e-14), std::make_optional<size_t>(10)), tps_path));
+                                  std::make_optional<double>(1e-14), std::make_optional<size_t>(10))));
 
-  MCMeasurementPara measure_para = MCMeasurementPara(
-      BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      1000, 1000, 1,
-      Configuration(Ly, Lx,
-                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Random generate configuration with Sz = 0
-      tps_path);
+  MonteCarloParams measure_mc_params{1000, 1000, 1,
+                                      Configuration(Ly, Lx,
+                                                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Random generate configuration with Sz = 0
+                                      false}; // not warmed up initially
+  PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                                                  CompressMPSScheme::SVD_COMPRESS,
+                                                  std::make_optional<double>(1e-14),
+                                                  std::make_optional<size_t>(10))};
+  MCMeasurementParams measure_para{measure_mc_params, measure_peps_params};
 
   void SetUp() {
     MPITest::SetUp();
@@ -74,7 +74,7 @@ struct HeisenbergSystem : public MPITest {
 };
 
 TEST_F(HeisenbergSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(pb_out, Ly, Lx);
     std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
     for (size_t y = 0; y < Ly; y++) {
@@ -117,13 +117,13 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 // Check if the TPS doesn't change by setting step length = 0
 TEST_F(HeisenbergSystem, ZeroUpdate) {
   MPI_Barrier(comm);
-  vmc_peps_para.optimizer_params.base_params.step_lengths = {0.0};
+  vmc_peps_para.optimizer_params.base_params.learning_rate = 0.0;
   vmc_peps_para.optimizer_params.base_params.max_iterations = 3;
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
   tps.Load(tps_path);
   auto init_tps = tps;
   auto executor =
-      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
+      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
                                                                                                        tps,
                                                                                                        comm,
                                                                                                        SquareSpinOneHalfXXZModel());
@@ -151,7 +151,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //VMC
   auto executor =
-      new VMCPEPSOptimizerExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
+      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
                                                                                                        tps,
                                                                                                        comm,
                                                                                                        SquareSpinOneHalfXXZModel());
@@ -170,9 +170,9 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
-          measure_para,
+      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
           tps,
+          measure_para,
           comm);
   start_flop = flop;
 

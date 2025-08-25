@@ -11,11 +11,13 @@
 #include <vector>
 #include <fstream>
 #include <algorithm>
+#include <memory>
+#include <numeric>
 #include "qlten/framework/hp_numeric/mpi_fun.h"
-#include "qlpeps/consts.h"                        //kMPIMasterRank
 
 namespace qlpeps {
-using namespace qlten;
+namespace hp_numeric = qlten::hp_numeric;
+using qlten::hp_numeric::kMPIMasterRank;
 
 template<typename DataType>
 void DumpVecData(
@@ -23,11 +25,25 @@ void DumpVecData(
     const std::vector<DataType> &data
 ) {
   std::ofstream ofs(filename, std::ofstream::binary);
+  if (!ofs.is_open()) {
+    throw std::ios_base::failure("Failed to open file: " + filename);
+  }
+  
   for (auto datum : data) {
     ofs << datum << '\n';
+    if (ofs.fail()) {
+      throw std::ios_base::failure("Failed to write to file: " + filename);
+    }
   }
   ofs << std::endl;
+  if (ofs.fail()) {
+    throw std::ios_base::failure("Failed to write endl to file: " + filename);
+  }
+  
   ofs.close();
+  if (ofs.fail()) {
+    throw std::ios_base::failure("Failed to close file: " + filename);
+  }
 }
 
 template<typename T>
@@ -114,21 +130,21 @@ std::pair<ElemT, double> GatherStatisticSingleData(
   ElemT mean(0);
   double standard_err(0);
 
-  ElemT *gather_data = nullptr;
-  if (comm_rank == kMPIMasterRank) {
-    gather_data = new ElemT[comm_size];
+  std::unique_ptr<ElemT[]> gather_data;
+  if (comm_rank == qlten::hp_numeric::kMPIMasterRank) {
+    gather_data = std::make_unique<ElemT[]>(comm_size);
   }
 
   HANDLE_MPI_ERROR(::MPI_Gather(&data,
                                 1,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                (void *) gather_data,
+                                (void *) gather_data.get(),
                                 1,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                kMPIMasterRank,
+                                qlten::hp_numeric::kMPIMasterRank,
                                 comm));
 
-  if (comm_rank == kMPIMasterRank) {
+  if (comm_rank == qlten::hp_numeric::kMPIMasterRank) {
     ElemT sum = 0.0;
     for (size_t i = 0; i < comm_size; i++) {
       sum += gather_data[i];
@@ -154,7 +170,7 @@ std::pair<ElemT, double> GatherStatisticSingleData(
         std::cerr << "Mean value: " << mean << std::endl;
       }
     }
-    delete[] gather_data;
+
   }
   return std::make_pair(mean, standard_err);
 }
@@ -182,19 +198,19 @@ void GatherStatisticListOfData(
     return;
   }
   std::vector<ElemT> all_data;
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     all_data.resize(world_size * data_size);
   }
   HANDLE_MPI_ERROR(::MPI_Gather(data.data(),
                                 data_size,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                rank == kMPIMasterRank ? all_data.data() : nullptr,
+                                rank == qlten::hp_numeric::kMPIMasterRank ? all_data.data() : nullptr,
                                 data_size,
                                 hp_numeric::GetMPIDataType<ElemT>(),
-                                kMPIMasterRank,
+                                qlten::hp_numeric::kMPIMasterRank,
                                 comm));
 
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     std::vector<std::vector<ElemT>> data_gather_transposed(data_size, std::vector<ElemT>(world_size));
     for (size_t i = 0; i < world_size; i++) {
       for (size_t j = 0; j < data_size; j++) {

@@ -26,7 +26,8 @@
 #include "qlten/framework/hp_numeric/mpi_fun.h"
 
 namespace qlpeps {
-using namespace qlten;
+using qlten::hp_numeric::kMPIMasterRank;
+namespace hp_numeric = qlten::hp_numeric;
 /**
  * solve the equation
  *          A * x = b
@@ -116,41 +117,51 @@ VectorType ConjugateGradientSolverMaster(
     const MPI_Comm &comm
 );
 
-// virtual forward declaration
-// NB! user should define the following functions by himself/herself
-//template<typename VectorType>
-//void CGSolverBroadCastVector(
-//    VectorType &x0,
-//const MPI_Comm& comm
-//);
-//
-//template<typename VectorType>
-//void CGSolverSendVector(
-//const MPI_Comm& comm,
-//    const VectorType &v,
-//    const size_t dest,
-//    const int tag
-//);
-//
-//template<typename VectorType>
-//size_t CGSolverRecvVector(
-//const MPI_Comm& comm,
-//    VectorType &v,
-//    const size_t src,
-//    const int tag
-//);
+/**
+ * @brief User-defined MPI communication functions required for VectorType
+ * 
+ * For parallel conjugate gradient solver to work, users must provide the following 
+ * MPI communication functions for their VectorType:
+ * 
+ * @code
+ * template<typename VectorType>
+ * void MPI_Bcast(VectorType &vector, const MPI_Comm &comm);
+ * 
+ * template<typename VectorType> 
+ * void MPI_Send(const VectorType &vector, int dest, const MPI_Comm &comm, int tag = 0);
+ * 
+ * template<typename VectorType>
+ * MPI_Status MPI_Recv(VectorType &vector, int src, const MPI_Comm &comm, int tag = 0);
+ * @endcode
+ * 
+ * These functions must handle:
+ * - Broadcasting vector data from master to all ranks
+ * - Sending vector data to specified destination rank
+ * - Receiving vector data from specified source rank (supports MPI_ANY_SOURCE)
+ */
 
 /**
- * Parallel version. matrix_a is stored distributed in different processor
- *
- * @tparam MatrixType
- * @tparam VectorType
- * @param matrix_a
- * @param b
- * @param x0
- * @param max_iter
- * @param tolerance
- * @return  only return in proc 0 is valid
+ * @brief Parallel conjugate gradient solver
+ * 
+ * Solves the linear system A * x = b using the conjugate gradient method
+ * in a distributed MPI environment. The matrix A is distributed across processors.
+ * 
+ * @warning Result distribution behavior:
+ *   - Master rank (rank 0): Returns the actual solution vector
+ *   - Slave ranks: Return the initial guess x0 (unchanged)
+ *   - If you need the solution on all ranks, manually broadcast after calling this function
+ * 
+ * @tparam MatrixType Matrix type supporting operator*(VectorType)
+ * @tparam VectorType Vector type with required MPI communication functions
+ * @param matrix_a Self-adjoint matrix/operator (distributed)
+ * @param b Right-hand side vector
+ * @param x0 Initial guess
+ * @param max_iter Maximum number of iterations
+ * @param tolerance Convergence tolerance
+ * @param residue_restart_step Residue restart interval (0 to disable)
+ * @param iter [out] Number of iterations performed (valid on master rank only)
+ * @param comm MPI communicator
+ * @return Solution vector on master rank, initial guess x0 on slave ranks
  */
 template<typename MatrixType, typename VectorType>
 VectorType ConjugateGradientSolver(
@@ -165,7 +176,7 @@ VectorType ConjugateGradientSolver(
 ) {
   int rank;
   MPI_Comm_rank(comm, &rank);
-  if (rank == kMPIMasterRank) {
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
     return ConjugateGradientSolverMaster(
         matrix_a, b, x0, max_iter, tolerance, residue_restart_step, iter, comm
     );
@@ -189,7 +200,7 @@ inline void MasterBroadcastInstruction(
   HANDLE_MPI_ERROR(::MPI_Bcast(const_cast<ConjugateGradientSolverInstruction *>(&instruction),
                                1,
                                MPI_INT,
-                               kMPIMasterRank,
+                               qlten::hp_numeric::kMPIMasterRank,
                                comm));
 }
 
@@ -199,7 +210,7 @@ SlaveReceiveBroadcastInstruction(const MPI_Comm &comm) {
   HANDLE_MPI_ERROR(::MPI_Bcast(&instruction,
                                1,
                                MPI_INT,
-                               kMPIMasterRank,
+                               qlten::hp_numeric::kMPIMasterRank,
                                comm));
   return instruction;
 }
@@ -329,7 +340,7 @@ VectorType MatrixMultiplyVectorMaster(
   qlten::Timer cg_mat_vec_mult_timer("conjugate gradient matrix vector multiplication");
   qlten::Timer cg_broadcast_vec_timer("conjugate gradient broadcast vector");
 #endif
-  CGSolverBroadCastVector(const_cast<VectorType &>(v), comm); //defined by user
+  MPI_Bcast(const_cast<VectorType &>(v), comm); //defined by user
 #ifdef QLPEPS_TIMING_MODE
   cg_broadcast_vec_timer.PrintElapsed();
 #endif
@@ -339,7 +350,7 @@ VectorType MatrixMultiplyVectorMaster(
   qlten::Timer cg_gather_vec_timer("conjugate gradient gather vector");
 #endif
   for (size_t i = 1; i < mpi_size; i++) {
-    CGSolverRecvVector(comm, res_list[i], MPI_ANY_SOURCE, 0);
+    MPI_Recv(res_list[i], MPI_ANY_SOURCE, comm, 0);
   }
 #ifdef QLPEPS_TIMING_MODE
   cg_gather_vec_timer.PrintElapsed();
@@ -361,9 +372,9 @@ void MatrixMultiplyVectorSlave(
     const MPI_Comm &comm
 ) {
   VectorType v;
-  CGSolverBroadCastVector(v, comm);
+  MPI_Bcast(v, comm);
   VectorType res = mat * v;
-  CGSolverSendVector(comm, res, kMPIMasterRank, 0);
+  MPI_Send(res, qlten::hp_numeric::kMPIMasterRank, comm, 0);
 }
 
 }//qlpeps

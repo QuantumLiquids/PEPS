@@ -53,34 +53,35 @@ protected:
     model_name = "square_tj_model";
     energy_ed = -0.5;  // Placeholder - should be updated with actual ED energy
     
-    // VMC optimization parameters
-    optimize_para = VMCOptimizePara(
-        BMPSTruncatePara(Dpeps, Dpeps * 2, 1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        100, 100, 1,
-        {(Lx * Ly - hole_num) / 2, (Lx * Ly - hole_num) / 2, hole_num},
-        Ly, Lx,
-        std::vector<double>(40, 0.2),
-        StochasticReconfiguration,
-        ConjugateGradientParams(100, 1e-4, 20, 0.01));
+    // VMC optimization parameters - Modern API
+    BMPSTruncatePara truncate_para(Dpeps, Dpeps * 2, 1e-15,
+                                   CompressMPSScheme::SVD_COMPRESS,
+                                   std::make_optional<double>(1e-14),
+                                   std::make_optional<size_t>(10));
+    
+    Configuration initial_config(Ly, Lx, OccupancyNum({(Lx * Ly - hole_num) / 2, (Lx * Ly - hole_num) / 2, hole_num}));
+    MonteCarloParams mc_params(100, 100, 1, initial_config, false);
+    PEPSParams peps_params(truncate_para);
+    
+    ConjugateGradientParams cg_params(100, 1e-4, 20, 0.01);
+    OptimizerParams opt_params = OptimizerParams::CreateStochasticReconfiguration(40, cg_params, 0.2);
+    
+    optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params);
     
     // Monte Carlo measurement parameters
-    measure_para = MCMeasurementPara(
-        BMPSTruncatePara(Dpeps, Dpeps * 2, 1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        1000, 1000, 1,
-        {(Lx * Ly - hole_num) / 2, (Lx * Ly - hole_num) / 2, hole_num},
-        Ly, Lx);
+    Configuration measure_config(Ly, Lx, OccupancyNum({(Lx * Ly - hole_num) / 2, (Lx * Ly - hole_num) / 2, hole_num}));
+    MonteCarloParams measure_mc_params(1000, 1000, 1, measure_config, false);
+    PEPSParams measure_peps_params(BMPSTruncatePara(Dpeps, Dpeps * 2, 1e-15,
+                                                    CompressMPSScheme::SVD_COMPRESS,
+                                                    std::make_optional<double>(1e-14),
+                                                    std::make_optional<size_t>(10)));
+    measure_para = MCMeasurementParams(measure_mc_params, measure_peps_params);
   }
 };
 
 // Test simple update optimization
 TEST_F(SquaretJModelSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
     
     // Initialize with checkerboard pattern

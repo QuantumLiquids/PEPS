@@ -19,10 +19,9 @@
 #include "qlpeps/two_dim_tn/tps/tps.h"                //ToTPS()
 #include "qlpeps/basic.h"                             //BondOrientation
 #include "qlpeps/utility/conjugate_gradient_solver.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  //ConjugateGradientParams
+#include "qlpeps/optimizer/optimizer_params.h"                   //ConjugateGradientParams
 #include "arnoldi_solver.h"
 namespace qlpeps {
-using namespace qlten;
 
 template<typename QNT>
 using HilbertSpaces = std::vector<std::vector<Index<QNT>>>;

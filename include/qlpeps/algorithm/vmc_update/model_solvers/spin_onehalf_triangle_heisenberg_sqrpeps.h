@@ -15,6 +15,22 @@
 namespace qlpeps {
 using namespace qlten;
 
+/**
+ * Spin-1/2 Heisenberg Model on Triangular Lattice using Square PEPS
+ * 
+ * Hamiltonian:
+ * $$H = J \sum_{\langle i,j \rangle} \vec{S}_i \cdot \vec{S}_j = J \sum_{\langle i,j \rangle} (S^x_i S^x_j + S^y_i S^y_j + S^z_i S^z_j)$$
+ * 
+ * where:
+ * - Sum over all nearest-neighbor bonds on triangular lattice
+ * - J: exchange coupling constant (J > 0 for antiferromagnetic)
+ * - Triangular geometry mapped onto square PEPS representation
+ * 
+ * Bond structure:
+ * - Horizontal bonds: (i,j) ↔ (i,j+1)
+ * - Vertical bonds: (i,j) ↔ (i+1,j) 
+ * - Diagonal bonds: (i,j) ↔ (i+1,j+1) [↘ direction]
+ */
 class SpinOneHalfTriHeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriHeisenbergSqrPEPS>,
                                         public ModelMeasurementSolver<SpinOneHalfTriHeisenbergSqrPEPS> {
  public:

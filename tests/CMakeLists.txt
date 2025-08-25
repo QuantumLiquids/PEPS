@@ -118,13 +118,16 @@ endmacro()
 
 macro(add_mpi_unittest_run
         TEST_NAME PROCESSOR_NUM INPUT_ARGS)
-    if (NOT (MPIEXEC_MAX_NUMPROCS MATCHES "1"))
+    # Check if we have enough processors to run the requested number of MPI processes
+    if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL ${PROCESSOR_NUM})
         add_test(NAME ${TEST_NAME}_mpi
                 COMMAND ${MPIEXEC_EXECUTABLE}
                 ${MPIEXEC_NUMPROC_FLAG} ${PROCESSOR_NUM}
                 $<TARGET_FILE:${TEST_NAME}>
                 ${INPUT_ARGS}
                 WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    else()
+        message(STATUS "Skipping MPI test ${TEST_NAME}_mpi: requires ${PROCESSOR_NUM} processes, but only ${MPIEXEC_MAX_NUMPROCS} available")
     endif ()
     set_target_properties(${TEST_NAME} PROPERTIES FOLDER tests)
 endmacro()
@@ -171,6 +174,12 @@ add_unittest(test_peps
 add_unittest(test_split_index_tps
         "test_2d_tn/test_split_index_tps.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+
+# MPI functionality tests for SplitIndexTPS
+add_mpi_unittest(test_split_index_tps_mpi
+        "test_2d_tn/test_split_index_tps_mpi.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
@@ -229,19 +238,11 @@ add_two_type_unittest(test_fermion_simple_update
 #        ""
 # )
 
-# Test vmc-peps (Unit Tests)
-add_two_type_unittest(test_vmc_peps
-        "test_algorithm/test_vmc_peps.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "test_data"
-)
-
-add_mpi_unittest_run(test_vmc_peps_double "4" " ")
-add_mpi_unittest_run(test_vmc_peps_complex "4" " ")
+# Legacy test_vmc_peps removed - use test_vmc_peps_optimizer instead
 
 # Test optimizer
 add_two_type_unittest(test_optimizer
-        "test_algorithm/test_optimizer.cpp"
+        "test_optimizer/test_optimizer.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
@@ -257,17 +258,63 @@ add_mpi_unittest_run(test_vmc_peps_optimizer_double "4" " ")
 add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
 
 
-# Test exact summation optimization using VMCPEPSOptimizerExecutor with custom energy evaluator
-add_two_type_unittest(test_exact_sum_optimization
-        "test_algorithm/test_exact_sum_optimization.cpp"
+## Optimizer exact-sum AdaGrad test (pure optimizer, deterministic gradients)
+add_two_type_unittest(test_optimizer_adagrad_exact_sum
+        "test_optimizer/test_optimizer_adagrad_exact_sum.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+
+# Add MPI test runs for optimizer exact-sum AdaGrad to verify MPI-aware ExactSumEnergyEvaluator
+add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_double "4" " ")
+add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_complex "4" " ")
+
+# Test pure exact summation evaluator (separated from optimizer complexity)
+add_two_type_unittest(test_exact_summation_evaluator
+        "test_algorithm/test_exact_summation_evaluator.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+
+# Add MPI test runs for exact summation evaluator to verify MPI-aware computation
+add_mpi_unittest_run(test_exact_summation_evaluator_double "4" " ")
+add_mpi_unittest_run(test_exact_summation_evaluator_complex "4" " ")
+
+
+## Optimizer exact-sum SGD test (pure optimizer, deterministic gradients)
+add_two_type_unittest(test_optimizer_sgd_exact_sum
+        "test_optimizer/test_optimizer_sgd_exact_sum.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+add_mpi_unittest_run(test_optimizer_sgd_exact_sum_double "4" " ")
+add_mpi_unittest_run(test_optimizer_sgd_exact_sum_complex "4" " ")
+
+
+# Learning rate scheduler unit tests (header-only, no extra libs)
+add_unittest(test_lr_schedulers
+        "test_optimizer/test_lr_schedulers.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
+
+# Optimizer params utility tests
+add_unittest(test_optimizer_params
+        "test_optimizer/test_optimizer_params.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
+# Optimizer gradient preprocessing integration (single-rank)
+add_unittest(test_optimizer_gradient_preprocessing
+        "test_optimizer/test_optimizer_gradient_preprocessing.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
 )
 
 # Fast tests (2x2 systems, quick execution)
 add_two_type_unittest(test_mc_peps_measure
         "test_algorithm/test_mc_peps_measure.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-        "test_algorithm/test_data/tps_square_heisenberg2x2D4Double"
+        "test_data/tps_square_heisenberg2x2D4Double"
 )
 
 
@@ -331,11 +378,7 @@ if(BUILD_SLOW_TESTS)
             " "
     )
 
-    add_two_type_unittest(test_square_j1j2_xxz_legacy
-            "integration_tests/test_square_j1j2_xxz_legacy_vmcpeps.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
-            " "
-    )
+    # Legacy test removed - functionality merged into test_square_j1j2_xxz
 
     add_two_type_unittest(test_triangle_heisenberg
             "integration_tests/test_triangle_heisenberg.cpp"
@@ -351,8 +394,7 @@ if(BUILD_SLOW_TESTS)
 
     add_mpi_unittest_run(test_square_j1j2_xxz_double "56" " ")
     add_mpi_unittest_run(test_square_j1j2_xxz_complex "56" " ")
-    add_mpi_unittest_run(test_square_j1j2_xxz_legacy_double "56" " ")
-    add_mpi_unittest_run(test_square_j1j2_xxz_legacy_complex "56" " ")
+    # Legacy test runs removed - functionality merged into test_square_j1j2_xxz
     add_mpi_unittest_run(test_triangle_heisenberg_double "56" " ")
     add_mpi_unittest_run(test_triangle_heisenberg_complex "56" " ")
     add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "56" " ")

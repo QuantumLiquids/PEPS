@@ -14,8 +14,9 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlmps/case_params_parser.h"
+
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
+#include "qlpeps/utility/filesystem_utils.h"
 // DEPRECATED: Loop update functionality removed from active testing
 // #include "qlpeps/algorithm/loop_update/loop_update.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
@@ -374,7 +375,7 @@ TEST_F(Z2tJModelTools, tJModelDopingSimpleUpdate) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
   std::string peps_path = "peps_tj_doping0.125";
-  if (IsPathExist(peps_path)) {
+  if (qlpeps::IsPathExist(peps_path)) {
     peps0.Load(peps_path);
   } else {
     std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));

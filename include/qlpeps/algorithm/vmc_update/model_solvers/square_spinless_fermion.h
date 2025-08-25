@@ -15,12 +15,36 @@ namespace qlpeps {
 using namespace qlten;
 
 /**
- * only include the nearest-neighbor hopping
- *  H = -t \sum_{<i,j>} c_i^dag c_j + h.c.
- *      -t_2 \sum_{<<i,j>>} c_i^dag c_j + h.c.
- *      +V \sum_{<i,j>} n_i^dag n_j
- *
- * 0 for filled, 1 for empty
+ * Spinless Fermion Model on Square Lattice  
+ * 
+ * Hamiltonian:
+ * $$H = -t \sum_{\langle i,j \rangle} (c_i^\dagger c_j + c_j^\dagger c_i) 
+ *       -t_2 \sum_{\langle\langle i,j \rangle\rangle} (c_i^\dagger c_j + c_j^\dagger c_i)
+ *       + V \sum_{\langle i,j \rangle} n_i n_j$$
+ * 
+ * where:
+ * - t: nearest-neighbor hopping amplitude
+ * - t₂: next-nearest-neighbor hopping amplitude  
+ * - V: nearest-neighbor density-density interaction
+ * - c_i†/c_i: spinless fermion creation/annihilation operators at site i
+ * - n_i = c_i† c_i: particle number operator (0 or 1 for fermions)
+ * - ⟨i,j⟩: nearest-neighbor pairs (horizontal/vertical bonds)
+ * - ⟨⟨i,j⟩⟩: next-nearest-neighbor pairs (diagonal bonds)
+ * 
+ * Single-site states (basis encoding):
+ * - 0: occupied site |1⟩ (fermion present)
+ * - 1: empty site |0⟩ (no fermion)
+ * 
+ * Physical interpretation:
+ * - First term: kinetic energy allowing fermion hopping between NN sites
+ * - Second term: kinetic energy (NNN hopping)  
+ * - Third term: repulsive interaction between neighboring fermions
+ * - No chemical potential term included (particle number not fixed)
+ * 
+ * Applications:
+ * - Quantum dots and artificial lattices
+ * - Cold atom systems in optical lattices
+ * - Effective models for certain correlated materials
  */
 
 class SquareSpinlessFermion : public SquareNNNModelEnergySolver<SquareSpinlessFermion>,

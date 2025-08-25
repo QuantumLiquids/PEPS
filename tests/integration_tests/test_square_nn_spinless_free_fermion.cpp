@@ -94,26 +94,24 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
   std::string model_name = "spinless_free_fermion";
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
 
-  VMCOptimizePara optimize_para =
-      VMCOptimizePara(BMPSTruncatePara(Dpeps, Dpeps * 3,
-                                       1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                       std::make_optional<double>(1e-14),
-                                       std::make_optional<size_t>(10)),
-                      100, 100, 1,
-                      std::vector<size_t>{4, 8},
-                      Ly, Lx,
-                      std::vector<double>(60, 0.2),
-                      StochasticReconfiguration,
-                      ConjugateGradientParams(100, 1e-4, 20, 0.01));
+  VMCPEPSOptimizerParams optimize_para = VMCPEPSOptimizerParams(
+      OptimizerFactory::CreateStochasticReconfiguration(60, ConjugateGradientParams(100, 1e-4, 20, 0.01), 0.2),
+      MonteCarloParams(100, 100, 1,
+                       Configuration(Ly, Lx, 
+                                     OccupancyNum({4, 8})),
+                       false), // not warmed up initially
+      PEPSParams(BMPSTruncatePara(Dpeps, Dpeps * 3,
+                                  1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                  std::make_optional<double>(1e-14),
+                                  std::make_optional<size_t>(10))));
 
-  MCMeasurementPara measure_para = MCMeasurementPara(
-      BMPSTruncatePara(Dpeps, 3 * Dpeps, 1e-15,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      1000, 1000, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx);
+  Configuration measure_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2))};
+  MonteCarloParams measure_mc_params{1000, 1000, 1, measure_config, false}; // not warmed up initially
+  PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 3 * Dpeps, 1e-15,
+                                                  CompressMPSScheme::SVD_COMPRESS,
+                                                  std::make_optional<double>(1e-14),
+                                                  std::make_optional<size_t>(10))};
+  MCMeasurementParams measure_para{measure_mc_params, measure_peps_params};
 
   void SetUp(void) {
     MPITest::SetUp();
@@ -126,13 +124,12 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
     ham_nn({0, 1, 0, 1}) = -t;
     ham_nn.Transpose({3, 0, 2, 1}); // transpose indices order for consistent with simple update convention
     qlten::hp_numeric::SetTensorManipulationThreads(1);
-    optimize_para.wavefunction_path = tps_path;
-    measure_para.wavefunction_path = tps_path;
+    // New API: TPS path is handled by the caller, not stored in parameters
   }
 };
 
 TEST_F(Z2SpinlessFreeFermionSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx);
 
     std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
@@ -176,10 +173,10 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   //VMC
   SquareSpinlessFermion spinless_fermion_model_solver(1, 0, 0);
   auto executor =
-      new VMCPEPSExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(optimize_para,
-                                                                                                tps,
-                                                                                                comm,
-                                                                                                spinless_fermion_model_solver);
+      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(optimize_para,
+                                                                                                          tps,
+                                                                                                          comm,
+                                                                                                          spinless_fermion_model_solver);
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 
@@ -195,9 +192,9 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
 
   //Measure
   auto measure_exe =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(
-          measure_para,
+      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareTNN3SiteExchange, SquareSpinlessFermion>(
           tps,
+          measure_para,
           comm,
           spinless_fermion_model_solver);
   start_flop = flop;
@@ -215,9 +212,9 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   //Measure2
 
   auto measure_exe2 =
-      new MonteCarloMeasurementExecutor<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
-          measure_para,
+      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
           tps,
+          measure_para,
           comm,
           spinless_fermion_model_solver);
   measure_exe2->Execute();

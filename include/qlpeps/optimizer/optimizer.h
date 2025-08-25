@@ -19,26 +19,90 @@
 #include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
 
 namespace qlpeps {
-using namespace qlten;
+
+// Narrow import: prefer direct symbol using over local alias
+using qlten::QLTensor;
 
 /**
- * @brief Optimizer for VMC PEPS that handles different optimization strategies
+ * @brief Optimizer for VMC PEPS that handles different optimization strategies with MPI support
  * 
  * This class provides a unified interface for different optimization strategies.
  * It supports line search and iterative optimization, with or without energy error support.
  * 
  * The optimization strategies are:
- * 1. Gradient line search
- * 2. Natural gradient line search
- * 3. Stochastic reconfiguration
+ * 1. SGD (with momentum and Nesterov acceleration)
+ * 2. AdaGrad (Adaptive Gradient)
+ * 3. Stochastic reconfiguration (natural gradient)
  * 4. Bounded gradient element update
  * 5. Random gradient element update
- * 6. AdaGrad (Adaptive Gradient)
+ * 6. Adam (planned)
+ * 7. L-BFGS (planned)
  * 
- * The optimization strategies are selected based on the update scheme parameter.
+ * ⚠️ CRITICAL MPI RESPONSIBILITY SEPARATION:
  * 
- * The optimization result is returned as an OptimizationResult object, which contains the optimized state,
- * the final energy, the minimum energy, the energy trajectory, the energy error trajectory, the gradient norm trajectory,
+ * 【CORE PRINCIPLE】: Clear MPI responsibility separation between state distribution and algorithm computation.
+ * 
+ * This design eliminates triple redundant broadcasts and follows "good taste" principles:
+ * "Good taste is about eliminating special cases and making the normal case work correctly."
+ * 
+ * ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+ * │   Optimizer     │    │ Energy Evaluator │    │  VMC Executor   │
+ * │                 │    │                  │    │                 │
+ * │ • Algorithm logic│───▶│ • Receives state │    │ • Final sync    │
+ * │ • SR uses MPI   │    │ • Broadcasts     │    │ • End guarantee │
+ * │ • NO state bcast│    │ • Manages MC     │    │ • Cleanup       │
+ * └─────────────────┘    └──────────────────┘    └─────────────────┘
+ *                               │
+ *                               ▼
+ *                       All ranks synchronized
+ *                       for Monte Carlo sampling
+ * 
+ * 【RESPONSIBILITY MATRIX】:
+ * | Component         | Responsibility              | MPI Behavior                    |
+ * |-------------------|----------------------------|---------------------------------|
+ * | Optimizer         | Algorithm logic & updates  | ✅ SR/CG solver, ❌ NO state bcast|
+ * | Energy Evaluator  | MC sampling coordination   | ✅ Sole state broadcast owner    |
+ * | VMC Executor      | High-level orchestration   | ✅ Final state guarantee         |
+ * 
+ * 【MPI DATA DISTRIBUTION】:
+ * 
+ * INPUT (to energy_evaluator):
+ * - current_state: Valid ONLY on master rank (optimizer output)
+ * 
+ * OUTPUT (from energy_evaluator):  
+ * - energy: Valid on ALL ranks (broadcast by energy_evaluator)
+ * - gradient: Valid ONLY on master rank (gathered by energy_evaluator)
+ * - energy_error: Valid ONLY on master rank
+ * 
+ * INTERNAL STATE:
+ * - algorithm_state (velocity, accumulated_gradients): Master rank ONLY
+ * - optimization_statistics: Master rank ONLY
+ * 
+ * OUTPUT:
+ * - optimized_state: Valid on all ranks (final broadcast by executor)
+ * - trajectories: Master rank ONLY
+ * 
+ * 【ITERATION FLOW】:
+ * 1. Optimizer updates state on master rank           ← NO state broadcast
+ * 2. SR algorithm: MPI-distributed CG solving         ← Optimizer internal MPI
+ * 3. Energy evaluator receives state (master only)    ← NO state broadcast yet
+ * 4. Energy evaluator broadcasts for MC sampling      ← SINGLE state broadcast  
+ * 5. Distributed Monte Carlo execution                ← All ranks
+ * 6. Energy evaluator gathers gradients to master     ← Standard gather
+ * 7. Energy evaluator broadcasts energy to all ranks  ← Standard broadcast
+ * 8. Return to step 1                                 ← Loop continues
+ * 
+ * 【DESIGN BENEFITS】:
+ * - 67% reduction in state broadcast overhead (3→1 broadcasts per iteration)
+ * - Clear responsibility separation (single responsibility principle)
+ * - Eliminates "special cases" and redundant MPI calls
+ * - Better scalability for large MPI configurations
+ * 
+ * THREAD SAFETY:
+ * - All gradient updates are performed only on master rank
+ * - Updated states are broadcast to all ranks after each iteration
+ * - This ensures deterministic behavior across different MPI configurations
+ * 
  * @tparam TenElemT Tensor element type
  * @tparam QNT Quantum number type
  */
@@ -106,42 +170,42 @@ class Optimizer {
    * @param initial_state Initial TPS state
    * @param energy_evaluator Function to evaluate energy, gradient, and error
    * @param callback Optional callback for monitoring progress
-   * @param gten_samples Optional gradient samples for stochastic reconfiguration
-   * @param gten_average Optional average gradient tensor for stochastic reconfiguration
+   * @param Ostar_samples Optional O^*(S) samples for stochastic reconfiguration
+   * @param Ostar_mean Optional average O^* tensor for stochastic reconfiguration
    * @return Optimization result
    */
   OptimizationResult IterativeOptimize(
       const WaveFunctionT& initial_state,
       std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT&)> energy_evaluator,
       const OptimizationCallback& callback = OptimizationCallback{},
-      const std::vector<WaveFunctionT>* gten_samples = nullptr,
-      const WaveFunctionT* gten_average = nullptr);
+      const std::vector<WaveFunctionT>* Ostar_samples = nullptr,
+      const WaveFunctionT* Ostar_mean = nullptr);
 
-  /**
-   * @brief Update TPS using gradient descent
-   * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient direction
-   * @param step_length Step length for update
-   * @return Updated TPS state
-   */
-  WaveFunctionT UpdateTPSByGradient(const WaveFunctionT& current_state, 
-                             const WaveFunctionT& gradient, 
-                             double step_length);
+
 
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
    * 
-   * @param gradient Standard gradient
-   * @param gten_samples Gradient tensor samples
-   * @param gten_average Average gradient tensor
+   * ✅ MPI COMMUNICATION REQUIRED: This function DOES use MPI for distributed CG solving!
+   * 
+   * Unlike state update functions, SR natural gradient calculation requires distributed
+   * computation across all ranks:
+   * - Master rank coordinates CG iterations 
+   * - All ranks participate in matrix-vector multiplications
+   * - Broadcast/gather operations for CG algorithm convergence
+   * 
+   * This is algorithm-internal MPI communication, NOT state distribution.
+   * 
+   * @param gradient Standard gradient (valid ONLY on master rank)
+   * @param Ostar_samples O^*(S) tensor samples (distributed across ranks)
+   * @param Ostar_mean Average O^* tensor (valid ONLY on master rank)
    * @param init_guess Initial guess for conjugate gradient solver
-   * @return Natural gradient and number of CG iterations
+   * @return Natural gradient and number of CG iterations (valid ONLY on master rank)
    */
   std::pair<WaveFunctionT, size_t> CalculateNaturalGradient(
       const WaveFunctionT& gradient,
-      const std::vector<WaveFunctionT>& gten_samples,
-      const WaveFunctionT& gten_average,
+      const std::vector<WaveFunctionT>& Ostar_samples,
+      const WaveFunctionT& Ostar_mean,
       const WaveFunctionT& init_guess);
 
   /**
@@ -149,8 +213,8 @@ class Optimizer {
    * 
    * @param current_state Current TPS state
    * @param gradient Standard gradient
-   * @param gten_samples Gradient tensor samples
-   * @param gten_average Average gradient tensor
+   * @param Ostar_samples O^*(S) tensor samples
+   * @param Ostar_mean Average O^* tensor
    * @param step_length Step length
    * @param init_guess Initial guess for CG solver
    * @param normalize Whether to normalize the natural gradient
@@ -159,8 +223,8 @@ class Optimizer {
   std::tuple<WaveFunctionT, double, size_t> StochasticReconfigurationUpdate(
       const WaveFunctionT& current_state,
       const WaveFunctionT& gradient,
-      const std::vector<WaveFunctionT>& gten_samples,
-      const WaveFunctionT& gten_average,
+      const std::vector<WaveFunctionT>& Ostar_samples,
+      const WaveFunctionT& Ostar_mean,
       double step_length,
       const WaveFunctionT& init_guess,
       bool normalize = false);
@@ -168,10 +232,13 @@ class Optimizer {
   /**
    * @brief Apply bounded gradient element update
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
    * @param step_length Step length
-   * @return Updated TPS state
+   * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT BoundedGradientUpdate(const WaveFunctionT& current_state,
                                const WaveFunctionT& gradient,
@@ -180,51 +247,47 @@ class Optimizer {
   /**
    * @brief Apply random gradient element update
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
    * @param step_length Step length
-   * @return Updated TPS state
+   * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT RandomGradientUpdate(const WaveFunctionT& current_state,
                               const WaveFunctionT& gradient,
                               double step_length);
 
   /**
-   * @brief Apply AdaGrad update
+   * @brief Apply AdaGrad update with adaptive learning rates
    * 
-   * @param current_state Current TPS state
-   * @param gradient Gradient
-   * @param step_length Step length (learning rate)
-   * @param epsilon Small constant for numerical stability
-   * @return Updated TPS state
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
+   * @param step_length Step length (base learning rate)
+   * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT AdaGradUpdate(const WaveFunctionT& current_state,
                        const WaveFunctionT& gradient,
                        double step_length);
 
   /**
-   * @brief Check if optimization scheme uses stochastic reconfiguration
+   * @brief Get current learning rate based on iteration and scheduler
    * 
-   * @param scheme Optimization scheme
-   * @return True if scheme uses SR
+   * @param iteration Current optimization iteration
+   * @param current_energy Current energy value (for energy-aware schedulers)
+   * @return Learning rate for this iteration
    */
-  static bool UsesStochasticReconfiguration(WAVEFUNCTION_UPDATE_SCHEME scheme);
+  double GetCurrentLearningRate(size_t iteration, double current_energy = 0.0) const;
 
-  /**
-   * @brief Check if optimization scheme is line search
-   * 
-   * @param scheme Optimization scheme
-   * @return True if scheme is line search
-   */
-  static bool IsLineSearchScheme(WAVEFUNCTION_UPDATE_SCHEME scheme);
-
-  /**
-   * @brief Check if optimization scheme is adaptive (AdaGrad, Adam, etc.)
-   * 
-   * @param scheme Optimization scheme
-   * @return True if scheme is adaptive
-   */
-  static bool IsAdaptiveScheme(WAVEFUNCTION_UPDATE_SCHEME scheme);
+  // =============================================================================
+  // BACKWARD COMPATIBILITY: Static methods for legacy VMC PEPS code
+  // =============================================================================
+  
+  // Legacy enum-based helper methods removed - use OptimizerParams.IsAlgorithm<T>() instead
 
   /**
    * @brief Check if optimization should stop based on convergence criteria
@@ -264,9 +327,12 @@ class Optimizer {
   // AdaGrad state
   WaveFunctionT accumulated_gradients_;
   bool adagrad_initialized_;
+  
+  // SGD Momentum state
+  WaveFunctionT velocity_;
+  bool sgd_momentum_initialized_;
 
-  // Helper methods
-  WaveFunctionT BroadcastState(const WaveFunctionT& state);
+  // Helper methods (none needed - keep it simple)
   void LogOptimizationStep(size_t iteration, 
                           double energy, 
                           double energy_error, 
@@ -285,30 +351,27 @@ class Optimizer {
       UpdateFunc update_func,
       const OptimizationCallback& callback);
 
-  // Tensor operations for AdaGrad
-  WaveFunctionT ElementWiseSquare(const WaveFunctionT& tensor);
-  WaveFunctionT ElementWiseSqrt(const WaveFunctionT& tensor);
-  WaveFunctionT ElementWiseInverse(const WaveFunctionT& tensor, double epsilon = 1e-8);
+  // Algorithm-specific update methods
+  
+  /**
+   * @brief SGD with momentum and Nesterov acceleration support
+   * 
+   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * Unified implementation naturally handles all SGD variants:
+   * - momentum = 0.0: reduces to vanilla SGD 
+   * - momentum > 0.0 + nesterov = false: standard momentum SGD
+   * - momentum > 0.0 + nesterov = true: Nesterov accelerated gradient
+   */
+  WaveFunctionT SGDUpdate(const WaveFunctionT& current_state,
+                         const WaveFunctionT& gradient,
+                         double step_length,
+                         const SGDParams& params);
   
  };
 
-// Implementation of static methods
-template<typename TenElemT, typename QNT>
-bool Optimizer<TenElemT, QNT>::UsesStochasticReconfiguration(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return std::find(stochastic_reconfiguration_methods.cbegin(),
-                   stochastic_reconfiguration_methods.cend(),
-                   scheme) != stochastic_reconfiguration_methods.cend();
-}
 
-template<typename TenElemT, typename QNT>
-bool Optimizer<TenElemT, QNT>::IsLineSearchScheme(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return scheme == GradientLineSearch || scheme == NaturalGradientLineSearch;
-}
-
-template<typename TenElemT, typename QNT>
-bool Optimizer<TenElemT, QNT>::IsAdaptiveScheme(WAVEFUNCTION_UPDATE_SCHEME scheme) {
-  return scheme == AdaGrad;
-}
 
 } // namespace qlpeps
 

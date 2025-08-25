@@ -23,6 +23,7 @@
 namespace qlpeps {
 
 const std::string kTpsPath = "tps";
+const std::string kTpsPathBase = "tps";  // Base name for TPS dumps (will append "final"/"lowest")
 const std::string kPepsPath = "peps";
 const std::string kRuntimeTempPath = ".temp";
 const std::string kEnvFileBaseName = "env";

@@ -17,7 +17,7 @@
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 #include "qlpeps/algorithm/loop_update/loop_update.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/spin_onehalf_triangle_heisenberg_sqrpeps.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
@@ -270,17 +270,15 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_TransverseIsing" + std::to_string(Lx) + "x" + std::to_string(Ly);
-  MCMeasurementPara mc_measure_para = MCMeasurementPara(
-      BMPSTruncatePara(4, 8, 1e-10,
-                       CompressMPSScheme::VARIATION2Site,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      mc_samples, mc_warmup, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx,
-      tps_path);
+  Configuration measure_config(Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2)));
+  MonteCarloParams measure_mc_params(mc_samples, mc_warmup, 1, measure_config, false); // not warmed up initially
+  PEPSParams measure_peps_params(BMPSTruncatePara(4, 8, 1e-10,
+                                                  CompressMPSScheme::VARIATION2Site,
+                                                  std::make_optional<double>(1e-14),
+                                                  std::make_optional<size_t>(10)));
+  MCMeasurementParams mc_measure_para(measure_mc_params, measure_peps_params);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, U1QN, MCUpdateSquareNNFullSpaceUpdateT, Model>(mc_measure_para,
+      new MCPEPSMeasurer<TenElemT, U1QN, MCUpdateSquareNNFullSpaceUpdateT, Model>(mc_measure_para,
                                                                                                  sitps,
                                                                                                  comm,
                                                                                                  Model(h));
@@ -489,21 +487,19 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
   std::string tps_path = "TPS_Heisenberg" + std::to_string(Lx) + "x" + std::to_string(Ly);
-  MCMeasurementPara mc_measure_para = MCMeasurementPara(
-      BMPSTruncatePara(4, 8, 1e-10,
-                       CompressMPSScheme::VARIATION2Site,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      mc_samples, mc_warmup, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx,
-      tps_path);
+  Configuration measure_config2(Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2)));
+  MonteCarloParams measure_mc_params2(mc_samples, mc_warmup, 1, measure_config2, false); // not warmed up initially
+  PEPSParams measure_peps_params2(BMPSTruncatePara(4, 8, 1e-10,
+                                                   CompressMPSScheme::VARIATION2Site,
+                                                   std::make_optional<double>(1e-14),
+                                                   std::make_optional<size_t>(10)));
+  MCMeasurementParams mc_measure_para(measure_mc_params2, measure_peps_params2);
   auto tps1 = TPS<TenElemT, U1QN>(peps1);
   auto sitps1 = SplitIndexTPS<TenElemT, U1QN>(tps1);
   sitps1.NormalizeAllSite();
 
   auto measure_executor1 =
-      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+      new MCPEPSMeasurer<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
                                                                               sitps1,
                                                                               comm,
                                                                               Model());
@@ -515,7 +511,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   auto tps = TPS<TenElemT, U1QN>(peps2);
   auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+      new MCPEPSMeasurer<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
                                                                               sitps,
                                                                               comm,
                                                                               Model());
@@ -799,19 +795,18 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   using WaveFunctionT = MCUpdateSquareTNN3SiteExchange;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;
-  MCMeasurementPara mc_measure_para = MCMeasurementPara(
-      BMPSTruncatePara(4, 8, 1e-10,
-                       CompressMPSScheme::VARIATION2Site,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      mc_samples, mc_warmup, 1,
-      std::vector<size_t>(2, Lx * Ly / 2),
-      Ly, Lx);
+  Configuration measure_config3(Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2)));
+  MonteCarloParams measure_mc_params3(mc_samples, mc_warmup, 1, measure_config3, false); // not warmed up initially
+  PEPSParams measure_peps_params3(BMPSTruncatePara(4, 8, 1e-10,
+                                                   CompressMPSScheme::VARIATION2Site,
+                                                   std::make_optional<double>(1e-14),
+                                                   std::make_optional<size_t>(10)));
+  MCMeasurementParams mc_measure_para(measure_mc_params3, measure_peps_params3);
   auto tps1 = TPS<TenElemT, U1QN>(peps1);
   auto sitps1 = SplitIndexTPS<TenElemT, U1QN>(tps1);
 
   auto measure_executor1 =
-      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+      new MCPEPSMeasurer<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
                                                                               sitps1,
                                                                               comm,
                                                                               Model());
@@ -823,7 +818,7 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   auto tps = TPS<TenElemT, U1QN>(peps4);
   auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
   auto measure_executor =
-      new MonteCarloMeasurementExecutor<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
+      new MCPEPSMeasurer<TenElemT, U1QN, WaveFunctionT, Model>(mc_measure_para,
                                                                               sitps,
                                                                               comm,
                                                                               Model());

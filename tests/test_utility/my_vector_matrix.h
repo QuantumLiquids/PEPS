@@ -195,7 +195,7 @@ class MySquareMatrix {
 };
 
 template<typename ElemT>
-void CGSolverBroadCastVector(
+void MPI_Bcast(
     MyVector<ElemT> &x0,
     const MPI_Comm &comm
 ) {
@@ -203,22 +203,22 @@ void CGSolverBroadCastVector(
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &mpi_size);
   size_t length;
-  if (rank == kMPIMasterRank) { length = x0.GetSize(); }
-  HANDLE_MPI_ERROR(::MPI_Bcast(&length, 1, MPI_UNSIGNED_LONG_LONG, kMPIMasterRank, comm));
-  if (rank != kMPIMasterRank) { x0.GetElements().resize(length); }
+  if (rank == qlten::hp_numeric::kMPIMasterRank) { length = x0.GetSize(); }
+  HANDLE_MPI_ERROR(::MPI_Bcast(&length, 1, MPI_UNSIGNED_LONG_LONG, qlten::hp_numeric::kMPIMasterRank, comm));
+  if (rank != qlten::hp_numeric::kMPIMasterRank) { x0.GetElements().resize(length); }
   HANDLE_MPI_ERROR(::MPI_Bcast(x0.GetElements().data(),
                                length,
                                hp_numeric::GetMPIDataType<ElemT>(),
-                               kMPIMasterRank,
+                               qlten::hp_numeric::kMPIMasterRank,
                                comm));
 }
 
 template<typename ElemT>
-void CGSolverSendVector(
-    const MPI_Comm &comm,
+void MPI_Send(
     const MyVector<ElemT> &v,
     const int dest,
-    const int tag
+    const MPI_Comm &comm,
+    const int tag = 0
 ) {
   size_t length = v.GetSize();
   hp_numeric::MPI_Send(length, dest, tag, comm);
@@ -226,11 +226,11 @@ void CGSolverSendVector(
 }
 
 template<typename ElemT>
-MPI_Status CGSolverRecvVector(
-    const MPI_Comm &comm,
+MPI_Status MPI_Recv(
     MyVector<ElemT> &v,
     int src,
-    int tag
+    const MPI_Comm &comm,
+    int tag = 0
 ) {
   size_t length;
   auto status = hp_numeric::MPI_Recv(length, src, tag, comm);

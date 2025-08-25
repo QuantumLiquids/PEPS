@@ -13,92 +13,98 @@
 #include <vector>
 #include <memory>
 #include <functional>
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_base.h"
+#include "qlten/qlten.h"
 #include "qlpeps/optimizer/optimizer.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 
 namespace qlpeps {
-using namespace qlten;
 
 /**
- * @brief Elegant VMC PEPS executor that uses the optimizer for clean separation of concerns
- * 
- * This executor is designed as a drop-in replacement for VMCPEPSExecutor, providing
- * the same interface while using the optimizer for all optimization logic. It offers
- * better modularity, testability, and maintainability.
- * 
- * MPI Behavior:
- * - Monte Carlo sampling is performed on all ranks in parallel
- * - Gradient calculation is performed on all ranks and gathered to master
- * - State updates (gradient descent, stochastic reconfiguration) are performed only on master rank
- * - Updated states are broadcast to all ranks to maintain synchronization
- * - Stochastic reconfiguration equation solving involves all cores working together
- * 
+ * @brief VMC PEPS optimization executor with clear separation from the optimizer.
+ *
+ * Design: drop-in replacement of the legacy VMCPEPSExecutor. This class owns Monte Carlo
+ * sampling and MPI gathering/broadcast, while the Optimizer owns update logic.
+ *
+ * Math (consistent with tutorials):
+ * - Wavefunction and weights: \f$\Psi(S;\theta),\; w_{\text{raw}}(S)=|\Psi(S)|^2,\; w = w_{\text{raw}}/Z\,.\f$
+ * - Local energy: \f$ E_{\mathrm{loc}}(S) = \sum_{S'} \dfrac{\Psi^*(S')}{\Psi^*(S)}\, \langle S'|H|S\rangle. \f$
+ * - Log-derivative: \f$ O_i^*(S) = \dfrac{\partial \ln \Psi^*(S)}{\partial \theta_i^*}. \f$
+ * - Energy and complex gradient: \f$ E = \langle E_{\mathrm{loc}} \rangle,\; \partial E/\partial \theta_i^*
+ *   = \langle E_{\mathrm{loc}}^* O_i^* \rangle - E^* \langle O_i^* \rangle. \f$
+ *
+ * Accumulators during MC sampling:
+ * - \f$\sum O_i^*\Rightarrow\f$ `Ostar_sum_`
+ * - \f$\sum E_{\mathrm{loc}}^* O_i^*\Rightarrow\f$ `ELocConj_Ostar_sum_`
+ * Master rank computes the final gradient; SR uses `Ostar_samples_` and `Ostar_mean_`.
+ *
+ * MPI behavior:
+ * - MC sampling and local quantity evaluation on all ranks;
+ * - Gradient gathering and parameter updates on master only;
+ * - SR system solving on all ranks; single state broadcast in the evaluator, final broadcast on completion.
+ *
  * @tparam TenElemT Tensor element type
  * @tparam QNT Quantum number type
- * @tparam MonteCarloSweepUpdater Monte Carlo updater type
- * @tparam EnergySolver Energy solver type
+ * @tparam MonteCarloSweepUpdater MC sweep updater strategy
+ * @tparam EnergySolver Model energy solver
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater> {
+class VMCPEPSOptimizer : public qlten::Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using OptimizerT = Optimizer<TenElemT, QNT>;
-  using BaseExecutor = MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>;
-
   using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
 
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::comm_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::mpi_size_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::rank_;
-
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::split_index_tps_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::tps_sample_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::ly_;
-  using MonteCarloPEPSBaseExecutor<TenElemT, QNT, MonteCarloSweepUpdater>::lx_;
-
-  // Constructor overloads with new parameter structure
-  VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
-                           const TPST &tps_init,
-                           const MPI_Comm &comm,
-                           const EnergySolver &solver);
-
-  VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
+  /**
+   * @brief Constructor with explicit TPS provided by user.
+   * 
+   * User provides all data explicitly - no hidden file loading.
+   * This constructor gives users complete control over the input data.
+   * 
+   * @param params Unified optimizer parameters (Optimizer + MC + PEPS)
+   * @param sitpst_init Split-index TPS provided by user
+   * @param comm MPI communicator
+   * @param solver Energy solver for optimization
+   */
+  VMCPEPSOptimizer(const VMCPEPSOptimizerParams &params,
                            const SITPST &sitpst_init,
                            const MPI_Comm &comm,
                            const EnergySolver &solver);
 
-  VMCPEPSOptimizerExecutor(const VMCPEPSOptimizerParams &params,
-                           const size_t ly, const size_t lx,
-                           const MPI_Comm &comm,
-                           const EnergySolver &solver);
-
-  // Constructor overloads for backward compatibility
-//  VMCPEPSOptimizerExecutor(const VMCOptimizePara &optimize_para,
-//                           const TPST &tps_init,
-//                           const MPI_Comm &comm,
-//                           const EnergySolver &solver);
-//
-//  VMCPEPSOptimizerExecutor(const VMCOptimizePara &optimize_para,
-//                           const SITPST &sitpst_init,
-//                           const MPI_Comm &comm,
-//                           const EnergySolver &solver);
-//
-//  VMCPEPSOptimizerExecutor(const VMCOptimizePara &optimize_para,
-//                           const size_t ly, const size_t lx,
-//                           const MPI_Comm &comm,
-//                           const EnergySolver &solver);
+  /**
+   * @brief Static factory function to create optimizer executor by loading TPS from file path.
+   * 
+   * Convenience factory for users who have TPS data stored on disk.
+   * This is the recommended approach when starting optimization from saved TPS.
+   
+   * 
+   * @param params Unified optimizer parameters (must contain valid initial_config)
+   * @param tps_path Path to TPS data files on disk
+   * @param comm MPI communicator
+   * @param solver Energy solver for optimization
+   * @return Unique pointer to the created optimizer executor
+   * 
+   * @note The initial_config in params.mc_params must be properly sized to determine lattice dimensions
+   * @note This factory automatically loads TPS from disk and initializes the optimization system
+   * 
+   * Usage:
+   *   auto executor = VMCPEPSOptimizer::CreateByLoadingTPS(params, tps_path, comm, solver);
+   */
+  static std::unique_ptr<VMCPEPSOptimizer>
+  CreateByLoadingTPS(const VMCPEPSOptimizerParams& params,
+                     const std::string& tps_path,
+                     const MPI_Comm& comm,
+                     const EnergySolver& solver);
 
   // Main execution method
   void Execute(void) override;
 
   // Data access methods - matching VMCPEPSExecutor interface
-  const SITPST &GetState() const noexcept { return this->split_index_tps_; }
-  const SITPST &GetOptimizedState() const { return this->split_index_tps_; }
+  const SITPST &GetState() const noexcept { return monte_carlo_engine_.State(); }
+  const SITPST &GetOptimizedState() const { return monte_carlo_engine_.State(); }
   const SITPST &GetBestState() const { return tps_lowest_; }
   double GetMinEnergy() const noexcept { return en_min_; }
   double GetCurrentEnergy() const noexcept {
@@ -113,7 +119,7 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
 
   // Data dumping methods
   void DumpData(const bool release_mem = false);
-  void DumpData(const std::string &tps_path, const bool release_mem = false);
+  void DumpData(const std::string &tps_base_name, const bool release_mem = false);
 
   // Optimizer access for advanced usage
   OptimizerT &GetOptimizer() { return optimizer_; }
@@ -131,21 +137,39 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
 
  protected:
   // Monte Carlo sampling methods
+  /**
+   * @brief Compute local energy and hole tensors for the current configuration,
+   * and accumulate O^* and E_loc^* O^*.
+   *
+   * Mapping:
+   * - E_loc from EnergySolver::CalEnergyAndHoles();
+   * - O^*(S): boson uses inverse_amplitude * holes; fermion uses CalGTenForFermionicTensors(...);
+   * - Accumulators: Ostar_sum_ += O^*, ELocConj_Ostar_sum_ += E_loc^* · O^*;
+   * - SR: append per-sample O^*(S) to Ostar_samples_ when enabled.
+   */
   void SampleEnergyAndHoles_(void);
   TenElemT SampleEnergy_(void);
   void ClearEnergyAndHoleSamples_(void);
 
   // Statistics gathering
+  /**
+   * @brief Gather energy and gradient over MPI and return (energy, gradient, energy_error).
+   *
+   * - energy: average over ranks and broadcast;
+   * - gradient: computed on master as ⟨E_loc^* O^*⟩ − E^* ⟨O^*⟩;
+   * - energy_error: valid on master only.
+   */
   std::tuple<TenElemT, SITPST, double> GatherStatisticEnergyAndGrad_(void);
 
   // Acceptance rate checking
   bool AcceptanceRateCheck(const std::vector<double> &accept_rate) const;
 
   // Data dumping helpers
-  void DumpVecData(const std::string &path, const std::vector<TenElemT> &data);
-  void DumpVecDataDouble(const std::string &path, const std::vector<double> &data);
+  void DumpVecData_(const std::string &path, const std::vector<TenElemT> &data);
+  void DumpVecDataDouble_(const std::string &path, const std::vector<double> &data);
 
  private:
+  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> monte_carlo_engine_;
   VMCPEPSOptimizerParams params_;  // New parameter structure
   EnergySolver energy_solver_;
 
@@ -165,17 +189,38 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
   std::vector<double> grad_norm_;
 
   // Gradient calculation storage
-  SITPST gten_sum_;
-  SITPST g_times_energy_sum_;
+  /**
+   * @brief Accumulator of O_i^* over MC samples (Σ O_i^*)
+   *
+   * Mathematical mapping: O_i^*(S) = ∂ ln Ψ^*(S) / ∂ θ_i^*. Under MC sampling,
+   * averaging by the number of samples yields ⟨O^*⟩.
+   */
+  SITPST Ostar_sum_;
+  /**
+   * @brief Accumulator of E_loc^* · O_i^* over MC samples (Σ E_loc^* O_i^*)
+   *
+   * Used to compute the complex gradient via
+   * ∂E/∂θ_i^* = ⟨E_loc^* O_i^*⟩ − E^* ⟨O_i^*⟩.
+   */
+  SITPST ELocConj_Ostar_sum_;
+  /**
+   * @brief Final gradient tensor (valid on master after gather)
+   */
   SITPST grad_;
-  SITPST gten_ave_;
+  /**
+   * @brief Mean of O_i^* under MC sampling: ⟨O^*⟩
+   */
+  SITPST Ostar_mean_;
 
   // Best state tracking
   double en_min_;
   SITPST tps_lowest_;
 
   // Stochastic reconfiguration storage
-  std::vector<SITPST> gten_samples_;
+  /**
+   * @brief Per-sample O^*(S) tensors for SR S-matrix construction
+   */
+  std::vector<SITPST> Ostar_samples_;
   bool stochastic_reconfiguration_update_class_;
 
   // Current energy error for optimizer access
@@ -185,7 +230,7 @@ class VMCPEPSOptimizerExecutor : public MonteCarloPEPSBaseExecutor<TenElemT, QNT
   void ReserveSamplesDataSpace_(void);
   void PrintExecutorInfo_(void);
   void ValidateState_(const SITPST &state);
-  void CreateDirectoryIfNeeded_(const std::string &path);
+
 
   // CRITICAL: Helper method to ensure wavefunction component consistency
   // This encapsulates the intertwined relationship between split_index_tps_ and tps_sample_

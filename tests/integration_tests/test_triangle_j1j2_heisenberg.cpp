@@ -96,41 +96,29 @@ class TriangleJ1J2HeisenbergSystem : public IntegrationTestFramework<QNT> {
       model_name = "triangle_j1j2_heisenberg";
       energy_ed = -8.5; // Approximate expected energy for triangle J1-J2 lattice
 
-      optimize_para = VMCOptimizePara(
-        BMPSTruncatePara(6,
-                         12,
-                         1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        100,
-        100,
-        1,
-        std::vector<size_t>(2, Lx * Ly / 2),
-        Ly,
-        Lx,
-        std::vector<double>(40, 0.3),
-        StochasticReconfiguration,
-        ConjugateGradientParams(100, 1e-5, 20, 0.001));
+      optimize_para = VMCPEPSOptimizerParams(
+          OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
+          MonteCarloParams(100, 100, 1,
+                           Configuration(Ly, Lx, 
+                                         OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
+                           false), // Sz = 0, not warmed up initially
+          PEPSParams(BMPSTruncatePara(6, 12, 1e-15,
+                                      CompressMPSScheme::SVD_COMPRESS,
+                                      std::make_optional<double>(1e-14),
+                                      std::make_optional<size_t>(10))));
 
-      measure_para = MCMeasurementPara(
-        BMPSTruncatePara(Dpeps,
-                         2 * Dpeps,
-                         1e-15,
-                         CompressMPSScheme::SVD_COMPRESS,
-                         std::make_optional<double>(1e-14),
-                         std::make_optional<size_t>(10)),
-        1000,
-        1000,
-        1,
-        std::vector<size_t>(2, Lx * Ly / 2),
-        Ly,
-        Lx);
+      Configuration measure_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2))};
+      MonteCarloParams measure_mc_params{1000, 1000, 1, measure_config, false}; // not warmed up initially
+      PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                                                      CompressMPSScheme::SVD_COMPRESS,
+                                                      std::make_optional<double>(1e-14),
+                                                      std::make_optional<size_t>(10))};
+      measure_para = MCMeasurementParams{measure_mc_params, measure_peps_params};
     }
 };
 
 TEST_F(TriangleJ1J2HeisenbergSystem, SimpleUpdate) {
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     SquareLatticePEPS<TenElemT, QNT> peps0(pb_out, Ly, Lx);
     std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx));
     for (size_t y = 0; y < Ly; y++) {
@@ -175,8 +163,7 @@ TEST_F(TriangleJ1J2HeisenbergSystem, StochasticGradientOpt) {
   Model trianglej1j2_hei_solver(j2);
 
   // Change to stochastic gradient
-  optimize_para.update_scheme = StochasticGradient;
-  optimize_para.step_lens = std::vector<double>(40, 0.1);
+  optimize_para.optimizer_params = OptimizerFactory::CreateSGDWithDecay(40, 0.1, 1.0, 1000);
 
   // VMC optimization
   RunVMCOptimization<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);
@@ -189,9 +176,8 @@ TEST_F(TriangleJ1J2HeisenbergSystem, NaturalGradientLineSearch) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS;
   Model trianglej1j2_hei_solver(j2);
 
-  // Change to natural gradient line search
-  optimize_para.update_scheme = NaturalGradientLineSearch;
-  optimize_para.cg_params = ConjugateGradientParams(100, 1e-4, 20, 0.01);
+  // Change to natural gradient line search (using L-BFGS as approximation)
+  optimize_para.optimizer_params = OptimizerFactory::CreateLBFGS(40, 0.01);
 
   // VMC optimization
   RunVMCOptimization<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);

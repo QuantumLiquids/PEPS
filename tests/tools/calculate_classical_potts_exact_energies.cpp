@@ -109,10 +109,22 @@ int main() {
     };
 
     std::ofstream results_file("potts_exact_energies.txt");
+    if (!results_file.is_open()) {
+        std::cerr << "Error: Failed to open output file 'potts_exact_energies.txt'" << std::endl;
+        return 1;
+    }
     results_file << std::fixed << std::setprecision(8);
+    if (results_file.fail()) {
+        std::cerr << "Error: Failed to set precision for output file" << std::endl;
+        return 1;
+    }
     results_file << "# Exact energies for q=" << q << " Potts model\n";
     results_file << "# T_critical = " << T_critical << "\n";
     results_file << "# Format: size temp_factor temperature exact_energy\n";
+    if (results_file.fail()) {
+        std::cerr << "Error: Failed to write header to output file" << std::endl;
+        return 1;
+    }
 
     for (const auto& calc : calculations) {
         double temperature = calc.temp_factor * T_critical;
@@ -129,12 +141,20 @@ int main() {
             // Write to file
             results_file << calc.size << " " << calc.temp_factor << " " 
                         << temperature << " " << exact_energy << "\n";
+            if (results_file.fail()) {
+                std::cerr << "Error: Failed to write results to output file" << std::endl;
+                return 1;
+            }
         } else {
             std::cout << "Skipping (too large for exact calculation)" << std::endl;
         }
     }
     
     results_file.close();
+    if (results_file.fail()) {
+        std::cerr << "Error: Failed to close output file properly" << std::endl;
+        return 1;
+    }
     
     std::cout << "\n=== Results Summary ===" << std::endl;
     std::cout << "Results saved to 'potts_exact_energies.txt'" << std::endl;

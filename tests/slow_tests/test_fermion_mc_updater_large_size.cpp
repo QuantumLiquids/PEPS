@@ -9,10 +9,11 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlmps/case_params_parser.h"
+
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
 #include "qlpeps/vmc_basic/wave_function_component.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -47,15 +48,13 @@ struct Z2tJModelTools : public testing::Test {
   size_t MC_samples = 100;
   size_t WarmUp = 100;
   std::string tps_path = "tps_from_ipeps_tJ_doping" + std::to_string(doping) + "_D4";
-  MCMeasurementPara mc_measurement_para = MCMeasurementPara(
-      BMPSTruncatePara(Db_min, Db_max, 1e-10,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      MC_samples, WarmUp, 1,
-      {(N - hole_num) / 2, (N - hole_num) / 2, hole_num},
-      Ly, Lx,
-      tps_path);
+  Configuration measurement_config{Ly, Lx, OccupancyNum({(N - hole_num) / 2, (N - hole_num) / 2, hole_num})};
+  MonteCarloParams measurement_mc_params{MC_samples, WarmUp, 1, measurement_config, false}; // not warmed up initially
+  PEPSParams measurement_peps_params{BMPSTruncatePara(Db_min, Db_max, 1e-10,
+                                                      CompressMPSScheme::SVD_COMPRESS,
+                                                      std::make_optional<double>(1e-14),
+                                                      std::make_optional<size_t>(10))};
+  MCMeasurementParams mc_measurement_para{measurement_mc_params, measurement_peps_params};
 
   SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps = SplitIndexTPS<QLTEN_Double, fZ2QN>(Ly, Lx);
 
@@ -165,7 +164,7 @@ size_t CountNumOfHole(const Configuration &config) {
 }
 
 TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
-  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.init_config, mc_measurement_para.bmps_trunc_para);
+  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.mc_params.initial_config, mc_measurement_para.peps_params.truncate_para);
   std::vector<double> accept_rate(1);
   for (size_t i = 0; i < 10; i++) {
     MCUpdateSquareNNExchange tnn_flip_updater;
@@ -177,7 +176,7 @@ TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
 }
 
 TEST_F(Z2tJModelTools, MonteCarlo3SiteUpdate) {
-  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.init_config, mc_measurement_para.bmps_trunc_para);
+  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.mc_params.initial_config, mc_measurement_para.peps_params.truncate_para);
   std::vector<double> accept_rate(1);
   for (size_t i = 0; i < 10; i++) {
     MCUpdateSquareTNN3SiteExchange tnn_flip_updater;

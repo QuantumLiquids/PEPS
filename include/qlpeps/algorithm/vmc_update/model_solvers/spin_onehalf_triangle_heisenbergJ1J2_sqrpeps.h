@@ -14,7 +14,33 @@ namespace qlpeps {
 using namespace qlten;
 
 /**
- * The J_1-J_2 Heisenberg Model on triangle lattice.
+ * Spin-1/2 J1-J2 Heisenberg Model on Triangular Lattice using Square PEPS
+ * 
+ * Hamiltonian:
+ * $$H = J_1 \sum_{\langle i,j \rangle} \vec{S}_i \cdot \vec{S}_j + J_2 \sum_{\langle\langle i,j \rangle\rangle} \vec{S}_i \cdot \vec{S}_j$$
+ * $$  = J_1 \sum_{\langle i,j \rangle} (S^x_i S^x_j + S^y_i S^y_j + S^z_i S^z_j) + J_2 \sum_{\langle\langle i,j \rangle\rangle} (S^x_i S^x_j + S^y_i S^y_j + S^z_i S^z_j)$$
+ * 
+ * where:
+ * - J_1: nearest-neighbor exchange coupling (triangular lattice bonds)
+ * - J_2: next-nearest-neighbor exchange coupling (additional competing interactions)
+ * - First sum: over all NN bonds in triangular coordination
+ * - Second sum: over NNN bonds creating further-range correlations
+ * 
+ * Bond structure in triangular lattice on square PEPS:
+ * J_1 bonds (nearest neighbors):
+ * - Horizontal: (i,j) ↔ (i,j+1)
+ * - Vertical: (i,j) ↔ (i+1,j)
+ * - Diagonal: (i,j) ↔ (i+1,j+1) [↘ direction]
+ * 
+ * J_2 bonds (next-nearest neighbors):
+ * - Skip-horizontal: (i,j) ↔ (i,j+2)  
+ * - Skip-vertical: (i,j) ↔ (i+2,j)
+ * - Long diagonal: (i,j) ↔ (i+2,j+1), (i+1,j) ↔ (i,j+2) [√5 distance]
+ * 
+ * This model exhibits rich physics including:
+ * - Geometric frustration from triangular lattice
+ * - Competing interactions between J_1 and J_2
+ * - Possible exotic quantum phases (spin liquids, etc.)
  */
 class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS>,
                                             public ModelMeasurementSolver<SpinOneHalfTriJ1J2HeisenbergSqrPEPS> {

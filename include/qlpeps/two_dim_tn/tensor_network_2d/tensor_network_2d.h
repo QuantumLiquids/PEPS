@@ -18,7 +18,6 @@
 #include "qlpeps/vmc_basic/configuration.h"    //Configure
 
 namespace qlpeps {
-using namespace qlten;
 
 //forward declaration
 template<typename TenElemT, typename QNT>

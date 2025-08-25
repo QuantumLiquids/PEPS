@@ -14,7 +14,6 @@
 #include "arnoldi_solver.h"
 
 namespace qlpeps {
-using namespace qlten;
 using qlmps::mock_qlten::SVD;
 
 //helper

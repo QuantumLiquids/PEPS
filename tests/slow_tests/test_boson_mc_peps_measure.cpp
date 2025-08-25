@@ -22,7 +22,7 @@
  */
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
-#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurement.h"
+#include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
 #include "qlmps/case_params_parser.h"
@@ -54,43 +54,46 @@ struct SqrHeiMCPEPS : MPITest {
   size_t Dpeps = 8;
   double E0_ED = -9.189207065192933;
   double e0_state = -9.18912;
-  MCMeasurementPara para = MCMeasurementPara(
-      BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
-                       CompressMPSScheme::SVD_COMPRESS,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      1000, 1000, 1,
-      std::vector<size_t>(2, N / 2),
-      Ly, Lx);
+  Configuration config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, N / 2))};
+  MonteCarloParams mc_params{1000, 1000, 1, config, false}; // not warmed up initially
+  PEPSParams peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+                                          CompressMPSScheme::SVD_COMPRESS,
+                                          std::make_optional<double>(1e-14),
+                                          std::make_optional<size_t>(10))};
+  MCMeasurementParams para{mc_params, peps_params};
 
   void SetUp(void) {
     MPITest::SetUp();
     qlten::hp_numeric::SetTensorManipulationThreads(1);
 
-    para.wavefunction_path =
-        (std::filesystem::path(TEST_SOURCE_DIR) / "slow_tests/test_data" / ("tps_square_heisenberg4x4D8" + data_type_in_file_name)).string();
+    // New API: TPS path is handled by the caller, not stored in parameters
   }
 };
 
 TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
   using Model = SquareSpinOneHalfXXZModel;
 
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     std::cout << "Starting Monte Carlo measurement test on 4 by 4 Heisenberg Model (expected time: ~5 minutes)..." << std::endl;
   }
-  auto executor = new MonteCarloMeasurementExecutor<TenElemT, QNT, TPSSampleFlipT, Model>(para,
-                                                                                          Ly, Lx,
+  // Load TPS explicitly - this is the new API pattern
+  std::string tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / "slow_tests/test_data" / ("tps_square_heisenberg4x4D8" + data_type_in_file_name)).string();
+  auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);
+  sitps.Load(tps_path);
+  
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT, TPSSampleFlipT, Model>(sitps,
+                                                                                          para,
                                                                                           comm);
   executor->Execute();
 
-  if (rank == kMPIMasterRank) {
+  if (rank == hp_numeric::kMPIMasterRank) {
     std::cout << "Measurement completed, analyzing results..." << std::endl;
   }
 
   auto [energy, en_err] = executor->OutputEnergy();
   auto measure_results = executor->GetMeasureResult();
 
-  if (rank == kMPIMasterRank && mpi_size > 1) {
+  if (rank == hp_numeric::kMPIMasterRank && mpi_size > 1) {
     //Justify whether as expected
     EXPECT_NEAR(Real(energy), e0_state, 1.5 * en_err);
   } else {
@@ -100,7 +103,6 @@ TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
 }
 
 /*
-using qlmps::CaseParamsParserBasic;
 
 struct FileParams : public CaseParamsParserBasic {
   FileParams(const char *f) : CaseParamsParserBasic(f) {
@@ -137,14 +139,13 @@ struct SpinSystemMCPEPS : public testing::Test {
   size_t Ly = params.Ly;
   size_t N = Lx * Ly;
 
-  MCMeasurementPara mc_measurement_para = MCMeasurementPara(
-      BMPSTruncatePara(params.Db_min, params.Db_max, 1e-10,
-                       CompressMPSScheme::VARIATION2Site,
-                       std::make_optional<double>(1e-14),
-                       std::make_optional<size_t>(10)),
-      params.MC_samples, params.WarmUp, 1,
-      std::vector<size_t>(2, N / 2),
-      Ly, Lx);
+  Configuration measurement_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, N / 2))};
+  MonteCarloParams measurement_mc_params{params.MC_samples, params.WarmUp, 1, measurement_config, false}; // not warmed up initially
+  PEPSParams measurement_peps_params{BMPSTruncatePara(params.Db_min, params.Db_max, 1e-10,
+                                                      CompressMPSScheme::VARIATION2Site,
+                                                      std::make_optional<double>(1e-14),
+                                                      std::make_optional<size_t>(10))};
+  MCMeasurementParams mc_measurement_para{measurement_mc_params, measurement_peps_params};
 
   const MPI_Comm comm = MPI_COMM_WORLD;
   int rank, mpi_size;
@@ -164,12 +165,15 @@ struct SpinSystemMCPEPS : public testing::Test {
 
 TEST_F(SpinSystemMCPEPS, TriHeisenbergD4) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS;
-  MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model triangle_hei_solver;
-  mc_measurement_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
+  // Load TPS explicitly - this is the new API pattern
+  std::string tps_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
+  auto sitps = SplitIndexTPS<TenElemT, U1QN>(Ly, Lx);
+  sitps.Load(tps_path);
 
-  executor = new MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
-                                                                                        Ly, Lx,
+  executor = new MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model>(sitps,
+                                                                                        mc_measurement_para,
                                                                                         comm, triangle_hei_solver);
 
   executor->Execute();
@@ -178,10 +182,10 @@ TEST_F(SpinSystemMCPEPS, TriHeisenbergD4) {
 
 TEST_F(SpinSystemMCPEPS, TriJ1J2HeisenbergD4) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS<TenElemT, U1QN>;
-  MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
+  MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model> *executor(nullptr);
   Model trianglej1j2_hei_solver(0.2);
   mc_measurement_para.wavefunction_path = "vmc_tps_tri_heisenbergD" + std::to_string(params.D);
-  executor = new MonteCarloMeasurementExecutor<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
+  executor = new MCPEPSMeasurer<TenElemT, U1QN, TPSSampleNNFlipT, Model>(mc_measurement_para,
                                                                                         Ly,
                                                                                         Lx,
                                                                                         comm,

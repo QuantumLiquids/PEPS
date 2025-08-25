@@ -13,10 +13,11 @@
 #include <iostream>
 #include <map>
 #include <vector>
+#include <memory>
 #include <stdexcept>
 #include "mpi.h"                // MPI BroadCast
 #include "qlten/qlten.h"        // Showable, Streamable
-#include "qlmps/qlmps.h"        // IsPathExist, CreatPath
+#include "qlpeps/utility/filesystem_utils.h"  // IsPathExist, CreatePath
 #include "qlpeps/two_dim_tn/framework/duomatrix.h"
 
 namespace qlpeps {
@@ -225,6 +226,31 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
     return sum;
   }
 
+  /**
+   * @brief Count occupancy numbers for each species in the configuration
+   * 
+   * Returns a vector where occupancy[i] = number of sites in state i.
+   * This is useful for validating U1 conservation in quantum systems.
+   * 
+   * @return Vector of occupancy numbers for each species
+   */
+  std::vector<size_t> CountOccupancy() const {
+    if (this->size() == 0) return {};
+    
+    // Find maximum state value to determine vector size
+    size_t max_state = 0;
+    for (size_t elem : *this) {
+      max_state = std::max(max_state, elem);
+    }
+    
+    std::vector<size_t> occupancy(max_state + 1, 0);
+    for (size_t elem : *this) {
+      occupancy[elem]++;
+    }
+    
+    return occupancy;
+  }
+
   void StreamRead(std::istream &) override;
   void StreamWrite(std::ostream &) const override;
 
@@ -247,11 +273,22 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
    * @param label Label for the file (e.g., MPI rank number)
    */
   void Dump(const std::string &path, const size_t label) {
-    if (!qlmps::IsPathExist(path)) { qlmps::CreatPath(path); }
+    EnsureDirectoryExists(path);
     std::string file = path + "/configuration" + std::to_string(label);
     std::ofstream ofs(file, std::ofstream::binary);
+    if (!ofs.is_open()) {
+      throw std::ios_base::failure("Failed to open file: " + file);
+    }
+    
     ofs << (*this);
+    if (ofs.fail()) {
+      throw std::ios_base::failure("Failed to write configuration to file: " + file);
+    }
+    
     ofs.close();
+    if (ofs.fail()) {
+      throw std::ios_base::failure("Failed to close file: " + file);
+    }
   }
 
   /**
@@ -325,14 +362,13 @@ inline void MPI_Send(
     const MPI_Comm &comm
 ) {
   const size_t rows = config.rows(), cols = config.cols(), N = config.size();
-  auto *config_raw_data = new size_t[N];
+  auto config_raw_data = std::make_unique<size_t[]>(N);
   for (size_t row = 0; row < rows; row++) {
     for (size_t col = 0; col < cols; col++) {
       config_raw_data[row * cols + col] = config({row, col});
     }
   }
-  ::MPI_Send(config_raw_data, N, MPI_UNSIGNED_LONG_LONG, dest, tag, comm);
-  delete[]config_raw_data;
+  ::MPI_Send(config_raw_data.get(), N, MPI_UNSIGNED_LONG_LONG, dest, tag, comm);
 }
 
 ///< config must reserve the memory space
@@ -344,14 +380,13 @@ inline int MPI_Recv(
     MPI_Status *status
 ) {
   const size_t rows = config.rows(), cols = config.cols(), N = config.size();
-  size_t *config_raw_data = new size_t[N];
-  int err_message = ::MPI_Recv(config_raw_data, N, MPI_UNSIGNED_LONG_LONG, source, tag, comm, status);
+  auto config_raw_data = std::make_unique<size_t[]>(N);
+  int err_message = ::MPI_Recv(config_raw_data.get(), N, MPI_UNSIGNED_LONG_LONG, source, tag, comm, status);
   for (size_t row = 0; row < rows; row++) {
     for (size_t col = 0; col < cols; col++) {
       config({row, col}) = config_raw_data[row * cols + col];
     }
   }
-  delete[]config_raw_data;
   return err_message;
 }
 
@@ -364,16 +399,16 @@ inline int MPI_Sendrecv(
     MPI_Status *status
 ) {
   const size_t rows = config_send.rows(), cols = config_send.cols(), N = config_send.size();
-  size_t *config_raw_data_send = new size_t[N];
-  size_t *config_raw_data_recv = new size_t[N];
+  auto config_raw_data_send = std::make_unique<size_t[]>(N);
+  auto config_raw_data_recv = std::make_unique<size_t[]>(N);
 
   for (size_t row = 0; row < rows; row++) {
     for (size_t col = 0; col < cols; col++) {
       config_raw_data_send[row * cols + col] = config_send({row, col});
     }
   }
-  int err_message = ::MPI_Sendrecv(config_raw_data_send, N, MPI_UNSIGNED_LONG_LONG, dest, sendtag,
-                                   config_raw_data_recv, N, MPI_UNSIGNED_LONG_LONG, source, recvtag,
+  int err_message = ::MPI_Sendrecv(config_raw_data_send.get(), N, MPI_UNSIGNED_LONG_LONG, dest, sendtag,
+                                   config_raw_data_recv.get(), N, MPI_UNSIGNED_LONG_LONG, source, recvtag,
                                    comm, status);
 
   for (size_t row = 0; row < rows; row++) {
@@ -381,8 +416,6 @@ inline int MPI_Sendrecv(
       config_recv({row, col}) = config_raw_data_recv[row * cols + col];
     }
   }
-  delete[]config_raw_data_send;
-  delete[]config_raw_data_recv;
   return err_message;
 }
 
@@ -393,7 +426,7 @@ inline void MPI_BCast(
 ) {
   using namespace qlten;
   const size_t rows = config.rows(), cols = config.cols(), N = config.size();
-  size_t *config_raw_data = new size_t[N];
+  auto config_raw_data = std::make_unique<size_t[]>(N);
   int my_rank;
   MPI_Comm_rank(comm, &my_rank);
   if (my_rank == root) {
@@ -404,7 +437,7 @@ inline void MPI_BCast(
     }
   }
 
-  HANDLE_MPI_ERROR(::MPI_Bcast(config_raw_data, N, MPI_UNSIGNED_LONG_LONG, root, comm));
+  HANDLE_MPI_ERROR(::MPI_Bcast(config_raw_data.get(), N, MPI_UNSIGNED_LONG_LONG, root, comm));
 
   if (my_rank != root) {
     for (size_t row = 0; row < rows; row++) {
@@ -413,7 +446,6 @@ inline void MPI_BCast(
       }
     }
   }
-  delete[]config_raw_data;
 }
 
 }//qlpeps

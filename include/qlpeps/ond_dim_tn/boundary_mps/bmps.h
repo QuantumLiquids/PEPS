@@ -17,8 +17,16 @@
 //if above include doesn't work, include mps_all.h
 
 namespace qlpeps {
-using namespace qlten;
-using namespace qlmps;
+using qlten::Index;
+using qlten::QNSector;
+using qlten::QLTensor;
+using qlten::QLTEN_Double;
+using qlmps::TenVec;
+using qlmps::MPSTenCanoType;
+using qlmps::kUncentralizedCenterIdx;
+using qlmps::IN;
+using qlmps::OUT;
+using qlmps::NONE;
 
 enum class CompressMPSScheme {
   SVD_COMPRESS,
@@ -155,7 +163,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   // MPS local operations. Only tensors near the target site are needed in memory.
   void LeftCanonicalizeTen(const size_t);
 
-  QLTensor<QLTEN_Double, QNT> RightCanonicalizeTen(const size_t);
+  qlten::QLTensor<qlten::QLTEN_Double, QNT> RightCanonicalizeTen(const size_t);
 
   //return (D, trunc_err)
   std::pair<size_t, double> RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);
