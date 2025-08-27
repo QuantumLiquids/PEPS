@@ -318,6 +318,31 @@ add_two_type_unittest(test_mc_peps_measure
 )
 
 
+# Independent MC energy+gradient evaluator smoke test
+add_two_type_unittest(test_mc_energy_grad_evaluator_smoke
+        "test_algorithm/test_mc_energy_grad_evaluator_smoke.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+# 2x2 classical Ising (h=0) smoke test using MonteCarloMeasure
+add_two_type_unittest(test_api_smoke
+        "test_algorithm/test_api_smoke.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+# Add MPI runs for the API smoke test (lightweight)
+add_mpi_unittest_run(test_api_smoke_double "4" " ")
+add_mpi_unittest_run(test_api_smoke_complex "4" " ")
+
+# 2x2 spinless fermion exact vs MC evaluator test
+add_two_type_unittest(test_mc_energy_grad_evaluator_spinless_fermion_2x2
+        "test_algorithm/test_mc_energy_grad_evaluator_spinless_fermion_2x2.cpp"
+        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
 
 ## Test utility
 add_unittest(test_conjugate_gradient_solver

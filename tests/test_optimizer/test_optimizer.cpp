@@ -461,30 +461,6 @@ TEST_F(OptimizerTest, BoundedGradientUpdate) {
   EXPECT_NE(GetMaxAbs(updated_state), GetMaxAbs(initial_state));
 }
 
-// Test random gradient update
-TEST_F(OptimizerTest, RandomGradientUpdate) {
-  OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
-
-  SITPST initial_state = test_tps_;
-  SITPST gradient = test_tps_;
-
-  // Fill gradient with some values
-  for (size_t row = 0; row < gradient.rows(); ++row) {
-    for (size_t col = 0; col < gradient.cols(); ++col) {
-      for (size_t i = 0; i < gradient({row, col}).size(); ++i) {
-        QNT qn0 = QNT();
-        gradient({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
-        gradient({row, col})[i].Random(qn0);
-      }
-    }
-  }
-
-  double step_length = 0.1;
-  SITPST updated_state = optimizer.RandomGradientUpdate(initial_state, gradient, step_length);
-
-  EXPECT_NE(GetMaxAbs(updated_state), GetMaxAbs(initial_state));
-}
-
 // Test advanced stop functionality - Gradient convergence
 TEST_F(OptimizerTest, AdvancedStopGradientConvergence) {
   // Set very low gradient tolerance to trigger gradient convergence

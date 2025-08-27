@@ -47,7 +47,7 @@ void DumpVecData(
 }
 
 template<typename T>
-T Mean(const std::vector<T> data) {
+T Mean(const std::vector<T> &data) {
   if (data.empty()) {
     return T(0);
   }
@@ -57,7 +57,7 @@ T Mean(const std::vector<T> data) {
 }
 
 template<typename T>
-double Variance(const std::vector<T> data,
+double Variance(const std::vector<T> &data,
                 const T &mean) {
   size_t data_size = data.size();
   std::vector<T> diff(data_size);
@@ -78,12 +78,12 @@ double Variance(const std::vector<T> data,
 }
 
 template<typename T>
-double Variance(const std::vector<T> data) {
+double Variance(const std::vector<T> &data) {
   return Variance(data, Mean(data));
 }
 
 template<typename T>
-double StandardError(const std::vector<T> data,
+double StandardError(const std::vector<T> &data,
                      const T &mean) {
   if (data.size() == 1) {
     return std::numeric_limits<double>::infinity();
@@ -177,7 +177,7 @@ std::pair<ElemT, double> GatherStatisticSingleData(
 
 template<typename ElemT>
 void GatherStatisticListOfData(
-    const std::vector<ElemT> data,
+    const std::vector<ElemT> &data,
     const MPI_Comm &comm,
     std::vector<ElemT> &avg, //output
     std::vector<double> &std_err//output

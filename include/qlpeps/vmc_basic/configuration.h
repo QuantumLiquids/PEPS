@@ -103,8 +103,9 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
   void Random(const size_t dim) {
     std::random_device rd;
     std::mt19937 rand_num_gen(rd());
+    std::uniform_int_distribution<size_t> uniform_dist(0, dim - 1);
     for(size_t& state : *this){
-      state = rand_num_gen() % dim;
+      state = uniform_dist(rand_num_gen);
     }
   }
 

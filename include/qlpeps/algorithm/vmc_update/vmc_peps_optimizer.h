@@ -65,7 +65,13 @@ class VMCPEPSOptimizer : public qlten::Executor {
    * This constructor gives users complete control over the input data.
    * 
    * @param params Unified optimizer parameters (Optimizer + MC + PEPS)
-   * @param sitpst_init Split-index TPS provided by user
+   * @param sitpst_init Split-index TPS provided by user.
+   *        MPI semantics: this constructor does NOT broadcast the state.
+   *        All MPI ranks must receive a complete and valid `SITPST` before
+   *        construction, because warm-up and internal initialization happen
+   *        immediately on each rank. The state will be broadcast later inside
+   *        the energy/gradient evaluator per evaluation, and the final
+   *        optimized state is broadcast at the end of `Execute()`.
    * @param comm MPI communicator
    * @param solver Energy solver for optimization
    */

@@ -43,11 +43,11 @@ struct MonteCarloParams {
                    size_t warmup_sweeps,
                    size_t sweeps_between,
                    const Configuration &config,
-                   bool warmed_up,
+                   bool is_warmed_up,
                    const std::string &config_dump_path = "")
     : num_samples(samples), num_warmup_sweeps(warmup_sweeps),
       sweeps_between_samples(sweeps_between), initial_config(config),
-      is_warmed_up(warmed_up), config_dump_path(config_dump_path) {
+      is_warmed_up(is_warmed_up), config_dump_path(config_dump_path) {
   }
 
   /**

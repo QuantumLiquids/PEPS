@@ -14,7 +14,7 @@
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
-#include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
+#include "qlpeps/api/vmc_api.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
 
@@ -159,8 +159,8 @@ protected:
     SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(
-        params, tps, comm, model);
+    auto executor = VmcOptimize<TenElemT, QNT, MCUpdaterT, ModelT>(
+        params, tps, comm, model, MCUpdaterT{}).release();
     
     size_t start_flop = flop;
     Timer vmc_timer("vmc");
@@ -186,8 +186,8 @@ protected:
     SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto measure_exe = new MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT>(
-        tps, measure_para, comm, model);
+    auto measure_exe = MonteCarloMeasure<TenElemT, QNT, MCUpdaterT, ModelT>(
+        tps, measure_para, comm, model, MCUpdaterT{}).release();
     
     size_t start_flop = flop;
     Timer mc_timer("mc");

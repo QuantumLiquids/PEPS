@@ -34,9 +34,8 @@ using qlten::QLTensor;
  * 2. AdaGrad (Adaptive Gradient)
  * 3. Stochastic reconfiguration (natural gradient)
  * 4. Bounded gradient element update
- * 5. Random gradient element update
- * 6. Adam (planned)
- * 7. L-BFGS (planned)
+ * 5. Adam (planned)
+ * 6. L-BFGS (planned)
  * 
  * ⚠️ CRITICAL MPI RESPONSIBILITY SEPARATION:
  * 
@@ -245,21 +244,6 @@ class Optimizer {
                                double step_length);
 
   /**
-   * @brief Apply random gradient element update
-   * 
-   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
-   * Energy evaluator handles all state distribution for Monte Carlo sampling.
-   * 
-   * @param current_state Current TPS state (valid on all ranks)
-   * @param gradient Gradient (valid ONLY on master rank)
-   * @param step_length Step length
-   * @return Updated TPS state (valid ONLY on master rank)
-   */
-  WaveFunctionT RandomGradientUpdate(const WaveFunctionT& current_state,
-                              const WaveFunctionT& gradient,
-                              double step_length);
-
-  /**
    * @brief Apply AdaGrad update with adaptive learning rates
    * 
    * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
@@ -321,8 +305,7 @@ class Optimizer {
   int rank_;
   int mpi_size_;
   
-  std::mt19937 random_engine_;
-  std::uniform_real_distribution<double> uniform_dist_;
+  // No RNG state needed inside Optimizer; stochasticity belongs to Monte Carlo components.
 
   // AdaGrad state
   WaveFunctionT accumulated_gradients_;

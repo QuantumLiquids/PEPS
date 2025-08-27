@@ -55,8 +55,7 @@ Optimizer<TenElemT, QNT>::Optimizer(const OptimizerParams &params,
                                     int rank,
                                     int mpi_size)
     : params_(params), comm_(comm), rank_(rank), mpi_size_(mpi_size),
-      random_engine_(std::random_device{}()),
-      uniform_dist_(0.0, 1.0),
+      
       adagrad_initialized_(false),
       sgd_momentum_initialized_(false) {
 }
@@ -724,35 +723,8 @@ Optimizer<TenElemT, QNT>::BoundedGradientUpdate(const SITPST &current_state,
     }
   }
 
-  // 🚫 CRITICAL MPI DESIGN: Do NOT broadcast here!
+  // CRITICAL MPI DESIGN: Do NOT broadcast here!
   // Energy evaluator owns all state distribution for Monte Carlo sampling.
-  return updated_state;
-}
-
-template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::RandomGradientUpdate(const SITPST &current_state,
-                                               const SITPST &gradient,
-                                               double step_length) {
-  SITPST random_gradient = gradient;
-
-  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    for (size_t row = 0; row < random_gradient.rows(); ++row) {
-      for (size_t col = 0; col < random_gradient.cols(); ++col) {
-        for (size_t i = 0; i < random_gradient({row, col}).size(); ++i) {
-          if (uniform_dist_(random_engine_) < 0.5) {
-            random_gradient({row, col})[i] *= -1.0;
-          }
-        }
-      }
-    }
-  }
-
-  // Apply random gradient update
-  SITPST updated_state = current_state;
-  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    updated_state += (-step_length) * random_gradient;
-  }
   return updated_state;
 }
 
@@ -927,8 +899,7 @@ void Optimizer<TenElemT, QNT>::ClearUp() {
   //   adam_initialized_ = false;
   // }
 
-  // Reset random engine state if needed
-  // random_engine_.seed(std::random_device{}());
+  // RNG state removed from Optimizer; nothing to reset here.
 
   // Clear any cached data or temporary storage
   // This ensures memory is freed and the optimizer is ready for the next run
