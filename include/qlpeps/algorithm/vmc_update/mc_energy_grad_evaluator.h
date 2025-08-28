@@ -72,6 +72,20 @@ class MCEnergyGradEvaluator {
       : engine_(engine), solver_(solver), comm_(comm), collect_sr_buffers_(collect_sr_buffers) {}
 
   /**
+   * @brief Reserve internal buffers for repeated evaluations (best-effort).
+   *
+   * Note: Physical dimensions can vary per site, so only coarse-grained
+   * reservations (e.g. sample counts) are effective here. Fine-grained tensor
+   * buffers are still shaped during Evaluate() when exact sizes are known.
+   *
+   * Historical: This function supersedes the pre-allocation that used to live
+   * in VMCPEPSOptimizer (for O* accumulators and per-sample buffers).
+   */
+  void ReserveBuffers(size_t /*ly*/, size_t /*lx*/, size_t sample_count) {
+    reserved_samples_ = sample_count;
+  }
+
+  /**
    * @brief Evaluate energy and gradient for a given state using Monte Carlo sampling.
    *
    * Semantics:
@@ -79,6 +93,29 @@ class MCEnergyGradEvaluator {
    * - Engine rebuilds wavefunction component and normalizes to O(1) amplitude.
    * - Performs MC sampling for engine.MCParams().num_samples samples.
    * - Reduces energy and gradient across MPI; returns Result.
+   *
+   * Per-sample computation (migrated from VMCPEPSOptimizer):
+   * - Compute local energy E_loc(S) and holes via solver.
+   * - Define O^*(S) = ∂ ln Ψ^*(S) / ∂θ^*; for bosonic case use
+   *   inverse_amplitude * holes; for fermionic case use CalGTenForFermionicTensors.
+   * - Accumulate Σ O^* and Σ E_loc^* O^* over samples.
+   *
+   * Gradient (complex parameters):
+   *   ∂E/∂θ^* = ⟨E_loc^* O^*⟩ − E^* ⟨O^*⟩,
+   * where complex conjugate is applied to E_loc and the mean energy E.
+   * We implement this by computing Ostar_mean = Σ O^* / N and
+   * grad = Σ E_loc^* O^* / N + (-E)^* · Ostar_mean, and then performing MPI means
+   * per tensor component. Fermionic parity operations are applied to grad at the end.
+   *
+   * SR buffers:
+   * - When collect_sr_buffers==true, per-sample O^*(S) tensors and their mean are
+   *   returned in Result (move semantics), enabling S-matrix construction with
+   *   zero extra copies.
+   *
+   * Energy samples:
+   * - Per-rank raw energy samples are not returned by default. Historically they
+   *   were dumped for debugging from VMCPEPSOptimizer; this has been disabled
+   *   during refactor and can be reintroduced here behind a debug switch if needed.
    */
   Result Evaluate(const SITPST &state) {
     // Assign state on master only to avoid spurious self-assignment
@@ -101,13 +138,16 @@ class MCEnergyGradEvaluator {
     const size_t sample_num = engine_.MCParams().num_samples;
 
     std::vector<TenElemT> energy_samples;
-    energy_samples.reserve(sample_num);
+    energy_samples.reserve(std::max(sample_num, reserved_samples_));
 
     SITPST Ostar_sum(ly, lx);
     SITPST ELocConj_Ostar_sum(ly, lx);
     SITPST grad(ly, lx);
     std::optional<SITPST> Ostar_mean_opt;
     std::vector<SITPST> Ostar_samples; // SR optional
+    if (collect_sr_buffers_) {
+      Ostar_samples.reserve(std::max(sample_num, reserved_samples_));
+    }
 
     // Pre-allocate containers with correct shapes
     for (size_t row = 0; row < ly; row++) {
@@ -226,6 +266,12 @@ class MCEnergyGradEvaluator {
   }
 
  private:
+  /**
+   * @brief Check acceptance rates against global maxima and print anomalies.
+   *
+   * Implementation mirrors the previous Optimizer-level check, but is now
+   * local to the evaluator to keep MC responsibilities together.
+   */
   bool AcceptanceRateCheck_(const std::vector<double> &accept_rate) const {
     if (accept_rate.empty()) { return false; }
     bool too_small = false;
@@ -251,6 +297,7 @@ class MCEnergyGradEvaluator {
   EnergySolver &solver_;
   const MPI_Comm &comm_;
   bool collect_sr_buffers_;
+  size_t reserved_samples_ = 0;
 };
 
 } // namespace qlpeps

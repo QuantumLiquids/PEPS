@@ -18,6 +18,7 @@
 #include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
+#include "qlpeps/algorithm/vmc_update/mc_energy_grad_evaluator.h"
 
 namespace qlpeps {
 
@@ -124,6 +125,15 @@ class VMCPEPSOptimizer : public qlten::Executor {
   const VMCPEPSOptimizerParams &GetParams() const noexcept { return params_; }
 
   // Data dumping methods
+  /**
+   * @brief Dump TPS and energy trajectories.
+   *
+   * Historical note: older versions also dumped per-rank energy samples as
+   * "energy/energy_sample<rank>" for debugging. During the ongoing refactor,
+   * we found this feature is rarely needed in practice and it is temporarily
+   * disabled. If required in the future, it can be reintroduced behind a
+   * debug switch in the energy evaluator.
+   */
   void DumpData(const bool release_mem = false);
   void DumpData(const std::string &tps_base_name, const bool release_mem = false);
 
@@ -142,33 +152,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
   }
 
  protected:
-  // Monte Carlo sampling methods
-  /**
-   * @brief Compute local energy and hole tensors for the current configuration,
-   * and accumulate O^* and E_loc^* O^*.
-   *
-   * Mapping:
-   * - E_loc from EnergySolver::CalEnergyAndHoles();
-   * - O^*(S): boson uses inverse_amplitude * holes; fermion uses CalGTenForFermionicTensors(...);
-   * - Accumulators: Ostar_sum_ += O^*, ELocConj_Ostar_sum_ += E_loc^* · O^*;
-   * - SR: append per-sample O^*(S) to Ostar_samples_ when enabled.
-   */
-  void SampleEnergyAndHoles_(void);
-  TenElemT SampleEnergy_(void);
-  void ClearEnergyAndHoleSamples_(void);
-
-  // Statistics gathering
-  /**
-   * @brief Gather energy and gradient over MPI and return (energy, gradient, energy_error).
-   *
-   * - energy: average over ranks and broadcast;
-   * - gradient: computed on master as ⟨E_loc^* O^*⟩ − E^* ⟨O^*⟩;
-   * - energy_error: valid on master only.
-   */
-  std::tuple<TenElemT, SITPST, double> GatherStatisticEnergyAndGrad_(void);
-
-  // Acceptance rate checking
-  bool AcceptanceRateCheck(const std::vector<double> &accept_rate) const;
+  // Monte Carlo sampling helpers have been migrated into MCEnergyGradEvaluator
 
   // Data dumping helpers
   void DumpVecData_(const std::string &path, const std::vector<TenElemT> &data);
@@ -189,26 +173,11 @@ class VMCPEPSOptimizer : public qlten::Executor {
   std::function<std::tuple<TenElemT, SITPST, double>(const SITPST &)> custom_energy_evaluator_;
 
   // Data storage
-  std::vector<TenElemT> energy_samples_;
   std::vector<TenElemT> energy_trajectory_;
   std::vector<double> energy_error_traj_;
   std::vector<double> grad_norm_;
 
   // Gradient calculation storage
-  /**
-   * @brief Accumulator of O_i^* over MC samples (Σ O_i^*)
-   *
-   * Mathematical mapping: O_i^*(S) = ∂ ln Ψ^*(S) / ∂ θ_i^*. Under MC sampling,
-   * averaging by the number of samples yields ⟨O^*⟩.
-   */
-  SITPST Ostar_sum_;
-  /**
-   * @brief Accumulator of E_loc^* · O_i^* over MC samples (Σ E_loc^* O_i^*)
-   *
-   * Used to compute the complex gradient via
-   * ∂E/∂θ_i^* = ⟨E_loc^* O_i^*⟩ − E^* ⟨O_i^*⟩.
-   */
-  SITPST ELocConj_Ostar_sum_;
   /**
    * @brief Final gradient tensor (valid on master after gather)
    */
@@ -244,6 +213,10 @@ class VMCPEPSOptimizer : public qlten::Executor {
 
   // Default energy evaluator
   std::tuple<TenElemT, SITPST, double> DefaultEnergyEvaluator_(const SITPST &state);
+
+  // Persistent Monte-Carlo energy+gradient evaluator for buffer reuse
+  std::unique_ptr<MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>
+      energy_grad_evaluator_;
 };
 
 } // namespace qlpeps

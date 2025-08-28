@@ -39,8 +39,6 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOp
       params_(params),
       energy_solver_(solver),
       optimizer_(params.optimizer_params, comm, monte_carlo_engine_.Rank(), monte_carlo_engine_.MpiSize()),
-      Ostar_sum_(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx()),
-      ELocConj_Ostar_sum_(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx()),
       grad_(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx()),
       en_min_(std::numeric_limits<double>::max()),
       tps_lowest_(monte_carlo_engine_.State()),
@@ -49,11 +47,19 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOp
   // Check if using stochastic reconfiguration algorithm
   stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
+  // Create persistent evaluator to reuse internal buffers; SR buffers toggled by algorithm type
+  energy_grad_evaluator_ = std::make_unique<MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>(
+      monte_carlo_engine_, energy_solver_, monte_carlo_engine_.Comm(), stochastic_reconfiguration_update_class_);
+
   // Ensure necessary directories exist for output
   if (!params_.tps_dump_base_name.empty()) {
     monte_carlo_engine_.EnsureDirectoryExists(params_.tps_dump_base_name + "final");
   }
   ReserveSamplesDataSpace_();
+  // Hint evaluator for buffer reservation (coarse-grained)
+  if (energy_grad_evaluator_) {
+    energy_grad_evaluator_->ReserveBuffers(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx(), params_.mc_params.num_samples);
+  }
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
 }
@@ -180,54 +186,19 @@ VMCPEPSOptimizer<TenElemT,
                          QNT,
                          MonteCarloSweepUpdater,
                          EnergySolver>::DefaultEnergyEvaluator_(const SITPST &state) {
-  // Update internal state - avoid self-assignment
-  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-    // Check if this is a self-assignment to avoid issues
-    if (&state != &monte_carlo_engine_.State()) {
-      monte_carlo_engine_.AssignState(state);
+  // Delegate to persistent evaluator which encapsulates state broadcast, sampling and MPI reductions
+  auto result = energy_grad_evaluator_->Evaluate(state);
+
+  // Wire SR buffers into optimizer-owned storage when SR is enabled
+  if (stochastic_reconfiguration_update_class_) {
+    if (result.Ostar_mean.has_value()) {
+      Ostar_mean_ = std::move(result.Ostar_mean.value());
     }
+    Ostar_samples_ = std::move(result.Ostar_samples);
   }
 
-  // CRITICAL: Broadcast the updated state to all ranks
-  // This ensures all ranks have the same state for Monte Carlo sampling
-  MPI_Bcast(monte_carlo_engine_.State(), monte_carlo_engine_.Comm());
-
-  // Update wavefunction component after tensor update
-  UpdateWavefunctionComponent_();
-
-  // Normalize TPS tensor so that the max amplitude of the wave function across all ranks is order 1.
-  monte_carlo_engine_.NormalizeStateOrder1();
-
-  // Clear previous samples
-  ClearEnergyAndHoleSamples_();
-
-  // Perform Monte Carlo sampling
-  std::vector<double> accept_rates_accum;
-  for (size_t sweep = 0; sweep < params_.mc_params.num_samples; sweep++) {
-    std::vector<double> accept_rates = monte_carlo_engine_.StepSweep();
-    if (sweep == 0) {
-      accept_rates_accum = accept_rates;
-    } else {
-      for (size_t i = 0; i < accept_rates_accum.size(); i++) {
-        accept_rates_accum[i] += accept_rates[i];
-      }
-    }
-    SampleEnergyAndHoles_();
-  }
-
-  // Calculate average acceptance rates
-  std::vector<double> accept_rates_avg = accept_rates_accum;
-  for (double &rate : accept_rates_avg) {
-    rate /= double(params_.mc_params.num_samples);
-  }
-
-  // Check acceptance rates for anomalies
-  AcceptanceRateCheck(accept_rates_avg);
-
-  // Perform Monte Carlo sampling and energy evaluation
-  auto [energy, gradient, energy_error] = GatherStatisticEnergyAndGrad_();
-
-  return std::make_tuple(energy, gradient, energy_error);
+  // Track trajectories on master is handled inside Gather in evaluator; here we just return
+  return std::make_tuple(result.energy, std::move(result.gradient), result.energy_error);
 }
 
 /**
@@ -240,8 +211,6 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Rese
     throw std::invalid_argument("Monte Carlo samples cannot be zero");
   }
 
-  energy_samples_.reserve(mc_samples);
-
   for (size_t row = 0; row < monte_carlo_engine_.Ly(); row++) {
     for (size_t col = 0; col < monte_carlo_engine_.Lx(); col++) {
       const size_t dim = monte_carlo_engine_.State()({row, col}).size();
@@ -250,12 +219,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Rese
             std::to_string(row) + ", " + std::to_string(col) + ")");
       }
 
-      Ostar_sum_({row, col}) = std::vector<Tensor>(dim);
-      for (size_t compt = 0; compt < dim; compt++) {
-        Ostar_sum_({row, col})[compt] = Tensor(monte_carlo_engine_.State()({row, col})[compt].GetIndexes());
-      }
-
-      ELocConj_Ostar_sum_({row, col}) = Ostar_sum_({row, col});
+      // No longer pre-alloc accumulators here; evaluator manages its own buffers
     }
   }
 
@@ -324,90 +288,17 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Prin
 /**
  * @brief Core per-sample path: compute E_loc and O^*; update accumulators and SR buffers.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergyAndHoles_(void) {
-#ifdef QLPEPS_TIMING_MODE
-  Timer cal_e_loc_and_holes_timer("cal_e_loc_and_holes (rank " + std::to_string(monte_carlo_engine_.Rank()) + ")");
-#endif
-
-  // Calculate local energy and holes for current configuration
-  // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
-  TensorNetwork2D<TenElemT, QNT> holes(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx());
-  TenElemT local_energy = energy_solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(
-      &monte_carlo_engine_.State(), &monte_carlo_engine_.WavefuncComp(), holes);
-
-  // For complex gradient calculation: use complex conjugate of local energy
-  // This implements Eq. (complex grad) from the research notes
-  TenElemT local_energy_conjugate = ComplexConjugate(local_energy);
-  TenElemT inverse_amplitude = ComplexConjugate(1.0 / monte_carlo_engine_.WavefuncComp().GetAmplitude());
-
-  energy_samples_.push_back(local_energy);
-
-  // Gradient accumulation uses:
-  // E_loc = ∑_{S'} (Ψ*(S')/Ψ*(S)) <S'|H|S>
-  // ∂E/∂θ* = <E_loc^* O*> − E^* <O*>, where O* = ∂ln(Ψ*)/∂θ*
-  // SR: store per-sample O*(S) when enabled
-  SITPST Ostar_sample(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx(), monte_carlo_engine_.State().PhysicalDim());
-  for (size_t row = 0; row < monte_carlo_engine_.Ly(); row++) {
-    for (size_t col = 0; col < monte_carlo_engine_.Lx(); col++) {
-      const size_t basis_index = monte_carlo_engine_.WavefuncComp().GetConfiguration({row, col});
-
-      Tensor Ostar_tensor;
-      if constexpr (Tensor::IsFermionic()) {
-        Ostar_tensor = CalGTenForFermionicTensors(holes({row, col}), monte_carlo_engine_.WavefuncComp().tn({row, col}));
-      } else {
-        Ostar_tensor = inverse_amplitude * holes({row, col});
-      }
-
-      Ostar_sum_({row, col})[basis_index] += Ostar_tensor; // Σ O^*
-      ELocConj_Ostar_sum_({row, col})[basis_index] += local_energy_conjugate * Ostar_tensor; // Σ E_loc^* O^*
-
-      if (stochastic_reconfiguration_update_class_) {
-        Ostar_sample({row, col})[basis_index] = Ostar_tensor; // O^*(S)
-      }
-    }
-  }
-  if (stochastic_reconfiguration_update_class_) {
-    Ostar_samples_.emplace_back(Ostar_sample); // SR: push one O* sample for S-matrix
-  }
-
-#ifdef QLPEPS_TIMING_MODE
-  cal_e_loc_and_holes_timer.PrintElapsed();
-#endif
-}
+// [removed] Legacy per-sample accumulation moved to MCEnergyGradEvaluator
 
 /**
  * @brief Energy-only sampling (no gradient accumulation).
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-TenElemT VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SampleEnergy_(void) {
-  TenElemT energy_loc = energy_solver_.CalEnergy(&monte_carlo_engine_.State(), &monte_carlo_engine_.WavefuncComp());
-  energy_samples_.push_back(energy_loc);
-  return energy_loc;
-}
+// [removed] Legacy energy-only sampling moved to MCEnergyGradEvaluator
 
 /**
  * @brief Clear per-iteration energy samples and gradient accumulators.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::ClearEnergyAndHoleSamples_(void) {
-  energy_samples_.clear();
-
-  for (size_t row = 0; row < monte_carlo_engine_.Ly(); row++) {
-    for (size_t col = 0; col < monte_carlo_engine_.Lx(); col++) {
-      size_t dim = monte_carlo_engine_.State().PhysicalDim({row, col});
-      Ostar_sum_({row, col}) = std::vector<Tensor>(dim);
-      for (size_t compt = 0; compt < dim; compt++) {
-        Ostar_sum_({row, col})[compt] = Tensor(monte_carlo_engine_.State()({row, col})[compt].GetIndexes());
-      }
-      ELocConj_Ostar_sum_({row, col}) = Ostar_sum_({row, col});
-    }
-  }
-
-  if (stochastic_reconfiguration_update_class_) {
-    Ostar_samples_.clear();
-  }
-}
+// [removed] Legacy clearing moved to evaluator ownership
 
 /**
  * @brief Gather energy and gradient statistics across all MPI ranks.
@@ -418,73 +309,12 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Clea
  * - Only master rank holds the final gradient after gathering
  * - Energy trajectory and error are tracked only on master rank
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-std::tuple<TenElemT,
-           typename VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SITPST,
-           double>
-VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::GatherStatisticEnergyAndGrad_(void) {
-  TenElemT en_self = Mean(energy_samples_); //energy value in each processor
-  auto [energy, en_err] = GatherStatisticSingleData(en_self, MPI_Comm(monte_carlo_engine_.Comm()));
-  qlten::hp_numeric::MPI_Bcast(&energy, 1, qlten::hp_numeric::kMPIMasterRank, MPI_Comm(monte_carlo_engine_.Comm()));
-  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-    energy_trajectory_.push_back(energy);
-    energy_error_traj_.push_back(en_err);
-  }
-
-  //calculate grad in each processor
-  const size_t sample_num = params_.mc_params.num_samples;
-  Ostar_mean_ = Ostar_sum_ * (1.0 / sample_num);
-  grad_ = ELocConj_Ostar_sum_ * (1.0 / sample_num) + ComplexConjugate(-energy) * Ostar_mean_;
-
-  for (size_t row = 0; row < monte_carlo_engine_.Ly(); row++) {
-    for (size_t col = 0; col < monte_carlo_engine_.Lx(); col++) {
-      const size_t phy_dim = grad_({row, col}).size();
-      for (size_t compt = 0; compt < phy_dim; compt++) {
-        // gather and estimate grad in master (and maybe the error bar of grad)
-        grad_({row, col})[compt] = MPIMeanTensor(grad_({row, col})[compt], monte_carlo_engine_.Comm());
-        // note here the grad data except in master are clear
-        if (stochastic_reconfiguration_update_class_) {
-          Ostar_mean_({row, col})[compt] = MPIMeanTensor(Ostar_mean_({row, col})[compt], monte_carlo_engine_.Comm());
-        }
-      }
-    }
-  }
-  grad_.ActFermionPOps();
-  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-    grad_norm_.push_back(grad_.NormSquare());
-  }
-  //do not broadcast because only broadcast the updated TPS
-  double energy_error = 0.0;
-  if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && !energy_error_traj_.empty()) {
-    energy_error = energy_error_traj_.back();
-  }
-  return std::make_tuple(energy, grad_, energy_error);
-}
+// [removed] Legacy MPI gather is implemented inside MCEnergyGradEvaluator
 
 /**
  * @brief Detect anomalously low acceptance rates relative to global maxima and report.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-bool VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::AcceptanceRateCheck(
-    const std::vector<double> &accept_rate) const {
-  bool too_small = false;
-  std::vector<double> global_max(accept_rate.size());
-  HANDLE_MPI_ERROR(::MPI_Allreduce(accept_rate.data(),
-                                   global_max.data(),
-                                   accept_rate.size(),
-                                   MPI_DOUBLE,
-                                   MPI_MAX,
-                                   monte_carlo_engine_.Comm()));
-  for (size_t i = 0; i < accept_rate.size(); i++) {
-    if (accept_rate[i] < 0.5 * global_max[i]) { //anomaly case
-      too_small = true;
-      std::cout << "Process " << monte_carlo_engine_.Rank() << ": Acceptance rate[" << i
-                << "] = " << accept_rate[i] << " is too small compared to global max "
-                << global_max[i] << std::endl;
-    }
-  }
-  return too_small;
-}
+// [removed] Acceptance check handled in evaluator
 
 
 /**
@@ -522,7 +352,7 @@ void VMCPEPSOptimizer<TenElemT,
   if (!params_.mc_params.config_dump_path.empty()) {
     monte_carlo_engine_.WavefuncComp().config.Dump(params_.mc_params.config_dump_path, monte_carlo_engine_.Rank());
   }
-  DumpVecData_(energy_data_path + "/energy_sample" + std::to_string(monte_carlo_engine_.Rank()), energy_samples_);
+  // Note: legacy energy_sample<rank> dump is temporarily disabled during refactor
   if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
     DumpVecDataDouble_(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
