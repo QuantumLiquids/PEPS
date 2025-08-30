@@ -200,12 +200,12 @@ protected:
     std::cout << "MC Gflops = " << Gflops / elapsed_time << std::endl;
 
     auto [energy, en_err] = measure_exe->OutputEnergy();
-    std::cout << "Measured energy: " << Real(energy) << " ± " << en_err << std::endl;
+    std::cout << "Measured energy: " << std::real(energy) << " ± " << en_err << std::endl;
     
     delete measure_exe;
     
     // Verify energy is close to expected
-    EXPECT_NEAR(Real(energy), energy_ed, 0.01);
+    EXPECT_NEAR(std::real(energy), energy_ed, 0.01);
   }
 };
 

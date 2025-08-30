@@ -207,7 +207,7 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
   std::cout << "Gflops = " << Gflops / elapsed_time << std::endl;
 
   auto [energy, en_err] = measure_exe->OutputEnergy();
-  EXPECT_NEAR(Real(energy), energy_ED, 1E-3);
+  EXPECT_NEAR(std::real(energy), energy_ED, 1E-3);
 
   //Measure2
 
@@ -219,7 +219,7 @@ TEST_F(Z2SpinlessFreeFermionSystem, StochasticReconfigurationOptAndMeasure) {
           spinless_fermion_model_solver);
   measure_exe2->Execute();
   auto [energy2, en_err2] = measure_exe2->OutputEnergy();
-  EXPECT_NEAR(Real(energy), Real(energy2), en_err + en_err2);
+  EXPECT_NEAR(std::real(energy), std::real(energy2), en_err + en_err2);
 }
 
 int main(int argc, char *argv[]) {

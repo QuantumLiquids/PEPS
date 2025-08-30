@@ -78,7 +78,7 @@ TEST_F(SmokeEvaluator2x2, EvaluateEnergyAndGradient) {
 
   // Basic sanity checks
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
-    EXPECT_TRUE(std::isfinite(Real(result.energy)));
+    EXPECT_TRUE(std::isfinite(std::real(result.energy)));
     EXPECT_TRUE(std::isfinite(result.energy_error) || result.energy_error == 0.0);
     EXPECT_GE(result.gradient.NormSquare(), 0.0);
     EXPECT_FALSE(result.accept_rates_avg.empty());

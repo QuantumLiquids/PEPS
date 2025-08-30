@@ -12,10 +12,9 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MC_ENERGY_GRAD_EVALUATOR_H
 
 #include <optional>
-#include <tuple>
 #include <vector>
-#include <type_traits>
 #include <iostream>
+#include <cmath>
 #include "mpi.h"
 
 #include "qlten/qlten.h"
@@ -116,6 +115,11 @@ class MCEnergyGradEvaluator {
    * - Per-rank raw energy samples are not returned by default. Historically they
    *   were dumped for debugging from VMCPEPSOptimizer; this has been disabled
    *   during refactor and can be reintroduced here behind a debug switch if needed.
+   *
+   * Error estimation:
+   * - The reported energy error is a coarse reference estimated via sqrt(N)-binning
+   *   (MeanAndBinnedErrorSqrtNUniformBin). Optimizer logic does not depend on this
+   *   error value. For more accurate error bars, use MCPEPSMeasurer (to be implemented).
    */
   Result Evaluate(const SITPST &state) {
     // Assign state on master only to avoid spurious self-assignment
@@ -143,7 +147,6 @@ class MCEnergyGradEvaluator {
     SITPST Ostar_sum(ly, lx);
     SITPST ELocConj_Ostar_sum(ly, lx);
     SITPST grad(ly, lx);
-    std::optional<SITPST> Ostar_mean_opt;
     std::vector<SITPST> Ostar_samples; // SR optional
     if (collect_sr_buffers_) {
       Ostar_samples.reserve(std::max(sample_num, reserved_samples_));
@@ -217,9 +220,8 @@ class MCEnergyGradEvaluator {
     // Downstream: check acceptance anomalies locally (with global max via MPI)
     AcceptanceRateCheck_(accept_rates_avg);
 
-    // Energy reduction across MPI
-    TenElemT en_self = Mean(energy_samples);
-    auto [energy, en_err] = GatherStatisticSingleData(en_self, comm_);
+    // Energy reduction across MPI using binning for error estimation
+    auto [energy, en_err] = MeanAndBinnedErrorSqrtNUniformBin(energy_samples, comm_);
     qlten::hp_numeric::MPI_Bcast(&energy, 1, qlten::hp_numeric::kMPIMasterRank, comm_);
 
     // Gradient estimation and MPI mean per tensor component
@@ -248,12 +250,7 @@ class MCEnergyGradEvaluator {
     Result res;
     res.energy = energy;
     double en_err_out = en_err;
-    // TODO(energy-error): If MPI size > 1 but en_err is infinite, this indicates an abnormal state.
-    // Potential causes include: NaN energies on some ranks, degenerate identical inputs,
-    // or mismatched MPI gathers. We should add diagnostics (rank-wise finite checks on
-    // en_self and energy_samples) and consider failing fast or emitting a structured log.
-    // Current behavior: keep en_err finite in single-process; sanitize infinities to 0 for stability.
-    if (engine_.MpiSize() == 1 || std::isinf(en_err_out)) { en_err_out = 0.0; }
+    DetectEnergyErrorAnomaly_(en_err_out, sample_num, energy_samples);
     res.energy_error = (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) ? en_err_out : 0.0;
     res.gradient = std::move(grad);
     res.gradient_norm = grad_norm;
@@ -298,6 +295,48 @@ class MCEnergyGradEvaluator {
   const MPI_Comm &comm_;
   bool collect_sr_buffers_;
   size_t reserved_samples_ = 0;
+
+  /**
+   * @brief Detect and report anomalies when the energy error is infinite.
+   *
+   * - If expected_total_bins > 1 (given sqrt(N) binning), an infinite error is
+   *   considered anomalous. Master prints summary diagnostics; all ranks scan a
+   *   few local samples for non-finite values and print them.
+   */
+  void DetectEnergyErrorAnomaly_(double en_err_out,
+                                 size_t samples_per_rank,
+                                 const std::vector<TenElemT> &energy_samples) const {
+    if (!std::isinf(en_err_out)) { return; }
+    const size_t bin_size = std::max<size_t>(1, static_cast<size_t>(std::sqrt(samples_per_rank)));
+    const size_t local_bins = samples_per_rank / bin_size;
+    const size_t expected_total_bins = engine_.MpiSize() * local_bins;
+
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && expected_total_bins > 1) {
+      std::cerr << "Energy error is infinite. expected_total_bins=" << expected_total_bins
+                << ", mpi_size=" << engine_.MpiSize()
+                << ", samples_per_rank=" << samples_per_rank
+                << ", bin_size=" << bin_size
+                << ". This indicates an anomaly (e.g., NaNs or identical samples)."
+                << std::endl;
+    }
+    if (expected_total_bins <= 1) { return; }
+
+    size_t printed = 0;
+    bool has_nonfinite = false;
+    for (size_t i = 0; i < energy_samples.size() && printed < 5; ++i) {
+      const auto &e = energy_samples[i];
+      const bool finite = std::isfinite(static_cast<double>(std::real(e))) &&
+                          std::isfinite(static_cast<double>(std::imag(e)));
+      if (!finite) {
+        has_nonfinite = true;
+        std::cerr << "Process " << engine_.Rank() << ": non-finite energy_samples[" << i << "] = " << e << std::endl;
+        ++printed;
+      }
+    }
+    if (!has_nonfinite && engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+      std::cerr << "No non-finite samples detected locally; consider checking bin counts/gather consistency across ranks." << std::endl;
+    }
+  }
 };
 
 } // namespace qlpeps

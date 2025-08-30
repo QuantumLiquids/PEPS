@@ -95,7 +95,7 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
   if (rank == hp_numeric::kMPIMasterRank) {
     const auto &traj = opt->GetEnergyTrajectory();
     ASSERT_FALSE(traj.empty());
-    EXPECT_NEAR(Real(traj.back()), ClassicalIsing2x2OBC_GroundEnergy(), 0.2);
+    EXPECT_NEAR(std::real(traj.back()), ClassicalIsing2x2OBC_GroundEnergy(), 0.2);
   }
 
   auto meas = MonteCarloMeasure<TenElemT, QNT,
@@ -105,7 +105,7 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
 
   auto [energy, en_err] = meas->OutputEnergy();
   if (rank == hp_numeric::kMPIMasterRank) {
-    EXPECT_NEAR(Real(energy), ClassicalIsing2x2OBC_GroundEnergy(), 0.1);
+    EXPECT_NEAR(std::real(energy), ClassicalIsing2x2OBC_GroundEnergy(), 0.1);
   }
 }
 

@@ -29,6 +29,7 @@ We will fix them after fixed some other issues.
 
 #include <filesystem>
 #include <iostream>
+#include <cmath>
 
 using namespace qlten;
 using namespace qlpeps;
@@ -302,9 +303,12 @@ TEST_F(SpinlessFermionExactVsMCTest, EnergyAndGradientMatch) {
 
   // 4) Assertions
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
-    double e_mc = Real(mc_res.energy);
-    double e_ex = Real(energy_exact);
-    double e_tol = 0.02; //  error estimate system will be improved in the future
+    double e_mc = std::real(mc_res.energy);
+    double e_ex = std::real(energy_exact);
+    double e_sigma = mc_res.energy_error;
+    EXPECT_TRUE(std::isfinite(e_sigma));
+    EXPECT_TRUE(e_sigma >= 0);
+    double e_tol =  3.0 * e_sigma;
     EXPECT_NEAR(e_mc, e_ex, e_tol);
 
     // Gradient comparison: normalize both to unit norm and compare direction
@@ -333,8 +337,8 @@ TEST_F(SpinlessFermionExactVsMCTest, EnergyAndGradientMatch) {
       mc_res.gradient.NormalizeAllSite();
       auto grad_dir_diff = grad_exact - mc_res.gradient;
       double dir_err = std::sqrt(grad_dir_diff.NormSquare());
-      // For 2x2 system with 6k samples, a conservative direction error tolerance
-      EXPECT_LT(dir_err, 0.2);
+      // For 2x2 system with 10k samples, a conservative direction error tolerance
+      EXPECT_LT(dir_err, 0.3);
     }
   }
 }

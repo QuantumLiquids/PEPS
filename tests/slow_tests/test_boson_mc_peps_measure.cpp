@@ -95,9 +95,9 @@ TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
 
   if (rank == hp_numeric::kMPIMasterRank && mpi_size > 1) {
     //Justify whether as expected
-    EXPECT_NEAR(Real(energy), e0_state, 1.5 * en_err);
+    EXPECT_NEAR(std::real(energy), e0_state, 1.5 * en_err);
   } else {
-    EXPECT_NEAR(Real(energy), e0_state, 0.1); //TODO: bin statistic even for ONE Markov chain
+    EXPECT_NEAR(std::real(energy), e0_state, 0.1); //TODO: bin statistic even for ONE Markov chain
   }
   delete executor;
 }

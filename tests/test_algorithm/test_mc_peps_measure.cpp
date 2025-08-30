@@ -180,7 +180,7 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
   auto [energy, en_err] = executor->OutputEnergy();
 
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
-    EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Relaxed tolerance for fast test
+    EXPECT_NEAR(std::real(energy), energy_exact, 0.01); // Relaxed tolerance for fast test
   }
 
   delete executor;
@@ -226,9 +226,9 @@ TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
     // For single process, use tight tolerance; for MPI, use error estimate
     if (mpi_size == 1) {
-      EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Tight tolerance for single process
+      EXPECT_NEAR(std::real(energy), energy_exact, 0.01); // Tight tolerance for single process
     } else {
-      EXPECT_NEAR(Real(energy), energy_exact, 3 * std::abs(en_err)); // Use error estimate for MPI
+      EXPECT_NEAR(std::real(energy), energy_exact, 3 * std::abs(en_err)); // Use error estimate for MPI
     }
   }
 
@@ -279,7 +279,7 @@ TEST_F(Test2x2MCPEPSFermion, SpinlessFermionModel) {
   auto [energy, en_err] = executor->OutputEnergy();
 
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
-    EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Relaxed tolerance for fast test
+    EXPECT_NEAR(std::real(energy), energy_exact, 0.01); // Relaxed tolerance for fast test
   }
 
   delete executor;
@@ -332,9 +332,9 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
     // For single process, use tight tolerance; for MPI, use error estimate
     if (mpi_size == 1) {
-      EXPECT_NEAR(Real(energy), energy_exact, 0.01); // Tight tolerance for single process
+      EXPECT_NEAR(std::real(energy), energy_exact, 0.01); // Tight tolerance for single process
     } else {
-      EXPECT_NEAR(Real(energy), energy_exact, 3 * std::abs(en_err)); // Use error estimate for MPI
+      EXPECT_NEAR(std::real(energy), energy_exact, 3 * std::abs(en_err)); // Use error estimate for MPI
     }
   }
 

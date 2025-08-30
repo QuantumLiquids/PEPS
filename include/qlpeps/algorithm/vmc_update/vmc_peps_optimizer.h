@@ -116,7 +116,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
   double GetMinEnergy() const noexcept { return en_min_; }
   double GetCurrentEnergy() const noexcept {
     return energy_trajectory_.empty() ? std::numeric_limits<double>::max() :
-           Real(energy_trajectory_.back());
+           std::real(energy_trajectory_.back());
   }
   const std::vector<TenElemT> &GetEnergyTrajectory() const { return energy_trajectory_; }
   const std::vector<double> &GetEnergyErrorTrajectory() const { return energy_error_traj_; }

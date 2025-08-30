@@ -86,7 +86,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   // Evaluate initial energy and gradient
   auto [initial_energy, initial_gradient] = energy_evaluator(initial_state);
   result.energy_trajectory.push_back(initial_energy);
-  result.min_energy = Real(initial_energy);
+  result.min_energy = std::real(initial_energy);
 
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     result.gradient_norms.push_back(std::sqrt(initial_gradient.NormSquare()));
@@ -115,7 +115,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   // Perform line search along the search direction
   SITPST best_state = initial_state;
-  double best_energy = Real(initial_energy);
+  double best_energy = std::real(initial_energy);
   double cumulative_step = 0.0;
 
   // For line search, use multiple steps with the current learning rate
@@ -158,8 +158,8 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     }
 
     // Update best state if energy improved
-    if (Real(test_energy) < best_energy) {
-      best_energy = Real(test_energy);
+    if (std::real(test_energy) < best_energy) {
+      best_energy = std::real(test_energy);
       best_state = test_state;
       result.min_energy = best_energy;
 
@@ -170,7 +170,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
     // Log progress
     LogOptimizationStep(i,
-                        Real(test_energy),
+                        std::real(test_energy),
                         energy_error,
                         std::sqrt(test_gradient.NormSquare()),
                         cumulative_step,
@@ -181,10 +181,10 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
                         update_time);
 
     if (callback.on_iteration) {
-      callback.on_iteration(i, Real(test_energy), energy_error, std::sqrt(test_gradient.NormSquare()));
+      callback.on_iteration(i, std::real(test_energy), energy_error, std::sqrt(test_gradient.NormSquare()));
     }
 
-    if (callback.should_stop && callback.should_stop(i, Real(test_energy), energy_error)) {
+    if (callback.should_stop && callback.should_stop(i, std::real(test_energy), energy_error)) {
       break;
     }
   }
@@ -215,7 +215,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
   // Evaluate initial energy and gradient
   auto [initial_energy, initial_gradient, initial_error] = energy_evaluator(initial_state);
   result.energy_trajectory.push_back(initial_energy);
-  result.min_energy = Real(initial_energy);
+  result.min_energy = std::real(initial_energy);
 
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     result.energy_error_trajectory.push_back(initial_error);
@@ -245,7 +245,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
   // Perform line search along the search direction
   SITPST best_state = initial_state;
-  double best_energy = Real(initial_energy);
+  double best_energy = std::real(initial_energy);
   double cumulative_step = 0.0;
 
   // For line search, use multiple steps with the current learning rate
@@ -285,8 +285,8 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
     }
 
     // Update best state if energy improved
-    if (Real(test_energy) < best_energy) {
-      best_energy = Real(test_energy);
+    if (std::real(test_energy) < best_energy) {
+      best_energy = std::real(test_energy);
       best_state = test_state;
       result.min_energy = best_energy;
 
@@ -297,7 +297,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
 
     // Log progress
     LogOptimizationStep(i,
-                        Real(test_energy),
+                        std::real(test_energy),
                         test_error,
                         std::sqrt(test_gradient.NormSquare()),
                         cumulative_step,
@@ -308,10 +308,10 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
                         update_time);
 
     if (callback.on_iteration) {
-      callback.on_iteration(i, Real(test_energy), test_error, std::sqrt(test_gradient.NormSquare()));
+      callback.on_iteration(i, std::real(test_energy), test_error, std::sqrt(test_gradient.NormSquare()));
     }
 
-    if (callback.should_stop && callback.should_stop(i, Real(test_energy), test_error)) {
+    if (callback.should_stop && callback.should_stop(i, std::real(test_energy), test_error)) {
       break;
     }
   }
@@ -397,8 +397,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
     // Update best state if energy improved
     bool energy_improved = false;
-    if (Real(current_energy) < best_energy) {
-      best_energy = Real(current_energy);
+    if (std::real(current_energy) < best_energy) {
+      best_energy = std::real(current_energy);
       best_state = current_state;
       result.min_energy = best_energy;
       energy_improved = true;
@@ -413,11 +413,11 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
     // Determine learning rate after we have energy info
     // Use previous iteration energy for scheduler when iter>0; otherwise use current energy
-    double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? Real(current_energy) : previous_energy);
+    double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
 
     // Advanced stopping criteria checks (skip for first iteration)
     if (iter > 0) {
-      double current_energy_real = Real(current_energy);
+      double current_energy_real = std::real(current_energy);
       double gradient_norm = std::sqrt(current_gradient.NormSquare());
 
       // EFFICIENT APPROACH: Only master rank evaluates stopping criteria, then broadcasts the decision.
@@ -445,7 +445,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       previous_energy = current_energy_real;
     } else {
       // For first iteration, just record the energy for next comparison
-      previous_energy = Real(current_energy);
+      previous_energy = std::real(current_energy);
     }
 
     // Start timer for optimization update step
@@ -516,7 +516,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
     // Log progress
     LogOptimizationStep(iter,
-                        Real(current_energy),
+                        std::real(current_energy),
                         current_error,
                         std::sqrt(current_gradient.NormSquare()),
                         learning_rate,
@@ -527,10 +527,10 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                         update_time);
 
     if (callback.on_iteration) {
-      callback.on_iteration(iter, Real(current_energy), current_error, std::sqrt(current_gradient.NormSquare()));
+      callback.on_iteration(iter, std::real(current_energy), current_error, std::sqrt(current_gradient.NormSquare()));
     }
 
-    if (callback.should_stop && callback.should_stop(iter, Real(current_energy), current_error)) {
+    if (callback.should_stop && callback.should_stop(iter, std::real(current_energy), current_error)) {
       break;
     }
   }

@@ -184,7 +184,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   std::cout << "Gflops = " << Gflops / elapsed_time << std::endl;
 
   auto [energy, en_err] = measure_exe->OutputEnergy();
-  EXPECT_NEAR(Real(energy), energy_ed, 0.001);
+  EXPECT_NEAR(std::real(energy), energy_ed, 0.001);
 }
 
 int main(int argc, char *argv[]) {

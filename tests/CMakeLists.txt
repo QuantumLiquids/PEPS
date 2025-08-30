@@ -337,11 +337,14 @@ add_mpi_unittest_run(test_api_smoke_double "4" " ")
 add_mpi_unittest_run(test_api_smoke_complex "4" " ")
 
 # 2x2 spinless fermion exact vs MC evaluator test
-add_two_type_unittest(test_mc_energy_grad_evaluator_spinless_fermion_2x2
-        "test_algorithm/test_mc_energy_grad_evaluator_spinless_fermion_2x2.cpp"
+add_two_type_unittest(test_mc_energy_grad_evaluator
+        "test_algorithm/test_mc_energy_grad_evaluator.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+
+add_mpi_unittest_run(test_mc_energy_grad_evaluator_double "4" " ")
+add_mpi_unittest_run(test_mc_energy_grad_evaluator_complex "4" " ")
 
 
 ## Test utility

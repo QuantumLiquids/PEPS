@@ -384,7 +384,7 @@ std::pair<double, double> SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProje
   if (print_time) {
     loop_projection_post_procedure_timer.PrintElapsed();
   }
-  return {norm, Real(overlap / wave_function_norm)};
+  return {norm, std::real(overlap / wave_function_norm)};
 }
 
 /** Each evolve  gate form a loop and includes 4 tensors, and

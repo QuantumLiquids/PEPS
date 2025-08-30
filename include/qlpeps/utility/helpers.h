@@ -13,9 +13,7 @@
 
 namespace qlpeps {
 
-// Extract real part for double/complex without depending on external Real overloads
-inline double Real(const double &x) { return x; }
-inline double Real(const std::complex<double> &z) { return std::real(z); }
+// Real functions removed - use std::real directly
 
 double ComplexConjugate(const double &x) { return x; }
 std::complex<double> ComplexConjugate(const std::complex<double> &z) { return std::conj(z); }
