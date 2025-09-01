@@ -155,7 +155,17 @@ class VMCPEPSOptimizer : public qlten::Executor {
   // Monte Carlo sampling helpers have been migrated into MCEnergyGradEvaluator
 
   // Data dumping helpers
+  /**
+   * @deprecated Legacy binary dump of energy trajectory.
+   *             Will be removed in a future release. Prefer CSV output at
+   *             `energy/energy_trajectory.csv`.
+   */
   void DumpVecData_(const std::string &path, const std::vector<TenElemT> &data);
+  /**
+   * @deprecated Legacy binary dump of double vectors (e.g., energy errors).
+   *             Will be removed in a future release. Prefer CSV output at
+   *             `energy/energy_trajectory.csv`.
+   */
   void DumpVecDataDouble_(const std::string &path, const std::vector<double> &data);
 
  private:

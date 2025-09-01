@@ -354,8 +354,34 @@ void VMCPEPSOptimizer<TenElemT,
   }
   // Note: legacy energy_sample<rank> dump is temporarily disabled during refactor
   if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+    // Temporary deprecation notice for legacy binary dumps; keep behavior unchanged
+    static bool deprec_once = false;
+    if (!deprec_once) {
+      std::cout << "[VMCPEPSOptimizer] Notice: binary trajectory dumps (energy_trajectory,"
+                   " energy_err_trajectory) are deprecated and will be removed in a future release."
+                   " Use energy/energy_trajectory.csv instead.\n";
+      deprec_once = true;
+    }
     DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
     DumpVecDataDouble_(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
+    // Also dump a human-friendly CSV of the trajectory, in append mode for multi-run continuity
+    const std::string csv_path = energy_data_path + "/energy_trajectory.csv";
+    const bool csv_exists = std::filesystem::exists(csv_path);
+    std::ofstream csv(csv_path, std::ios::app);
+    if (csv) {
+      // Write header if file newly created
+      if (!csv_exists) {
+        csv << "iteration,energy,energy_error,gradient_norm\n";
+      }
+      const size_t n = energy_trajectory_.size();
+      for (size_t i = 0; i < n; ++i) {
+        const double e = std::real(energy_trajectory_[i]);
+        const double err = (i < energy_error_traj_.size() ? energy_error_traj_[i] : 0.0);
+        const double gnorm = (i < grad_norm_.size() ? grad_norm_[i] : 0.0);
+        csv << i << "," << std::setprecision(17) << e << "," << err << "," << gnorm << "\n";
+      }
+      csv.close();
+    }
   }
 }
 

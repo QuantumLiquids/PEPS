@@ -336,33 +336,87 @@ bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
     // New format
     size_t rows = 0, cols = 0;
     ifs >> rows >> cols >> phy_dim;
-    if (ifs.fail()) { return false; } // Handle corrupted meta file
+    if (ifs.fail()) {
+#ifndef NDEBUG
+      std::cerr << "[SplitIndexTPS::Load][DEBUG] Failed to parse metadata file: "
+                << meta_file << std::endl;
+#endif
+      return false; // Handle corrupted meta file
+    }
+#ifndef NDEBUG
+    std::cerr << "[SplitIndexTPS::Load][DEBUG] Using new format metadata. path="
+              << tps_path << ", rows=" << rows << ", cols=" << cols
+              << ", phy_dim=" << phy_dim << std::endl;
+#endif
     *this = SplitIndexTPS<TenElemT, QNT>(rows, cols);
   } else {
     // Old format
     std::string old_meta_file = tps_path + "/" + "phys_dim";
     std::ifstream old_ifs(old_meta_file, std::ifstream::binary);
-    if (!old_ifs.good()) { return false; } // No meta file found
+    if (!old_ifs.good()) {
+#ifndef NDEBUG
+      std::cerr << "[SplitIndexTPS::Load][DEBUG] Neither new nor old metadata file exists. path="
+                << tps_path << std::endl;
+#endif
+      return false; // No meta file found
+    }
     old_ifs >> phy_dim;
-    if (old_ifs.fail()) { return false; } // Handle corrupted phys_dim file
+    if (old_ifs.fail()) {
+#ifndef NDEBUG
+      std::cerr << "[SplitIndexTPS::Load][DEBUG] Failed to parse old metadata file: "
+                << old_meta_file << std::endl;
+#endif
+      return false; // Handle corrupted phys_dim file
+    }
+#ifndef NDEBUG
+    std::cerr << "[SplitIndexTPS::Load][DEBUG] Using old format metadata. path="
+              << tps_path << ", phy_dim=" << phy_dim
+              << " (rows/cols must be pre-sized: rows=" << this->rows()
+              << ", cols=" << this->cols() << ")" << std::endl;
+#endif
     // For old format, assume `this` is already sized correctly.
   }
 
   if (phy_dim == 0) {
+#ifndef NDEBUG
+    std::cerr << "[SplitIndexTPS::Load][DEBUG] Invalid phy_dim=0, aborting load. path="
+              << tps_path << std::endl;
+#endif
     return false;
   }
 
+#ifndef NDEBUG
+  std::cerr << "[SplitIndexTPS::Load][DEBUG] Begin loading tensors. total_sites="
+            << (this->rows() * this->cols()) << ", phy_dim per site=" << phy_dim
+            << std::endl;
+#endif
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
       (*this)({row, col}) = std::vector<Tensor>(phy_dim);
       for (size_t compt = 0; compt < phy_dim; compt++) {
         std::string ten_file = GenSplitIndexTPSTenName(tps_path, row, col, compt);
         if (!this->LoadTen(row, col, compt, ten_file)) {
+#ifndef NDEBUG
+          std::cerr << "[SplitIndexTPS::Load][DEBUG] Failed to load tensor file: row="
+                    << row << ", col=" << col << ", compt=" << compt
+                    << ", file=" << ten_file << std::endl;
+#endif
           return false;
         }
+#ifndef NDEBUG
+        else {
+          std::cerr << "[SplitIndexTPS::Load][DEBUG] Loaded tensor: row=" << row
+                    << ", col=" << col << ", compt=" << compt
+                    << ", file=" << ten_file << std::endl;
+        }
+#endif
       }
     }
   }
+#ifndef NDEBUG
+  std::cerr << "[SplitIndexTPS::Load][DEBUG] All tensors loaded successfully. path="
+            << tps_path << std::endl;
+#endif
   return true;
 }
 
