@@ -55,13 +55,16 @@ install(
         DIRECTORY ${QLPEPS_HEADER_DIR}
         DESTINATION ${QLPEPS_INCLUDE_DEST})
 
-# Doxygen documentation
-find_package(Doxygen)
-if (DOXYGEN_FOUND)
-    # Add docs subdirectory for documentation building
-    add_subdirectory(docs)
-else()
-    message(WARNING "Doxygen not found. Documentation will not be generated.")
+# Doxygen documentation (optional)
+option(QLPEPS_BUILD_DOCS "Build Doxygen documentation." OFF)
+if (QLPEPS_BUILD_DOCS)
+    find_package(Doxygen)
+    if (DOXYGEN_FOUND)
+        # Add docs subdirectory for documentation building
+        add_subdirectory(docs)
+    else()
+        message(WARNING "Doxygen not found. Skipping documentation build.")
+    endif()
 endif()
 
 # Build tool scripts

@@ -12,8 +12,12 @@ add_definitions(-DTEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}/tests") # used in test co
 # Test configuration options
 option(BUILD_SLOW_TESTS "Build slow integration tests (may take several minutes)" OFF)
 
+# Number of MPI processes for slow tests (can be overridden per environment)
+set(SLOW_TESTS_MPI_PROCS 56 CACHE STRING "MPI processes used to run slow tests")
+
 # Print test configuration
 if(BUILD_SLOW_TESTS)
+    option(ENABLE_INTEGRATION_SINGLE_RANK "Register single-rank integration tests (non-MPI)" OFF)
     message(STATUS "Slow tests: ENABLED")
 else()
     message(STATUS "Slow tests: DISABLED")
@@ -361,8 +365,9 @@ add_mpi_unittest(test_conjugate_gradient_mpi_solver
 )
 
 
-# Slow tests (4x4 systems, long execution)
+
 if(BUILD_SLOW_TESTS)
+    # Slow tests (4x4 systems, long execution)
     add_two_type_unittest(test_boson_measure
             "slow_tests/test_boson_mc_peps_measure.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
@@ -381,50 +386,90 @@ if(BUILD_SLOW_TESTS)
             "${CMAKE_CURRENT_LIST_DIR}/test_data/"
     )
 
-    # VMC integration tests (moved to slow tests section)
+    # SU + VMC + Measure integration tests
+    # Integration tests: only MPI variants enabled by default (single-rank runs omitted)
+    # To run all MPI integration tests: ctest -V -L mpi-integration --test-dir build
     add_two_type_unittest(test_square_heisenberg
             "integration_tests/test_square_heisenberg.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
-
-    add_mpi_unittest_run(test_square_heisenberg_double "56" " ")
-    add_mpi_unittest_run(test_square_heisenberg_complex "56" " ")
+    if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
+        set_tests_properties(test_square_heisenberg_double PROPERTIES DISABLED TRUE)
+        set_tests_properties(test_square_heisenberg_complex PROPERTIES DISABLED TRUE)
+    endif()
+    set_tests_properties(test_square_heisenberg_double PROPERTIES LABELS "integration;single;slow")
+    set_tests_properties(test_square_heisenberg_complex PROPERTIES LABELS "integration;single;slow")
+    add_mpi_unittest_run(test_square_heisenberg_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_square_heisenberg_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+    set_tests_properties(test_square_heisenberg_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_square_heisenberg_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
 
     add_two_type_unittest(test_square_nn_spinless_free_fermion
             "integration_tests/test_square_nn_spinless_free_fermion.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
-
-    add_mpi_unittest_run(test_square_nn_spinless_free_fermion_double "56" " ")
-    add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "56" " ")
+    if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
+        set_tests_properties(test_square_nn_spinless_free_fermion_double PROPERTIES DISABLED TRUE)
+        set_tests_properties(test_square_nn_spinless_free_fermion_complex PROPERTIES DISABLED TRUE)
+    endif()
+    set_tests_properties(test_square_nn_spinless_free_fermion_double PROPERTIES LABELS "integration;single;slow")
+    set_tests_properties(test_square_nn_spinless_free_fermion_complex PROPERTIES LABELS "integration;single;slow")
+    add_mpi_unittest_run(test_square_nn_spinless_free_fermion_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_square_nn_spinless_free_fermion_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+    set_tests_properties(test_square_nn_spinless_free_fermion_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_square_nn_spinless_free_fermion_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
 
     add_two_type_unittest(test_square_j1j2_xxz
             "integration_tests/test_square_j1j2_xxz.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
+    if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
+        set_tests_properties(test_square_j1j2_xxz_double PROPERTIES DISABLED TRUE)
+        set_tests_properties(test_square_j1j2_xxz_complex PROPERTIES DISABLED TRUE)
+    endif()
+    set_tests_properties(test_square_j1j2_xxz_double PROPERTIES LABELS "integration;single;slow")
+    set_tests_properties(test_square_j1j2_xxz_complex PROPERTIES LABELS "integration;single;slow")
 
-    # Legacy test removed - functionality merged into test_square_j1j2_xxz
 
     add_two_type_unittest(test_triangle_heisenberg
             "integration_tests/test_triangle_heisenberg.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
+    if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
+        set_tests_properties(test_triangle_heisenberg_double PROPERTIES DISABLED TRUE)
+        set_tests_properties(test_triangle_heisenberg_complex PROPERTIES DISABLED TRUE)
+    endif()
+    set_tests_properties(test_triangle_heisenberg_double PROPERTIES LABELS "integration;single;slow")
+    set_tests_properties(test_triangle_heisenberg_complex PROPERTIES LABELS "integration;single;slow")
 
     add_two_type_unittest(test_triangle_j1j2_heisenberg
             "integration_tests/test_triangle_j1j2_heisenberg.cpp"
             "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
+    if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
+        set_tests_properties(test_triangle_j1j2_heisenberg_double PROPERTIES DISABLED TRUE)
+        set_tests_properties(test_triangle_j1j2_heisenberg_complex PROPERTIES DISABLED TRUE)
+    endif()
+    set_tests_properties(test_triangle_j1j2_heisenberg_double PROPERTIES LABELS "integration;single;slow")
+    set_tests_properties(test_triangle_j1j2_heisenberg_complex PROPERTIES LABELS "integration;single;slow")
 
-    add_mpi_unittest_run(test_square_j1j2_xxz_double "56" " ")
-    add_mpi_unittest_run(test_square_j1j2_xxz_complex "56" " ")
+    add_mpi_unittest_run(test_square_j1j2_xxz_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_square_j1j2_xxz_complex "${SLOW_TESTS_MPI_PROCS}" " ")
     # Legacy test runs removed - functionality merged into test_square_j1j2_xxz
-    add_mpi_unittest_run(test_triangle_heisenberg_double "56" " ")
-    add_mpi_unittest_run(test_triangle_heisenberg_complex "56" " ")
-    add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "56" " ")
-    add_mpi_unittest_run(test_triangle_j1j2_heisenberg_complex "56" " ")
+    add_mpi_unittest_run(test_triangle_heisenberg_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_triangle_heisenberg_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_triangle_j1j2_heisenberg_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_triangle_j1j2_heisenberg_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+
+    set_tests_properties(test_square_j1j2_xxz_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_square_j1j2_xxz_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_triangle_heisenberg_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_triangle_heisenberg_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_triangle_j1j2_heisenberg_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_triangle_j1j2_heisenberg_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
 endif()

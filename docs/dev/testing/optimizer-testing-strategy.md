@@ -53,6 +53,8 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 
 
 ### 缺口
-对SR的支持不是那么直接。虽然也有可能可以，但是还需要一些数学推导工作。
+用严格求和对SR的支持不是那么直接，但是还需要一些数学推导工作。
+
+目前在集成测试中测试。
 
 

@@ -626,7 +626,7 @@ void MPI_Send(
  * @tparam TenElemT Tensor element type
  * @tparam QNT Quantum number type
  * @param split_index_tps The SplitIndexTPS to receive into
- * @param src Source MPI rank
+ * @param src Source MPI rank, can be MPI_ANY_SOURCE
  * @param comm MPI communicator
  * @param tag MPI message tag
  * @return MPI status of the last receive operation
@@ -644,6 +644,18 @@ MPI_Status MPI_Recv(
   size_t peps_size[3];
   MPI_Status status;
   HANDLE_MPI_ERROR(::MPI_Recv(peps_size, 3, MPI_UNSIGNED_LONG_LONG, src, tag, comm, &status));
+  int actual_src = src;
+  if (src == MPI_ANY_SOURCE) {
+    actual_src = status.MPI_SOURCE;
+  }
+  #ifdef QLPEPS_MPI_DEBUG
+  int dbg_rank = -1;
+  MPI_Comm_rank(comm, &dbg_rank);
+  std::cerr << "[MPI DEBUG] rank " << dbg_rank
+            << " SplitIndexTPS::MPI_Recv header from "
+            << (src == MPI_ANY_SOURCE ? std::string("ANY(actual ") + std::to_string(actual_src) + ")" : std::to_string(actual_src))
+            << ", tag=" << tag << std::endl;
+  #endif
   
   auto [rows, cols, phy_dim] = peps_size;
   split_index_tps = SplitIndexTPS<TenElemT, QNT>(rows, cols);
@@ -652,7 +664,7 @@ MPI_Status MPI_Recv(
   for (auto &tens : split_index_tps) {
     tens = std::vector<Tensor>(phy_dim);
     for (Tensor &ten : tens) {
-      status = ten.MPI_Recv(src, tag, comm);
+      status = ten.MPI_Recv(actual_src, tag, comm);
     }
   }
   

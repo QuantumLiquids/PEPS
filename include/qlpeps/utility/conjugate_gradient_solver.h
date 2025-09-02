@@ -341,6 +341,12 @@ VectorType MatrixMultiplyVectorMaster(
   qlten::Timer cg_broadcast_vec_timer("conjugate gradient broadcast vector");
 #endif
   MPI_Bcast(const_cast<VectorType &>(v), comm); //defined by user
+  #ifdef QLPEPS_MPI_DEBUG
+  int dbg_rank_master = -1; MPI_Comm_rank(comm, &dbg_rank_master);
+  if (dbg_rank_master == qlten::hp_numeric::kMPIMasterRank) {
+    std::cerr << "[MPI DEBUG][CG] master broadcasted vector" << std::endl;
+  }
+  #endif
 #ifdef QLPEPS_TIMING_MODE
   cg_broadcast_vec_timer.PrintElapsed();
 #endif
@@ -350,6 +356,9 @@ VectorType MatrixMultiplyVectorMaster(
   qlten::Timer cg_gather_vec_timer("conjugate gradient gather vector");
 #endif
   for (size_t i = 1; i < mpi_size; i++) {
+    #ifdef QLPEPS_MPI_DEBUG
+    std::cerr << "[MPI DEBUG][CG] master waiting recv i=" << i << " tag=0 from ANY" << std::endl;
+    #endif
     MPI_Recv(res_list[i], MPI_ANY_SOURCE, comm, 0);
   }
 #ifdef QLPEPS_TIMING_MODE
@@ -373,7 +382,14 @@ void MatrixMultiplyVectorSlave(
 ) {
   VectorType v;
   MPI_Bcast(v, comm);
+  #ifdef QLPEPS_MPI_DEBUG
+  int dbg_rank_slave = -1; MPI_Comm_rank(comm, &dbg_rank_slave);
+  std::cerr << "[MPI DEBUG][CG] rank " << dbg_rank_slave << " received broadcast vector" << std::endl;
+  #endif
   VectorType res = mat * v;
+  #ifdef QLPEPS_MPI_DEBUG
+  std::cerr << "[MPI DEBUG][CG] rank " << dbg_rank_slave << " sending result to master tag=0" << std::endl;
+  #endif
   MPI_Send(res, qlten::hp_numeric::kMPIMasterRank, comm, 0);
 }
 

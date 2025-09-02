@@ -49,7 +49,13 @@ QLTensor<TenElemT, QNT> MPIMeanTensor(const QLTensor<TenElemT, QNT> &tensor,
     for (size_t proc = 0; proc < mpi_size; proc++) {
       if (proc != qlten::hp_numeric::kMPIMasterRank) {
         ten_list.emplace_back(std::make_unique<Tensor>());
+        #ifdef QLPEPS_MPI_DEBUG
+        std::cerr << "[MPI DEBUG] rank 0 waiting tensor from proc=" << proc << " tag=" << (2 * proc) << std::endl;
+        #endif
         ten_list.back()->MPI_Recv(proc, 2 * proc, comm);
+        #ifdef QLPEPS_MPI_DEBUG
+        std::cerr << "[MPI DEBUG] rank 0 received tensor from proc=" << proc << std::endl;
+        #endif
       } else {
         ten_list.emplace_back(std::make_unique<Tensor>(tensor));
       }
@@ -64,6 +70,9 @@ QLTensor<TenElemT, QNT> MPIMeanTensor(const QLTensor<TenElemT, QNT> &tensor,
     
     return Mean(tensor_ptrs, mpi_size);
   } else {
+    #ifdef QLPEPS_MPI_DEBUG
+    std::cerr << "[MPI DEBUG] rank " << rank << " sending tensor to master tag=" << (2 * rank) << std::endl;
+    #endif
     tensor.MPI_Send(qlten::hp_numeric::kMPIMasterRank, 2 * rank, comm);
     return Tensor();
   }

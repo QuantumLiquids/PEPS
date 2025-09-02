@@ -14,6 +14,7 @@
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
+#include "qlpeps/api/vmc_api.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
 
@@ -115,75 +116,78 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
 }
 
 // Check if the TPS doesn't change by setting step length = 0
-TEST_F(HeisenbergSystem, ZeroUpdate) {
+TEST_F(HeisenbergSystem, SGDWithZeroLR) {
   MPI_Barrier(comm);
   vmc_peps_para.optimizer_params.base_params.learning_rate = 0.0;
   vmc_peps_para.optimizer_params.base_params.max_iterations = 3;
+  // Switch to SGD (zero LR) to exclude SR/CG MPI path for debugging
+  vmc_peps_para.optimizer_params = OptimizerFactory::CreateSGDWithDecay(
+      3 /*max_iterations*/, 0.0 /*initial_lr*/, 1.0 /*decay_rate*/, 1 /*decay_steps*/);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    std::cout << "[ZeroUpdate] Using SGD with zero learning rate to disable SR/CG path" << std::endl;
+  }
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
-  tps.Load(tps_path);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    tps.Load(tps_path);
+  }
+  qlpeps::MPI_Bcast(tps, comm);
   auto init_tps = tps;
-  auto executor =
-      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
-                                                                                                       tps,
-                                                                                                       comm,
-                                                                                                       SquareSpinOneHalfXXZModel());
+  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
+      vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModel());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
-  executor->Execute();
+  // already executed inside VmcOptimize
   size_t end_flop = flop;
   double elapsed_time = vmc_timer.Elapsed();
   double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "flop = " << end_flop - start_flop << std::endl;
   std::cout << "Gflops = " << Gflops << std::endl;
-  SplitIndexTPS<TenElemT, QNT> result_sitps = executor->GetState();
+  SplitIndexTPS<TenElemT, QNT> result_sitps = executor_ptr->GetState();
   init_tps.NormalizeAllSite();
   result_sitps.NormalizeAllSite();
   auto diff = init_tps + (-result_sitps);
   EXPECT_NE(diff.NormSquare(), 1e-14);
-  delete executor;
+  // unique_ptr auto cleanup
 }
 
 TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   MPI_Barrier(comm);
 
   SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
-  tps.Load(tps_path);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    tps.Load(tps_path);
+  }
+  qlpeps::MPI_Bcast(tps, comm);
 
   //VMC
-  auto executor =
-      new VMCPEPSOptimizer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(vmc_peps_para,
-                                                                                                       tps,
-                                                                                                       comm,
-                                                                                                       SquareSpinOneHalfXXZModel());
+  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
+      vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModel());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 
-  executor->Execute();
+  // already executed inside VmcOptimize
 
   size_t end_flop = flop;
   double elapsed_time = vmc_timer.PrintElapsed();
   double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "Gflops = " << Gflops / elapsed_time << std::endl;
 
-  tps = executor->GetState();
-  delete executor;
+  tps = executor_ptr->GetState();
+  // unique_ptr auto cleanup
 
   //Measure
-  auto measure_exe =
-      new MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
-          tps,
-          measure_para,
-          comm);
+  auto measure_exe_ptr = MonteCarloMeasure<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
+      tps, measure_para, comm, SquareSpinOneHalfXXZModel());
   start_flop = flop;
 
-  measure_exe->Execute();
+  // already executed inside MonteCarloMeasure
 
   end_flop = flop;
   elapsed_time = vmc_timer.PrintElapsed();
   Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "Gflops = " << Gflops / elapsed_time << std::endl;
 
-  auto [energy, en_err] = measure_exe->OutputEnergy();
+  auto [energy, en_err] = measure_exe_ptr->OutputEnergy();
   EXPECT_NEAR(std::real(energy), energy_ed, 0.001);
 }
 

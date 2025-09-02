@@ -274,6 +274,51 @@ TEST_F(SplitIndexTPSMPITest, TestDifferentCommunicators) {
 }
 
 /**
+ * Test ANY_SOURCE receive semantics for SplitIndexTPS::MPI_Recv
+ * Master rank (0) receives from ANY_SOURCE with a fixed tag; senders are ranks 1 and 2.
+ */
+TEST_F(SplitIndexTPSMPITest, TestMPISendRecvAnySource) {
+  if (size_ < 3) {
+    GTEST_SKIP() << "This test requires at least 3 MPI processes";
+  }
+
+  const int master_rank = 0;
+  const int tag = 77;
+
+  if (rank_ == master_rank) {
+    // Receive twice from ANY_SOURCE
+    DSITPS recv_a, recv_b;
+    MPI_Status st_a{}, st_b{};
+
+    st_a = qlpeps::MPI_Recv(recv_a, MPI_ANY_SOURCE, MPI_COMM_WORLD, tag);
+    st_b = qlpeps::MPI_Recv(recv_b, MPI_ANY_SOURCE, MPI_COMM_WORLD, tag);
+
+    // Basic validation of payload
+    EXPECT_EQ(recv_a.rows(), Ly);
+    EXPECT_EQ(recv_a.cols(), Lx);
+    EXPECT_EQ(recv_a.PhysicalDim(), 2);
+    EXPECT_EQ(recv_b.rows(), Ly);
+    EXPECT_EQ(recv_b.cols(), Lx);
+    EXPECT_EQ(recv_b.PhysicalDim(), 2);
+
+    // Sources should be 1 and 2 in any order
+    std::set<int> srcs{st_a.MPI_SOURCE, st_b.MPI_SOURCE};
+    EXPECT_EQ(srcs.size(), 2u);
+    EXPECT_TRUE(srcs.count(1) == 1);
+    EXPECT_TRUE(srcs.count(2) == 1);
+    EXPECT_EQ(st_a.MPI_TAG, tag);
+    EXPECT_EQ(st_b.MPI_TAG, tag);
+  } else if (rank_ == 1 || rank_ == 2) {
+    // Sender ranks construct and send
+    DTPS tps = CreateRandTestTPS();
+    DSITPS sitps(tps);
+    qlpeps::MPI_Send(sitps, master_rank, MPI_COMM_WORLD, tag);
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
+/**
  * Test error handling and edge cases
  */
 TEST_F(SplitIndexTPSMPITest, TestEdgeCases) {
