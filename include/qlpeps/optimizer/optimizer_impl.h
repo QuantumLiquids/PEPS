@@ -480,15 +480,16 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       }
       else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
         // Stochastic Reconfiguration variants
-        auto [new_state, ng_norm, sr_iters] = StochasticReconfigurationUpdate(
+        // Fix Intel icpx compiler crash: avoid structured binding in lambda
+        auto sr_result = StochasticReconfigurationUpdate(
             current_state, current_gradient,
             Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
             Ostar_mean ? *Ostar_mean : SITPST{},
             learning_rate, sr_init_guess, algo_params.normalize_update);
-        updated_state = new_state;
-        sr_iterations = sr_iters;
-        sr_natural_grad_norm = ng_norm;
-        sr_init_guess = new_state; // Use as initial guess for next iteration
+        updated_state = std::get<0>(sr_result);
+        sr_natural_grad_norm = std::get<1>(sr_result);
+        sr_iterations = std::get<2>(sr_result);
+        sr_init_guess = std::get<0>(sr_result); // Use as initial guess for next iteration
       }
       else if constexpr (std::is_same_v<T, AdaGradParams>) {
         updated_state = AdaGradUpdate(current_state, preprocessed_gradient, learning_rate);
