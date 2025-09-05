@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
+#include "qlpeps/api/conversions.h"
 #include "qlten/framework/hp_numeric/mpi_fun.h"
 #include <filesystem>
 #include <mpi.h>
@@ -100,7 +101,7 @@ protected:
         tps({row, col}).Random(qn0);
       }
     }
-    return CSITPS(tps);
+    return ToSplitIndexTPS<QLTEN_Complex, U1QN>(tps);
   }
 
   int rank_, size_;
@@ -120,7 +121,7 @@ TEST_F(SplitIndexTPSMPITest, TestMPIBroadcastDouble) {
   // Master rank creates the original data
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     DTPS master_tps = CreateRandTestTPS();
-    master_sitps = DSITPS(master_tps);
+    master_sitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(master_tps);
   }
   
   // Broadcast using the SplitIndexTPS BroadCast function
@@ -202,7 +203,7 @@ TEST_F(SplitIndexTPSMPITest, TestMPISendRecv) {
   if (rank_ == sender_rank) {
     // Sender creates and sends data
     DTPS original_tps = CreateRandTestTPS();
-    original_sitps = DSITPS(original_tps);
+    original_sitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(original_tps);
     
     // Send to receiver
     qlpeps::MPI_Send(original_sitps, receiver_rank, MPI_COMM_WORLD, 42);
@@ -256,7 +257,7 @@ TEST_F(SplitIndexTPSMPITest, TestDifferentCommunicators) {
     
     if (sub_rank == 0) {
       DTPS test_tps = CreateRandTestTPS();
-      test_sitps = DSITPS(test_tps);
+      test_sitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(test_tps);
     }
     
     // Broadcast within sub-communicator
@@ -311,7 +312,7 @@ TEST_F(SplitIndexTPSMPITest, TestMPISendRecvAnySource) {
   } else if (rank_ == 1 || rank_ == 2) {
     // Sender ranks construct and send
     DTPS tps = CreateRandTestTPS();
-    DSITPS sitps(tps);
+    DSITPS sitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(tps);
     qlpeps::MPI_Send(sitps, master_rank, MPI_COMM_WORLD, tag);
   }
 
@@ -347,7 +348,7 @@ TEST_F(SplitIndexTPSMPITest, TestGroupIndicesConsistency) {
   
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     original_tps = CreateRandTestTPS();
-    sitps = DSITPS(original_tps);
+    sitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(original_tps);
   }
   
   // Broadcast SplitIndexTPS

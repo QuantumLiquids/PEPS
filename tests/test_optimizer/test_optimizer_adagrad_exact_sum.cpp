@@ -530,7 +530,7 @@ struct TrivialTransverseIsingTools : public MPITest {
 TEST_F(TrivialTransverseIsingTools, ExactSumGradientOptWithVMCOptimizer) {
   auto trun_para =
       BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
-  using Model = TransverseIsingSquare;
+  using Model = TransverseFieldIsingSquare;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;

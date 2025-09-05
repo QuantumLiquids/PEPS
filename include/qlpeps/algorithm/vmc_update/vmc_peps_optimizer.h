@@ -79,7 +79,8 @@ class VMCPEPSOptimizer : public qlten::Executor {
   VMCPEPSOptimizer(const VMCPEPSOptimizerParams &params,
                            const SITPST &sitpst_init,
                            const MPI_Comm &comm,
-                           const EnergySolver &solver);
+                           const EnergySolver &solver,
+                           MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater());
 
   /**
    * @brief Static factory function to create optimizer executor by loading TPS from file path.
@@ -104,7 +105,8 @@ class VMCPEPSOptimizer : public qlten::Executor {
   CreateByLoadingTPS(const VMCPEPSOptimizerParams& params,
                      const std::string& tps_path,
                      const MPI_Comm& comm,
-                     const EnergySolver& solver);
+                     const EnergySolver& solver,
+                     MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater());
 
   // Main execution method
   void Execute(void) override;

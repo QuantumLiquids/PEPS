@@ -8,10 +8,20 @@
 - **Parallelization:** MPI
 - **Tensor&MPS:** [QuantumLiquids/TensorToolkit](https://github.com/QuantumLiquids/TensorToolkit); [QuantumLiquids/UltraDMRG](https://github.com/QuantumLiquids/UltraDMRG)
 
+### 编译器支持与最低版本
+为避免已知的 lambda + 结构化绑定在旧编译器中的问题，推荐使用下列及以上版本：
+
+| 编译器 |  推荐版本 |
+| --- | --- |
+| GCC | 11.0+ |
+| Clang/LLVM |  15.0+ |
+| Intel oneAPI icpx | 2024.0+（LLVM 17 基线） |
+
+
 ## 创建项目
-臃肿的C++是这样的，当你开始一个项目的时候，需要从新建文件夹开始。比如我们叫它
+我们从新建文件夹开始。比如我们叫它
 ```bash
-mkdir TransverseIsingPEPS
+mkdir TransverseFieldIsingPEPS
 ```
 
 我们建议在项目的开始就配置好编译工具。我们也建议采用现代C++标准化的CMake构建编译系统而非Makefile。
@@ -68,13 +78,66 @@ mkdir src/
 ```
 
 ## 创建代码
-兄弟们等我在example给你们放个代码，然后你把代码拷贝过去。
-还得给你们一句一句解释。
 
-然后在CMakeList.txt file中放入
-```cmake
-add_executable(simple_update src/xxxx.cpp)
+### 从示例复制
+  本仓库已提供可直接运行的最小示例， 位于`examples/transverse_field_ising_simple_update.cpp`。在编译运行之前，我们先对代码做一些解读。
+  
+### 模型与算符（- ZZ - h X）
+- 我们使用的哈密顿量是：
+
+  \[ H = - \sum_{\langle i,j \rangle} Z_i Z_j - h \sum_i X_i \]
+
+  其中：\(X = \begin{pmatrix}0 & 1\\ 1 & 0\end{pmatrix},\; Z = \begin{pmatrix}1 & 0 \\ 0 & -1\end{pmatrix}\)
+
+NN两体算符和 on-site 算符是我们要传入给程序的
+### NN 两体哈密顿量张量的索引约定（重要）
+- 对于最近邻两体算符 \(Z_i Z_j\)，我们在张量里使用 4 条腿，索引顺序固定为：
+
+  \[ (\text{in}_1,\; \text{out}_1,\; \text{in}_2,\; \text{out}_2) \]
+其中，下角标1,2标记格点， in/out对应 |cat>/<bra|
+  图示约定（数字为索引序号）：
+
+  ```
+        1           3          // out_1, out_2
+        |           |
+        ^           ^
+        |----  H  ----|
+        ^           ^
+        |           |
+        0           2          // in_1, in_2
+  ```
+
+  在示例代码里，两个 on-site 算子（此处为 Z 与 Z）做外积即可得到该顺序：先是第一个算子的 (in,out)，再接第二个算子的 (in,out)：
+
+```53:55:/Users/wanghaoxin/GitHub/PEPS/examples/transverse_field_ising_simple_update.cpp
+    Tensor ham_zz;
+    Contract(&opZ, {}, &opZ, {}, &ham_zz); // outer product yields correct index order
+    ham_zz *= -1.0;
 ```
+
+### 使用 SU Executor（SquareLatticeNNSimpleUpdateExecutor）
+- 我们采用 `SquareLatticeNNSimpleUpdateExecutor` 来做 Simple Update：
+  - NN 两体项传入 `ham_nn = - Z ⊗ Z`（索引顺序如上）。
+  - on-site 项传入 `ham_onsite = - h * X`（rank-2）。
+  - 这会在内部对每条 NN 键构造 `exp(-τ H_bond)` 并做截断，完成一次扫。
+
+
+### 将可执行文件添加到你的 CMake（要点：源码里不需要包含 mpi.h，但编译需链接 MPI）
+- 如果你在自己的工程里使用该示例，最小化地添加一个目标并链接必要依赖（BLAS/LAPACK/OpenMP/MPI 与 hptt）：
+
+```cmake
+add_executable(transverse_field_ising_simple_update
+    ${CMAKE_SOURCE_DIR}/examples/transverse_field_ising_simple_update.cpp)
+
+target_link_libraries(transverse_field_ising_simple_update
+    ${hptt_LIBRARY}
+    BLAS::BLAS
+    LAPACK::LAPACK
+    OpenMP::OpenMP_CXX
+    MPI::MPI_CXX)  # 仅链接，源码无需包含 mpi.h
+```
+
+> 说明：qlten 内部使用 MPI，因此虽然示例源码没有 `#include <mpi.h>`，编译/链接阶段仍需要 `MPI::MPI_CXX`。
 ## 编译
 ```bash
 mkdir build/ && cd build && cmake ..
@@ -86,7 +149,7 @@ make
 
 ## 运行
 ```bash
-./simple_update
+./transverse_field_ising_simple_update
 ```
 
 

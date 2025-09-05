@@ -85,11 +85,11 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
                                           std::make_optional<size_t>(10)));
   VMCPEPSOptimizerParams vmc_params(opt_params, mc_params, peps_params);
 
-  TransverseIsingSquare model(/*h=*/0.0);
+  TransverseFieldIsingSquare model(/*h=*/0.0);
 
   auto opt = VmcOptimize<TenElemT, QNT,
                          MCUpdateSquareNNFullSpaceUpdate,
-                         TransverseIsingSquare>(
+                         TransverseFieldIsingSquare>(
       vmc_params, sitps, comm, model, MCUpdateSquareNNFullSpaceUpdate{});
 
   if (rank == hp_numeric::kMPIMasterRank) {
@@ -100,7 +100,7 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
 
   auto meas = MonteCarloMeasure<TenElemT, QNT,
                                 MCUpdateSquareNNFullSpaceUpdate,
-                                TransverseIsingSquare>(
+                                TransverseFieldIsingSquare>(
       opt->GetState(), MCMeasurementParams(mc_params, peps_params), comm, model, MCUpdateSquareNNFullSpaceUpdate{});
 
   auto [energy, en_err] = meas->OutputEnergy();

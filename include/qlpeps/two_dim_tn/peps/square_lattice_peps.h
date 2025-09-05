@@ -207,6 +207,7 @@ class SquareLatticePEPS {
 
   bool Load(const std::string path = kPepsPath);
 
+  [[deprecated("Use ToTPS(peps) in qlpeps::api::conversions instead")]]
   operator TPS<TenElemT, QNT>(void) const;
 
   TenMatrix<TenT> Gamma; // The rank-5 projection tensors;

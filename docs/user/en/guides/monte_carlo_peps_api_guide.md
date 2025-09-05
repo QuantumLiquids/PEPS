@@ -16,6 +16,7 @@ Both patterns maintain the same **unified parameter structure** and **clear init
 
 ```cpp
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/api/conversions.h" // explicit conversions PEPS/TPS/SITPS
 
 // User creates or loads TPS explicitly
 SplitIndexTPS<TenElemT, QNT> user_tps(ly, lx);

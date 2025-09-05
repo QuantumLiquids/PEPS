@@ -12,9 +12,13 @@ API 提供两种清晰的构造模式：
 测量：
 ```cpp
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/api/conversions.h" // 显式转换 PEPS/TPS/SITPS
 
 SplitIndexTPS<TenElemT, QNT> user_tps(ly, lx);
 user_tps.Random();
+// 如果你持有 PEPS，可显式转换：
+// auto tps   = qlpeps::ToTPS<TenElemT, QNT>(peps);
+// user_tps   = qlpeps::ToSplitIndexTPS<TenElemT, QNT>(tps);
 
 Configuration user_config(ly, lx, OccupancyNum({num_up, num_down, num_empty}));
 

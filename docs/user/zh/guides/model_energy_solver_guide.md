@@ -180,10 +180,10 @@ psi_list
 #### 5. 横场伊辛模型
 **头文件**：`#include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h"`
 
-**类名**：`TransverseIsingSquare`
+**类名**：`TransverseFieldIsingSquare`
 
 **构造函数**：
-- `TransverseIsingSquare(double h)`
+- `TransverseFieldIsingSquare(double h)`
   - `h`：横向磁场强度，控制量子涨落与经典序参量的竞争
 
 **哈密顿量**：$$H = -\sum_{\langle i,j \rangle} \sigma^z_i \sigma^z_j - h \sum_i \sigma^x_i$$

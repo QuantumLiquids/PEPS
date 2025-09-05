@@ -112,6 +112,7 @@ VMCPEPSOptimizerParams params{
 
 ```cpp
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/api/conversions.h" // 显式转换 PEPS/TPS/SITPS
 
 using TenElemT = qlten::QLTEN_Complex;
 using QNT = qlten::QNZ2;
@@ -131,6 +132,10 @@ VMCPEPSOptimizerParams vmc_params{opt_params, mc_params, peps_params, "output"};
 EnergySolver energy_solver(ly, lx, J_coupling);
 
 // 4. 创建并执行
+// 如果从 PEPS 开始，建议显式转换
+// auto tps   = qlpeps::ToTPS<TenElemT, QNT>(peps_init);
+// auto sitps = qlpeps::ToSplitIndexTPS<TenElemT, QNT>(tps);
+
 VMCPEPSOptimizer<TenElemT, QNT, MonteCarloUpdater, EnergySolver> 
   executor(vmc_params, initial_tps, MPI_COMM_WORLD, energy_solver);
 

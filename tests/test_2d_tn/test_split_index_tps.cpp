@@ -11,6 +11,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps_impl.h"
+#include "qlpeps/api/conversions.h"
 #include "qlpeps/consts.h"
 #include <filesystem>
 
@@ -46,7 +47,7 @@ struct SplitIdxTPSData : public testing::Test {
 
   void SetUp() override {
     dtps = CreateRandTestTPS();
-    dsitps = SplitIndexTPS(dtps);
+    dsitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(dtps);
   }
 
   void TearDown() override {

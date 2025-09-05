@@ -15,6 +15,7 @@
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/api/vmc_api.h"
+#include "qlpeps/api/conversions.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
 
@@ -102,14 +103,14 @@ TEST_F(HeisenbergSystem, SimpleUpdate) {
     su_exe->ResetStepLenth(0.001);
     su_exe->Execute();
 
-    auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+    auto tps = ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
 //  std::string peps_path = "Hei_PEPS" + std::to_string(Ly) + "x"
 //      + std::to_string(Lx) + "D" + std::to_string(su_exe->update_para.Dmax);
 //  su_exe->DumpResult(peps_path, true);
     for (auto &ten : tps) {
       ten *= (1.0 / ten.GetMaxAbs());
     }
-    SplitIndexTPS<TenElemT, QNT> sitps = tps;
+    auto sitps = ToSplitIndexTPS<TenElemT, QNT>(tps);
     sitps.Dump(tps_path);
     delete su_exe;
   }

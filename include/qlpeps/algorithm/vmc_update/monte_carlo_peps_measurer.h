@@ -165,7 +165,8 @@ class MCPEPSMeasurer : public qlten::Executor {
   MCPEPSMeasurer(const SITPST &sitps,
                                 const MCMeasurementParams &measurement_params,
                                 const MPI_Comm &comm,
-                                const MeasurementSolver &solver = MeasurementSolver());
+                                const MeasurementSolver &solver = MeasurementSolver(),
+                                MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater());
 
   /**
    * @brief Static factory function to create measurement executor by loading TPS from file path.
@@ -191,7 +192,8 @@ class MCPEPSMeasurer : public qlten::Executor {
   CreateByLoadingTPS(const std::string& tps_path,
                      const MCMeasurementParams& measurement_params,
                      const MPI_Comm& comm,
-                     const MeasurementSolver& solver = MeasurementSolver());
+                     const MeasurementSolver& solver = MeasurementSolver(),
+                     MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater());
 
   void Execute(void) override;
 

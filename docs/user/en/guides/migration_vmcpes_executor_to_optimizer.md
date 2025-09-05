@@ -106,6 +106,7 @@ VMCPEPSExecutor<TenElemT, QNT, MCUpdater, Model> executor(
 #### After (VMCPEPSOptimizer):
 ```cpp
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/api/conversions.h" // explicit conversions PEPS/TPS/SITPS
 
 // Step 1: Create Configuration object (replaces occupancy array + ly/lx)
 Configuration initial_config(4, 4, OccupancyNum({1, 1, 2})); // ly, lx, occupancy
@@ -133,6 +134,9 @@ opt_params.cg_params = ConjugateGradientParams();
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "./"); // tps_dump_path
 
 // Step 4: Create executor (same TPS, just new parameters)
+// If starting from a PEPS, convert explicitly:
+// auto tps   = qlpeps::ToTPS<TenElemT, QNT>(peps_init);
+// auto sitps = qlpeps::ToSplitIndexTPS<TenElemT, QNT>(tps);
 VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
     params, tps_init, comm, model);
 ```

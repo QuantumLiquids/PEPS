@@ -60,6 +60,38 @@ struct BMPSTruncatePara {
                    std::optional<size_t> iter_max)
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme),
         convergence_tol(convergence_tol), iter_max(iter_max) {}
+
+  // Convenience constructor for SVD compression (variational parameters unused)
+  BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
+                   std::enable_if_t<true, CompressMPSScheme> compress_scheme)
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error),
+        compress_scheme(compress_scheme), convergence_tol(std::nullopt), iter_max(std::nullopt) {}
+
+  // Static factories to avoid misuse and clarify intent
+  // SVD compression: only D_min, D_max, trunc_err are relevant
+  static BMPSTruncatePara SVD(size_t d_min, size_t d_max, double trunc_error) {
+    return BMPSTruncatePara(d_min, d_max, trunc_error,
+                            CompressMPSScheme::SVD_COMPRESS,
+                            std::nullopt, std::nullopt);
+  }
+
+  // Two-site variational compression: require convergence_tol and iter_max
+  static BMPSTruncatePara Variational2Site(size_t d_min, size_t d_max, double trunc_error,
+                                           double convergence_tol, size_t iter_max) {
+    return BMPSTruncatePara(d_min, d_max, trunc_error,
+                            CompressMPSScheme::VARIATION2Site,
+                            std::make_optional<double>(convergence_tol),
+                            std::make_optional<size_t>(iter_max));
+  }
+
+  // One-site variational compression: require convergence_tol and iter_max
+  static BMPSTruncatePara Variational1Site(size_t d_min, size_t d_max, double trunc_error,
+                                           double convergence_tol, size_t iter_max) {
+    return BMPSTruncatePara(d_min, d_max, trunc_error,
+                            CompressMPSScheme::VARIATION1Site,
+                            std::make_optional<double>(convergence_tol),
+                            std::make_optional<size_t>(iter_max));
+  }
 };
 
 /**

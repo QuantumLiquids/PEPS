@@ -71,15 +71,17 @@ class MonteCarloEngine {
   MonteCarloEngine(const SITPST &sitps,
                    const MonteCarloParams &monte_carlo_params,
                    const PEPSParams &peps_params,
-                   const MPI_Comm &comm)
+                   const MPI_Comm &comm,
+                   MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater())
       : split_index_tps_(sitps),
         lx_(sitps.cols()),
         ly_(sitps.rows()),
         tps_sample_(sitps.rows(), sitps.cols(), peps_params.truncate_para),
-        monte_carlo_params_(monte_carlo_params),
+        comm_(comm),
+        mc_sweep_updater_(std::move(mc_updater)),
         u_double_(0, 1),
-        warm_up_(monte_carlo_params.is_warmed_up),
-        comm_(comm) {
+        monte_carlo_params_(monte_carlo_params),
+        warm_up_(monte_carlo_params.is_warmed_up) {
     MPI_SetUp_();
     Initialize_();
   }

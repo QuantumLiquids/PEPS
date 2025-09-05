@@ -68,9 +68,9 @@ VmcOptimize(const VMCPEPSOptimizerParams &params,
             const SplitIndexTPS<TenElemT, QNT> &sitps,
             const MPI_Comm &comm,
             const EnergySolver &solver,
-            MonteCarloSweepUpdater /*mc_updater*/ = MonteCarloSweepUpdater{}) {
+            MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater{}) {
   using ExecT = VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>;
-  auto executor = std::make_unique<ExecT>(params, sitps, comm, solver);
+  auto executor = std::make_unique<ExecT>(params, sitps, comm, solver, std::move(mc_updater));
   executor->Execute();
   return executor;
 }
@@ -117,9 +117,9 @@ MonteCarloMeasure(const SplitIndexTPS<TenElemT, QNT> &sitps,
                   const MCMeasurementParams &measurement_params,
                   const MPI_Comm &comm,
                   const MeasurementSolver &solver = MeasurementSolver{},
-                  MonteCarloSweepUpdater /*mc_updater*/ = MonteCarloSweepUpdater{}) {
+                  MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater{}) {
   using MeasT = MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>;
-  auto measurer = std::make_unique<MeasT>(sitps, measurement_params, comm, solver);
+  auto measurer = std::make_unique<MeasT>(sitps, measurement_params, comm, solver, std::move(mc_updater));
   measurer->Execute();
   return measurer;
 }

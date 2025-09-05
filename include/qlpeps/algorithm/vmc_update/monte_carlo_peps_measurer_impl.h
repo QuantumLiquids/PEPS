@@ -18,11 +18,12 @@ MCPEPSMeasurer<TenElemT,
     const SITPST &sitpst,
     const MCMeasurementParams &measurement_params,
     const MPI_Comm &comm,
-    const MeasurementSolver &solver):
+    const MeasurementSolver &solver,
+    MonteCarloSweepUpdater mc_updater):
     qlten::Executor(),
     mc_measure_params(measurement_params),
     measurement_solver_(solver),
-    engine_(sitpst, measurement_params.mc_params, measurement_params.peps_params, comm) {
+    engine_(sitpst, measurement_params.mc_params, measurement_params.peps_params, comm, std::move(mc_updater)) {
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   qlpeps::MPISignalGuard::Register();
@@ -35,7 +36,8 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Create
     const std::string& tps_path,
     const MCMeasurementParams& measurement_params,
     const MPI_Comm& comm,
-    const MeasurementSolver& solver) {
+    const MeasurementSolver& solver,
+    MonteCarloSweepUpdater mc_updater) {
   
   // Load TPS from file path with proper error handling
   SITPST loaded_tps(measurement_params.mc_params.initial_config.rows(), 
@@ -46,7 +48,7 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Create
   
   // Create executor using the primary constructor with loaded TPS
   return std::make_unique<MCPEPSMeasurer>(
-      loaded_tps, measurement_params, comm, solver);
+      loaded_tps, measurement_params, comm, solver, std::move(mc_updater));
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>

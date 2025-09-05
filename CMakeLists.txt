@@ -25,6 +25,7 @@ endif ()
 
 option(QLPEPS_BUILD_UNITTEST "Build unittests for QuantumLiquids/PEPS." OFF)
 option(QLPEPS_BUILD_PROFILER "Build profiler test cases for QuantumLiquids/PEPS." OFF)
+option(QLPEPS_BUILD_EXAMPLES "Build examples for QuantumLiquids/PEPS." OFF)
 
 # Advanced options.
 option(QLPEPS_TIMING_MODE "Timing mode." OFF)
@@ -130,4 +131,9 @@ if (QLPEPS_BUILD_PROFILER)
     find_path(PROFILER_INCLUDE_DIR "gperftools")
     find_library(LIBPROFILER_LIBRARY "libprofiler.a")
     add_subdirectory(profiler profiler)
+endif ()
+
+# Build examples.
+if (QLPEPS_BUILD_EXAMPLES)
+    add_subdirectory(examples examples)
 endif ()

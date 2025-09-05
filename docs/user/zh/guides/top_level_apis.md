@@ -248,3 +248,24 @@ const auto &res = meas.GetMeasureResult(); // contains bond/one-/two-point funct
 - 对于费米子系统，依赖内置的宇称操作和 `CalGTenForFermionicTensors`；不要手动重新应用符号。
 - 设置 `wavefunction_path` 以便执行器能够一致地转储/加载 TPS 和配置。
 - 在 MPI 运行中，避免进程相关的文件路径，除非在文档中说明（每进程原始样本和配置）。
+
+### 状态转换（PEPS/TPS/SplitIndexTPS）
+
+推荐使用显式的自由函数，头文件：`qlpeps/api/conversions.h`。
+
+```cpp
+#include "qlpeps/api/conversions.h"
+using qlten::special_qn::U1QN;
+
+// PEPS -> TPS
+auto tps = qlpeps::ToTPS<double, U1QN>(peps);
+
+// TPS -> SplitIndexTPS
+auto sitps = qlpeps::ToSplitIndexTPS<double, U1QN>(tps);
+
+// 直接：PEPS -> SplitIndexTPS
+auto sitps2 = qlpeps::ToSplitIndexTPS<double, U1QN>(peps);
+```
+
+说明：
+- 旧接口 `SquareLatticePEPS::operator TPS()` 与 `SplitIndexTPS(const TPS&)` 仍保留但已标记为弃用，请优先使用上述显式 API。

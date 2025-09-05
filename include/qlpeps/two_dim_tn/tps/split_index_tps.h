@@ -154,6 +154,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @note The physical index is assumed to be at position 4 in the tensor.
    * @note For fermionic tensors, appropriate quantum number sectors are created.
    */
+  [[deprecated("Use ToSplitIndexTPS(tps) in qlpeps::api::conversions instead")]]
   SplitIndexTPS(const TPST &tps) : TenMatrix<std::vector<Tensor>>(tps.rows(), tps.cols()) {
     const size_t phy_idx = 4;
     for (size_t row = 0; row < tps.rows(); row++) {

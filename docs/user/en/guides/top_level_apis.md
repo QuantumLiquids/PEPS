@@ -250,3 +250,25 @@ const auto &res = meas.GetMeasureResult(); // contains bond/one-/two-point funct
 - In MPI runs, avoid rank-dependent file paths except where documented (per-rank raw samples and configurations).
 
 
+### State conversions (PEPS/TPS/SplitIndexTPS)
+
+Use explicit named free functions in `qlpeps/api/conversions.h`.
+
+```cpp
+#include "qlpeps/api/conversions.h"
+using qlten::special_qn::U1QN;
+
+// PEPS -> TPS
+auto tps = qlpeps::ToTPS<double, U1QN>(peps);
+
+// TPS -> SplitIndexTPS
+auto sitps = qlpeps::ToSplitIndexTPS<double, U1QN>(tps);
+
+// PEPS -> SplitIndexTPS (direct)
+auto sitps2 = qlpeps::ToSplitIndexTPS<double, U1QN>(peps);
+```
+
+Notes:
+- Legacy interfaces `SquareLatticePEPS::operator TPS()` and `SplitIndexTPS(const TPS&)` are kept but marked deprecated. Prefer the explicit APIs above.
+
+

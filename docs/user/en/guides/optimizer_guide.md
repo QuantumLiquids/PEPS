@@ -305,6 +305,7 @@ Notes:
 
 ```cpp
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
+#include "qlpeps/api/conversions.h"  // explicit PEPS/TPS/SITPS conversions
 
 // Complete VMCPEPS optimization parameters
 VMCPEPSOptimizerParams vmc_params{
@@ -315,8 +316,12 @@ VMCPEPSOptimizerParams vmc_params{
 };
 
 // Create and execute optimizer
+// Example of explicit conversions if starting from a PEPS
+auto tps      = qlpeps::ToTPS<ComplexDouble, QNZ2>(peps_initial);
+auto sitps    = qlpeps::ToSplitIndexTPS<ComplexDouble, QNZ2>(tps);
+
 VMCPEPSOptimizer<ComplexDouble, QNZ2> executor(
-  vmc_params, initial_tps, comm, energy_solver
+  vmc_params, sitps, comm, energy_solver
 );
 executor.Execute();
 ```

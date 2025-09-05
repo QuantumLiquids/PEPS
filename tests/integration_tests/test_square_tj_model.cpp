@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/api/conversions.h"
 #include "integration_test_framework.h"
 #include "../test_mpi_env.h"
 
@@ -100,8 +101,8 @@ TEST_F(SquaretJModelSystem, SimpleUpdate) {
     peps0.Initial(activates);
     
     // Save initial TPS for now (Hamiltonian setup would be needed for full simple update)
-    auto tps = TPS<TenElemT, QNT>(peps0);
-    SplitIndexTPS<TenElemT, QNT> sitps = tps;
+    auto tps = ToTPS<TenElemT, QNT>(peps0);
+    auto sitps = ToSplitIndexTPS<TenElemT, QNT>(tps);
     sitps.Dump(tps_path);
   }
 }

@@ -556,9 +556,9 @@ TEST_F(TrivialTransverseIsingTest, LowestState) {
                                    std::optional<double>(), std::optional<size_t>());
   
   auto energy_gs_exact = Calculate2x2OBCTransverseIsingEnergy(J, h);  // Exact analytical calculation
-  TransverseIsingSquare model(h);
+  TransverseFieldIsingSquare model(h);
   
-  bool success = RunExactSummationTest<TransverseIsingSquare, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
+  bool success = RunExactSummationTest<TransverseFieldIsingSquare, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
       model,
       split_index_tps_lowest,
       all_configs,
@@ -580,9 +580,9 @@ TEST_F(TrivialTransverseIsingTest, SimpleUpdateState) {
   
   // Actual computed value from single process run using Simple Update TPS data
   double energy_simple_update_expect = -5.19991995228;  // computed from simple_update TPS
-  TransverseIsingSquare model(h);
+  TransverseFieldIsingSquare model(h);
   
-  bool success = RunExactSummationTest<TransverseIsingSquare, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
+  bool success = RunExactSummationTest<TransverseFieldIsingSquare, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
       model,
       split_index_tps_simple_update,
       all_configs,

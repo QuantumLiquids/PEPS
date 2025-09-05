@@ -15,6 +15,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 #include "qlpeps/qlpeps.h"
+#include "qlpeps/api/conversions.h"
 #include "../test_mpi_env.h"
 
 using namespace qlten;
@@ -154,8 +155,8 @@ TEST_F(Z2SpinlessFreeFermionSystem, SimpleUpdate) {
     su_exe->ResetStepLenth(0.001);
     su_exe->Execute();
     auto peps = su_exe->GetPEPS();
-    auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
-    SplitIndexTPS<TenElemT, QNT> sitps = tps;
+    auto tps = ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
+    auto sitps = ToSplitIndexTPS<TenElemT, QNT>(tps);
     sitps.Dump(tps_path);
     delete su_exe;
   }

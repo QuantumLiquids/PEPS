@@ -265,7 +265,7 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   //measure the energy
   auto tps = TPS<TenElemT, U1QN>(peps4);
   auto sitps = SplitIndexTPS<TenElemT, U1QN>(tps);
-  using Model = TransverseIsingSquare;
+  using Model = TransverseFieldIsingSquare;
   using MCUpdateSquareNNFullSpaceUpdateT = MCUpdateSquareNNFullSpaceUpdate;
   size_t mc_samples = 1000;
   size_t mc_warmup = 100;

@@ -33,9 +33,10 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOp
     const VMCPEPSOptimizerParams &params,
     const SITPST &sitpst_init,
     const MPI_Comm &comm,
-    const EnergySolver &solver)
+    const EnergySolver &solver,
+    MonteCarloSweepUpdater mc_updater)
     : qlten::Executor(),
-      monte_carlo_engine_(sitpst_init, params.mc_params, params.peps_params, comm),
+      monte_carlo_engine_(sitpst_init, params.mc_params, params.peps_params, comm, std::move(mc_updater)),
       params_(params),
       energy_solver_(solver),
       optimizer_(params.optimizer_params, comm, monte_carlo_engine_.Rank(), monte_carlo_engine_.MpiSize()),
@@ -70,7 +71,8 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::CreateByL
     const VMCPEPSOptimizerParams &params,
     const std::string &tps_path,
     const MPI_Comm &comm,
-    const EnergySolver &solver) {
+    const EnergySolver &solver,
+    MonteCarloSweepUpdater mc_updater) {
 
   // Load TPS from file path with proper error handling
   SITPST loaded_tps(params.mc_params.initial_config.rows(), params.mc_params.initial_config.cols());
@@ -79,7 +81,7 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::CreateByL
   }
 
   // Create executor using the primary constructor with loaded TPS
-  return std::make_unique<VMCPEPSOptimizer>(params, loaded_tps, comm, solver);
+  return std::make_unique<VMCPEPSOptimizer>(params, loaded_tps, comm, solver, std::move(mc_updater));
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>

@@ -21,14 +21,14 @@ using namespace qlten;
  * sigma^z & sigma^x are Pauli matrix with matrix element 1.
  */
 
-class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
-                              public ModelMeasurementSolver<TransverseIsingSquare> {
+class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsingSquare>,
+                              public ModelMeasurementSolver<TransverseFieldIsingSquare> {
  public:
-  TransverseIsingSquare(void) = delete;
+  TransverseFieldIsingSquare(void) = delete;
 
-  TransverseIsingSquare(double h) : h_(h) {}
+  TransverseFieldIsingSquare(double h) : h_(h) {}
   using ModelEnergySolver::CalEnergyAndHoles;
-  using ModelMeasurementSolver<TransverseIsingSquare>::operator();
+  using ModelMeasurementSolver<TransverseFieldIsingSquare>::operator();
 
   template<typename TenElemT, typename QNT, bool calchols>
   TenElemT CalEnergyAndHolesImpl(
@@ -129,7 +129,7 @@ class TransverseIsingSquare : public ModelEnergySolver<TransverseIsingSquare>,
 };
 
 template<typename TenElemT, typename QNT, bool calchols>
-TenElemT TransverseIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+TenElemT TransverseFieldIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                             const qlpeps::Configuration &config,
                                                             TensorNetwork2D<TenElemT, QNT> &tn,
                                                             const qlpeps::BMPSTruncatePara &trunc_para,
@@ -167,7 +167,7 @@ TenElemT TransverseIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<
 }
 
 template<typename TenElemT, typename QNT>
-ObservablesLocal<TenElemT> TransverseIsingSquare::SampleMeasureImpl(const SplitIndexTPS<TenElemT,
+ObservablesLocal<TenElemT> TransverseFieldIsingSquare::SampleMeasureImpl(const SplitIndexTPS<TenElemT,
                                                                                         QNT> *split_index_tps,
                                                                     const qlpeps::Configuration &config,
                                                                     TensorNetwork2D<TenElemT, QNT> &tn,
