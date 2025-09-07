@@ -11,7 +11,7 @@
 当前随机数主要通过 `std::random_device` → `std::mt19937` 初始化，分布在：
 - `Configuration::Random(...)`（函数局部、每次重播种）
 - `MonteCarloSweepUpdaterBase`（成员 RNG）
-- `NonDBMCMCStateUpdate`（调用方注入）
+- `SuwaTodoStateUpdate`（调用方注入；旧名 `NonDBMCMCStateUpdate`）
 
 问题：
 - 不可复现：缺少统一播种入口；平台差异导致 `random_device` 非一致。

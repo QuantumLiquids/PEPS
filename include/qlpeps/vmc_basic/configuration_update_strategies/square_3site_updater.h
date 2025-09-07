@@ -10,7 +10,7 @@
 
 #include "qlpeps/vmc_basic/wave_function_component.h"    // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
+#include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"     // NonDBMCMCStateUpdate
 
 namespace qlpeps {
 
@@ -143,7 +143,7 @@ class MCUpdateSquareTNN3SiteExchange :
       weights[i] = std::norm(psis[i] / psi_abs_max);
     }
 
-    size_t final_state = NonDBMCMCStateUpdate(init_state, weights, random_engine_);
+    size_t final_state = SuwaTodoStateUpdate(init_state, weights, random_engine_);
     if (final_state == init_state) {
       return false;
     }

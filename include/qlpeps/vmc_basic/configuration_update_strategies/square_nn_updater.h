@@ -11,7 +11,7 @@
 
 #include "qlpeps/vmc_basic/wave_function_component.h"               // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"     // NonDBMCMCStateUpdate
+#include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"     // NonDBMCMCStateUpdate
 #include "monte_carlo_sweep_updater_all.h"                          // MonteCarloSweepUpdaterBase
 #include "qlpeps/vmc_basic/tj_single_site_state.h"
 
@@ -171,7 +171,7 @@ class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpda
     for (size_t i = 0; i < dim * dim; i++) {
       weights[i] = std::norm(alternative_psi[i] / tps_component.amplitude);
     }
-    size_t final_state = NonDBMCMCStateUpdate(init_config, weights, random_engine_);
+    size_t final_state = SuwaTodoStateUpdate(init_config, weights, random_engine_);
     if (final_state == init_config) {
       return false;
     }

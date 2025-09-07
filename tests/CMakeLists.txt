@@ -204,8 +204,8 @@ add_mpi_unittest(test_statistics_mpi
         "test_monte_carlo_tools/test_statistics_mpi.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
-add_unittest(test_non_detailed_balance_mcmc
-        "test_monte_carlo_tools/test_non_detailed_balance_mcmc.cpp"
+add_unittest(test_suwa_todo_update
+        "test_monte_carlo_tools/test_suwa_todo_update.cpp"
         "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 

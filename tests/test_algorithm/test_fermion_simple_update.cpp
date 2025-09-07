@@ -19,6 +19,7 @@
 #include "qlpeps/utility/filesystem_utils.h"
 // DEPRECATED: Loop update functionality removed from active testing
 // #include "qlpeps/algorithm/loop_update/loop_update.h"
+#include "qlpeps/api/conversions.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 
 using namespace qlten;
@@ -162,7 +163,7 @@ TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
     
     auto peps = su_exe->GetPEPS();
     auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
-    SplitIndexTPS<TenElemT, QNT> sitps = tps;
+    SplitIndexTPS<TenElemT, QNT> sitps = SplitPhyIndex(tps);
     sitps.Dump(tps_path);
 
     double exact_gs_energy = CalGroundStateEnergyForSpinlessNNFreeFermionOBC(Lx, Ly, ele_num);

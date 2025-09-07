@@ -79,5 +79,6 @@ namespace qlpeps {
 
 #include "qlpeps/algorithm/algorithm_all.h"
 #include "qlpeps/api/vmc_api.h"
+#include "qlpeps/api/conversions.h"
 
 #endif //QLPEPS_QLPEPS_H

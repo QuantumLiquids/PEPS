@@ -130,7 +130,7 @@ class CachedMCUpdateSquareNNExchange : public MonteCarloSweepUpdaterBase<> {
       throw std::runtime_error("Current configuration not found in precomputed table.");
     }
     size_t init_idx = it_idx->second;
-    size_t final_idx = NonDBMCMCStateUpdate(init_idx, weights_, this->random_engine_);
+    size_t final_idx = SuwaTodoStateUpdate(init_idx, weights_, this->random_engine_);
     bool changed = (final_idx != init_idx);
     if (changed) {
       // Rebuild the wavefunction component at the chosen configuration (deep rebuild of TN/env)

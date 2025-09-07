@@ -15,7 +15,7 @@
   - 复现性：默认无；对象复制会复制 RNG 状态（可能导致流复制）。
 
 - 非详细平衡 MCMC 工具（调用方注入 RNG）
-  - 模板函数：`NonDBMCMCStateUpdate(..., RandGenerator &generator)`。
+  - 模板函数：`SuwaTodoStateUpdate(..., RandGenerator &generator)`（旧名 `NonDBMCMCStateUpdate` 已弃用）。
   - 特性：不自持 RNG；由调用方传入引擎，最易实现端到端可复现。
 
 - MonteCarloEngine（分布成员，无自有引擎）
@@ -36,7 +36,7 @@
 
 - Configuration::Random(...)：函数局部 RNG；每次重播种；不可复现。
 - MonteCarloSweepUpdaterBase：成员 RNG；构造播种；生命周期=对象；复制会复制状态。
-- NonDBMCMCStateUpdate：不自带 RNG；由调用方注入；最易复现。
+- SuwaTodoStateUpdate：不自带 RNG；由调用方注入；最易复现。
 - MonteCarloEngine：不自持引擎（依赖 Updater）；分布对象不产生熵。
 
 ### 最佳实践（保持兼容）

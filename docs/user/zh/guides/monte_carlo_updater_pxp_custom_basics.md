@@ -15,8 +15,8 @@ PXP 约束：两相邻站点不允许同时处于激发态（记作 1）。即�
 
 ## 接口与工具
 
-- 非详细平衡多候选选择：`NonDBMCMCStateUpdate(init_state, weights, rng)`
-  - 头文件：`qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h`
+- 非详细平衡多候选选择：`SuwaTodoStateUpdate(init_state, weights, rng)`
+  - 头文件：`qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h`
   - 约束：候选顺序在整个模拟中固定，且不依赖 init_state；否则违反 balance condition。
 
 ## 函数签名与 CRTP 集成
@@ -40,7 +40,7 @@ bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1,
 
 - 固定候选顺序（例如词典序），且在整个模拟期间不变；不依赖当前 `init_state`。
 - 非法候选可直接置零或不加入候选表；推荐置零以保持候选长度恒定，便于验证顺序不变。
-- 使用 `NonDBMCMCStateUpdate` 时，严格遵守其头文件中的顺序约束，避免引入隐蔽偏差。
+- 使用 `SuwaTodoStateUpdate` 时，严格遵守其头文件中的顺序约束，避免引入隐蔽偏差。
 
 ## 完整示例：MCUpdateSquareNNFullSpacePXP（可直接作为自定义更新器）
 
@@ -48,7 +48,7 @@ bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1,
 
 ```cpp
 #include "qlpeps/vmc_basic/configuration_update_strategies/square_nn_updater.h"   // MCUpdateSquareNNUpdateBase
-#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"         // NonDBMCMCStateUpdate
+#include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"         // SuwaTodoStateUpdate
 
 namespace qlpeps {
 
@@ -92,7 +92,7 @@ class MCUpdateSquareNNFullSpacePXP : public MCUpdateSquareNNUpdateBase<MCUpdateS
       weights[i] = r * r;
     }
 
-    const size_t final_state = NonDBMCMCStateUpdate(init_config, weights, random_engine_);
+    const size_t final_state = SuwaTodoStateUpdate(init_config, weights, random_engine_);
     if (final_state == init_config) return false;
 
     tps_component.UpdateLocal(sitps, alternative_psi[final_state],
@@ -123,12 +123,12 @@ executor.Execute();
 三站点（TNN）或 cluster/loop 更新可采用同样的思路：
 - 先枚举固定顺序的候选置换或子空间；
 - 对不合法（违反 PXP 或其它硬约束）的候选置零权重；
-- 调用 `NonDBMCMCStateUpdate` 完成无偏选择；
+- 调用 `SuwaTodoStateUpdate` 完成无偏选择；
 - 最后用 `UpdateLocal` 完成一次原子更新。
 
 ## 参考
 
 - 非详细平衡选择核：PRL 105, 120603 (2010)
-- 接口：`qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h`
+- 接口：`qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h`
 
 

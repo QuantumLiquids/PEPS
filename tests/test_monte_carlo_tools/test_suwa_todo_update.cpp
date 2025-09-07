@@ -2,7 +2,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-01-15
 *
-* Description: QuantumLiquids/PEPS project. Unittests for Non-detailed balance Markov-chain Monte-Carlo.
+* Description: QuantumLiquids/PEPS project. Unittests for Suwa–Todo (non-detailed balance) Markov-chain Monte-Carlo.
 *
 * A strict and sensitive test may need by manually tuning the sampling steps and thermalization steps.
 * 
@@ -19,21 +19,21 @@
 #include <gtest/gtest.h>
 #include <random>
 #include "qlten/utility/timer.h"                                  //Timer
-#include "qlpeps/vmc_basic/monte_carlo_tools/non_detailed_balance_mcmc.h"
+#include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"                  //Mean
 
 using qlten::Timer;
 using namespace qlpeps;
 
 // Fast test focused on algorithmic correctness
-TEST(NonDBMCMCTest, BasicFunctionality) {
+TEST(SuwaTodoUpdateTest, BasicFunctionality) {
   std::random_device rd;
   std::mt19937 gen(rd());
 
   // Test 1: Single state should always stay
   {
     std::vector<double> weights = {1.0};
-    size_t result = NonDBMCMCStateUpdate(0, weights, gen);
+    size_t result = SuwaTodoStateUpdate(0, weights, gen);
     EXPECT_EQ(result, 0);
   }
 
@@ -41,7 +41,7 @@ TEST(NonDBMCMCTest, BasicFunctionality) {
   {
     std::vector<double> weights = {1.0, 0.0, 1.0};
     for (int i = 0; i < 100; ++i) {
-      size_t result = NonDBMCMCStateUpdate(0, weights, gen);
+      size_t result = SuwaTodoStateUpdate(0, weights, gen);
       EXPECT_NE(result, 1); // State 1 has zero weight
     }
   }
@@ -50,13 +50,13 @@ TEST(NonDBMCMCTest, BasicFunctionality) {
   {
     std::vector<double> weights = {0.0, 1.0, 0.0};
     for (int i = 0; i < 100; ++i) {
-      size_t result = NonDBMCMCStateUpdate(1, weights, gen);
+      size_t result = SuwaTodoStateUpdate(1, weights, gen);
       EXPECT_EQ(result, 1);
     }
   }
 }
 
-void TestSingleModeNonDBMarkovChainDistribution(
+void TestSingleModeSuwaTodoMarkovChainDistribution(
   const std::vector<double> &weights,
   const size_t num_iterations,
   const size_t init_state = 0
@@ -70,7 +70,7 @@ void TestSingleModeNonDBMarkovChainDistribution(
   // Generate the Markov chain and count the occurrences of each state
   size_t state = init_state;
   for (int i = 0; i < num_iterations; ++i) {
-    state = qlpeps::NonDBMCMCStateUpdate(state, weights, gen);
+    state = qlpeps::SuwaTodoStateUpdate(state, weights, gen);
     state_counts[state]++;
   }
 
@@ -94,11 +94,11 @@ void TestSingleModeNonDBMarkovChainDistribution(
   }
 }
 
-TEST(NonDBMCMCTest, SingleModeMarkovChainDistribution) {
+TEST(SuwaTodoUpdateTest, SingleModeMarkovChainDistribution) {
   // Reduce samples for faster unit testing
-  TestSingleModeNonDBMarkovChainDistribution({1, 0.5, 0.3, 0.01, 0.06, 2}, 5e5);
-  TestSingleModeNonDBMarkovChainDistribution({1, 0.3, 1e-30}, 5e5, 0);
-  TestSingleModeNonDBMarkovChainDistribution({9.6, 9.6, 1}, 5e5, 1);
+  TestSingleModeSuwaTodoMarkovChainDistribution({1, 0.5, 0.3, 0.01, 0.06, 2}, 5e5);
+  TestSingleModeSuwaTodoMarkovChainDistribution({1, 0.3, 1e-30}, 5e5, 0);
+  TestSingleModeSuwaTodoMarkovChainDistribution({9.6, 9.6, 1}, 5e5, 1);
 }
 
 ///< Potts Model Monte Carlo Simulation Class
@@ -134,7 +134,7 @@ class PottsModel {
           weights[j] = std::exp(-GetLocalE_(i) / temperature_);
         }
 
-        spins_[i] = NonDBMCMCStateUpdate(spin, weights, gen);
+        spins_[i] = SuwaTodoStateUpdate(spin, weights, gen);
       }
     }
     void MonteCarloSample() {
@@ -487,8 +487,8 @@ class ConservedPottsModel {
         weights[i] = std::exp(-E / temperature_);
       }
 
-      // Call NonDBMCMCStateUpdate to select the final state
-      size_t final_state = NonDBMCMCStateUpdate(init_state, weights, gen);
+      // Call SuwaTodoStateUpdate to select the final state
+      size_t final_state = SuwaTodoStateUpdate(init_state, weights, gen);
 
       // set spins_, even if final_state = init_state
       spins_[site1] = permutations[final_state][0];
@@ -917,8 +917,8 @@ class ConservedIsingModel {
       spins_[site2] = spins_[site3];
       spins_[site3] = temp; //back to original
 
-      // Choose the final state using NonDBMCMCStateUpdate
-      size_t final_state = NonDBMCMCStateUpdate(init_state, weights, gen);
+      // Choose the final state using SuwaTodoStateUpdate
+      size_t final_state = SuwaTodoStateUpdate(init_state, weights, gen);
       //    size_t final_state = DBMCMCStateUpdate(0, weights,gen);
       if (int(spins_[site1]) + int(spins_[site2]) + int(spins_[site3]) == 1) {
         //1 true, 2 false
@@ -1042,3 +1042,6 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+
+
