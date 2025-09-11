@@ -40,6 +40,18 @@ namespace qlpeps {
  * Non-responsibilities:
  * - Does not own model/Hamiltonian logic (delegates to EnergySolver).
  * - Does not manage optimizer logic or parameter updates.
+ *
+ * Numeric stability and normalization policy:
+ * - Evaluate() DOES NOT normalize the wavefunction/state. Plain gradients are not
+ *   scale-invariant, therefore implicit normalization would rescale gradients and
+ *   can interfere with optimizers (e.g., LBFGS, line-search methods).
+ * - Users should provide a well-scaled wavefunction. In our VMC flow,
+ *   MonteCarloEngine normalizes during initialization and after WarmUp() so that
+ *   the amplitude stays O(1). If you use this evaluator independently, adopt a
+ *   similar safeguard: perform amplitude sanity checks and, if necessary, apply
+ *   a global rescaling outside Evaluate().
+ * - As a light-weight guard, Evaluate() emits a warning when |amplitude| lies
+ *   outside [sqrt(min_double), sqrt(max_double)], following TPS policy.
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
 class MCEnergyGradEvaluator {
@@ -89,7 +101,7 @@ class MCEnergyGradEvaluator {
    *
    * Semantics:
    * - Master rank assigns state (if different), broadcasts to all ranks.
-   * - Engine rebuilds wavefunction component and normalizes to O(1) amplitude.
+   * - Engine rebuilds the wavefunction component; no normalization is performed here.
    * - Performs MC sampling for engine.MCParams().num_samples samples.
    * - Reduces energy and gradient across MPI; returns Result.
    *
@@ -132,9 +144,14 @@ class MCEnergyGradEvaluator {
     // Broadcast the updated state to all ranks
     MPI_Bcast(engine_.State(), engine_.Comm());
 
-    // Update wavefunction component and normalize amplitude globally
-    engine_.UpdateWavefunctionComponent();
-    engine_.NormalizeStateOrder1();
+    // Refresh wavefunction component. Do NOT normalize here to avoid rescaling gradients.
+    engine_.RefreshWavefunctionComponent();
+    // Sanity-check wavefunction amplitude magnitude following TPS component policy
+    if (!engine_.WavefuncComp().IsAmplitudeSquareLegal()) {
+      std::cout << "Warning (rank " << engine_.Rank() << "): wavefunction amplitude magnitude "
+                << std::scientific << std::abs(engine_.WavefuncComp().GetAmplitude())
+                << " is outside sqrt(numeric_limits) bounds." << std::endl;
+    }
 
     // Local accumulators
     const size_t ly = engine_.Ly();
@@ -167,6 +184,8 @@ class MCEnergyGradEvaluator {
 
     // Monte Carlo sampling loop
     std::vector<double> accept_rates_accum;
+    // Reuse holes buffer across samples to avoid per-iteration allocation
+    TensorNetwork2D<TenElemT, QNT> holes(ly, lx);
     for (size_t sweep = 0; sweep < sample_num; sweep++) {
       std::vector<double> accept_rates = engine_.StepSweep();
       if (sweep == 0) {
@@ -177,8 +196,7 @@ class MCEnergyGradEvaluator {
         }
       }
 
-      // Compute local energy and holes
-      TensorNetwork2D<TenElemT, QNT> holes(ly, lx);
+      // Compute local energy and holes (holes is overwritten each sample)
       TenElemT local_energy = solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(&engine_.State(),
                                                                                        &engine_.WavefuncComp(),
                                                                                        holes);
@@ -188,7 +206,10 @@ class MCEnergyGradEvaluator {
 
       // Accumulate O* and E_loc^* O*
       // O* = d ln(psi*) / d theta*
-      SITPST Ostar_sample(ly, lx, engine_.State().PhysicalDim());
+      std::optional<SITPST> Ostar_sample_opt;
+      if (collect_sr_buffers_) {
+        Ostar_sample_opt.emplace(ly, lx, engine_.State().PhysicalDim());
+      }
       for (size_t row = 0; row < ly; row++) {
         for (size_t col = 0; col < lx; col++) {
           const size_t basis_index = engine_.WavefuncComp().GetConfiguration({row, col});
@@ -204,12 +225,12 @@ class MCEnergyGradEvaluator {
           ELocConj_Ostar_sum({row, col})[basis_index] += local_energy_conjugate * Ostar_tensor;
 
           if (collect_sr_buffers_) {
-            Ostar_sample({row, col})[basis_index] = Ostar_tensor;
+            (*Ostar_sample_opt)({row, col})[basis_index] = Ostar_tensor;
           }
         }
       }
       if (collect_sr_buffers_) {
-        Ostar_samples.emplace_back(Ostar_sample);
+        Ostar_samples.emplace_back(std::move(*Ostar_sample_opt));
       }
     }
 

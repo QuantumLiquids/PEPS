@@ -17,11 +17,19 @@
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/base/mpi_signal_guard.h"
+#include <complex>
 
 
 namespace qlpeps {
 
 
+
+// Conjugation helper that preserves the input domain type.
+// For real numbers, returns the value itself. For complex numbers, returns std::conj.
+template<typename T>
+inline T Conj(const T &v) { return v; }
+template<typename T>
+inline std::complex<T> Conj(const std::complex<T> &v) { return std::conj(v); }
 
 ///< Sum over element-wise product of two spin configurations
 template<typename ElemT>
@@ -31,7 +39,7 @@ ElemT SpinConfigurationOverlap(
 ) {
   ElemT overlap(0);
   for (size_t i = 0; i < sz1.size(); i++) {
-    overlap += sz1[i] * sz2[i];
+    overlap += Conj(sz1[i]) * sz2[i];
   }
   return overlap;
 }
@@ -47,23 +55,22 @@ std::vector<T> CalAutoCorrelation(
   for (size_t t = 0; t < res_len; t++) {
     T sum(0);
     for (size_t j = 0; j < data.size() - t; j++) {
-      sum += data[j] * data[j + t];
+      sum += Conj(data[j]) * data[j + t];
     }
-    res[t] = sum / double(data.size() - t) - mean * mean;
+    res[t] = sum / double(data.size() - t) - mean * Conj(mean);
   }
   return res;
 }
 
 /**
- * Calculate the spin auto-correlation from the local_sz_samples
- * The auto-correlation is defined as
+ * Calculate the site-averaged auto-correlation for a one-point observable (e.g., spin or charge)
+ * from per-sample configurations. The observable at site i and MC step t is denoted as O_i(t).
  *
- * 1/N Sum_i <S_i(t)*S_i(t+delta t)> - 1/N Sum_i <S_i>^2
+ * Definition (with per-site mean removal):
+ *   C(tau) = (1/N) * Sum_i [ < (O_i(t) - mu_i) * conj(O_i(t+tau) - mu_i) >_t ]
+ * where mu_i = < O_i(t) >_t is the time average at site i over the local samples.
  *
- * Where we define <S_i> = 0. As an example, S_i = \pm 0.5 (distinct with 0/1).
- * Note to use the consistent definition as the input.
- * @param local_sz_samples
- * @return
+ * This function makes no assumption such as <O_i> = 0.
  */
 template<typename ElemT>
 std::vector<ElemT> CalSpinAutoCorrelation(
@@ -72,13 +79,30 @@ std::vector<ElemT> CalSpinAutoCorrelation(
   const size_t sample_num = local_sz_samples.size();
   const size_t res_len = 20 > sample_num / 2 ? sample_num / 2 : 20;
   const size_t N = local_sz_samples[0].size();// lattice size
-  std::vector<ElemT> res(res_len, 0.0);
+  std::vector<ElemT> res(res_len, ElemT(0));
+
+  // Compute per-site time mean mu_i
+  std::vector<ElemT> mu(N, ElemT(0));
+  for (size_t j = 0; j < sample_num; ++j) {
+    const auto &conf = local_sz_samples[j];
+    for (size_t i = 0; i < N; ++i) {
+      mu[i] += conf[i];
+    }
+  }
+  for (size_t i = 0; i < N; ++i) {
+    mu[i] = mu[i] / static_cast<double>(sample_num);
+  }
+
   for (size_t t = 0; t < res_len; t++) {
     ElemT overlap_sum(0);
     for (size_t j = 0; j < local_sz_samples.size() - t; j++) {
-      overlap_sum += SpinConfigurationOverlap(local_sz_samples[j], local_sz_samples[j + t]);
+      const auto &conf_t0 = local_sz_samples[j];
+      const auto &conf_tt = local_sz_samples[j + t];
+      for (size_t i = 0; i < N; ++i) {
+        overlap_sum += Conj(conf_t0[i] - mu[i]) * (conf_tt[i] - mu[i]);
+      }
     }
-    res[t] = overlap_sum / (double) (local_sz_samples.size() - t) / (double) N;
+    res[t] = overlap_sum / static_cast<double>(local_sz_samples.size() - t) / static_cast<double>(N);
   }
   return res;
 }

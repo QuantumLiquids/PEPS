@@ -142,28 +142,15 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Exec
   // Broadcast the final optimized state to all ranks
   MPI_Bcast(monte_carlo_engine_.State(), monte_carlo_engine_.Comm());
 
-  // Update wavefunction component and normalize after final state update
-  UpdateWavefunctionComponent_();
+  // Refresh wavefunction component and normalize after final state update
+  monte_carlo_engine_.RefreshWavefunctionComponent();
   monte_carlo_engine_.NormalizeStateOrder1();
 
   DumpData();
   this->SetStatus(ExecutorStatus::FINISH);
 }
 
-/**
- * @brief Update wavefunction component after tensor state changes.
- *
- * This method is called after the split index TPS is updated to ensure
- * the Monte Carlo sampling uses the updated wavefunction. This is critical
- * for maintaining consistency between the tensor state and the sampling.
- */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::UpdateWavefunctionComponent_(void) {
-  // CRITICAL: Update wavefunction component once the wave function (split index TPS) updates.
-  // This ensures the Monte Carlo sampling uses the updated wavefunction
-  Configuration config = monte_carlo_engine_.WavefuncComp().config;
-  monte_carlo_engine_.WavefuncComp() = WaveFunctionComponentT(monte_carlo_engine_.State(), config, monte_carlo_engine_.WavefuncComp().trun_para);
-}
+// Removed: UpdateWavefunctionComponent_ is obsolete; use MonteCarloEngine::RefreshWavefunctionComponent instead.
 
 /**
  * @brief Default energy evaluator for VMC PEPS optimizer.

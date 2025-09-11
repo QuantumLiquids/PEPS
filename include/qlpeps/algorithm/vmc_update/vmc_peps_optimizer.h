@@ -217,11 +217,9 @@ class VMCPEPSOptimizer : public qlten::Executor {
   void ReserveSamplesDataSpace_(void);
   void PrintExecutorInfo_(void);
   void ValidateState_(const SITPST &state);
-
-
-  // CRITICAL: Helper method to ensure wavefunction component consistency
-  // This encapsulates the intertwined relationship between split_index_tps_ and tps_sample_
-  void UpdateWavefunctionComponent_();
+  
+  
+  // Note: Wavefunction component refresh is now handled by MonteCarloEngine::RefreshWavefunctionComponent.
 
   // Default energy evaluator
   std::tuple<TenElemT, SITPST, double> DefaultEnergyEvaluator_(const SITPST &state);

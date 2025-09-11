@@ -110,10 +110,10 @@ class MonteCarloEngine {
   }
 
   /**
-   * @brief Rebuild `TPSWaveFunctionComponent` after the state or configuration changes.
-   * Keeps truncation parameters unchanged and preserves the current configuration.
+   * @brief Refresh `TPSWaveFunctionComponent` after the state or configuration changes.
+   *        Keeps truncation parameters unchanged and preserves the current configuration.
    */
-  void UpdateWavefunctionComponent() {
+  void RefreshWavefunctionComponent() {
     Configuration config = tps_sample_.config;
     tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
   }
