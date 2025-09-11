@@ -269,13 +269,21 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
   }
   
   /**
-   * @brief Save configuration to a binary file
+   * @brief Save configuration to a text-format file (opened in binary mode)
+   *
+   * The serialized format is plain text numbers separated by spaces/newlines
+   * (human-readable). The stream is opened with std::ofstream::binary only to
+   * avoid any platform-specific newline translation; the data itself is text.
+   * This method also writes a sidecar metadata file "<file>.shape" containing
+   * two integers: rows and cols, to enable self-describing loading while keeping
+   * backward compatibility.
+   *
    * @param path Directory path where to save the file
    * @param label Label for the file (e.g., MPI rank number)
    */
-  void Dump(const std::string &path, const size_t label) {
-    EnsureDirectoryExists(path);
-    std::string file = path + "/configuration" + std::to_string(label);
+  void Dump(const std::string &directory, const size_t label) {
+    EnsureDirectoryExists(directory);
+    std::string file = directory + "/configuration" + std::to_string(label);
     std::ofstream ofs(file, std::ofstream::binary);
     if (!ofs.is_open()) {
       throw std::ios_base::failure("Failed to open file: " + file);
@@ -290,24 +298,135 @@ class Configuration : public DuoMatrix<size_t>, public Showable, public Streamab
     if (ofs.fail()) {
       throw std::ios_base::failure("Failed to close file: " + file);
     }
+
+    // Best-effort: write sidecar shape metadata (no exception thrown here)
+    std::string shape_file = file + ".shape";
+    std::ofstream sofs(shape_file, std::ofstream::out);
+    if (sofs.is_open()) {
+      sofs << this->rows() << " " << this->cols() << "\n";
+      sofs.close();
+    }
   }
 
-  /**
-   * @brief Load configuration from a binary file
-   * @param path Directory path where the file is located
-   * @param label Label of the file to load (e.g., MPI rank number)
-   * @return true if file was successfully loaded, false otherwise
-   */
-  bool Load(const std::string &path, const size_t label) {
-    std::string file = path + "/configuration" + std::to_string(label);
-    std::ifstream ifs(file, std::ifstream::binary);
-    if (!ifs) {
-      return false; // Failed to open the file
+  /// @brief Save configuration to a specific file name (no label involved)
+#if 0
+  void Dump(const std::string &file) {
+    // Ensure directory exists if a directory component is present
+    const auto last_slash = file.find_last_of('/');
+    if (last_slash != std::string::npos) {
+      EnsureDirectoryExists(file.substr(0, last_slash));
     }
-    ifs >> (*this);
+
+    std::ofstream ofs(file, std::ofstream::binary);
+    if (!ofs.is_open()) {
+      throw std::ios_base::failure("Failed to open file: " + file);
+    }
+    ofs << (*this);
+    if (ofs.fail()) {
+      throw std::ios_base::failure("Failed to write configuration to file: " + file);
+    }
+    ofs.close();
+    if (ofs.fail()) {
+      throw std::ios_base::failure("Failed to close file: " + file);
+    }
+
+    // Best-effort: write sidecar shape metadata
+    std::string shape_file = file + ".shape";
+    std::ofstream sofs(shape_file, std::ofstream::out);
+    if (sofs.is_open()) {
+      sofs << this->rows() << " " << this->cols() << "\n";
+      sofs.close();
+    }
+  }
+#endif
+
+  /**
+   * @brief Load configuration from a text-format file (opened in binary mode)
+   *
+   * Directory-only semantics: this function treats `path` strictly as a directory
+   * and loads from `path + "/configuration" + label`.
+   * - If a sidecar file "<file>.shape" exists, its (rows, cols) must match the
+   *   current object's size; mismatch returns false without throwing.
+   * - Any I/O or parse failure returns false. No exception is thrown from this function.
+   *
+   * @param directory Directory path
+   * @param label Label of the file in the directory (e.g., MPI rank)
+   * @return true if file was successfully loaded and shape matches; false otherwise
+   */
+  bool Load(const std::string &directory, const size_t label) {
+    // Directory-only semantics: construct file path deterministically
+    std::string file = directory + "/configuration" + std::to_string(label);
+
+    // If shape sidecar exists, check dimensions first; old version of the file may not have this sidecar
+    {
+      std::string shape_file = file + ".shape";
+      std::ifstream sifs(shape_file);
+      if (sifs.is_open()) {
+        size_t rows = 0, cols = 0;
+        if (!(sifs >> rows >> cols)) {
+          return false;
+        }
+        if (rows != this->rows() || cols != this->cols()) {
+          return false;
+        }
+      }
+    }
+
+    // Now read the main data payload; convert failures into false
+    std::ifstream ifs(file, std::ifstream::binary);
+    if (!ifs.is_open()) {
+      return false;
+    }
+    try {
+      ifs >> (*this);
+    } catch (...) {
+      ifs.close();
+      return false;
+    }
+    if (ifs.fail()) {
+      ifs.close();
+      return false;
+    }
     ifs.close();
     return true;
   }
+
+  /// @brief Load configuration from a specific file name (no label involved)
+#if 0
+  bool Load(const std::string &file) {
+    // Optional shape validation if sidecar exists
+    {
+      std::string shape_file = file + ".shape";
+      std::ifstream sifs(shape_file);
+      if (sifs.is_open()) {
+        size_t rows = 0, cols = 0;
+        if (!(sifs >> rows >> cols)) {
+          return false;
+        }
+        if (rows != this->rows() || cols != this->cols()) {
+          return false;
+        }
+      }
+    }
+
+    std::ifstream ifs(file, std::ifstream::binary);
+    if (!ifs.is_open()) {
+      return false;
+    }
+    try {
+      ifs >> (*this);
+    } catch (...) {
+      ifs.close();
+      return false;
+    }
+    if (ifs.fail()) {
+      ifs.close();
+      return false;
+    }
+    ifs.close();
+    return true;
+  }
+#endif
 
   void Show(const size_t indent_level = 0) const override;
   

@@ -4,7 +4,7 @@ title: SplitIndexTPS 数据结构
 
 ## 概览
 
-`SplitIndexTPS<TenElemT, QNT>` 表示将物理指标拆分后的二维张量网络状态（TPS）。每个格点保存一个长度为 `phy_dim` 的张量向量 `std::vector<QLTensor<...>>`，其中第 i 个分量对应物理局域希尔伯特空间的第 i 个基态投影后的张量。该表示法便于 VMC 采样与基于配置的投影收缩。
+`SplitIndexTPS<TenElemT, QNT>` 表示将物理指标拆分后的二维的张量网络乘积态（TPS）。每个格点保存一个长度为 `phy_dim` 的张量向量 `std::vector<QLTensor<...>>`，其中第 i 个分量对应物理局域希尔伯特空间的第 i 个基态投影后的张量。该表示法便于 VMC 采样与基于配置的投影收缩。
 
 实现位置：`include/qlpeps/two_dim_tn/tps/split_index_tps.h` 与 `.../split_index_tps_impl.h`。
 
