@@ -35,6 +35,8 @@ class SquareSpinOneHalfJ1J2XXZModel : public SquareNNNModelEnergySolver<SquareSp
                                       public SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>,
                                       public SquareSpinOneHalfXXZModelMixIn {
  public:
+  using SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::EvaluateObservables;
+  using SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::DescribeObservables;
 
   SquareSpinOneHalfJ1J2XXZModel(void) = delete;
 

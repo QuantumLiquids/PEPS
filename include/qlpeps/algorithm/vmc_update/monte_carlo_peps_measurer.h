@@ -11,18 +11,21 @@
 #include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS data structure
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                // SplitIndexTPS state
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  // MCMeasurementParams
-#include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ObservablesLocal solver
+#include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // Observable registry API
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"        // Mean, Variance, DumpVecData, ...
 #include "qlpeps/utility/helpers.h"                               // Real helpers
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/base/mpi_signal_guard.h"
 #include <complex>
+#include <unordered_map>
+#include <string>
 
 
 namespace qlpeps {
 
-
+// Default cap for the number of lags returned by autocorrelation helpers
+inline constexpr size_t kAutocorrMaxLagCap = 20;
 
 // Conjugation helper that preserves the input domain type.
 // For real numbers, returns the value itself. For complex numbers, returns std::conj.
@@ -45,25 +48,25 @@ ElemT SpinConfigurationOverlap(
 }
 
 template<typename T>
-std::vector<T> CalAutoCorrelation(
+std::vector<T> ComputeAutocorrelation(
     const std::vector<T> &data,
     const T mean
 ) {
-  const size_t sample_num = data.size();
-  const size_t res_len = 20 > sample_num / 2 ? sample_num / 2 : 20;
-  std::vector<T> res(res_len, T(0));
-  for (size_t t = 0; t < res_len; t++) {
+  const size_t num_samples = data.size();
+  const size_t num_lags = kAutocorrMaxLagCap > num_samples / 2 ? num_samples / 2 : kAutocorrMaxLagCap;
+  std::vector<T> result(num_lags, T(0));
+  for (size_t tau = 0; tau < num_lags; ++tau) {
     T sum(0);
-    for (size_t j = 0; j < data.size() - t; j++) {
-      sum += Conj(data[j]) * data[j + t];
+    for (size_t j = 0; j < num_samples - tau; ++j) {
+      sum += Conj(data[j]) * data[j + tau];
     }
-    res[t] = sum / double(data.size() - t) - mean * Conj(mean);
+    result[tau] = sum / static_cast<double>(num_samples - tau) - mean * Conj(mean);
   }
-  return res;
+  return result;
 }
 
 /**
- * Calculate the site-averaged auto-correlation for a one-point observable (e.g., spin or charge)
+ * Calculate the site-averaged auto-correlation for a site-local observable (e.g., spin or charge)
  * from per-sample configurations. The observable at site i and MC step t is denoted as O_i(t).
  *
  * Definition (with per-site mean removal):
@@ -73,38 +76,38 @@ std::vector<T> CalAutoCorrelation(
  * This function makes no assumption such as <O_i> = 0.
  */
 template<typename ElemT>
-std::vector<ElemT> CalSpinAutoCorrelation(
-    const std::vector<std::vector<ElemT>> &local_sz_samples
+std::vector<ElemT> ComputeSiteAveragedAutocorrelation(
+    const std::vector<std::vector<ElemT>> &site_local_samples
 ) {
-  const size_t sample_num = local_sz_samples.size();
-  const size_t res_len = 20 > sample_num / 2 ? sample_num / 2 : 20;
-  const size_t N = local_sz_samples[0].size();// lattice size
-  std::vector<ElemT> res(res_len, ElemT(0));
+  const size_t num_samples = site_local_samples.size();
+  const size_t num_lags = kAutocorrMaxLagCap > num_samples / 2 ? num_samples / 2 : kAutocorrMaxLagCap;
+  const size_t num_sites = site_local_samples[0].size(); // lattice size
+  std::vector<ElemT> result(num_lags, ElemT(0));
 
   // Compute per-site time mean mu_i
-  std::vector<ElemT> mu(N, ElemT(0));
-  for (size_t j = 0; j < sample_num; ++j) {
-    const auto &conf = local_sz_samples[j];
-    for (size_t i = 0; i < N; ++i) {
-      mu[i] += conf[i];
+  std::vector<ElemT> per_site_mean(num_sites, ElemT(0));
+  for (size_t j = 0; j < num_samples; ++j) {
+    const auto &frame = site_local_samples[j];
+    for (size_t i = 0; i < num_sites; ++i) {
+      per_site_mean[i] += frame[i];
     }
   }
-  for (size_t i = 0; i < N; ++i) {
-    mu[i] = mu[i] / static_cast<double>(sample_num);
+  for (size_t i = 0; i < num_sites; ++i) {
+    per_site_mean[i] = per_site_mean[i] / static_cast<double>(num_samples);
   }
 
-  for (size_t t = 0; t < res_len; t++) {
+  for (size_t tau = 0; tau < num_lags; ++tau) {
     ElemT overlap_sum(0);
-    for (size_t j = 0; j < local_sz_samples.size() - t; j++) {
-      const auto &conf_t0 = local_sz_samples[j];
-      const auto &conf_tt = local_sz_samples[j + t];
-      for (size_t i = 0; i < N; ++i) {
-        overlap_sum += Conj(conf_t0[i] - mu[i]) * (conf_tt[i] - mu[i]);
+    for (size_t j = 0; j < num_samples - tau; ++j) {
+      const auto &t0 = site_local_samples[j];
+      const auto &tt = site_local_samples[j + tau];
+      for (size_t i = 0; i < num_sites; ++i) {
+        overlap_sum += Conj(t0[i] - per_site_mean[i]) * (tt[i] - per_site_mean[i]);
       }
     }
-    res[t] = overlap_sum / static_cast<double>(local_sz_samples.size() - t) / static_cast<double>(N);
+    result[tau] = overlap_sum / static_cast<double>(num_samples - tau) / static_cast<double>(num_sites);
   }
-  return res;
+  return result;
 }
 
 void PrintProgressBar(size_t progress, size_t total) {
@@ -121,27 +124,10 @@ void PrintProgressBar(size_t progress, size_t total) {
 }
 
 /**
-      * @brief Dumps the sample_data to a CSV file.
+      * @brief Dumps sample_data to CSV (utility for simple vectors).
       *
-      * This function writes the `sample_data` data to a file in CSV format.
-      * Each row in the output file corresponds to a single sample (outer vector),
-      * and each column within a row corresponds to an element of the inner vector  (e.g. for one point function, corresponding to site index).
-      *
-      * @param filename The name of the output file. Should follow the `.csv` naming convention.
-      *
-      * @details
-      * The output file format is designed for easy reading in MATLAB or Python.
-      *
-      * Example of MATLAB usage:
-      * ```
-      * data = csvread('output.csv');
-      * ```
-      *
-      * Example of Python usage:
-      * ```python
-      * import numpy as np
-      * data = np.loadtxt('output.csv', delimiter=',')
-      * ```
+      * Each row corresponds to a single sample; columns are elements of the inner vector.
+      * Use registry-aware DumpStats* helpers for observable statistics instead.
       *
       * @throws std::ios_base::failure If the file cannot be opened for writing.
       */
@@ -223,8 +209,19 @@ class MCPEPSMeasurer : public qlten::Executor {
 
   void ReplicaTest(std::function<double(const Configuration &, const Configuration &)>); // for check the ergodicity
 
+  /**
+   * @brief Dump aggregated statistics for registered observables.
+   *
+   * Writes per-key CSV files under the configured measurement dump path (stats/<key>.csv),
+   * with columns: index, mean, stderr. Shapes and index semantics are provided by
+   * DescribeObservables(). For pair observables using upper-triangular packing, an auxiliary
+   * index map file is emitted.
+   */
   void DumpData();
 
+  /**
+   * @brief Dump aggregated statistics to the specified directory.
+   */
   void DumpData(const std::string &measurement_data_path);
 
   MCMeasurementParams mc_measure_params;
@@ -259,7 +256,7 @@ class MCPEPSMeasurer : public qlten::Executor {
     return engine_.WavefuncComp().config;
   }
  private:
-  void ReserveSamplesDataSpace_();
+  void ReserveSamplesData_();
 
   void PrintExecutorInfo_(void);
 
@@ -271,248 +268,139 @@ class MCPEPSMeasurer : public qlten::Executor {
 
   void SynchronizeConfiguration_(const size_t root = 0); //for the replica test
 
+  // Friendly stats dump helpers (text files)
+  void DumpStatsMatrix_(const std::string &dir,
+                        const std::string &key,
+                        const std::vector<TenElemT> &vals,
+                        size_t ly,
+                        size_t lx) const;
+  void DumpStatsFlat_(const std::string &dir,
+                      const std::string &key,
+                      const std::vector<TenElemT> &vals,
+                      const std::vector<double> &errs) const;
+  // Real-valued overload for conceptually real observables (e.g., psi_rel_err)
+  void DumpStatsFlat_(const std::string &dir,
+                      const std::string &key,
+                      const std::vector<double> &vals,
+                      const std::vector<double> &errs) const;
+
+  // For pair observables packed as upper-triangular (i<=j), emit index mapping file
+  void DumpPackedUpperTriIndexMap_(const std::string &dir,
+                                   const std::string &key,
+                                   size_t packed_len) const;
+
+  // Compute psi(S) consistency: return pair (psi_mean, psi_rel_err)
+  std::pair<TenElemT, double> ComputePsiConsistencyRelErr_(const std::vector<TenElemT> &psi_list) const;
+
+  // registry aggregated stats keyed by observable name
+  std::unordered_map<std::string, std::pair<std::vector<TenElemT>, std::vector<double>>> registry_stats_;
+
   MeasurementSolver measurement_solver_;
   MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> engine_;
+  std::vector<ObservableMeta> observables_meta_;
   struct Result {
     TenElemT energy;
     double en_err;
-
-    std::vector<TenElemT> bond_energys;
-    std::vector<double> bond_energy_errs;
-    std::vector<TenElemT> one_point_functions;
-    std::vector<double> one_point_function_errs;
-    std::vector<TenElemT> two_point_functions;
-    std::vector<double> two_point_function_errs;
-
-    std::vector<TenElemT> energy_auto_corr;
-    std::vector<double> energy_auto_corr_err;
-    std::vector<TenElemT> one_point_functions_auto_corr;
-    std::vector<double> one_point_functions_auto_corr_err;
-
-    Result(void) = default;
-
-    ~Result() {
-      return;
-    }
-
-    void Dump() const {
-      std::string filename = "energy_statistics";
-      std::ofstream ofs(filename, std::ofstream::binary);
-      if (!ofs.is_open()) {
-        throw std::ios_base::failure("Failed to open file: " + filename);
-      }
-      ofs.write((const char *) &energy, 1 * sizeof(TenElemT));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write energy to " + filename);
-      ofs.write((const char *) &en_err, 1 * sizeof(double));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write en_err to " + filename);
-      ofs.write((const char *) bond_energys.data(), bond_energys.size() * sizeof(TenElemT));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write bond_energys to " + filename);
-      ofs.write((const char *) energy_auto_corr.data(), energy_auto_corr.size() * sizeof(TenElemT));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write energy_auto_corr to " + filename);
-      ofs << std::endl;
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write endl to " + filename);
-      ofs.close();
-      if (ofs.fail()) throw std::ios_base::failure("Failed to close " + filename);
-
-      filename = "one_point_functions";
-      ofs.open(filename, std::ofstream::binary);
-      if (!ofs.is_open()) {
-        throw std::ios_base::failure("Failed to open file: " + filename);
-      }
-      ofs.write((const char *) one_point_functions.data(), one_point_functions.size() * sizeof(TenElemT));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write one_point_functions to " + filename);
-      ofs.write((const char *) one_point_function_errs.data(), one_point_function_errs.size() * sizeof(double));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write one_point_function_errs to " + filename);
-      ofs.write((const char *) one_point_functions_auto_corr.data(),
-                one_point_functions_auto_corr.size() * sizeof(TenElemT));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write one_point_functions_auto_corr to " + filename);
-      ofs << std::endl;
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write endl to " + filename);
-      ofs.close();
-      if (ofs.fail()) throw std::ios_base::failure("Failed to close " + filename);
-
-      filename = "two_point_functions";
-      ofs.open(filename, std::ofstream::binary);
-      if (!ofs.is_open()) {
-        throw std::ios_base::failure("Failed to open file: " + filename);
-      }
-      ofs.write((const char *) two_point_functions.data(), two_point_functions.size() * sizeof(TenElemT));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write two_point_functions to " + filename);
-      ofs.write((const char *) two_point_function_errs.data(), two_point_function_errs.size() * sizeof(double));
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write two_point_function_errs to " + filename);
-      ofs << std::endl;
-      if (ofs.fail()) throw std::ios_base::failure("Failed to write endl to " + filename);
-      ofs.close();
-      if (ofs.fail()) throw std::ios_base::failure("Failed to close " + filename);
-    }
-    void DumpCSV() const {
-      // Dump energy and error
-      {
-        std::ofstream ofs("energy_statistics.csv");
-        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open energy_statistics.csv");
-        ofs << "energy,en_err\n";
-        ofs << energy << "," << en_err << "\n";
-        ofs.close();
-      }
-
-      // Dump bond energies and errors
-      {
-        std::ofstream ofs("bond_energys.csv");
-        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open bond_energys.csv");
-        ofs << "bond_energy,bond_energy_err\n";
-        for (size_t i = 0; i < bond_energys.size(); ++i) {
-          ofs << bond_energys[i] << "," << (i < bond_energy_errs.size() ? bond_energy_errs[i] : 0.0) << "\n";
-        }
-        ofs.close();
-      }
-
-      // Dump one point functions and errors
-      {
-        std::ofstream ofs("one_point_functions.csv");
-        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open one_point_functions.csv");
-        ofs << "one_point_function,one_point_function_err\n";
-        for (size_t i = 0; i < one_point_functions.size(); ++i) {
-          ofs << one_point_functions[i] << ","
-              << (i < one_point_function_errs.size() ? one_point_function_errs[i] : 0.0) << "\n";
-        }
-        ofs.close();
-      }
-
-      // Dump two point functions and errors
-      {
-        std::ofstream ofs("two_point_functions.csv");
-        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open two_point_functions.csv");
-        ofs << "two_point_function,two_point_function_err\n";
-        for (size_t i = 0; i < two_point_functions.size(); ++i) {
-          ofs << two_point_functions[i] << ","
-              << (i < two_point_function_errs.size() ? two_point_function_errs[i] : 0.0) << "\n";
-        }
-        ofs.close();
-      }
-
-      // Dump energy auto correlation
-      {
-        std::ofstream ofs("energy_auto_corr.csv");
-        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open energy_auto_corr.csv");
-        ofs << "energy_auto_corr,energy_auto_corr_err\n";
-        for (size_t i = 0; i < energy_auto_corr.size(); ++i) {
-          ofs << energy_auto_corr[i] << "," << (i < energy_auto_corr_err.size() ? energy_auto_corr_err[i] : 0.0)
-              << "\n";
-        }
-        ofs.close();
-      }
-
-      // Dump one point function auto correlation
-      {
-        std::ofstream ofs("one_point_functions_auto_corr.csv");
-        if (!ofs.is_open()) throw std::ios_base::failure("Failed to open one_point_functions_auto_corr.csv");
-        ofs << "one_point_functions_auto_corr,one_point_functions_auto_corr_err\n";
-        for (size_t i = 0; i < one_point_functions_auto_corr.size(); ++i) {
-          ofs << one_point_functions_auto_corr[i] << ","
-              << (i < one_point_functions_auto_corr_err.size() ? one_point_functions_auto_corr_err[i] : 0.0) << "\n";
-        }
-        ofs.close();
-      }
-    }
   } res;
 
   /**
    * Record the statistic inside `bin_size`
    */
-  struct BinStatistics {
-    double energy_mean;
-    double energy_square_mean;  // used to restore the global variance
-    std::vector<double> bond_energy_mean;
-    std::vector<double> bond_square_mean;
-
-    std::vector<double> one_point_function_mean;
-    std::vector<double> two_point_function_mean;
-
-  };
   // observable
   struct SampleData {
-    std::vector<TenElemT> wave_function_amplitude_samples;
-    std::vector<TenElemT> energy_samples;
+    void Reserve(const size_t sample_num) { (void)sample_num; }
 
-    std::vector<std::vector<TenElemT>> bond_energy_samples;
-    std::vector<std::vector<TenElemT>>
-        one_point_function_samples; // outside is the sample index, inner side is the lattice index.
-    std::vector<std::vector<TenElemT>>
-        two_point_function_samples;
+    void Clear() {}
 
-    void Reserve(const size_t sample_num) {
-      wave_function_amplitude_samples.reserve(sample_num);
-      energy_samples.reserve(sample_num);
-      bond_energy_samples.reserve(sample_num);
-      one_point_function_samples.reserve(sample_num);
-      two_point_function_samples.reserve(sample_num);
-    }
+    
 
-    void Clear() {
-      wave_function_amplitude_samples.clear();
-      energy_samples.clear();
-      bond_energy_samples.clear();
-      one_point_function_samples.clear();
-      two_point_function_samples.clear();
-    }
+    // registry samples: key -> list of flat values (per-sample)
+    std::unordered_map<std::string, std::vector<std::vector<TenElemT>>> registry_samples;
 
-    void PushBack(TenElemT wave_function_amplitude, ObservablesLocal<TenElemT> &&observables_sample) {
-      wave_function_amplitude_samples.push_back(wave_function_amplitude);
-      energy_samples.push_back(observables_sample.energy_loc);
-      bond_energy_samples.push_back(std::move(observables_sample.bond_energys_loc));
-      one_point_function_samples.push_back(std::move(observables_sample.one_point_functions_loc));
-      two_point_function_samples.push_back(std::move(observables_sample.two_point_functions_loc));
+    // New path: push values from registry map (keyed)
+    void PushBackRegistry(TenElemT /*wave_function_amplitude*/, const ObservableMap<TenElemT>& obs_map) {
+      for (const auto &kv : obs_map) {
+        registry_samples[kv.first].push_back(kv.second);
+        
+      }
     }
 
     /**
      * Average, Standard error, auto correlation inside one MPI process
      * @return
      */
-    Result Statistic(void) const {
-      Result res_thread;
-      res_thread.energy = Mean(energy_samples);
-      res_thread.en_err = 0.0;
-      res_thread.bond_energys = AveListOfData(bond_energy_samples);
-      res_thread.energy_auto_corr = CalAutoCorrelation(energy_samples, res_thread.energy);
-      res_thread.one_point_functions = AveListOfData(one_point_function_samples);
-      res_thread.two_point_functions = AveListOfData(two_point_function_samples);
-      // Here we assume one_point_functions is something like sz configuration
-      res_thread.one_point_functions_auto_corr = CalSpinAutoCorrelation(one_point_function_samples);
-      return res_thread;
-    }
+    Result Statistic(void) const { return Result{}; }
 
-    void DumpOnePointFunctionSamples(const std::string &filename) const {
-      DumpSampleData(one_point_function_samples, filename);
-    }
-    /**
-      * @brief Dumps the two_point_function_samples to a CSV file.
-      *
-      * This function writes the `two_point_function_samples` data to a file in CSV format.
-      * Each row in the output file corresponds to a single sample (outer vector),
-      * and each column within a row corresponds to an element of the inner vector.
-      *
-      * @param filename The name of the output file. Should follow the `.csv` naming convention.
-      *
-      * @details
-      * The output file format is designed for easy reading in MATLAB or Python.
-      *
-      * Example of MATLAB usage:
-      * ```
-      * data = csvread('output.csv');
-      * ```
-      *
-      * Example of Python usage:
-      * ```python
-      * import numpy as np
-      * data = np.loadtxt('output.csv', delimiter=',')
-      * ```
-      *
-      * @throws std::ios_base::failure If the file cannot be opened for writing.
-      */
-    void DumpTwoPointFunctionSamples(const std::string &filename) const {
-      DumpSampleData(two_point_function_samples, filename);
+    // Compute element-wise mean and naive standard error (no autocorr) for registry keys within one rank
+    std::unordered_map<std::string, std::pair<std::vector<TenElemT>, std::vector<double>>> StatisticRegistry() const {
+      std::unordered_map<std::string, std::pair<std::vector<TenElemT>, std::vector<double>>> out;
+      for (const auto &kv : registry_samples) {
+        const auto &samples = kv.second; // vector<flat>
+        if (samples.empty()) { continue; }
+        const size_t vec_len = samples[0].size();
+        std::vector<TenElemT> mean(vec_len, TenElemT(0));
+        std::vector<double> stderr(vec_len, 0.0);
+        const size_t S = samples.size();
+        // mean
+        for (size_t s = 0; s < S; ++s) {
+          for (size_t i = 0; i < vec_len; ++i) { mean[i] += samples[s][i]; }
+        }
+        for (size_t i = 0; i < vec_len; ++i) { mean[i] = mean[i] / static_cast<double>(S); }
+        // stderr (naive)
+        for (size_t i = 0; i < vec_len; ++i) {
+          double var_acc = 0.0;
+          for (size_t s = 0; s < S; ++s) {
+            auto diff = samples[s][i] - mean[i];
+            var_acc += std::norm(diff);
+          }
+          double var = (S > 0) ? (var_acc / static_cast<double>(S)) : 0.0;
+          stderr[i] = (S > 1) ? std::sqrt(var / static_cast<double>(S - 1)) : std::numeric_limits<double>::infinity();
+        }
+        out.emplace(kv.first, std::make_pair(std::move(mean), std::move(stderr)));
+      }
+      return out;
     }
   } sample_data_;
+
+  // Psi sample tuple: (psi_mean, psi_rel_err)
+  std::vector<std::pair<TenElemT, double>> psi_samples_;
+
+  // Friendly stats dump helpers (text files)
+  void DumpStatsMatrix_(const std::string &dir,
+                        const std::string &key,
+                        const std::vector<TenElemT> &vals,
+                        size_t ly,
+                        size_t lx) const;
+  void DumpStatsFlat_(const std::string &dir,
+                      const std::string &key,
+                      const std::vector<TenElemT> &vals,
+                      const std::vector<double> &errs) const;
+  // Real-valued overload for conceptually real observables (e.g., psi_rel_err)
+  void DumpStatsFlat_(const std::string &dir,
+                      const std::string &key,
+                      const std::vector<double> &vals,
+                      const std::vector<double> &errs) const;
+
+  // For pair observables packed as upper-triangular (i<=j), emit index mapping file
+  void DumpPackedUpperTriIndexMap_(const std::string &dir,
+                                   const std::string &key,
+                                   size_t packed_len) const;
+
+  // Compute psi(S) consistency: return pair (psi_mean, psi_rel_err)
+  std::pair<TenElemT, double> ComputePsiConsistencyRelErr_(const std::vector<TenElemT> &psi_list) const;
+
+  // Dump per-sample psi summary to samples/psi.csv on master rank
+  void DumpPsiSamples_(const std::string &dir) const {
+    if (engine_.Rank() != qlten::hp_numeric::kMPIMasterRank) return;
+    const std::string samples_dir = dir + "samples/";
+    engine_.EnsureDirectoryExists(samples_dir + "dummy");
+    std::ofstream ofs(samples_dir + "psi.csv");
+    ofs << "sample_id,psi_mean_re,psi_mean_im,psi_rel_err\n";
+    for (size_t i = 0; i < psi_samples_.size(); ++i) {
+      ofs << i << "," << std::real(psi_samples_[i].first) << "," << std::imag(psi_samples_[i].first)
+          << "," << psi_samples_[i].second << "\n";
+    }
+  }
 };//MCPEPSMeasurer
 
 

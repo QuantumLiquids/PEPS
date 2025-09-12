@@ -27,6 +27,8 @@ MCPEPSMeasurer<TenElemT,
   ReserveSamplesDataSpace_();
   PrintExecutorInfo_();
   qlpeps::MPISignalGuard::Register();
+  // Load observable metadata from solver
+  observables_meta_ = measurement_solver_.DescribeObservables();
   this->SetStatus(ExecutorStatus::INITED);
 }
 
@@ -71,7 +73,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::R
       }
     }
     // send-recv configuration
-    Configuration config2(engine_.Ly(), engine_.Lx_);
+    Configuration config2(engine_.Ly(), engine_.Lx());
     size_t dest = (engine_.Rank() + 1) % engine_.MpiSize();
     size_t source = (engine_.Rank() + engine_.MpiSize() - 1) % engine_.MpiSize();
     MPI_Status status;
@@ -130,8 +132,27 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
 #ifdef QLPEPS_TIMING_MODE
   Timer evaluate_sample_obsrvb_timer("evaluate_sample_observable (rank " + std::to_string(engine_.Rank()) + ")");
 #endif
-  ObservablesLocal<TenElemT> observables_local = measurement_solver_(&engine_.State(), &engine_.WavefuncComp());
-  sample_data_.PushBack(engine_.WavefuncComp().amplitude, std::move(observables_local));
+  // Registry-based path only
+  auto registry_map = measurement_solver_.template EvaluateObservables<TenElemT, QNT>(&engine_.State(), &engine_.WavefuncComp());
+  sample_data_.PushBackRegistry(engine_.WavefuncComp().amplitude, registry_map);
+  // Psi summary via dedicated API (no registry involvement)
+  {
+    static size_t warn_count = 0;
+    auto psi_summary = measurement_solver_.template EvaluatePsiSummary<TenElemT, QNT>(&engine_.State(), &engine_.WavefuncComp());
+    const bool enabled = mc_measure_params.psi_consistency_warning_enabled;
+    const double th = mc_measure_params.psi_consistency_warn_threshold;
+    const size_t maxw = mc_measure_params.psi_consistency_max_warnings;
+    if (enabled && psi_summary.psi_rel_err > th && warn_count < maxw) {
+      ++warn_count;
+      std::cerr << "[psi_consistency] rel_err=" << std::scientific << psi_summary.psi_rel_err
+                << " > threshold=" << th << ". Consider relaxing truncation parameters.\n";
+      if (warn_count == maxw) {
+        std::cerr << "[psi_consistency] reached max warnings (" << maxw << ") on this rank, suppressing further messages.\n";
+      }
+    }
+    // Append to per-sample psi list for later dump
+    psi_samples_.push_back({psi_summary.psi_mean, psi_summary.psi_rel_err});
+  }
 #ifdef QLPEPS_TIMING_MODE
   evaluate_sample_obsrvb_timer.PrintElapsed();
 #endif
@@ -139,33 +160,29 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::GatherStatistic_() {
-  Result res_thread = sample_data_.Statistic();
+  // No legacy per-rank stats; we aggregate registry directly
   std::cout << "Rank " << engine_.Rank() << ": statistic data finished." << std::endl;
 
-  auto [energy, en_err] = GatherStatisticSingleData(res_thread.energy, MPI_Comm(engine_.Comm()));
-  res.energy = energy;
-  res.en_err = en_err;
-  GatherStatisticListOfData(res_thread.bond_energys,
-                            engine_.Comm(),
-                            res.bond_energys,
-                            res.bond_energy_errs);
-  GatherStatisticListOfData(res_thread.one_point_functions,
-                            engine_.Comm(),
-                            res.one_point_functions,
-                            res.one_point_function_errs);
-  GatherStatisticListOfData(res_thread.two_point_functions,
-                            engine_.Comm(),
-                            res.two_point_functions,
-                            res.two_point_function_errs);
-  GatherStatisticListOfData(res_thread.energy_auto_corr,
-                            engine_.Comm(),
-                            res.energy_auto_corr,
-                            res.energy_auto_corr_err);
-  GatherStatisticListOfData(res_thread.one_point_functions_auto_corr,
-                            engine_.Comm(),
-                            res.one_point_functions_auto_corr,
-                            res.one_point_functions_auto_corr_err);
-
+  // Aggregate registry-based observables
+  auto local_registry = sample_data_.StatisticRegistry();
+  // First process energy (scalar) to populate Result
+  if (auto it = local_registry.find("energy"); it != local_registry.end()) {
+    const auto &local_mean = it->second.first; // length 1
+    std::vector<TenElemT> global_mean;
+    std::vector<double> global_stderr;
+    GatherStatisticListOfData(local_mean, engine_.Comm(), global_mean, global_stderr);
+    if (!global_mean.empty()) res.energy = global_mean[0];
+    if (!global_stderr.empty()) res.en_err = global_stderr[0];
+  }
+  // Then gather all keys into registry_stats_
+  for (const auto &kv : local_registry) {
+    const std::string &key = kv.first;
+    const std::vector<TenElemT> &local_mean = kv.second.first;
+    std::vector<TenElemT> global_mean;
+    std::vector<double> global_stderr;
+    GatherStatisticListOfData(local_mean, engine_.Comm(), global_mean, global_stderr);
+    registry_stats_[key] = std::make_pair(std::move(global_mean), std::move(global_stderr));
+  }
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
@@ -182,30 +199,61 @@ MCPEPSMeasurer<TenElemT,
   }
 
   if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-    res.Dump();
-    res.DumpCSV(); // Dump data in two forms
+    const std::string base_dir = (measurement_data_path.empty() ? std::string("./") : (measurement_data_path + "/"));
+    const std::string stats_dir = base_dir + "stats/";
+    engine_.EnsureDirectoryExists(stats_dir + "dummy");
+    if (!registry_stats_.empty()) {
+      // Dump only registry-based results keyed by observable name
+      for (const auto &kv : registry_stats_) {
+        const std::string &key = kv.first;
+        const auto &pair = kv.second;
+        const auto &vals = pair.first;
+        const auto &errs = pair.second;
+
+        // Determine lattice size once
+        const size_t ly = engine_.Ly();
+        const size_t lx = engine_.Lx();
+
+        // Decide dump style based on observable meta
+        bool dumped = false;
+        for (const auto &m : observables_meta_) {
+          if (m.key != key) continue;
+          const bool shape_is_matrix = (m.shape.size() == 2 && m.shape[0] == ly && m.shape[1] == lx);
+          const bool labels_imply_matrix = (m.shape.empty() && m.index_labels.size() == 2 && m.index_labels[0] == "y" && m.index_labels[1] == "x" && vals.size() == ly * lx);
+          if (shape_is_matrix || labels_imply_matrix) {
+            DumpStatsMatrix_(stats_dir, key, vals, ly, lx);
+            dumped = true;
+          }
+          break;
+        }
+
+        if (!dumped) {
+          // Default: flat dump; special-case conceptually real quantities
+          if (key == "psi_rel_err") {
+            std::vector<double> vals_real;
+            vals_real.reserve(vals.size());
+            for (const auto &v : vals) { vals_real.push_back(static_cast<double>(std::real(v))); }
+            DumpStatsFlat_(stats_dir, key, vals_real, errs);
+          } else {
+            DumpStatsFlat_(stats_dir, key, vals, errs);
+          }
+        }
+
+        // If meta hints triangular packing, emit index_map
+        for (const auto &m : observables_meta_) {
+          if (m.key == key) {
+            if (!m.index_labels.empty() && m.index_labels[0] == "pair_packed_upper_tri") {
+              DumpPackedUpperTriIndexMap_(stats_dir, key, vals.size());
+            }
+            break;
+          }
+        }
+      }
+    }
+    // Dump psi samples separately (samples/psi.csv)
+    DumpPsiSamples_(base_dir);
   }
-  //dump sample data relative to measurement_data_path
-  const std::string base_path = measurement_data_path.empty() ? "./" : measurement_data_path + "/";
-  const std::string energy_raw_path = base_path + "energy_sample_data/";
-  const std::string wf_amplitude_path = base_path + "wave_function_amplitudes/";
-  const std::string one_point_function_raw_data_path = base_path + "one_point_function_samples/";
-  const std::string two_point_function_raw_data_path = base_path + "two_point_function_samples/";
-  
-  // Create measurement data directories using EnsureDirectoryExists_ with dummy filenames
-  // Note: EnsureDirectoryExists_ expects a file path and creates its parent directory.
-  // We append "dummy" as a placeholder filename to make it create the target directory itself.
-  // This is a common workaround pattern when using file-path-based directory creation functions.
-  engine_.EnsureDirectoryExists(energy_raw_path + "dummy");                    // Creates energy_sample_data/
-  engine_.EnsureDirectoryExists(wf_amplitude_path + "dummy");                  // Creates wave_function_amplitudes/  
-  engine_.EnsureDirectoryExists(one_point_function_raw_data_path + "dummy");   // Creates one_point_function_samples/
-  engine_.EnsureDirectoryExists(two_point_function_raw_data_path + "dummy");   // Creates two_point_function_samples/
-  DumpVecData(energy_raw_path + "/energy" + std::to_string(engine_.Rank()), sample_data_.energy_samples);
-  DumpVecData(wf_amplitude_path + "/psi" + std::to_string(engine_.Rank()), sample_data_.wave_function_amplitude_samples);
-  sample_data_.DumpOnePointFunctionSamples(
-      one_point_function_raw_data_path + "/sample" + std::to_string(engine_.Rank()) + ".csv");
-  sample_data_.DumpTwoPointFunctionSamples(
-      two_point_function_raw_data_path + "/sample" + std::to_string(engine_.Rank()) + ".csv");
+  // raw samples dump removed in registry-only mode
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
@@ -273,6 +321,82 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
   }
   std::cout << "]";
   GatherStatistic_();
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsMatrix_(
+    const std::string &dir,
+    const std::string &key,
+    const std::vector<TenElemT> &vals,
+    size_t ly,
+    size_t lx) const {
+  std::ofstream ofs(dir + key + ".csv");
+  ofs << "index,mean,stderr\n";
+  for (size_t y = 0; y < ly; ++y) {
+    for (size_t x = 0; x < lx; ++x) {
+      const size_t idx = y * lx + x;
+      ofs << idx << "," << vals[idx] << "," << 0.0 << "\n";
+    }
+  }
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsFlat_(
+    const std::string &dir,
+    const std::string &key,
+    const std::vector<TenElemT> &vals,
+    const std::vector<double> &errs) const {
+  std::ofstream ofs(dir + key + ".csv");
+  ofs << "index,mean,stderr\n";
+  for (size_t i = 0; i < vals.size(); ++i) {
+    const double err = (i < errs.size()) ? errs[i] : 0.0;
+    ofs << i << "," << vals[i] << "," << err << "\n";
+  }
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsFlat_(
+    const std::string &dir,
+    const std::string &key,
+    const std::vector<double> &vals,
+    const std::vector<double> &errs) const {
+  std::ofstream ofs(dir + key + ".csv");
+  ofs << "index,mean,stderr\n";
+  for (size_t i = 0; i < vals.size(); ++i) {
+    const double err = (i < errs.size()) ? errs[i] : 0.0;
+    ofs << i << "," << vals[i] << "," << err << "\n";
+  }
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpPackedUpperTriIndexMap_(
+    const std::string &dir,
+    const std::string &key,
+    size_t packed_len) const {
+  // Emit a text mapping describing how to reconstruct (i,j) from linear index k for upper-triangular packing
+  std::ofstream ofs(dir + key + "_index_map.txt");
+  ofs << "# index -> (i,j) mapping for upper-triangular packed pairs (i<=j)\n";
+  ofs << "# k = i*L - i*(i-1)/2 + (j - i), with L being linear size along flattening;\n";
+  ofs << "# This file only documents the convention; concrete (i,j) require model-specific L.\n";
+  ofs << "# length=" << packed_len << "\n";
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+std::pair<TenElemT, double>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::ComputePsiConsistencyRelErr_(
+    const std::vector<TenElemT> &psi_list) const {
+  TenElemT mean(0);
+  if (psi_list.empty()) { return {mean, 0.0}; }
+  for (const auto &v : psi_list) mean += v;
+  mean = mean / static_cast<double>(psi_list.size());
+  auto abs_val = [](const TenElemT &v) -> double { return static_cast<double>(std::abs(v)); };
+  const double denom = std::max(abs_val(mean), 1e-300);
+  double max_dev = 0.0;
+  for (const auto &v : psi_list) {
+    max_dev = std::max(max_dev, abs_val(v - mean));
+  }
+  const double rel = max_dev / denom; // radius_rel = max_i |psi_i - mean| / |mean|
+  return {mean, rel};
 }
 
 } // namespace qlpeps

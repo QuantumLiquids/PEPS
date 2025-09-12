@@ -434,11 +434,87 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
                         public SquareNNModelMeasurementSolver<SquaretJNNModel>,
                         public SquaretJModelMixIn {
  public:
+  using SquareNNModelMeasurementSolver<SquaretJNNModel>::EvaluateObservables;
+  using SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables;
   explicit SquaretJNNModel(double t, double J, double mu) : SquaretJModelMixIn(t,
                                                                                0,
                                                                                J,
                                                                                0,
                                                                                mu) {};
+
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    ObservableMap<TenElemT> out;
+    std::vector<TenElemT> psi_list; // local only; not returned in registry
+    auto &tn = tps_sample->tn;
+    const auto &config = tps_sample->config;
+    const auto &trunc = tps_sample->trun_para;
+    const size_t ly = tn.rows();
+    const size_t lx = tn.cols();
+
+    // Basic fields
+    std::vector<TenElemT> sz; sz.reserve(ly * lx);
+    for (auto &c : config) { sz.push_back(static_cast<TenElemT>(CalSpinSzImpl(c))); }
+    out["spin_z"] = std::move(sz);
+    std::vector<TenElemT> ch; ch.reserve(ly * lx);
+    for (auto &c : config) { ch.push_back(static_cast<TenElemT>(CalDensityImpl(c))); }
+    out["charge"] = std::move(ch);
+
+    // Prepare env and scan bonds for SC_bond_singlet
+    tn.GenerateBMPSApproach(UP, trunc);
+    std::vector<TenElemT> sc_h; if (lx > 1) sc_h.reserve(ly * (lx - 1));
+    std::vector<TenElemT> sc_v; if (ly > 1) sc_v.reserve((ly - 1) * lx);
+    for (size_t row = 0; row < ly; ++row) {
+      tn.InitBTen(LEFT, row);
+      tn.GrowFullBTen(RIGHT, row, 1, true);
+      for (size_t col = 0; col < lx; ++col) {
+        const SiteIdx s1{row, col};
+        if (col + 1 < lx) {
+          const SiteIdx s2{row, col + 1};
+          std::optional<TenElemT> psi;
+          auto pair = EvaluateBondSC(s1, s2, config(s1), config(s2), HORIZONTAL, tn, (*sitps)(s1), (*sitps)(s2), psi);
+          sc_h.push_back(pair.second); // delta
+          tn.BTenMoveStep(RIGHT);
+        }
+      }
+      if (row + 1 < ly) { tn.BMPSMoveStep(DOWN, trunc); }
+    }
+
+    // Vertical: reset env along columns
+    tn.GenerateBMPSApproach(LEFT, trunc);
+    for (size_t col = 0; col < lx; ++col) {
+      tn.InitBTen(UP, col);
+      tn.GrowFullBTen(DOWN, col, 1, true);
+      for (size_t row = 0; row + 1 < ly; ++row) {
+        const SiteIdx s1{row, col};
+        const SiteIdx s2{row + 1, col};
+        std::optional<TenElemT> psi;
+        auto pair = EvaluateBondSC(s1, s2, config(s1), config(s2), VERTICAL, tn, (*sitps)(s1), (*sitps)(s2), psi);
+        sc_v.push_back(pair.second);
+        if (row + 2 < ly) tn.BTenMoveStep(DOWN);
+      }
+      if (col + 1 < lx) tn.BMPSMoveStep(RIGHT, trunc);
+    }
+
+    // Energy via diagonal terms is available from legacy path; keep scalar zero here to avoid duplication
+    out["energy"] = {TenElemT(0)}; // engine will still use sample energy list for stats
+    if (!sc_h.empty()) out["SC_bond_singlet_h"] = std::move(sc_h);
+    if (!sc_v.empty()) out["SC_bond_singlet_v"] = std::move(sc_v);
+    // Do not emit psi_list via registry; executor will build psi via base helper when needed
+    return out;
+  }
+
+  std::vector<ObservableMeta> DescribeObservables() const {
+    return {
+        {"energy", "Total energy (scalar)", {}, {}},
+        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
+        {"charge", "Local charge per site (Ly,Lx)", {}, {"y","x"}},
+        {"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {}, {"y","x"}},
+        {"SC_bond_singlet_v", "Bond singlet SC (vertical)", {}, {"y","x"}}
+    };
+  }
 };
 
 /*
@@ -452,11 +528,32 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
                          public SquareNNNModelMeasurementSolver<SquaretJNNNModel>,
                          public SquaretJModelMixIn {
  public:
+  using SquareNNNModelMeasurementSolver<SquaretJNNNModel>::EvaluateObservables;
+  using SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables;
   explicit SquaretJNNNModel(double t, double t2, double J, double mu) : SquaretJModelMixIn(t,
                                                                                            t2,
                                                                                            J,
                                                                                            0,
                                                                                            mu) {};
+
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    // Reuse NN model logic; NNN does not change local SC definition.
+    SquaretJNNModel helper(0, 0, 0);
+    return helper.template EvaluateObservables<TenElemT, QNT>(sitps, tps_sample);
+  }
+
+  std::vector<ObservableMeta> DescribeObservables() const {
+    return {
+        {"energy", "Total energy (scalar)", {}, {}},
+        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
+        {"charge", "Local charge per site (Ly,Lx)", {}, {"y","x"}},
+        {"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {}, {"y","x"}},
+        {"SC_bond_singlet_v", "Bond singlet SC (vertical)", {}, {"y","x"}}
+    };
+  }
 };
 
 /**

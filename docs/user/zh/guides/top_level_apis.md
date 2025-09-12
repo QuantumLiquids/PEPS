@@ -182,10 +182,16 @@ exe.DumpData("output/vmc_peps_", /*release_mem=*/false);
 ### 参数和求解器
 
 - `MCMeasurementParams` 结合了用于测量运行的 `MonteCarloParams` 和 `PEPSParams`。
-- `MeasurementSolver` 函子在调用时必须返回 `ObservablesLocal<TenElemT>`：
-  `measurement_solver_(&split_index_tps_, &tps_sample_)`。
+- 采用“注册表”API：实现
+  `std::vector<ObservableMeta> DescribeObservables() const` 与
+  `ObservableMap<TenElemT> EvaluateObservables(const SplitIndexTPS<TenElemT,QNT>*, TPSWaveFunctionComponent<TenElemT,QNT>*)`。
+  执行器按样本调用 `EvaluateObservables`，并按观测量 `key` 做聚合。
+  其中 `psi_list` 仅作为中间量使用，不会导出；执行器将其转换为：
+  - `psi_mean`（复数标量，波函数振幅均值）
+  - `psi_rel_err`（实数标量，相对半径），定义：`radius_rel = max_i |psi_i - mean| / |mean|`。
+  详见 RFC《Observable Registry and Results Organization》。
   内置模型测量求解器位于
-  `qlpeps/algorithm/vmc_update/model_measurement_solver.h` 和
+  `qlpeps/algorithm/vmc_update/model_measurement_solver.h` 与
   `qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h`。
 
 ### 执行流程和输出
@@ -231,7 +237,8 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
 meas.Execute();
 
 auto [E, dE] = meas.OutputEnergy();
-const auto &res = meas.GetMeasureResult(); // contains bond/one-/two-point functions and auto-correlations
+const auto &res = meas.GetMeasureResult(); // 兼容字段从注册表派生（如 energy 等）
+// 注册表 CSV 输出位于 stats/<key>.csv
 ```
 
 ---

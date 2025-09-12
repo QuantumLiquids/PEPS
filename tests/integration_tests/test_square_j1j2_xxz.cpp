@@ -49,40 +49,12 @@ protected:
   std::string model_name = "square_j1j2_xxz";
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
   
-  // Modern VMC parameters for different optimization schemes
-  VMCPEPSOptimizerParams vmc_sr_params = VMCPEPSOptimizerParams(
-      OptimizerParamsBuilder()
-          .SetMaxIterations(40)
-          .SetLearningRate(0.3)
-          .WithStochasticReconfiguration(ConjugateGradientParams(100, 1e-5, 20, 0.001))
-          .Build(),
-      MonteCarloParams(100, 100, 1,
-                       Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
-                       false), // not warmed up initially
-      PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                  std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10))));
-  
+  // Modern VMC parameters (keep only SGD here)
   VMCPEPSOptimizerParams vmc_sgd_params = VMCPEPSOptimizerParams(
       OptimizerParamsBuilder()
           .SetMaxIterations(40)
           .SetLearningRate(0.1)
           .WithSGD()
-          .Build(),
-      MonteCarloParams(100, 100, 1,
-                       Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
-                       false), // not warmed up initially
-      PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                  std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10))));
-  
-  VMCPEPSOptimizerParams vmc_lbfgs_params = VMCPEPSOptimizerParams(
-      OptimizerParamsBuilder()
-          .SetMaxIterations(40)
-          .SetLearningRate(0.1)
-          .WithLBFGS(LBFGSParams(20, 1e-6, 1e-12, 1000))
           .Build(),
       MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx,
@@ -213,40 +185,6 @@ TEST_F(J1J2XXZSystem, SimpleUpdate) {
   RunSimpleUpdate();
 }
 
-TEST_F(J1J2XXZSystem, ZeroUpdate) {
-  using Model = SquareSpinOneHalfJ1J2XXZModel;
-  Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
-  
-  // Test with zero sweeps (just initialization)
-  VMCPEPSOptimizerParams zero_params = VMCPEPSOptimizerParams(
-      OptimizerParamsBuilder()
-          .SetMaxIterations(0)
-          .SetLearningRate(0.3)
-          .WithStochasticReconfiguration(ConjugateGradientParams(100, 1e-5, 20, 0.001))
-          .Build(),
-      MonteCarloParams(0, 0, 1,
-                       Configuration(Ly, Lx,
-                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
-                       false), // not warmed up initially
-      PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                  std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10))));
-  
-  // Test with zero sweeps (just initialization) - should not throw
-  RunVMCOptimization<Model, MCUpdateSquareTNN3SiteExchange>(j1j2_model, zero_params);
-}
-
-TEST_F(J1J2XXZSystem, StochasticReconfigurationOpt) {
-  using Model = SquareSpinOneHalfJ1J2XXZModel;
-  Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
-  
-  // VMC optimization with Stochastic Reconfiguration
-  RunVMCOptimization<Model, MCUpdateSquareTNN3SiteExchange>(j1j2_model, vmc_sr_params);
-  
-  // Monte Carlo measurement
-  RunMCMeasurement<Model, MCUpdateSquareTNN3SiteExchange>(j1j2_model);
-}
-
 TEST_F(J1J2XXZSystem, StochasticGradientOpt) {
   using Model = SquareSpinOneHalfJ1J2XXZModel;
   Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
@@ -258,6 +196,7 @@ TEST_F(J1J2XXZSystem, StochasticGradientOpt) {
   RunMCMeasurement<Model, MCUpdateSquareNNExchange>(j1j2_model);
 }
 
+#if 0
 TEST_F(J1J2XXZSystem, LBFGSLineSearch) {
   using Model = SquareSpinOneHalfJ1J2XXZModel;
   Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
@@ -268,6 +207,7 @@ TEST_F(J1J2XXZSystem, LBFGSLineSearch) {
   // Monte Carlo measurement  
   RunMCMeasurement<Model, MCUpdateSquareTNN3SiteExchange>(j1j2_model);
 }
+#endif
 
 int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);

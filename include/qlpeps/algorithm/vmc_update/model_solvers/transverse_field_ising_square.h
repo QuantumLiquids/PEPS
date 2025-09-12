@@ -12,6 +12,8 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
+#include <complex>
+#include <cmath>
 
 namespace qlpeps {
 using namespace qlten;
@@ -28,7 +30,8 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
 
   TransverseFieldIsingSquare(double h) : h_(h) {}
   using ModelEnergySolver::CalEnergyAndHoles;
-  using ModelMeasurementSolver<TransverseFieldIsingSquare>::operator();
+  using ModelMeasurementSolver<TransverseFieldIsingSquare>::EvaluateObservables;
+  using ModelMeasurementSolver<TransverseFieldIsingSquare>::DescribeObservables;
 
   template<typename TenElemT, typename QNT, bool calchols>
   TenElemT CalEnergyAndHolesImpl(
@@ -48,16 +51,93 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
                                                                                psi_list);
   }
 
+  // Legacy SampleMeasureImpl removed under registry-only API
+
   template<typename TenElemT, typename QNT>
-  ObservablesLocal<TenElemT> SampleMeasureImpl(
-      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
-      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
-      std::vector<TenElemT> &psi_list
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample
   ) {
-    TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
-    const Configuration &sample_config = tps_sample->config;
+    ObservableMap<TenElemT> out;
+    std::vector<TenElemT> psi_list;
+
+    // Local references
+    auto &tn = tps_sample->tn;
+    const Configuration &config = tps_sample->config;
     const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
-    return this->SampleMeasureImpl(split_index_tps, sample_config, sample_tn, trunc_para, psi_list);
+    const size_t lx = tn.cols();
+    const size_t ly = tn.rows();
+
+    // Prepare environment
+    tn.GenerateBMPSApproach(UP, trunc_para);
+
+    // Accumulators
+    TenElemT energy_ex(0); // off-diagonal part
+    std::vector<TenElemT> sigma_x;
+    sigma_x.reserve(lx * ly);
+    std::vector<TenElemT> two_point;
+    two_point.reserve(lx / 2 * 3);
+
+    for (size_t row = 0; row < ly; ++row) {
+      tn.InitBTen(LEFT, row);
+      tn.GrowFullBTen(RIGHT, row, 1, true);
+      // push psi at row-begin for consistency check
+      auto psi = tn.Trace({row, 0}, HORIZONTAL);
+      psi_list.push_back(psi);
+      auto inv_psi = TenElemT(1.0) / psi;
+      for (size_t col = 0; col < lx; ++col) {
+        const SiteIdx site{row, col};
+        TenElemT ex_term = EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*sitps)(site), inv_psi);
+        energy_ex += ex_term;
+        if (h_ != 0.0) {
+          sigma_x.push_back((-ex_term) / static_cast<double>(h_));
+        } else {
+          sigma_x.push_back(TenElemT(0));
+        }
+        if (col < lx - 1) {
+          tn.BTenMoveStep(RIGHT);
+        }
+      }
+      if (row == ly / 2) {
+        // simple SzSz along middle row
+        SiteIdx site1{row, lx / 4};
+        double sz1 = config(site1) - 0.5;
+        for (size_t i = 1; i <= lx / 2; ++i) {
+          SiteIdx site2{row, lx / 4 + i};
+          double sz2 = config(site2) - 0.5;
+          two_point.push_back(sz1 * sz2);
+        }
+      }
+      if (row < ly - 1) {
+        tn.BMPSMoveStep(DOWN, trunc_para);
+      }
+    }
+
+    // Diagonal zz energy
+    TenElemT energy_diag = CalDiagTermEnergy<TenElemT>(config);
+    out["energy"] = {energy_ex + energy_diag};
+
+    // spin_z (Ly x Lx)
+    {
+      std::vector<TenElemT> spin_z;
+      spin_z.reserve(ly * lx);
+      for (auto &s : config) { spin_z.push_back(static_cast<double>(s) - 0.5); }
+      out["spin_z"] = std::move(spin_z);
+    }
+
+    if (!sigma_x.empty()) out["sigma_x"] = std::move(sigma_x);
+    if (!two_point.empty()) out["SzSz_row"] = std::move(two_point);
+    // psi_list is not emitted via registry; Measurer computes PsiSummary separately
+
+    // Diagonal bond energies omitted by default; can be enabled if needed later
+    return out;
+  }
+
+  std::vector<ObservableMeta> DescribeObservables() const {
+    return {
+        {"energy", "Total energy (scalar)", {}, {}},
+        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}}
+    };
   }
 
   template<typename TenElemT, typename QNT, bool calchols>
@@ -116,14 +196,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
     return (-h_) * ratio;
   }
 
-  template<typename TenElemT, typename QNT>
-  ObservablesLocal<TenElemT> SampleMeasureImpl(
-      const SplitIndexTPS<TenElemT, QNT> *sitps,
-      const Configuration &sample_config,
-      TensorNetwork2D<TenElemT, QNT> &sample_tn,
-      const BMPSTruncatePara &trunc_para,
-      std::vector<TenElemT> &psi_list
-  );
+  
  private:
   double h_;
 };
@@ -166,59 +239,6 @@ TenElemT TransverseFieldIsingSquare::CalEnergyAndHolesImplParsed(const SplitInde
   return energy;
 }
 
-template<typename TenElemT, typename QNT>
-ObservablesLocal<TenElemT> TransverseFieldIsingSquare::SampleMeasureImpl(const SplitIndexTPS<TenElemT,
-                                                                                        QNT> *split_index_tps,
-                                                                    const qlpeps::Configuration &config,
-                                                                    TensorNetwork2D<TenElemT, QNT> &tn,
-                                                                    const qlpeps::BMPSTruncatePara &trunc_para,
-                                                                    std::vector<TenElemT> &psi_list) {
-  ObservablesLocal<TenElemT> res;
-  TenElemT energy(0);
-  const size_t lx = tn.cols(), ly = tn.rows();
-  res.bond_energys_loc.reserve(lx * ly * 2);
-  res.two_point_functions_loc.reserve(lx / 2 * 3);
-  tn.GenerateBMPSApproach(UP, trunc_para);
-  psi_list.reserve(tn.rows() + tn.cols());
-  for (size_t row = 0; row < ly; row++) {
-    tn.InitBTen(LEFT, row);
-    tn.GrowFullBTen(RIGHT, row, 1, true);
-    // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
-    auto psi = tn.Trace({row, 0}, HORIZONTAL);
-    auto inv_psi = 1.0 / psi;
-    psi_list.push_back(psi);
-    for (size_t col = 0; col < tn.cols(); col++) {
-      const SiteIdx site = {row, col};
-      //transverse-field terms
-      energy += EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*split_index_tps)(site), inv_psi);
-      //zz terms
-      if (col < tn.cols() - 1) {
-        tn.BTenMoveStep(RIGHT);
-      }
-    }
-    if (row == tn.rows() / 2) { //measure correlation in the middle bonds
-      SiteIdx site1 = {row, lx / 4};
-
-      // sz(i) * sz(j)
-      double sz1 = config(site1) - 0.5;
-      for (size_t i = 1; i <= lx / 2; i++) {
-        SiteIdx site2 = {row, lx / 4 + i};
-        double sz2 = config(site2) - 0.5;
-        res.two_point_functions_loc.push_back(sz1 * sz2);
-      }
-    }
-    if (row < tn.rows() - 1) {
-      tn.BMPSMoveStep(DOWN, trunc_para);
-    }
-  }
-
-  energy += CalDiagTermEnergy<TenElemT>(config);
-  res.energy_loc = energy;
-  res.one_point_functions_loc.reserve(tn.rows() * tn.cols());
-  for (auto &spin_config : config) {
-    res.one_point_functions_loc.push_back((double) spin_config - 0.5);
-  }
-  return res;
-}
+// Legacy SampleMeasureImpl(out-of-class) removed under registry-only API
 }//qlpeps
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_TRANSVERSE_FIELD_ISING_SQUARE_H
