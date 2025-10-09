@@ -46,6 +46,20 @@ class SquareSpinOneHalfJ1J2XXZModel : public SquareNNNModelEnergySolver<SquareSp
   ///< Generic construction
   SquareSpinOneHalfJ1J2XXZModel(double jz, double jxy, double jz2, double jxy2, double pinning_field00) :
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, jz2, jxy2, pinning_field00) {}
+
+  std::vector<ObservableMeta> DescribeObservables() const {
+    auto base = SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::DescribeObservables();
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {0, 0};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
+        meta.index_labels = {"bond_id"};
+      }
+    }
+    return base;
+  }
 };//SquareSpinOneHalfJ1J2XXZModel
 
 }//qlpeps

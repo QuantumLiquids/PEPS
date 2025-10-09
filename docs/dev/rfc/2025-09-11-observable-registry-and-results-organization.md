@@ -85,4 +85,50 @@ struct PsiSummary {
   - 具体模型负责提供其 `psi_list` 的生成逻辑；
   - `MCPEPSMeasurer` 在每个样本结束时调用 `EvaluatePsiSummary()` 收集并写入 `samples/psi.csv`。
 
+## Current Status (2025-10)
+
+- All built-in solvers have been migrated to the registry interface. Keys are documented in
+  `docs/user/en/guides/model_observables.md`.
+- `MCPEPSMeasurer::Result` exposure has been reduced to the energy compatibility shim; all other
+  consumers should query registries or CSV dumps directly.
+- Recent fixes:
+  - `TransverseFieldIsingSquare` now advertises `sigma_x` and `SzSz_row` via `DescribeObservables()`.
+  - `SquareHubbardModel` exposes `double_occupancy` explicitly, matching the legacy dump.
+- Remaining legacy discrepancies:
+  - No raw `psi_list` in registry (by design).
+  - Per-model gaps must be tracked as they surface; see below for planned tests.
+  - Base metadata supplied by `SquareNNNModelMeasurementSolver` is intentionally minimal. Each
+    concrete solver must enrich the entries (shape/index labels) to match its lattice geometry.
+
+## Test Roadmap
+
+1. **Registry contract tests**
+   - Build a parameterised gtest suite that instantiates every built-in solver on a minimal 2×2
+     `SplitIndexTPS` and asserts that each key declared in `DescribeObservables()` appears in the
+     returned `ObservableMap`.
+   - For models with conditional keys (e.g., superconducting order, NNN bonds), cover both enabled
+     and disabled cases.
+
+2. **Smoke tests with bundled TPS data**
+   - Reuse sample states in `tests/slow_tests/test_data/` to run `MCPEPSMeasurer::Execute()` and
+     verify that `stats/<key>.csv` exists for every advertised key.
+   - Keep these tests under `RUN_SLOW_TESTS` to avoid extending the default CI time.
+
+3. **Physics regression tests**
+   - Where reference data exists (e.g., 4×4 Heisenberg, 2×2 transverse Ising), compare registry
+     means against expected values within statistical tolerance.
+   - For models lacking references, construct deterministic product states with analytic
+     expectations for sanity checks.
+
+4. **Golden data integration**
+   - Prepare QuSpin (or similar) ED scripts for tiny lattices; store the resulting observables as
+     JSON/CSV fixtures in `tests/resources/` and compare against registry outputs.
+   - Plan follow-up integration with DMRG pipelines for larger systems when data is available.
+
+5. **Automation skeleton**
+   - Extend `tests/test_algorithm/test_mc_peps_measure.cpp` or add a new suite that parameterises
+     over model classes, lattice sizes, and expected registry keys, reducing boilerplate.
+   - Provide helpers to read registry metadata at runtime, so new keys automatically enter the
+     assertions.
+
 

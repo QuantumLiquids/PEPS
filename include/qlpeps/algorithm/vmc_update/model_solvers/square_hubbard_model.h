@@ -122,6 +122,39 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
     return HubbardConfig2Spinz(config);
   }
 
+  std::vector<ObservableMeta> DescribeObservables() const {
+    auto base = SquareNNModelMeasurementSolver<SquareHubbardModel>::DescribeObservables();
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {0, 0};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
+        meta.index_labels = {"bond_id"};
+      }
+    }
+    base.push_back({"double_occupancy", "On-site double occupancy indicator (Ly,Lx)", {0, 0}, {"y", "x"}});
+    return base;
+  }
+
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    ObservableMap<TenElemT> out = SquareNNModelMeasurementSolver<SquareHubbardModel>::template EvaluateObservables<TenElemT, QNT>(
+        split_index_tps, tps_sample);
+    const auto &config = tps_sample->config;
+    const size_t ly = config.rows();
+    const size_t lx = config.cols();
+    std::vector<TenElemT> doublon;
+    doublon.reserve(ly * lx);
+    for (auto &site_config : config) {
+      doublon.push_back(static_cast<TenElemT>(HubbardSingleSiteState(site_config) == HubbardSingleSiteState::DoubleOccupancy));
+    }
+    out["double_occupancy"] = std::move(doublon);
+    return out;
+  }
+
  private:
   double t_;
   double U_;

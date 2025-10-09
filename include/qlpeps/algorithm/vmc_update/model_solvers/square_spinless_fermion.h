@@ -84,6 +84,21 @@ class SquareSpinlessFermion : public SquareNNNModelEnergySolver<SquareSpinlessFe
   double CalDensityImpl(const size_t config) const {
     return double(1 - config);
   }
+
+  std::vector<ObservableMeta> DescribeObservables() const {
+    auto base = SquareNNNModelMeasurementSolver<SquareSpinlessFermion>::DescribeObservables();
+    for (auto &meta : base) {
+      if (meta.key == "charge" || meta.key == "spin_z") {
+        meta.shape = {0, 0};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
+        meta.index_labels = {"bond_id"};
+      }
+    }
+    return base;
+  }
+
  private:
   const double t_; // nearest-neighbor hopping amplitude
   const double t2_;// next-nearest-neighbor hopping amplitude

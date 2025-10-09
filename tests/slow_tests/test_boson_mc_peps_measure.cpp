@@ -91,7 +91,7 @@ TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
   }
 
   auto [energy, en_err] = executor->OutputEnergy();
-  auto measure_results = executor->GetMeasureResult();
+  auto energy_estimate = executor->GetEnergyEstimate();
 
   if (rank == hp_numeric::kMPIMasterRank && mpi_size > 1) {
     //Justify whether as expected

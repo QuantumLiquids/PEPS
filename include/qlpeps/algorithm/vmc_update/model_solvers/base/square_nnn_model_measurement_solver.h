@@ -19,8 +19,8 @@ namespace qlpeps {
 // site-local fields. Psi is handled via BuildPsiList and the executor, not the registry. 
 
 template<typename ModelType, bool has_nnn_interaction = true>
-class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNModelMeasurementSolver<ModelType,
-                                                                                                      has_nnn_interaction>> {
+class SquareNNNModelMeasurementSolver
+    : public ModelMeasurementSolver<SquareNNNModelMeasurementSolver<ModelType, has_nnn_interaction>> {
  public:
   using ModelMeasurementSolver<SquareNNNModelMeasurementSolver<ModelType, has_nnn_interaction>>::EvaluateObservables;
   using ModelMeasurementSolver<SquareNNNModelMeasurementSolver<ModelType, has_nnn_interaction>>::DescribeObservables;
@@ -100,7 +100,10 @@ class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNM
     };
 
     // No off-diagonal long-range measurement at this layer
-    auto off_diag_long_range_measure_func = nullptr;
+    auto off_diag_long_range_measure_func = [](const auto &, const auto &) {};
+
+    std::vector<TenElemT> psi_list;
+    psi_list.reserve(ly + lx);
 
     if constexpr (has_nnn_interaction) {
       BondTraversalMixin::TraverseAllBonds(tn, trunc_para, bond_measure_func, nnn_link_measure_func,
@@ -114,10 +117,8 @@ class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNM
     // Total energy = bond total + onsite; cache psi summary for Measurer to consume without re-traversal
     TenElemT energy_onsite = derived->EvaluateTotalOnsiteEnergy(config);
     out["energy"] = {energy_bond_total + energy_onsite};
-    if (!psi_list.empty()) {
-      auto sum = this->template ComputePsiSummary<TenElemT>(psi_list);
-      this->template SetLastPsiSummary<TenElemT>(sum.psi_mean, sum.psi_rel_err);
-    }
+    auto psi_summary = this->template ComputePsiSummary<TenElemT>(psi_list);
+    this->template SetLastPsiSummary<TenElemT>(psi_summary.psi_mean, psi_summary.psi_rel_err);
 
     if (!e_h.empty()) out["bond_energy_h"] = std::move(e_h);
     if (!e_v.empty()) out["bond_energy_v"] = std::move(e_v);
@@ -128,14 +129,18 @@ class SquareNNNModelMeasurementSolver : public ModelMeasurementSolver<SquareNNNM
   // Provide generic metadata with stable keys; shapes are model-dependent and may be left unspecified.
   std::vector<ObservableMeta> DescribeObservables() const {
     std::vector<ObservableMeta> out = {
-        {"energy", "Total energy (scalar)", {}, {}},
-        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
-        {"charge", "Local charge per site (Ly,Lx)", {}, {"y","x"}},
-        {"bond_energy_h", "Bond energy on horizontal NN bonds (flat)", {}, {}},
-        {"bond_energy_v", "Bond energy on vertical NN bonds (flat)", {}, {}}
+        {"energy", "Total energy (scalar)", {}, {}}
     };
+    if constexpr (ModelType::requires_spin_sz_measurement) {
+      out.push_back({"spin_z", "Local spin Sz per site", {}, {}});
+    }
+    if constexpr (ModelType::requires_density_measurement) {
+      out.push_back({"charge", "Local charge per site", {}, {}});
+    }
+    out.push_back({"bond_energy_h", "Bond energy on horizontal NN bonds", {}, {}});
+    out.push_back({"bond_energy_v", "Bond energy on vertical NN bonds", {}, {}});
     if constexpr (has_nnn_interaction) {
-      out.push_back({"bond_energy_diag", "Bond energy on diagonal NNN bonds (flat)", {}, {}});
+      out.push_back({"bond_energy_diag", "Bond energy on diagonal NNN bonds", {}, {}});
     }
     return out;
   }

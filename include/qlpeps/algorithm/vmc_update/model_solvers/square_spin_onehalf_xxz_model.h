@@ -198,11 +198,18 @@ class SquareSpinOneHalfXXZModel
   }
 
   std::vector<ObservableMeta> DescribeObservables() const {
-    return {
-        {"energy", "Total energy (scalar)", {}, {}},
-        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
-        {"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {}, {"pair_packed_upper_tri"}}
-    };
+    auto base = SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables();
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {0, 0};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
+        meta.index_labels = {"bond_id"};
+      }
+    }
+    base.push_back({"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {}, {"pair_packed_upper_tri"}});
+    return base;
   }
 };
 

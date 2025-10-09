@@ -237,7 +237,7 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
 meas.Execute();
 
 auto [E, dE] = meas.OutputEnergy();
-const auto &res = meas.GetMeasureResult(); // 兼容字段从注册表派生（如 energy 等）
+auto energy_estimate = meas.GetEnergyEstimate(); // 查询 energy 键的统计值
 // 注册表 CSV 输出位于 stats/<key>.csv
 ```
 

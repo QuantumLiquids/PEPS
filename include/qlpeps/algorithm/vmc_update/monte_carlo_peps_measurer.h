@@ -19,6 +19,7 @@
 #include "qlpeps/base/mpi_signal_guard.h"
 #include <complex>
 #include <unordered_map>
+#include <optional>
 #include <string>
 
 
@@ -154,7 +155,6 @@ void DumpSampleData(const std::vector<std::vector<TenElemT>> sample_data, const 
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 class MCPEPSMeasurer : public qlten::Executor {
-  struct Result;
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
@@ -226,27 +226,14 @@ class MCPEPSMeasurer : public qlten::Executor {
 
   MCMeasurementParams mc_measure_params;
 
-  std::pair<TenElemT, double> OutputEnergy() const {
-    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-      if (this->GetStatus() == ExecutorStatus::FINISH) {
-        std::cout << "Measured energy : "
-                  << std::setw(8) << res.energy
-                  << pm_sign << " "
-                  << std::scientific << res.en_err
-                  << std::endl;
-      } else {
-        std::cout << "The program didn't complete the measurements. " << std::endl;
-      }
-    }
-    return {res.energy, res.en_err};
-  }
+  struct EnergyEstimate {
+    TenElemT energy;
+    double stderr;
+  };
 
-  const Result &GetMeasureResult() const {
-    if (this->GetStatus() != ExecutorStatus::FINISH) {
-      std::cout << "The program didn't complete the measurements. " << std::endl;
-    }
-    return res;
-  }
+  std::pair<TenElemT, double> OutputEnergy() const;
+
+  std::optional<EnergyEstimate> GetEnergyEstimate() const;
 
   /**
    * @brief Get the current configuration of the TPS sample
@@ -278,13 +265,10 @@ class MCPEPSMeasurer : public qlten::Executor {
                       const std::string &key,
                       const std::vector<TenElemT> &vals,
                       const std::vector<double> &errs) const;
-  // Real-valued overload for conceptually real observables (e.g., psi_rel_err)
-  void DumpStatsFlat_(const std::string &dir,
-                      const std::string &key,
-                      const std::vector<double> &vals,
-                      const std::vector<double> &errs) const;
-
-  // For pair observables packed as upper-triangular (i<=j), emit index mapping file
+  void DumpStatsFlatReal_(const std::string &dir,
+                          const std::string &key,
+                          const std::vector<double> &vals,
+                          const std::vector<double> &errs) const;
   void DumpPackedUpperTriIndexMap_(const std::string &dir,
                                    const std::string &key,
                                    size_t packed_len) const;
@@ -298,10 +282,6 @@ class MCPEPSMeasurer : public qlten::Executor {
   MeasurementSolver measurement_solver_;
   MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> engine_;
   std::vector<ObservableMeta> observables_meta_;
-  struct Result {
-    TenElemT energy;
-    double en_err;
-  } res;
 
   /**
    * Record the statistic inside `bin_size`
@@ -324,12 +304,6 @@ class MCPEPSMeasurer : public qlten::Executor {
         
       }
     }
-
-    /**
-     * Average, Standard error, auto correlation inside one MPI process
-     * @return
-     */
-    Result Statistic(void) const { return Result{}; }
 
     // Compute element-wise mean and naive standard error (no autocorr) for registry keys within one rank
     std::unordered_map<std::string, std::pair<std::vector<TenElemT>, std::vector<double>>> StatisticRegistry() const {
@@ -365,29 +339,7 @@ class MCPEPSMeasurer : public qlten::Executor {
   // Psi sample tuple: (psi_mean, psi_rel_err)
   std::vector<std::pair<TenElemT, double>> psi_samples_;
 
-  // Friendly stats dump helpers (text files)
-  void DumpStatsMatrix_(const std::string &dir,
-                        const std::string &key,
-                        const std::vector<TenElemT> &vals,
-                        size_t ly,
-                        size_t lx) const;
-  void DumpStatsFlat_(const std::string &dir,
-                      const std::string &key,
-                      const std::vector<TenElemT> &vals,
-                      const std::vector<double> &errs) const;
-  // Real-valued overload for conceptually real observables (e.g., psi_rel_err)
-  void DumpStatsFlat_(const std::string &dir,
-                      const std::string &key,
-                      const std::vector<double> &vals,
-                      const std::vector<double> &errs) const;
-
-  // For pair observables packed as upper-triangular (i<=j), emit index mapping file
-  void DumpPackedUpperTriIndexMap_(const std::string &dir,
-                                   const std::string &key,
-                                   size_t packed_len) const;
-
-  // Compute psi(S) consistency: return pair (psi_mean, psi_rel_err)
-  std::pair<TenElemT, double> ComputePsiConsistencyRelErr_(const std::vector<TenElemT> &psi_list) const;
+  std::optional<EnergyEstimate> QueryEnergyEstimate_() const;
 
   // Dump per-sample psi summary to samples/psi.csv on master rank
   void DumpPsiSamples_(const std::string &dir) const {

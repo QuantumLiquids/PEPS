@@ -24,7 +24,7 @@ MCPEPSMeasurer<TenElemT,
     mc_measure_params(measurement_params),
     measurement_solver_(solver),
     engine_(sitpst, measurement_params.mc_params, measurement_params.peps_params, comm, std::move(mc_updater)) {
-  ReserveSamplesDataSpace_();
+  ReserveSamplesData_();
   PrintExecutorInfo_();
   qlpeps::MPISignalGuard::Register();
   // Load observable metadata from solver
@@ -122,7 +122,7 @@ template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typen
 void MCPEPSMeasurer<TenElemT,
                                    QNT,
                                    MonteCarloSweepUpdater,
-                                   MeasurementSolver>::ReserveSamplesDataSpace_(
+                                   MeasurementSolver>::ReserveSamplesData_(
     void) {
   sample_data_.Reserve(mc_measure_params.mc_params.num_samples);
 }
@@ -165,15 +165,6 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::G
 
   // Aggregate registry-based observables
   auto local_registry = sample_data_.StatisticRegistry();
-  // First process energy (scalar) to populate Result
-  if (auto it = local_registry.find("energy"); it != local_registry.end()) {
-    const auto &local_mean = it->second.first; // length 1
-    std::vector<TenElemT> global_mean;
-    std::vector<double> global_stderr;
-    GatherStatisticListOfData(local_mean, engine_.Comm(), global_mean, global_stderr);
-    if (!global_mean.empty()) res.energy = global_mean[0];
-    if (!global_stderr.empty()) res.en_err = global_stderr[0];
-  }
   // Then gather all keys into registry_stats_
   for (const auto &kv : local_registry) {
     const std::string &key = kv.first;
@@ -233,7 +224,7 @@ MCPEPSMeasurer<TenElemT,
             std::vector<double> vals_real;
             vals_real.reserve(vals.size());
             for (const auto &v : vals) { vals_real.push_back(static_cast<double>(std::real(v))); }
-            DumpStatsFlat_(stats_dir, key, vals_real, errs);
+            DumpStatsFlatReal_(stats_dir, key, vals_real, errs);
           } else {
             DumpStatsFlat_(stats_dir, key, vals, errs);
           }
@@ -355,7 +346,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsFlat_(
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsFlatReal_(
     const std::string &dir,
     const std::string &key,
     const std::vector<double> &vals,
@@ -397,6 +388,60 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Comput
   }
   const double rel = max_dev / denom; // radius_rel = max_i |psi_i - mean| / |mean|
   return {mean, rel};
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+std::optional<typename MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::EnergyEstimate>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::QueryEnergyEstimate_() const {
+  auto it = registry_stats_.find("energy");
+  if (it == registry_stats_.end()) {
+    return std::nullopt;
+  }
+  const auto &vals = it->second.first;
+  const auto &errs = it->second.second;
+  if (vals.empty()) {
+    return std::nullopt;
+  }
+  TenElemT energy = vals.front();
+  double stderr = errs.empty() ? 0.0 : errs.front();
+  return EnergyEstimate{energy, stderr};
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+std::pair<TenElemT, double>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::OutputEnergy() const {
+  auto energy_opt = QueryEnergyEstimate_();
+  if (!energy_opt.has_value()) {
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+      std::cout << "Energy observable is unavailable." << std::endl;
+    }
+    return {TenElemT(0), 0.0};
+  }
+  const auto &energy_est = energy_opt.value();
+  if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+    if (this->GetStatus() == ExecutorStatus::FINISH) {
+      std::cout << "Measured energy : "
+                << std::setw(8) << energy_est.energy
+                << " +/- "
+                << std::scientific << energy_est.stderr
+                << std::endl;
+    } else {
+      std::cout << "The program didn't complete the measurements. " << std::endl;
+    }
+  }
+  return {energy_est.energy, energy_est.stderr};
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+std::optional<typename MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::EnergyEstimate>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::GetEnergyEstimate() const {
+  if (this->GetStatus() != ExecutorStatus::FINISH) {
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+      std::cout << "The program didn't complete the measurements. " << std::endl;
+    }
+    return std::nullopt;
+  }
+  return QueryEnergyEstimate_();
 }
 
 } // namespace qlpeps

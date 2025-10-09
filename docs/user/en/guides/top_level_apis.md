@@ -238,7 +238,7 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
 meas.Execute();
 
 auto [E, dE] = meas.OutputEnergy();
-const auto &res = meas.GetMeasureResult(); // legacy fields populated from registry (energy, etc.)
+auto energy_estimate = meas.GetEnergyEstimate(); // query registry statistics by key, e.g., "energy"
 // Registry CSVs are dumped under stats/<key>.csv
 ```
 

@@ -507,13 +507,19 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
   }
 
   std::vector<ObservableMeta> DescribeObservables() const {
-    return {
-        {"energy", "Total energy (scalar)", {}, {}},
-        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
-        {"charge", "Local charge per site (Ly,Lx)", {}, {"y","x"}},
-        {"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {}, {"y","x"}},
-        {"SC_bond_singlet_v", "Bond singlet SC (vertical)", {}, {"y","x"}}
-    };
+    auto base = SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables();
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {0, 0};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
+        meta.index_labels = {"bond_id"};
+      }
+    }
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {0, 0}, {"y", "x"}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical)", {0, 0}, {"y", "x"}});
+    return base;
   }
 };
 
@@ -546,13 +552,19 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
   }
 
   std::vector<ObservableMeta> DescribeObservables() const {
-    return {
-        {"energy", "Total energy (scalar)", {}, {}},
-        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
-        {"charge", "Local charge per site (Ly,Lx)", {}, {"y","x"}},
-        {"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {}, {"y","x"}},
-        {"SC_bond_singlet_v", "Bond singlet SC (vertical)", {}, {"y","x"}}
-    };
+    auto base = SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables();
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {0, 0};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
+        meta.index_labels = {"bond_id"};
+      }
+    }
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {0, 0}, {"y", "x"}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical)", {0, 0}, {"y", "x"}});
+    return base;
   }
 };
 
