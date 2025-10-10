@@ -40,6 +40,8 @@ class SquareNNNModelMeasurementSolver
     const size_t ly = tn.rows();
     const size_t lx = tn.cols();
 
+    constexpr bool kHasSCFlag = requires { ModelType::enable_sc_measurement; };
+
     // Site-local observables
     auto *derived = static_cast<ModelType *>(this);
     if constexpr (ModelType::requires_spin_sz_measurement) {
@@ -57,13 +59,22 @@ class SquareNNNModelMeasurementSolver
     std::vector<TenElemT> e_h; if (lx > 1) e_h.reserve(ly * (lx - 1));
     std::vector<TenElemT> e_v; if (ly > 1) e_v.reserve((ly - 1) * lx);
     std::vector<TenElemT> e_diag; if constexpr (has_nnn_interaction) { if (lx > 1 && ly > 1) e_diag.reserve((ly - 1) * (lx - 1)); }
+    std::vector<TenElemT> sc_h;
+    std::vector<TenElemT> sc_v;
+    if constexpr (kHasSCFlag) {
+      if (ModelType::enable_sc_measurement) {
+        if (lx > 1) sc_h.reserve(ly * (lx - 1));
+        if (ly > 1) sc_v.reserve((ly - 1) * lx);
+      }
+    }
     TenElemT energy_bond_total = 0;
 
     // Bond measurement functor (NN)
-    auto bond_measure_func = [&](const SiteIdx site1, const SiteIdx site2, const BondOrientation orient, const TenElemT inv_psi_row_or_col) {
+    auto bond_measure_func = [&](const SiteIdx site1, const SiteIdx site2,
+                                 const BondOrientation orient, const TenElemT inv_psi_row_or_col) {
       TenElemT eb;
+      std::optional<TenElemT> fermion_psi;
       if constexpr (Index<QNT>::IsFermionic()) {
-        std::optional<TenElemT> fermion_psi; fermion_psi = TenElemT(1.0) / inv_psi_row_or_col;
         eb = derived->EvaluateBondEnergy(site1, site2, config(site1), config(site2), orient, tn,
                                          (*split_index_tps)(site1), (*split_index_tps)(site2), fermion_psi);
       } else {
@@ -76,6 +87,22 @@ class SquareNNNModelMeasurementSolver
         e_v.push_back(eb);
       }
       energy_bond_total += eb;
+
+      if constexpr (kHasSCFlag) {
+        if (ModelType::enable_sc_measurement) {
+          std::optional<TenElemT> sc_psi;
+          if constexpr (Index<QNT>::IsFermionic()) {
+            sc_psi = fermion_psi;
+          }
+          auto sc_pair = derived->EvaluateBondSC(site1, site2, config(site1), config(site2), orient, tn,
+                                                 (*split_index_tps)(site1), (*split_index_tps)(site2), sc_psi);
+          if (orient == HORIZONTAL) {
+            sc_h.push_back(sc_pair.second);
+          } else if (orient == VERTICAL) {
+            sc_v.push_back(sc_pair.second);
+          }
+        }
+      }
     };
 
     // NNN link measurement functor (accumulate LEFTUP_TO_RIGHTDOWN to preserve legacy semantics)
@@ -123,6 +150,12 @@ class SquareNNNModelMeasurementSolver
     if (!e_h.empty()) out["bond_energy_h"] = std::move(e_h);
     if (!e_v.empty()) out["bond_energy_v"] = std::move(e_v);
     if constexpr (has_nnn_interaction) { if (!e_diag.empty()) out["bond_energy_diag"] = std::move(e_diag); }
+    if constexpr (kHasSCFlag) {
+      if (ModelType::enable_sc_measurement) {
+        if (!sc_h.empty()) out["SC_bond_singlet_h"] = std::move(sc_h);
+        if (!sc_v.empty()) out["SC_bond_singlet_v"] = std::move(sc_v);
+      }
+    }
     return out;
   }
 

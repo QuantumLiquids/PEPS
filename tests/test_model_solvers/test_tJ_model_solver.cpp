@@ -13,7 +13,7 @@
 using namespace qlten;
 using namespace qlpeps;
 
-const bool  SquaretJModelMixIn::enable_sc_measurement = false;
+// Smoke test: ensure diagonal observables exist for an arbitrary configuration.
 TEST(tJModelSolverTest, HandlesMeasureDiagonalOrder) {
   const double t = 1.0, J = 0.3;
   const size_t Lx = 4, Ly = 6;

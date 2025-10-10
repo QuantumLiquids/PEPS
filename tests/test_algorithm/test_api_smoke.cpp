@@ -48,7 +48,8 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
   SquareLatticePEPS<TenElemT, QNT> peps0(pb_out, Ly, Lx);
   std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx, 0));
   peps0.Initial(activates);
-  SplitIndexTPS<TenElemT, QNT> sitps = TPS<TenElemT, QNT>(peps0);
+  auto tps = ToTPS<TenElemT, QNT>(peps0);
+  SplitIndexTPS<TenElemT, QNT> sitps = ToSplitIndexTPS<TenElemT, QNT>(tps);
 
   // Add small random noise to SplitIndexTPS tensors to break symmetry
   {

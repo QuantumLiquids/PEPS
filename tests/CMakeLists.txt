@@ -472,4 +472,20 @@ if(BUILD_SLOW_TESTS)
     set_tests_properties(test_triangle_heisenberg_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
     set_tests_properties(test_triangle_j1j2_heisenberg_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
     set_tests_properties(test_triangle_j1j2_heisenberg_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+
+    add_two_type_unittest(test_square_tj_model
+            "integration_tests/test_square_tj_model.cpp"
+            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+    if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
+        set_tests_properties(test_square_tj_model_double PROPERTIES DISABLED TRUE)
+        set_tests_properties(test_square_tj_model_complex PROPERTIES DISABLED TRUE)
+    endif()
+    set_tests_properties(test_square_tj_model_double PROPERTIES LABELS "integration;single;slow")
+    set_tests_properties(test_square_tj_model_complex PROPERTIES LABELS "integration;single;slow")
+    add_mpi_unittest_run(test_square_tj_model_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_square_tj_model_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+    set_tests_properties(test_square_tj_model_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_square_tj_model_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
 endif()

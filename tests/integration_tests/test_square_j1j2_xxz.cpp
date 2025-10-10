@@ -113,11 +113,11 @@ protected:
       su_exe->Execute();
       
       // Save optimized TPS
-      auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+      auto tps = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
       for (auto &ten : tps) {
         ten *= (1.0 / ten.GetMaxAbs());
       }
-      SplitIndexTPS<TenElemT, QNT> sitps = tps;
+      SplitIndexTPS<TenElemT, QNT> sitps = ToSplitIndexTPS<TenElemT, QNT>(tps);
       sitps.Dump(tps_path);
       
       delete su_exe;

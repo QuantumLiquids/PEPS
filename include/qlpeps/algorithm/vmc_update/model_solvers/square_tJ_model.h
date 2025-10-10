@@ -62,7 +62,7 @@ class SquaretJModelMixIn {
  public:
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
-  static const bool enable_sc_measurement;
+  inline static bool enable_sc_measurement = false;
   SquaretJModelMixIn(void) = delete;
 
   explicit SquaretJModelMixIn(double t, double t2, double J, double V, double mu)
@@ -118,6 +118,7 @@ class SquaretJModelMixIn {
       const JastrowDress &jastrow_dress
   );
 
+    ///< Here psi seems to be a redundant variable.
   template<typename TenElemT, typename QNT>
   std::pair<TenElemT, TenElemT> EvaluateBondSC(
       const SiteIdx site1, const SiteIdx site2,
@@ -166,6 +167,10 @@ class SquaretJModelMixIn {
   double mu_;
 };
 
+/**
+ *  The variable psi is ONLY used for return. Any input will be covered by nullopt or a new value.
+ *  The returned psi will be used to check the accuracy of psi get by boundary MPS contraction of tensor network.
+ */
 template<typename TenElemT, typename QNT>
 TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     const SiteIdx site1, const SiteIdx site2,
@@ -272,6 +277,9 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
  * t2 hopping energy
  *
  * @param psi  if containing value, we assume it is the correct value; if not, calculate it and store into it.
+ * This logic is based on the operations outside the function:
+ * psi will be reset as unavailable once boundary tensor was moved; And for the calculation in
+ * the same plaquette, the psi can be reused for different diagonal bond direction.
  */
 template<typename TenElemT, typename QNT>
 TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
@@ -440,71 +448,7 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
                                                                                0,
                                                                                J,
                                                                                0,
-                                                                               mu) {};
-
-  template<typename TenElemT, typename QNT>
-  ObservableMap<TenElemT> EvaluateObservables(
-      const SplitIndexTPS<TenElemT, QNT> *sitps,
-      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
-    ObservableMap<TenElemT> out;
-    std::vector<TenElemT> psi_list; // local only; not returned in registry
-    auto &tn = tps_sample->tn;
-    const auto &config = tps_sample->config;
-    const auto &trunc = tps_sample->trun_para;
-    const size_t ly = tn.rows();
-    const size_t lx = tn.cols();
-
-    // Basic fields
-    std::vector<TenElemT> sz; sz.reserve(ly * lx);
-    for (auto &c : config) { sz.push_back(static_cast<TenElemT>(CalSpinSzImpl(c))); }
-    out["spin_z"] = std::move(sz);
-    std::vector<TenElemT> ch; ch.reserve(ly * lx);
-    for (auto &c : config) { ch.push_back(static_cast<TenElemT>(CalDensityImpl(c))); }
-    out["charge"] = std::move(ch);
-
-    // Prepare env and scan bonds for SC_bond_singlet
-    tn.GenerateBMPSApproach(UP, trunc);
-    std::vector<TenElemT> sc_h; if (lx > 1) sc_h.reserve(ly * (lx - 1));
-    std::vector<TenElemT> sc_v; if (ly > 1) sc_v.reserve((ly - 1) * lx);
-    for (size_t row = 0; row < ly; ++row) {
-      tn.InitBTen(LEFT, row);
-      tn.GrowFullBTen(RIGHT, row, 1, true);
-      for (size_t col = 0; col < lx; ++col) {
-        const SiteIdx s1{row, col};
-        if (col + 1 < lx) {
-          const SiteIdx s2{row, col + 1};
-          std::optional<TenElemT> psi;
-          auto pair = EvaluateBondSC(s1, s2, config(s1), config(s2), HORIZONTAL, tn, (*sitps)(s1), (*sitps)(s2), psi);
-          sc_h.push_back(pair.second); // delta
-          tn.BTenMoveStep(RIGHT);
-        }
-      }
-      if (row + 1 < ly) { tn.BMPSMoveStep(DOWN, trunc); }
-    }
-
-    // Vertical: reset env along columns
-    tn.GenerateBMPSApproach(LEFT, trunc);
-    for (size_t col = 0; col < lx; ++col) {
-      tn.InitBTen(UP, col);
-      tn.GrowFullBTen(DOWN, col, 1, true);
-      for (size_t row = 0; row + 1 < ly; ++row) {
-        const SiteIdx s1{row, col};
-        const SiteIdx s2{row + 1, col};
-        std::optional<TenElemT> psi;
-        auto pair = EvaluateBondSC(s1, s2, config(s1), config(s2), VERTICAL, tn, (*sitps)(s1), (*sitps)(s2), psi);
-        sc_v.push_back(pair.second);
-        if (row + 2 < ly) tn.BTenMoveStep(DOWN);
-      }
-      if (col + 1 < lx) tn.BMPSMoveStep(RIGHT, trunc);
-    }
-
-    // Energy via diagonal terms is available from legacy path; keep scalar zero here to avoid duplication
-    out["energy"] = {TenElemT(0)}; // engine will still use sample energy list for stats
-    if (!sc_h.empty()) out["SC_bond_singlet_h"] = std::move(sc_h);
-    if (!sc_v.empty()) out["SC_bond_singlet_v"] = std::move(sc_v);
-    // Do not emit psi_list via registry; executor will build psi via base helper when needed
-    return out;
-  }
+                                                                               mu) {}
 
   std::vector<ObservableMeta> DescribeObservables() const {
     auto base = SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables();
@@ -540,16 +484,7 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
                                                                                            t2,
                                                                                            J,
                                                                                            0,
-                                                                                           mu) {};
-
-  template<typename TenElemT, typename QNT>
-  ObservableMap<TenElemT> EvaluateObservables(
-      const SplitIndexTPS<TenElemT, QNT> *sitps,
-      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
-    // Reuse NN model logic; NNN does not change local SC definition.
-    SquaretJNNModel helper(0, 0, 0);
-    return helper.template EvaluateObservables<TenElemT, QNT>(sitps, tps_sample);
-  }
+                                                                                           mu) {}
 
   std::vector<ObservableMeta> DescribeObservables() const {
     auto base = SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables();

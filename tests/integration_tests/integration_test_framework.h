@@ -32,7 +32,7 @@ protected:
   // Common parameters
   size_t Lx = 3;
   size_t Ly = 4;
-  size_t Dpeps = 6;
+  size_t Dpeps = 8;
   QNT qn0 = QNT();
   
   // Physical indices
@@ -85,11 +85,11 @@ protected:
       executor->Execute();
 
       // Save TPS
-      auto tps = TPST(executor->GetPEPS());
+      auto tps = ToTPS<TenElemT, QNT>(executor->GetPEPS());
       for (auto &ten : tps) {
         ten *= (1.0 / ten.GetMaxAbs());
       }
-      SplitIndexTPST sitps = tps;
+      SplitIndexTPST sitps = ToSplitIndexTPS<TenElemT, QNT>(tps);
       sitps.Dump(tps_path);
     }
   }
@@ -144,6 +144,8 @@ protected:
     auto [energy, en_err] = measure_exe->OutputEnergy();
     EXPECT_NEAR(std::real(energy), energy_ed, 0.001);
     
+    this->template ValidateMeasurementResults<ModelT, MCUpdaterT>(*measure_exe);
+
     delete measure_exe;
   }
 
@@ -175,6 +177,9 @@ protected:
     
     delete executor;
   }
+
+  template<typename ModelT, typename MCUpdaterT>
+  void ValidateMeasurementResults(const MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT> &) const {}
 };
 
 #endif // PEPS_INTEGRATION_TEST_FRAMEWORK_H 

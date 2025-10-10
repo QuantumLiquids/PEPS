@@ -10,6 +10,7 @@
 #include <bitset>
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
+#include "qlpeps/api/conversions.h"
 #include "qlpeps/qlpeps.h"
 
 using namespace qlten;
@@ -796,7 +797,7 @@ struct ProjectedtJTensorNetwork : public testing::Test {
         tps({row, col}) = local_ten;
       }
     }
-    SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps(tps);
+    SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps = SplitIndexTPS<QLTEN_Double, fZ2QN>::FromTPS(tps);
     split_idx_tps.NormalizeAllSite();
     split_idx_tps *= 3.0;
     return split_idx_tps;
@@ -882,8 +883,8 @@ struct ProjectedSpinTenNet : public testing::Test {
     SquareLatticeNNSimpleUpdateExecutor<QLTEN_Double, U1QN> su_exe(update_para, peps0, ham_hei_nn);
     su_exe.Execute();
 
-    TPS<QLTEN_Double, U1QN> tps(su_exe.GetPEPS());
-    SplitIndexTPS<QLTEN_Double, U1QN> split_index_tps(tps);
+    TPS<QLTEN_Double, U1QN> tps = qlpeps::ToTPS<QLTEN_Double, U1QN>(su_exe.GetPEPS());
+    SplitIndexTPS<QLTEN_Double, U1QN> split_index_tps = SplitIndexTPS<QLTEN_Double, U1QN>::FromTPS(tps);
     for (size_t i = 0; i < Lx; i++) {
       //col index
       for (size_t j = 0; j < Ly; j++) {

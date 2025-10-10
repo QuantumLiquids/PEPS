@@ -242,6 +242,8 @@ class MCPEPSMeasurer : public qlten::Executor {
   const Configuration& GetCurrentConfiguration() const {
     return engine_.WavefuncComp().config;
   }
+
+  const auto &ObservableRegistry() const { return registry_stats_; }
  private:
   void ReserveSamplesData_();
 

@@ -9,6 +9,7 @@
 
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
+#include "qlpeps/api/conversions.h"
 #include "qlpeps/algorithm/simple_update/simple_update_model_all.h"
 #include <memory>
 
@@ -121,7 +122,7 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   su_exe->update_para.Trunc_err = 1e-10;
   su_exe->ResetStepLenth(0.01); // call to re-evaluate the evolution gates
   su_exe->Execute();
-  auto tps_d4 = TPS<TenElemT, Z2QN>(su_exe->GetPEPS());
+  auto tps_d4 = qlpeps::ToTPS<TenElemT, Z2QN>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
   tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
@@ -137,7 +138,7 @@ TEST_F(TransverseFieldIsing, SimpleUpdate) {
   su_exe->update_para.steps = 100;
   su_exe->ResetStepLenth(0.0001);
   su_exe->Execute();
-  auto tps_d8 = TPS<TenElemT, Z2QN>(su_exe->GetPEPS());
+  auto tps_d8 = qlpeps::ToTPS<TenElemT, Z2QN>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
   tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
   double E_est = su_exe->GetEstimatedEnergy();
@@ -355,7 +356,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenberg) {
   su_exe->update_para.Trunc_err = 1e-6;
   su_exe->ResetStepLenth(0.1); // call to re-evaluate the evolution gates
   su_exe->Execute();
-  auto tps_d4 = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+  auto tps_d4 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
   tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
@@ -365,7 +366,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenberg) {
   su_exe->update_para.steps = 50;
   su_exe->ResetStepLenth(0.02);
   su_exe->Execute();
-  auto tps_d8 = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+  auto tps_d8 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
   tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
@@ -390,7 +391,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningFie
   su_exe->update_para.Trunc_err = 1e-6;
   su_exe->ResetStepLenth(0.05); // call to re-evaluate the evolution gates
   su_exe->Execute();
-  auto tps_d4 = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+  auto tps_d4 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
   tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
@@ -400,7 +401,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningFie
   su_exe->update_para.steps = 50;
   su_exe->ResetStepLenth(0.01);
   su_exe->Execute();
-  auto tps_d8 = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+  auto tps_d8 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
   tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 
@@ -424,7 +425,7 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, TriangleNNHeisenberg) {
   su_exe->ResetStepLenth(0.05);
   su_exe->Execute();
 
-  auto tps4 = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+  auto tps4 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
   su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
   tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
 

@@ -155,30 +155,15 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @note For fermionic tensors, appropriate quantum number sectors are created.
    */
   [[deprecated("Use ToSplitIndexTPS(tps) in qlpeps::api::conversions instead")]]
-  SplitIndexTPS(const TPST &tps) : TenMatrix<std::vector<Tensor>>(tps.rows(), tps.cols()) {
-    const size_t phy_idx = 4;
-    for (size_t row = 0; row < tps.rows(); row++) {
-      for (size_t col = 0; col < tps.cols(); col++) {
-        const Index<QNT> local_hilbert = tps({row, col}).GetIndex(phy_idx);
-        const auto local_hilbert_inv = InverseIndex(local_hilbert);
-        const size_t dim = local_hilbert.dim();
-        (*this)({row, col}) = std::vector<Tensor>(dim);
-        for (size_t i = 0; i < dim; i++) {
-          if constexpr (Tensor::IsFermionic()) {
-            QNT qn = local_hilbert.GetQNSctFromActualCoor(i).GetQn();
-            Index<QNT> match_idx = Index<QNT>({QNSector<QNT>(qn, 1)}, IN);
-            Tensor project_ten = Tensor({local_hilbert_inv, match_idx});
-            project_ten({i, 0}) = TenElemT(1.0);
-            Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &(*this)({row, col})[i]);
-          } else {
-            Tensor project_ten = Tensor({local_hilbert_inv});
-            project_ten({i}) = TenElemT(1.0);
-            Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &(*this)({row, col})[i]);
-          }
-        }
-      }
-    }
-  }
+  SplitIndexTPS(const TPST &tps) : SplitIndexTPS(FromTPS(tps)) {}
+
+  /**
+   * @brief Explicit conversion helper from TPS to split-index representation.
+   *
+   * @param tps Source tensor product state to be split.
+   * @return SplitIndexTPS with physical legs separated into individual tensors.
+   */
+  static SplitIndexTPS FromTPS(const TPST &tps);
 
   // using TenMatrix<std::vector<Tensor>>::operator=;
   // Using explicit definition below for compatibility with lower version of g++

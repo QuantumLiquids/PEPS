@@ -162,7 +162,7 @@ TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
     // su_exe->Execute();
     
     auto peps = su_exe->GetPEPS();
-    auto tps = TPS<TenElemT, QNT>(su_exe->GetPEPS());
+    auto tps = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
     SplitIndexTPS<TenElemT, QNT> sitps = SplitPhyIndex(tps);
     sitps.Dump(tps_path);
 
