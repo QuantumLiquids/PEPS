@@ -14,13 +14,13 @@ owners: [PEPS Core]
 struct ObservableMeta {
   std::string key;                    // "energy", "spin_z", "charge", "bond_energy", "SzSz", "SC_dwave", ...
   std::string description;            // English, concise physical meaning
-  std::vector<size_t> shape;          // e.g., {Ly, Lx} or {Nbonds} or {Ly,Lx,Ly,Lx}
-  std::vector<std::string> index_labels; // e.g., {"y","x"} or {"bond_id"}
+  std::vector<size_t> shape;          // runtime shape. Scalars use {}; lattice-aware entries use {Ly, Lx}, etc.
+  std::vector<std::string> index_labels; // semantic tags, e.g., {"y","x"} or {"bond_y","bond_x"}
 };
 ```
 
 求值接口（由 `MeasurementSolver` 实现）：
-- `DescribeObservables(): std::vector<ObservableMeta>`
+- `DescribeObservables(size_t ly, size_t lx): std::vector<ObservableMeta>`
 - `EvaluateSample(): std::unordered_map<std::string, std::vector<T>>`（扁平数组，长度为∏shape）
 
 Psi 摘要（特殊通道，非注册表成员）：
@@ -97,8 +97,42 @@ struct PsiSummary {
 - Remaining legacy discrepancies:
   - No raw `psi_list` in registry (by design).
   - Per-model gaps must be tracked as they surface; see below for planned tests.
-  - Base metadata supplied by `SquareNNNModelMeasurementSolver` is intentionally minimal. Each
-    concrete solver must enrich the entries (shape/index labels) to match its lattice geometry.
+  - Base metadata supplied by `SquareNNNModelMeasurementSolver` is intentionally minimal; each
+    concrete solver must enrich the entries (shape/index labels) to match its lattice geometry。
+
+## API Refactor Plan (No Backward Compatibility Required)
+
+### Goals
+- 彻底去除 “shape = {0,0} + 猜方向” 的隐式约定。
+- 让 `DescribeObservables` 在被调用时就拿到格点尺寸，写入真实 shape。
+- 统一 `index_labels` 语义，允许可选的第三轴标签标注方向/类型。
+- 更新 `MCPEPSMeasurer` 以使用新的 metadata，删除现有的 fallback 猜测逻辑。
+
+### Proposed Changes
+1. **API 签名**：`DescribeObservables(size_t ly, size_t lx)`
+   - 基类默认实现返回空向量。
+   - 派生类必须使用传入尺寸填充真实 shape。
+2. **Metadata 规范**
+   - `shape` 必须与数据长度匹配。标量 `{}`；site 级 `{ly, lx}`；横向 bond `{ly, lx-1}`；纵向 `{ly-1, lx}`；对角 `{ly-1, lx-1}`。
+  - `index_labels` 可空；若填写，应与 shape 轴一一对应（如 `{ "bond_y", "bond_x" }` 表示起点坐标）。
+3. **Measurer 更新**
+   - `MCPEPSMeasurer` 在构造时调用 `DescribeObservables(engine_.Ly(), engine_.Lx())`。
+   - Dump 逻辑直接利用 `shape` 创建矩阵；shape 与数据不匹配时抛出异常。
+   - 旧的尺寸猜测和静默 fallback 逻辑全部移除。
+4. **模型迁移 Checklist**
+   - 更新所有派生模型的 `DescribeObservables` 签名与实现，填入真实 shape/labels。
+   - 清理遗留的 `"bond_id"` 等魔法字符串。
+
+### Developer Guide 更新
+- 在开发者文档新增 “扩展 Measurement Solver 的步骤”：说明新签名、shape/index_labels 写法及常见示例。
+
+### Rollout Notes
+- 无需兼容旧签名；编译失败会直接提醒开发者调整。
+- 重构需与 `MCPEPSMeasurer` 改动同行提交，避免中间状态。
+
+### Follow-up
+- 重构完成后，更新本文档的 “Remaining legacy discrepancies” 段落。
+- 增加自动化测试，断言 `DescribeObservables(ly,lx)` 的 shape 与实际数据吻合。
 
 ## Test Roadmap
 

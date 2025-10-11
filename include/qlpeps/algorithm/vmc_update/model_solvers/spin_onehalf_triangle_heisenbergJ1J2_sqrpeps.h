@@ -265,17 +265,22 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     return out;
   }
 
-  std::vector<ObservableMeta> DescribeObservables() const {
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    const size_t row_corr_len = lx / 2;
+    const size_t bond_len_horizontal = ly * (lx > 0 ? lx - 1 : 0);
+    const size_t bond_len_vertical = (ly > 0 ? ly - 1 : 0) * lx;
+    const size_t bond_len_diag = (ly > 0 ? ly - 1 : 0) * (lx > 0 ? lx - 1 : 0);
+    const size_t site_num = ly * lx;
     return {
         {"energy", "Total energy (scalar)", {}, {}},
-        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
-        {"SzSz_row", "Row SzSz correlations along middle row (flat)", {}, {}},
-        {"SmSp_row", "Row Sm(i)Sp(j) along middle row (flat)", {}, {}},
-        {"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {}, {}},
-        {"bond_energy_h", "Bond energy on horizontal NN bonds (flat)", {}, {}},
-        {"bond_energy_v", "Bond energy on vertical NN bonds (flat)", {}, {}},
-        {"bond_energy_diag", "Bond energy on diagonal (triangular) bonds (flat)", {}, {}},
-        {"SzSz_all2all", "All-to-all SzSz correlations (upper-tri packed)", {}, {"pair_packed_upper_tri"}}
+        {"spin_z", "Local spin Sz per site (Ly,Lx)", {ly, lx}, {"y","x"}},
+        {"SzSz_row", "Row SzSz correlations along middle row (flat)", {row_corr_len}, {"segment"}},
+        {"SmSp_row", "Row Sm(i)Sp(j) along middle row (flat)", {row_corr_len}, {"segment"}},
+        {"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {row_corr_len}, {"segment"}},
+        {"bond_energy_h", "Bond energy on horizontal NN bonds (flat)", {bond_len_horizontal}, {"bond"}},
+        {"bond_energy_v", "Bond energy on vertical NN bonds (flat)", {bond_len_vertical}, {"bond"}},
+        {"bond_energy_diag", "Bond energy on diagonal (triangular) bonds (flat)", {bond_len_diag}, {"bond"}},
+        {"SzSz_all2all", "All-to-all SzSz correlations (upper-tri packed)", {site_num * (site_num + 1) / 2}, {"pair_packed_upper_tri"}}
     };
   }
  private:

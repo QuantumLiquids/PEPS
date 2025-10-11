@@ -30,7 +30,7 @@ MCPEPSMeasurer<TenElemT,
   PrintExecutorInfo_();
   qlpeps::MPISignalGuard::Register();
   // Load observable metadata from solver
-  observables_meta_ = measurement_solver_.DescribeObservables();
+  observables_meta_ = measurement_solver_.DescribeObservables(engine_.Ly(), engine_.Lx());
   this->SetStatus(ExecutorStatus::INITED);
 }
 
@@ -219,26 +219,36 @@ MCPEPSMeasurer<TenElemT,
         const auto &vals = pair.first;
         const auto &errs = pair.second;
 
-        // Determine lattice size once
-        const size_t ly = engine_.Ly();
-        const size_t lx = engine_.Lx();
-
-        // Decide dump style based on observable meta
         bool dumped = false;
-        for (const auto &m : observables_meta_) {
-          if (m.key != key) continue;
-          const bool shape_is_matrix = (m.shape.size() == 2 && m.shape[0] == ly && m.shape[1] == lx);
-          const bool labels_imply_matrix = (m.shape.empty() && m.index_labels.size() == 2 && m.index_labels[0] == "y" &&
-            m.index_labels[1] == "x" && vals.size() == ly * lx);
-          if (shape_is_matrix || labels_imply_matrix) {
-            DumpStatsMatrix_(stats_dir, key, vals, ly, lx);
+
+        const ObservableMeta *meta_ptr = nullptr;
+        for (const auto &meta : observables_meta_) {
+          if (meta.key == key) {
+            meta_ptr = &meta;
+            break;
+          }
+        }
+
+        if (meta_ptr != nullptr && !meta_ptr->shape.empty()) {
+          size_t expected = 1;
+          for (size_t dim : meta_ptr->shape) {
+            if (dim == 0) {
+              throw std::runtime_error("Observable '" + key + "' declares zero-sized dimension.");
+            }
+            expected *= dim;
+          }
+          if (expected != vals.size()) {
+            throw std::runtime_error("Observable '" + key + "' metadata shape mismatch: expected "
+                                     + std::to_string(expected) + " entries, got " + std::to_string(vals.size()));
+          }
+
+          if (meta_ptr->shape.size() == 2) {
+            DumpStatsMatrix_(stats_dir, key, vals, errs, meta_ptr->shape[0], meta_ptr->shape[1]);
             dumped = true;
           }
-          break;
         }
 
         if (!dumped) {
-          // Default: flat dump; special-case conceptually real quantities
           if (key == "psi_rel_err") {
             std::vector<double> vals_real;
             vals_real.reserve(vals.size());
@@ -342,14 +352,42 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   const std::string &dir,
   const std::string &key,
   const std::vector<TenElemT> &vals,
-  size_t ly,
-  size_t lx) const {
-  std::ofstream ofs(dir + key + ".csv");
-  ofs << "index,mean,stderr\n";
-  for (size_t y = 0; y < ly; ++y) {
-    for (size_t x = 0; x < lx; ++x) {
-      const size_t idx = y * lx + x;
-      ofs << idx << "," << vals[idx] << "," << 0.0 << "\n";
+  const std::vector<double> &errs,
+  size_t rows,
+  size_t cols) const {
+  const std::string mean_path = dir + key + "_mean.csv";
+  const std::string stderr_path = dir + key + "_stderr.csv";
+  {
+    std::ofstream ofs(mean_path);
+    if (!ofs.is_open()) {
+      throw std::runtime_error("Cannot open file: " + mean_path);
+    }
+    for (size_t r = 0; r < rows; ++r) {
+      for (size_t c = 0; c < cols; ++c) {
+        const size_t idx = r * cols + c;
+        ofs << vals[idx];
+        if (c + 1 < cols) {
+          ofs << ",";
+        }
+      }
+      ofs << "\n";
+    }
+  }
+  {
+    std::ofstream ofs(stderr_path);
+    if (!ofs.is_open()) {
+      throw std::runtime_error("Cannot open file: " + stderr_path);
+    }
+    for (size_t r = 0; r < rows; ++r) {
+      for (size_t c = 0; c < cols; ++c) {
+        const size_t idx = r * cols + c;
+        const double err = (idx < errs.size()) ? errs[idx] : 0.0;
+        ofs << err;
+        if (c + 1 < cols) {
+          ofs << ",";
+        }
+      }
+      ofs << "\n";
     }
   }
 }

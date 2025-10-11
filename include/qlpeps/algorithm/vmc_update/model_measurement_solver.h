@@ -30,8 +30,8 @@ using ObservableMap = std::unordered_map<std::string, std::vector<ElemT>>; // ke
 struct ObservableMeta {
   std::string key;                    ///< Unique key, e.g., "energy", "spin_z"
   std::string description;            ///< Concise physical meaning (English)
-  std::vector<size_t> shape;          ///< Data shape. Empty for scalar; {Ly,Lx} for per-site fields
-  std::vector<std::string> index_labels; ///< Optional labels, e.g., {"y","x"}
+  std::vector<size_t> shape;          ///< Data shape. Empty for scalar; lattice-aware entries should use runtime sizes
+  std::vector<std::string> index_labels; ///< Optional axis labels, e.g., {"y","x"} or {"bond_y","bond_x"}
 };
 
 /**
@@ -40,7 +40,7 @@ struct ObservableMeta {
  * This class defines the minimal "observable registry" API required by the new
  * measurement pipeline described in the RFC “Observable Registry and Results Organization”.
  * Concrete model solvers should override:
- *   - DescribeObservables(): return a list of ObservableMeta, each carrying a stable key
+ *   - DescribeObservables(size_t ly, size_t lx): return a list of ObservableMeta, each carrying a stable key
  *     (e.g., "energy", "spin_z", "bond_energy_h"), human-readable description, and
  *     optional shape/index labels.
  *   - EvaluateObservables(sitps, tps_sample): return key -> flat values for a single MC sample.
@@ -68,7 +68,7 @@ class ModelMeasurementSolver {
       TPSWaveFunctionComponent<TenElemT, QNT> * /*tps_sample*/
   ) { return {}; }
 
-  std::vector<ObservableMeta> DescribeObservables() const { return {}; }
+  std::vector<ObservableMeta> DescribeObservables(size_t /*ly*/, size_t /*lx*/) const { return {}; }
   const double wave_function_component_measure_accuracy = 1E-3;
 
   /**

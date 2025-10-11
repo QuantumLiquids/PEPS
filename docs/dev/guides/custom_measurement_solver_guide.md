@@ -11,12 +11,12 @@
 
 1) 元数据描述
 ```c++
-std::vector<ObservableMeta> DescribeObservables() const;
+std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const;
 ```
 - `key`: 唯一字符串，如 "energy"、"spin_z"、"psi_mean"；
 - `description`: 简短英文说明；
-- `shape`: 数据形状（空=标量；{Ly,Lx}=矩阵；更多维见模型实际）；
-- `index_labels`: 可选维度标签，如 {"y","x"}。
+- `shape`: 数据形状；标量用 `{}`，site 级 `{ly, lx}`，横向 bond `{ly, lx-1}`，纵向 bond `{ly-1, lx}`，对角 `{ly-1, lx-1}` 等。
+- `index_labels`: 可选轴标签；使用 `{"bond_y", "bond_x"}` 表示键起点坐标；如使用上三角打包，首元素填 `"pair_packed_upper_tri"`。
 
 2) 单次样本计算
 ```c++
@@ -34,7 +34,7 @@ ObservableMap<TenElemT> EvaluateObservables(
 - 统计：框架对每个 `key` 的每个分量在 MPI master 汇总并计算“均值 + 旧式标准误差（忽略自相关）”。
 - 导出目录：`stats/`
   - 统一 CSV：`stats/<key>.csv`，表头：`index,mean,stderr`
-  - 对于二维形状，仍以扁平索引导出，shape 信息可从 `DescribeObservables().shape` 获得
+- 对于二维形状，仍以扁平索引导出，shape 信息可从 `DescribeObservables(ly,lx)` 的返回值获得
 - 类型：由模板参数 TenElemT 决定（double/complex）。复数以 C++ 默认格式输出（"(re,im)"）。如需拆分列，可在后续版本加入 `_re/_im` 双列支持。
 
 ## 4. `psi_consistency` 建议

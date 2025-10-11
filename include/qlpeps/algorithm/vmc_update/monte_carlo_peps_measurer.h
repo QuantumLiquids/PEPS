@@ -173,10 +173,10 @@ class MCPEPSMeasurer : public qlten::Executor {
    * @param solver Model measurement solver for observables
    */
   MCPEPSMeasurer(const SITPST &sitps,
-                                const MCMeasurementParams &measurement_params,
-                                const MPI_Comm &comm,
-                                const MeasurementSolver &solver = MeasurementSolver(),
-                                MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater());
+                 const MCMeasurementParams &measurement_params,
+                 const MPI_Comm &comm,
+                 const MeasurementSolver &solver = MeasurementSolver(),
+                 MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater());
 
   /**
    * @brief Static factory function to create measurement executor by loading TPS from file path.
@@ -261,8 +261,9 @@ class MCPEPSMeasurer : public qlten::Executor {
   void DumpStatsMatrix_(const std::string &dir,
                         const std::string &key,
                         const std::vector<TenElemT> &vals,
-                        size_t ly,
-                        size_t lx) const;
+                        const std::vector<double> &errs,
+                        size_t rows,
+                        size_t cols) const;
   void DumpStatsFlat_(const std::string &dir,
                       const std::string &key,
                       const std::vector<TenElemT> &vals,

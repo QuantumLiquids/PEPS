@@ -160,20 +160,29 @@ class SquareNNNModelMeasurementSolver
   }
 
   // Provide generic metadata with stable keys; shapes are model-dependent and may be left unspecified.
-  std::vector<ObservableMeta> DescribeObservables() const {
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
     std::vector<ObservableMeta> out = {
         {"energy", "Total energy (scalar)", {}, {}}
     };
     if constexpr (ModelType::requires_spin_sz_measurement) {
-      out.push_back({"spin_z", "Local spin Sz per site", {}, {}});
+      out.push_back({"spin_z", "Local spin Sz per site", {ly, lx}, {"y", "x"}});
     }
     if constexpr (ModelType::requires_density_measurement) {
-      out.push_back({"charge", "Local charge per site", {}, {}});
+      out.push_back({"charge", "Local charge per site", {ly, lx}, {"y", "x"}});
     }
-    out.push_back({"bond_energy_h", "Bond energy on horizontal NN bonds", {}, {}});
-    out.push_back({"bond_energy_v", "Bond energy on vertical NN bonds", {}, {}});
+    out.push_back({"bond_energy_h",
+                   "Bond energy on horizontal NN bonds",
+                   {ly, (lx > 0 ? lx - 1 : 0)},
+                   {"bond_y", "bond_x"}});
+    out.push_back({"bond_energy_v",
+                   "Bond energy on vertical NN bonds",
+                   {(ly > 0 ? ly - 1 : 0), lx},
+                   {"bond_y", "bond_x"}});
     if constexpr (has_nnn_interaction) {
-      out.push_back({"bond_energy_diag", "Bond energy on diagonal NNN bonds", {}, {}});
+      out.push_back({"bond_energy_diag",
+                     "Bond energy on diagonal NNN bonds",
+                     {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)},
+                     {"bond_y", "bond_x"}});
     }
     return out;
   }

@@ -133,12 +133,12 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
     return out;
   }
 
-  std::vector<ObservableMeta> DescribeObservables() const {
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
     return {
         {"energy", "Total energy (scalar)", {}, {}},
-        {"spin_z", "Local spin Sz per site (Ly,Lx)", {}, {"y","x"}},
-        {"sigma_x", "Transverse magnetisation per site (Ly,Lx)", {}, {"y","x"}},
-        {"SzSz_row", "SzSz correlations along middle row (flat)", {}, {}}
+        {"spin_z", "Local spin Sz per site (Ly,Lx)", {ly, lx}, {"y","x"}},
+        {"sigma_x", "Transverse magnetisation per site (Ly,Lx)", {ly, lx}, {"y","x"}},
+        {"SzSz_row", "SzSz correlations along middle row (flat)", {lx / 2}, {"segment"}}
     };
   }
 

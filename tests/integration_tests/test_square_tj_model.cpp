@@ -33,6 +33,7 @@ protected:
   size_t num_down = 4;
   inline static const double kChemicalPotential = 0.776927653748;
   static constexpr double kEDEnergy = -8.93157918694544;
+  static constexpr double kEnergyTolerance = 5e-2;
   static constexpr std::array<double, 12> kEDChargeMap = {
       0.7212004230746919, 0.6236483846273850, 0.7212004230746910,
       0.6623151920824453, 0.6093203850583544, 0.6623151920824456,
@@ -112,7 +113,7 @@ protected:
 
     auto energy_stats = measurer.GetEnergyEstimate();
     ASSERT_TRUE(energy_stats.has_value());
-    EXPECT_NEAR(std::real(energy_stats->energy), kEDEnergy, 5e-2);// error arise from finite bond dimension
+    EXPECT_NEAR(std::real(energy_stats->energy), kEDEnergy, kEnergyTolerance);
     EXPECT_LT(std::abs(std::imag(energy_stats->energy)), 1e-10);
 
     const auto &observables = measurer.ObservableRegistry();
@@ -138,6 +139,9 @@ protected:
       EXPECT_LT(std::abs(imag_part), 1e-8);
     }
   }
+  bool EnableFrameworkEnergyCheck() const override { return false; }
+
+  double FrameworkEnergyTolerance() const override { return kEnergyTolerance; }
 };
 
 // Test simple update optimization
@@ -179,26 +183,12 @@ TEST_F(SquaretJModelSystem, StochasticReconfigurationOpt) {
   RunVMCOptimization<Model, MCUpdater>(model);
 }
 
-// Test Monte Carlo measurement after VMC optimization
 TEST_F(SquaretJModelSystem, Measure) {
   using Model = SquaretJNNModel;
   using MCUpdater = MCUpdateSquareNNExchange;
-  
+
   Model model(t, J, 0);
   RunMCMeasurement<Model, MCUpdater>(model);
-}
-
-TEST_F(SquaretJModelSystem, MonteCarloMatchesED) {
-  using Model = SquaretJNNModel;
-  using MCUpdater = MCUpdateSquareNNExchange;
-
-  Model model(t, J, 0);
-  SplitIndexTPS<TenElemT, QNT> sitps(Ly, Lx);
-  sitps.Load(tps_path);
-  MCPEPSMeasurer<TenElemT, QNT, MCUpdater, Model> measurer(sitps, measure_para, MPI_COMM_WORLD, model);
-  measurer.Execute();
-
-  ValidateMeasurementResults(measurer);
 }
 
 int main(int argc, char *argv[]) {

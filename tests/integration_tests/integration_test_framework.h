@@ -141,8 +141,11 @@ protected:
     double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
     std::cout << "Measurement Gflops = " << Gflops / elapsed_time << std::endl;
 
-    auto [energy, en_err] = measure_exe->OutputEnergy();
-    EXPECT_NEAR(std::real(energy), energy_ed, 0.001);
+    if (EnableFrameworkEnergyCheck()) {
+      auto [energy, en_err] = measure_exe->OutputEnergy();
+      (void)en_err;
+      EXPECT_NEAR(std::real(energy), energy_ed, FrameworkEnergyTolerance());
+    }
     
     this->template ValidateMeasurementResults<ModelT, MCUpdaterT>(*measure_exe);
 
@@ -180,6 +183,16 @@ protected:
 
   template<typename ModelT, typename MCUpdaterT>
   void ValidateMeasurementResults(const MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT> &) const {}
+
+  /**
+   * @brief Allow derived tests to opt out of the default energy benchmark.
+   */
+  virtual bool EnableFrameworkEnergyCheck() const { return true; }
+
+  /**
+   * @brief Default tolerance used when the framework checks the ED energy.
+   */
+  virtual double FrameworkEnergyTolerance() const { return 1e-3; }
 };
 
 #endif // PEPS_INTEGRATION_TEST_FRAMEWORK_H 

@@ -197,18 +197,28 @@ class SquareSpinOneHalfXXZModel
     return out;
   }
 
-  std::vector<ObservableMeta> DescribeObservables() const {
-    auto base = SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables();
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    auto base = SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
-        meta.shape = {0, 0};
+        meta.shape = {ly, lx};
         meta.index_labels = {"y", "x"};
       }
-      if (meta.key == "bond_energy_h" || meta.key == "bond_energy_v" || meta.key == "bond_energy_diag") {
-        meta.index_labels = {"bond_id"};
+      if (meta.key == "bond_energy_h") {
+        meta.shape = {ly, (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_v") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_diag") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
       }
     }
-    base.push_back({"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {}, {"pair_packed_upper_tri"}});
+    const size_t N = ly * lx;
+    base.push_back({"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {N * (N + 1) / 2}, {"pair_packed_upper_tri"}});
     return base;
   }
 };
