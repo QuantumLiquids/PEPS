@@ -345,9 +345,10 @@ class MCPEPSMeasurer : public qlten::Executor {
 
   // Dump per-sample psi summary to samples/psi.csv on master rank
   void DumpPsiSamples_(const std::string &dir) const {
-    if (engine_.Rank() != qlten::hp_numeric::kMPIMasterRank) return;
+    const bool is_master = engine_.Rank() == qlten::hp_numeric::kMPIMasterRank;
     const std::string samples_dir = dir + "samples/";
     engine_.EnsureDirectoryExists(samples_dir + "dummy");
+    if (!is_master) return;
     std::ofstream ofs(samples_dir + "psi.csv");
     ofs << "sample_id,psi_mean_re,psi_mean_im,psi_rel_err\n";
     for (size_t i = 0; i < psi_samples_.size(); ++i) {

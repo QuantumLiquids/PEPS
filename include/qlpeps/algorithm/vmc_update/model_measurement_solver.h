@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <complex>
 
 namespace qlpeps {
 
@@ -110,6 +111,26 @@ class ModelMeasurementSolver {
       TPSWaveFunctionComponent<TenElemT, QNT> * /*tps_sample*/
   ) const { return {}; }
 
+  /**
+   * @brief Estimate the mean amplitude and a conservative relative error.
+   *
+   * Tensor-network contractions yield multiple amplitudes for the same configuration by
+   * finalizing the network at different positions; the spread reflects truncation noise.
+   * For bosonic models these samples cluster tightly, but fermionic simulations often show
+   * two clusters separated by an almost-\f$\pi\f$ phase due to sign conventions.
+   *
+   * This helper first selects the largest-magnitude amplitude as a reference and flips any
+   * sample whose overlap \f$\Re[\psi_i \psi_\mathrm{ref}^*]\f$ is negative, effectively
+   * aligning the two fermionic branches. Afterwards it reports the arithmetic mean and the
+   * maximum deviation normalized by \f$|\langle\psi\rangle|\f$.
+   *
+   * The contraction pipeline guarantees that all amplitudes are well separated from the
+   * numeric limit, hence no extra normalization is required when forming the overlap.
+   *
+   * @tparam TenElemT Scalar type of the amplitudes (real or complex).
+   * @param psi_list All contraction results obtained for a single configuration.
+   * @return Mean amplitude and relative radius of the aligned cluster.
+   */
   template<typename TenElemT>
   PsiSummary<TenElemT> ComputePsiSummary(const std::vector<TenElemT> &psi_list) const {
     PsiSummary<TenElemT> out{};
@@ -118,13 +139,42 @@ class ModelMeasurementSolver {
       out.psi_rel_err = 0.0;
       return out;
     }
+    // Choose the largest magnitude as reference to stabilize the phase alignment.
+    constexpr double kReferenceTol = 1e-14;
+    size_t ref_index = 0;
+    double ref_abs = 0.0;
+    for (size_t i = 0; i < psi_list.size(); ++i) {
+      double mag = static_cast<double>(std::abs(psi_list[i]));
+      if (mag > ref_abs) {
+        ref_abs = mag;
+        ref_index = i;
+      }
+    }
+    const bool ref_valid = ref_abs > kReferenceTol;
+    const TenElemT psi_ref = psi_list[ref_index];
+
     TenElemT mean(0);
-    for (const auto &v : psi_list) mean += v;
+    std::vector<TenElemT> aligned;
+    aligned.reserve(psi_list.size());
+    using std::conj;
+    using std::real;
+    for (const auto &psi_val : psi_list) {
+      TenElemT aligned_val = psi_val;
+      if (ref_valid) {
+        const auto phase = psi_val * conj(psi_ref);
+        if (static_cast<double>(real(phase)) < 0.0) {
+          aligned_val = -psi_val;
+        }
+      }
+      aligned.push_back(aligned_val);
+      mean += aligned_val;
+    }
+
     mean = mean / static_cast<double>(psi_list.size());
     auto abs_val = [](const TenElemT &v) -> double { return static_cast<double>(std::abs(v)); };
-    const double denom = std::max(abs_val(mean), 1e-300);
+    const double denom = std::max(abs_val(mean), std::numeric_limits<double>::epsilon());
     double max_dev = 0.0;
-    for (const auto &v : psi_list) {
+    for (const auto &v : aligned) {
       max_dev = std::max(max_dev, abs_val(v - mean));
     }
     out.psi_mean = mean;
