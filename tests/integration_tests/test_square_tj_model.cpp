@@ -18,7 +18,8 @@
 using namespace qlten;
 using namespace qlpeps;
 
-class SquaretJModelSystem : public IntegrationTestFramework<qlten::special_qn::fZ2QN> {
+class SquaretJModelSystem
+    : public IntegrationTestFramework<qlten::special_qn::fZ2QN, SquaretJModelSystem> {
 protected:
   using QNT = qlten::special_qn::fZ2QN;
   using IndexT = Index<QNT>;
@@ -104,6 +105,7 @@ protected:
     measure_para = MCMeasurementParams(measure_mc_params, measure_peps_params);
   }
 
+ public:
   template<typename ModelT, typename MCUpdaterT>
   void ValidateMeasurementResults(
       const MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT> &measurer) const {

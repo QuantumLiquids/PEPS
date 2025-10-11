@@ -16,10 +16,13 @@
 #include "../test_mpi_env.h"
 #include "../utilities.h"
 
+#include <type_traits>
+#include <utility>
+
 using namespace qlten;
 using namespace qlpeps;
 
-template<typename QNT>
+template<typename QNT, typename DerivedT>
 class IntegrationTestFramework : public MPITest {
 protected:
   using TenElemT = TEN_ELEM_TYPE;
@@ -147,7 +150,7 @@ protected:
       EXPECT_NEAR(std::real(energy), energy_ed, FrameworkEnergyTolerance());
     }
     
-    this->template ValidateMeasurementResults<ModelT, MCUpdaterT>(*measure_exe);
+    InvokeValidateMeasurementResults<ModelT, MCUpdaterT>(*measure_exe);
 
     delete measure_exe;
   }
@@ -181,9 +184,6 @@ protected:
     delete executor;
   }
 
-  template<typename ModelT, typename MCUpdaterT>
-  void ValidateMeasurementResults(const MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT> &) const {}
-
   /**
    * @brief Allow derived tests to opt out of the default energy benchmark.
    */
@@ -193,6 +193,25 @@ protected:
    * @brief Default tolerance used when the framework checks the ED energy.
    */
   virtual double FrameworkEnergyTolerance() const { return 1e-3; }
+
+private:
+  template<typename T, typename ModelT, typename MCUpdaterT, typename = void>
+  struct HasValidateMeasurementResults : std::false_type {};
+
+  template<typename T, typename ModelT, typename MCUpdaterT>
+  struct HasValidateMeasurementResults<
+      T, ModelT, MCUpdaterT,
+      std::void_t<decltype(std::declval<const T>().template ValidateMeasurementResults<ModelT, MCUpdaterT>(
+          std::declval<const MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT>&>()))>>
+      : std::true_type {};
+
+  template<typename ModelT, typename MCUpdaterT>
+  void InvokeValidateMeasurementResults(
+      const MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT> &measurer) const {
+    if constexpr (HasValidateMeasurementResults<DerivedT, ModelT, MCUpdaterT>::value) {
+      static_cast<const DerivedT *>(this)->template ValidateMeasurementResults<ModelT, MCUpdaterT>(measurer);
+    }
+  }
 };
 
 #endif // PEPS_INTEGRATION_TEST_FRAMEWORK_H 
