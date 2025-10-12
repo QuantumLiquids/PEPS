@@ -8,7 +8,32 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_MEASUREMENT_IMPL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_MEASUREMENT_IMPL_H
 
+#include <complex>
+#include <fstream>
+#include <iomanip>
+#include <limits>
+#include <sstream>
+
 namespace qlpeps {
+inline void ConfigureStreamForHighPrecision(std::ofstream &ofs) {
+  ofs.setf(std::ios::scientific, std::ios::floatfield);
+  ofs << std::setprecision(std::numeric_limits<double>::max_digits10);
+}
+
+inline std::string ToCsvString(double value) {
+  std::ostringstream oss;
+  oss.setf(std::ios::scientific, std::ios::floatfield);
+  oss << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
+  return oss.str();
+}
+
+inline std::string ToCsvString(const std::complex<double> &value) {
+  std::ostringstream oss;
+  oss.setf(std::ios::scientific, std::ios::floatfield);
+  oss << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
+  return oss.str();
+}
+
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 MCPEPSMeasurer<TenElemT,
                QNT,
@@ -362,10 +387,11 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
     if (!ofs.is_open()) {
       throw std::runtime_error("Cannot open file: " + mean_path);
     }
+    ConfigureStreamForHighPrecision(ofs);
     for (size_t r = 0; r < rows; ++r) {
       for (size_t c = 0; c < cols; ++c) {
         const size_t idx = r * cols + c;
-        ofs << vals[idx];
+        ofs << ToCsvString(vals[idx]);
         if (c + 1 < cols) {
           ofs << ",";
         }
@@ -378,11 +404,12 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
     if (!ofs.is_open()) {
       throw std::runtime_error("Cannot open file: " + stderr_path);
     }
+    ConfigureStreamForHighPrecision(ofs);
     for (size_t r = 0; r < rows; ++r) {
       for (size_t c = 0; c < cols; ++c) {
         const size_t idx = r * cols + c;
         const double err = (idx < errs.size()) ? errs[idx] : 0.0;
-        ofs << err;
+        ofs << ToCsvString(err);
         if (c + 1 < cols) {
           ofs << ",";
         }
@@ -400,9 +427,10 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   const std::vector<double> &errs) const {
   std::ofstream ofs(dir + key + ".csv");
   ofs << "index,mean,stderr\n";
+  ConfigureStreamForHighPrecision(ofs);
   for (size_t i = 0; i < vals.size(); ++i) {
     const double err = (i < errs.size()) ? errs[i] : 0.0;
-    ofs << i << "," << vals[i] << "," << err << "\n";
+    ofs << i << "," << ToCsvString(vals[i]) << "," << ToCsvString(err) << "\n";
   }
 }
 
@@ -414,9 +442,10 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   const std::vector<double> &errs) const {
   std::ofstream ofs(dir + key + ".csv");
   ofs << "index,mean,stderr\n";
+  ConfigureStreamForHighPrecision(ofs);
   for (size_t i = 0; i < vals.size(); ++i) {
     const double err = (i < errs.size()) ? errs[i] : 0.0;
-    ofs << i << "," << vals[i] << "," << err << "\n";
+    ofs << i << "," << ToCsvString(vals[i]) << "," << ToCsvString(err) << "\n";
   }
 }
 
