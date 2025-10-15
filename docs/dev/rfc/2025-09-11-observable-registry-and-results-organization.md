@@ -1,7 +1,7 @@
 ---
 title: Observable Registry and Results Organization for VMC/PEPS Measurements
 date: 2025-09-11
-status: draft
+status: completed
 owners: [PEPS Core]
 ---
 
@@ -85,20 +85,13 @@ struct PsiSummary {
   - 具体模型负责提供其 `psi_list` 的生成逻辑；
   - `MCPEPSMeasurer` 在每个样本结束时调用 `EvaluatePsiSummary()` 收集并写入 `samples/psi.csv`。
 
-## Current Status (2025-10)
+## Completion Notes (2025-10-15)
 
-- All built-in solvers have been migrated to the registry interface. Keys are documented in
-  `docs/user/en/guides/model_observables.md`.
-- `MCPEPSMeasurer::Result` exposure has been reduced to the energy compatibility shim; all other
-  consumers should query registries or CSV dumps directly.
-- Recent fixes:
-  - `TransverseFieldIsingSquare` now advertises `sigma_x` and `SzSz_row` via `DescribeObservables()`.
-  - `SquareHubbardModel` exposes `double_occupancy` explicitly, matching the legacy dump.
-- Remaining legacy discrepancies:
-  - No raw `psi_list` in registry (by design).
-  - Per-model gaps must be tracked as they surface; see below for planned tests.
-  - Base metadata supplied by `SquareNNNModelMeasurementSolver` is intentionally minimal; each
-    concrete solver must enrich the entries (shape/index labels) to match its lattice geometry。
+- Registry-based measurer landed in branch `refactor/measurer` (commits 87e59ee, 15c91d0, a970c67, d38abc8, 892ff49).
+- All built-in solvers now publish explicit metadata via `DescribeObservables(ly, lx)` with runtime shapes.
+- `MCPEPSMeasurer` dumps per-key statistics (`stats/<key>.csv`) and `samples/psi.csv`; legacy structs removed.
+- Developer/user docs updated (custom solver guide, model observables guide) to reflect registry flow.
+- Validation: `ctest --test-dir build -R mc_peps_measure` (double/complex) + partial default `ctest` run; no regressions observed.
 
 ## API Refactor Plan (No Backward Compatibility Required)
 
