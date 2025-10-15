@@ -157,11 +157,70 @@ class SquareSpinOneHalfXXZModel
       public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>,
       public SquareSpinOneHalfXXZModelMixIn {
  public:
+  using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::EvaluateObservables;
+  using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables;
   ///< Isotropic Heisenberg model with J = 1 and no pinning field
   SquareSpinOneHalfXXZModel(void) : SquareSpinOneHalfXXZModelMixIn(1.0, 1.0, 0.0, 0.0, 0.0) {}
 
   SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning00) :
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, 0.0, 0.0, pinning00) {}
+
+  // Registry API: emit energy and spin_z; models can extend to bond_energy_h/v if desired.
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    std::vector<TenElemT> psi_list;
+    TensorNetwork2D<TenElemT, QNT> hole_dummy(tps_sample->tn.rows(), tps_sample->tn.cols());
+    auto e = this->template CalEnergyAndHolesImpl<TenElemT, QNT, false>(split_index_tps, tps_sample, hole_dummy, psi_list);
+    ObservableMap<TenElemT> out;
+    out["energy"] = {e};
+    // spin_z from configuration
+    const auto &config = tps_sample->config;
+    std::vector<TenElemT> sz;
+    sz.reserve(config.size());
+    for (auto &c : config) { sz.push_back(this->CalSpinSzImpl(c)); }
+    out["spin_z"] = std::move(sz);
+    // Optional: SzSz_all2all packed upper triangular (i<=j)
+    const size_t N = config.size();
+    // collect linear Sz values in iteration order
+    std::vector<double> sz_vals; sz_vals.reserve(N);
+    for (auto &c : config) { sz_vals.push_back(static_cast<double>(c) - 0.5); }
+    std::vector<TenElemT> szsz;
+    szsz.reserve(N * (N + 1) / 2);
+    for (size_t i = 0; i < N; ++i) {
+      const double szi = sz_vals[i];
+      for (size_t j = i; j < N; ++j) { szsz.push_back(static_cast<TenElemT>(szi * sz_vals[j])); }
+    }
+    out["SzSz_all2all"] = std::move(szsz);
+    // psi_list is not emitted via registry; Measurer computes PsiSummary separately
+    return out;
+  }
+
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    auto base = SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables(ly, lx);
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {ly, lx};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h") {
+        meta.shape = {ly, (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_v") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_diag") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+    }
+    const size_t N = ly * lx;
+    base.push_back({"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {N * (N + 1) / 2}, {"pair_packed_upper_tri"}});
+    return base;
+  }
 };
 
 }//qlpeps

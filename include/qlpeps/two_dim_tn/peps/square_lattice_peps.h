@@ -207,6 +207,16 @@ class SquareLatticePEPS {
 
   bool Load(const std::string path = kPepsPath);
 
+  /**
+   * @brief Convert this PEPS to a TPS defined on the same lattice.
+   *
+   * The returned TPS carries the physical index structure of the current PEPS
+   * and the surrounding singular-value tensors folded into each local tensor.
+   *
+   * @return Tensor product state representing the current PEPS configuration.
+   */
+  TPS<TenElemT, QNT> ToTPS() const;
+
   [[deprecated("Use ToTPS(peps) in qlpeps::api::conversions instead")]]
   operator TPS<TenElemT, QNT>(void) const;
 

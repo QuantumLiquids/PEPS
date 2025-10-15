@@ -76,7 +76,6 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
                            public SquareNNModelMeasurementSolver<SquareHubbardModel> {
  public:
   using SquareNNModelEnergySolver<SquareHubbardModel>::CalEnergyAndHoles;
-  using SquareNNModelMeasurementSolver<SquareHubbardModel>::operator();
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
 
@@ -121,6 +120,48 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
 
   double CalSpinSzImpl(const size_t config) const {
     return HubbardConfig2Spinz(config);
+  }
+
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    auto base = SquareNNModelMeasurementSolver<SquareHubbardModel>::DescribeObservables(ly, lx);
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {ly, lx};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h") {
+        meta.shape = {ly, (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_v") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_diag") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+    }
+    base.push_back({"double_occupancy", "On-site double occupancy indicator (Ly,Lx)", {ly, lx}, {"y", "x"}});
+    return base;
+  }
+
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    ObservableMap<TenElemT> out = SquareNNModelMeasurementSolver<SquareHubbardModel>::template EvaluateObservables<TenElemT, QNT>(
+        split_index_tps, tps_sample);
+    const auto &config = tps_sample->config;
+    const size_t ly = config.rows();
+    const size_t lx = config.cols();
+    std::vector<TenElemT> doublon;
+    doublon.reserve(ly * lx);
+    for (auto &site_config : config) {
+      doublon.push_back(static_cast<TenElemT>(HubbardSingleSiteState(site_config) == HubbardSingleSiteState::DoubleOccupancy));
+    }
+    out["double_occupancy"] = std::move(doublon);
+    return out;
   }
 
  private:

@@ -682,6 +682,35 @@ SplitIndexTPS<TenElemT, QNT> &SplitIndexTPS<TenElemT, QNT>::operator=(SplitIndex
   return *this;
 }
 
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+SplitIndexTPS<TenElemT, QNT>::FromTPS(const TPST &tps) {
+  SplitIndexTPS<TenElemT, QNT> result(tps.rows(), tps.cols());
+  const size_t phy_idx = 4;
+  for (size_t row = 0; row < tps.rows(); row++) {
+    for (size_t col = 0; col < tps.cols(); col++) {
+      const Index<QNT> local_hilbert = tps({row, col}).GetIndex(phy_idx);
+      const auto local_hilbert_inv = InverseIndex(local_hilbert);
+      const size_t dim = local_hilbert.dim();
+      result({row, col}) = std::vector<Tensor>(dim);
+      for (size_t i = 0; i < dim; i++) {
+        if constexpr (Tensor::IsFermionic()) {
+          QNT qn = local_hilbert.GetQNSctFromActualCoor(i).GetQn();
+          Index<QNT> match_idx = Index<QNT>({QNSector<QNT>(qn, 1)}, IN);
+          Tensor project_ten = Tensor({local_hilbert_inv, match_idx});
+          project_ten({i, 0}) = TenElemT(1.0);
+          Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &result({row, col})[i]);
+        } else {
+          Tensor project_ten = Tensor({local_hilbert_inv});
+          project_ten({i}) = TenElemT(1.0);
+          Contract(tps(row, col), {phy_idx}, &project_ten, {0}, &result({row, col})[i]);
+        }
+      }
+    }
+  }
+  return result;
+}
+
 /**
  * @brief Broadcast SplitIndexTPS tensor to all MPI ranks
  * 

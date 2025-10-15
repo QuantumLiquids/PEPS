@@ -47,7 +47,8 @@ std::vector<MatrixElement<double>> GenerateTriElements(
   return tri_elements;
 }
 
-class TriangleJ1J2HeisenbergSystem : public IntegrationTestFramework<QNT> {
+class TriangleJ1J2HeisenbergSystem
+    : public IntegrationTestFramework<QNT, TriangleJ1J2HeisenbergSystem> {
   protected:
     double j2 = 0.2;
     Tensor ham_hei_nn; // nearest-neighbor hamiltonian
@@ -114,7 +115,7 @@ class TriangleJ1J2HeisenbergSystem : public IntegrationTestFramework<QNT> {
                                                       std::make_optional<double>(1e-14),
                                                       std::make_optional<size_t>(10))};
       measure_para = MCMeasurementParams{measure_mc_params, measure_peps_params};
-    }
+  }
 };
 
 TEST_F(TriangleJ1J2HeisenbergSystem, SimpleUpdate) {

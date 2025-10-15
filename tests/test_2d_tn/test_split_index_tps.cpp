@@ -140,7 +140,7 @@ TEST_F(SplitIdxTPSData, TestNormalization) {
   }
 
   // Verify that dsitps2 created from a normalized dtps is also normalized
-  DSITPS dsitps2(dtps);
+  DSITPS dsitps2 = ToSplitIndexTPS<QLTEN_Double, U1QN>(dtps);
   dsitps2.NormalizeAllSite();
   for (const auto &split_ten_vec : dsitps2) {
     double total_norm_sq = 0;

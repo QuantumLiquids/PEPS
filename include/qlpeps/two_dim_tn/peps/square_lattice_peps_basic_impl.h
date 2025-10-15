@@ -536,7 +536,8 @@ void SquareLatticePEPS<TenElemT, QNT>::RegularizeIndexDir() {
 }
 
 template<typename TenElemT, typename QNT>
-SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
+TPS<TenElemT, QNT>
+SquareLatticePEPS<TenElemT, QNT>::ToTPS() const {
   auto tps = TPS<TenElemT, QNT>(rows_, cols_);
   SquareLatticePEPS peps_copy = (*this);
   if constexpr (TenT::IsFermionic()) {
@@ -562,6 +563,11 @@ SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
     }
   }
   return tps;
+}
+
+template<typename TenElemT, typename QNT>
+SquareLatticePEPS<TenElemT, QNT>::operator TPS<TenElemT, QNT>() const {
+  return ToTPS();
 }
 
 /**

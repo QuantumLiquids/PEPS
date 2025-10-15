@@ -717,7 +717,7 @@ Optimizer<TenElemT, QNT>::BoundedGradientUpdate(const SITPST &current_state,
         const size_t phy_dim = gradient({row, col}).size();
         for (size_t compt = 0; compt < phy_dim; ++compt) {
           Tensor &grad_ten = const_cast<SITPST &>(gradient)({row, col})[compt];
-          grad_ten.ElementWiseBoundTo(step_length);
+          grad_ten.ElementWiseClipTo(step_length);
           updated_state({row, col})[compt] += (-step_length) * grad_ten;
         }
       }

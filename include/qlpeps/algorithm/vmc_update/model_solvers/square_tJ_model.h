@@ -62,7 +62,7 @@ class SquaretJModelMixIn {
  public:
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
-  static const bool enable_sc_measurement;
+  inline static bool enable_sc_measurement = false;
   SquaretJModelMixIn(void) = delete;
 
   explicit SquaretJModelMixIn(double t, double t2, double J, double V, double mu)
@@ -118,6 +118,7 @@ class SquaretJModelMixIn {
       const JastrowDress &jastrow_dress
   );
 
+    ///< Here psi seems to be a redundant variable.
   template<typename TenElemT, typename QNT>
   std::pair<TenElemT, TenElemT> EvaluateBondSC(
       const SiteIdx site1, const SiteIdx site2,
@@ -166,6 +167,10 @@ class SquaretJModelMixIn {
   double mu_;
 };
 
+/**
+ *  The variable psi is ONLY used for return. Any input will be covered by nullopt or a new value.
+ *  The returned psi will be used to check the accuracy of psi get by boundary MPS contraction of tensor network.
+ */
 template<typename TenElemT, typename QNT>
 TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     const SiteIdx site1, const SiteIdx site2,
@@ -272,6 +277,9 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
  * t2 hopping energy
  *
  * @param psi  if containing value, we assume it is the correct value; if not, calculate it and store into it.
+ * This logic is based on the operations outside the function:
+ * psi will be reset as unavailable once boundary tensor was moved; And for the calculation in
+ * the same plaquette, the psi can be reused for different diagonal bond direction.
  */
 template<typename TenElemT, typename QNT>
 TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
@@ -434,11 +442,34 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
                         public SquareNNModelMeasurementSolver<SquaretJNNModel>,
                         public SquaretJModelMixIn {
  public:
+  using SquareNNModelMeasurementSolver<SquaretJNNModel>::EvaluateObservables;
+  using SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables;
   explicit SquaretJNNModel(double t, double J, double mu) : SquaretJModelMixIn(t,
                                                                                0,
                                                                                J,
                                                                                0,
-                                                                               mu) {};
+                                                                               mu) {}
+
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    auto base = SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables(ly, lx);
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {ly, lx};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h") {
+        meta.shape = {ly, (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_v") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+    }
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
+    return base;
+  }
 };
 
 /*
@@ -452,11 +483,38 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
                          public SquareNNNModelMeasurementSolver<SquaretJNNNModel>,
                          public SquaretJModelMixIn {
  public:
+  using SquareNNNModelMeasurementSolver<SquaretJNNNModel>::EvaluateObservables;
+  using SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables;
   explicit SquaretJNNNModel(double t, double t2, double J, double mu) : SquaretJModelMixIn(t,
                                                                                            t2,
                                                                                            J,
                                                                                            0,
-                                                                                           mu) {};
+                                                                                           mu) {}
+
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    auto base = SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables(ly, lx);
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {ly, lx};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h") {
+        meta.shape = {ly, (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_v") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_diag") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+    }
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
+    return base;
+  }
 };
 
 /**

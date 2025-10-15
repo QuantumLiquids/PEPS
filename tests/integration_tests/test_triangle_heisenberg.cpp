@@ -47,7 +47,8 @@ std::vector<MatrixElement<double>> GenerateTriElements(
   return tri_elements;
 }
 
-class TriangleHeisenbergSystem : public IntegrationTestFramework<QNT> {
+class TriangleHeisenbergSystem
+    : public IntegrationTestFramework<QNT, TriangleHeisenbergSystem> {
 protected:
   Tensor ham_hei_nn;  // nearest-neighbor hamiltonian
   Tensor ham_hei_tri;  // three-site hamiltonian in triangle lattice

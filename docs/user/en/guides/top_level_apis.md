@@ -182,8 +182,15 @@ Runs MPI-parallel Monte Carlo sampling to estimate energy, bond energies, one- a
 ### Parameters and solvers
 
 - `MCMeasurementParams` combines `MonteCarloParams` and `PEPSParams` for measurement runs.
-- The `MeasurementSolver` functor must return `ObservablesLocal<TenElemT>` when called as:
-  `measurement_solver_(&split_index_tps_, &tps_sample_)`.
+- Registry-based API: implement
+  `std::vector<ObservableMeta> DescribeObservables() const` and
+  `ObservableMap<TenElemT> EvaluateObservables(const SplitIndexTPS<TenElemT,QNT>*, TPSWaveFunctionComponent<TenElemT,QNT>*)`.
+  The executor invokes `EvaluateObservables` per sample and aggregates by observable `key`.
+  Note: `psi_list` is only used internally as a transient value and is never dumped.
+  The executor converts it to:
+  - `psi_mean` (complex scalar): mean wavefunction amplitude
+  - `psi_rel_err` (real scalar): relative radius defined as `radius_rel = max_i |psi_i - mean| / |mean|`.
+  See the RFC “Observable Registry and Results Organization”.
   Built-in model measurement solvers are available under
   `qlpeps/algorithm/vmc_update/model_measurement_solver.h` and
   `qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h`.
@@ -231,7 +238,8 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>
 meas.Execute();
 
 auto [E, dE] = meas.OutputEnergy();
-const auto &res = meas.GetMeasureResult(); // contains bond/one-/two-point functions and auto-correlations
+auto energy_estimate = meas.GetEnergyEstimate(); // query registry statistics by key, e.g., "energy"
+// Registry CSVs are dumped under stats/<key>.csv
 ```
 
 ---

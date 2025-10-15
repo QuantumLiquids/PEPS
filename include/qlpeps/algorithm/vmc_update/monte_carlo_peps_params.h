@@ -109,6 +109,10 @@ struct MCMeasurementParams {
   MonteCarloParams mc_params;
   PEPSParams peps_params;
   std::string measurement_data_dump_path;  ///< Path for dumping measurement results (empty = current dir)
+  // psi(S) consistency warning controls (per-rank)
+  bool psi_consistency_warning_enabled = true;     ///< Enable runtime warnings for psi consistency
+  double psi_consistency_warn_threshold = 1e-4;    ///< Trigger threshold for psi_rel_err
+  size_t psi_consistency_max_warnings = 50;        ///< Max warning messages per rank
 
   MCMeasurementParams() : measurement_data_dump_path("./") {}
 

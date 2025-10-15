@@ -36,9 +36,7 @@ namespace qlpeps {
 template<typename TenElemT, typename QNT>
 inline TPS<TenElemT, QNT>
 ToTPS(const SquareLatticePEPS<TenElemT, QNT> &peps) {
-  // Reuse existing implementation via the implicit conversion operator.
-  // Keeping it here centralizes the recommended call site.
-  return static_cast<TPS<TenElemT, QNT>>(peps);
+  return peps.ToTPS();
 }
 
 /**
@@ -47,7 +45,7 @@ ToTPS(const SquareLatticePEPS<TenElemT, QNT> &peps) {
 template<typename TenElemT, typename QNT>
 inline SplitIndexTPS<TenElemT, QNT>
 ToSplitIndexTPS(const TPS<TenElemT, QNT> &tps) {
-  return SplitIndexTPS<TenElemT, QNT>(tps);
+  return SplitIndexTPS<TenElemT, QNT>::FromTPS(tps);
 }
 
 /**

@@ -13,33 +13,20 @@
 namespace qlpeps {
 
 /**
- * SquareNNModelMeasurementSolver is the base class to define general nearest-neighbor
- * model measurement solver on the square lattices,
- * work for the energy and order parameter measurements.
- * The CRTP technique is used to realize the Polymorphism.
- *
- * To defined the concrete model which inherit from SquareNNModelMeasurementSolver,
- * for boson model the following member function with specific signature must to be defined:
- * template<typename TenElemT, typename QNT>
-  [[nodiscard]] TenElemT EvaluateBondEnergy(
-      const SiteIdx site1, const SiteIdx site2,
-      const size_t config1, const size_t config2,
-      const BondOrientation orient,
-      const TensorNetwork2D<TenElemT, QNT> &tn,
-      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
-      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
-      const TenElemT inv_psi
-  )
-  the following member functions can be defined if you want to perform the measurement, or relevant measure will be ignored if not define:
-   - CalDensityImpl (work for, like fermion models)
-   - CalSpinSz (work for, like t-J, Hubbard, and spin models)
-   - EvaluateOffDiagOrderInRow (to evaluate the off-diagonal orders in specific row)
-   - EvaluateBondSC (optional)
- *
+ * SquareNNModelMeasurementSolver: NN-only specialization of the NNN base, using the
+ * registry-based observable API. See SquareNNNModelMeasurementSolver for required hooks.
  */
 
 template<class ExplicitlyModel>
-using SquareNNModelMeasurementSolver = SquareNNNModelMeasurementSolver<ExplicitlyModel, false>;
+class SquareNNModelMeasurementSolver : public SquareNNNModelMeasurementSolver<ExplicitlyModel, false> {
+ public:
+  using Base = SquareNNNModelMeasurementSolver<ExplicitlyModel, false>;
+  using Base::EvaluateObservables;
+  using Base::DescribeObservables;
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    return Base::DescribeObservables(ly, lx);
+  }
+};
 } // namespace qlpeps
 
 #endif // QLPEPS_ALGORITHM_VMC_UPDATE_SQUARE_NN_MODEL_MEASUREMENT_SOLVERS_H
