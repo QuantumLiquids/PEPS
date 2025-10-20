@@ -8,12 +8,8 @@
 #ifndef VMC_PEPS_TWO_DIM_TN_PEPS_ARNOLDI_SOLVER_H
 #define VMC_PEPS_TWO_DIM_TN_PEPS_ARNOLDI_SOLVER_H
 
-#if defined(USE_OPENBLAS)
-#include <cblas.h>                              // Use CBLAS header
-#include <lapacke.h>
-#else
-#include "mkl_lapacke.h"                        // Use MKL header
-#endif
+
+#include "qlten/framework/hp_numeric/backend_selector.h" //lapacke
 
 #include <functional>
 #include <optional>

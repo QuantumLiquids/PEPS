@@ -246,6 +246,7 @@ struct Z2SpinlessFreeFermionTools : public MPITest {
 
   std::vector<Configuration> all_configs;
   void SetUp(void) {
+    MPITest::SetUp();
     LoadAllPreGeneratedResults();
     GenerateAllConfigs();
   }
@@ -370,6 +371,7 @@ struct TrivialHeisenbergTools : public MPITest {
 
   std::vector<Configuration> all_configs;
   void SetUp(void) {
+    MPITest::SetUp();
     split_index_tps = LoadPreGeneratedTPS();
     GenerateAllConfigs();
   }
@@ -474,6 +476,7 @@ struct TrivialTransverseIsingTools : public MPITest {
 
   std::vector<Configuration> all_configs;
   void SetUp(void) {
+    MPITest::SetUp();
     split_index_tps = LoadPreGeneratedTPS();
     GenerateAllConfigs();
   }
@@ -583,6 +586,7 @@ struct Z2tJTools : public MPITest {
 
   std::vector<Configuration> all_configs;
   void SetUp(void) {
+    MPITest::SetUp();
     split_index_tps = LoadPreGeneratedTPS();
     GenerateAllConfigs();
   }

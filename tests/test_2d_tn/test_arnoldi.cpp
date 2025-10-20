@@ -65,7 +65,7 @@ struct TensorSet : public testing::Test {
   std::vector<size_t> d = {4, 10, 20};
   U1QN qn0 = U1QN(0);
   IndexT pb_out = IndexT({QNSctT(qn0, 2)}, TenIndexDirType::OUT);
-  IndexT pb_in = InverseIndex(pb_in);
+  IndexT pb_in = InverseIndex(pb_out);
   std::vector<IndexT> idx_in, idx_out;
   void SetUp(void) {
     idx_in.resize(d.size());
