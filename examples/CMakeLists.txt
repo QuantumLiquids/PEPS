@@ -40,7 +40,7 @@ include_directories(${CMAKE_SOURCE_DIR}/../include)
 
 # Add transverse field Ising Simple Update example
 add_executable(transverse_field_ising_simple_update transverse_field_ising_simple_update.cpp)
-target_include_directories(transverse_field_ising_simple_update PRIVATE ${BLAS_INCLUDE_DIR} ${hptt_INCLUDE_DIR})
+target_include_directories(transverse_field_ising_simple_update PRIVATE ${BLAS_INCLUDE_DIRS} ${hptt_INCLUDE_DIR})
 target_link_libraries(transverse_field_ising_simple_update
     ${hptt_LIBRARY}
     BLAS::BLAS
@@ -52,7 +52,7 @@ target_compile_options(transverse_field_ising_simple_update PRIVATE )
 
 # Add transverse field Ising VMC optimize example
 add_executable(transverse_field_ising_vmc_optimize transverse_field_ising_vmc_optimize.cpp)
-target_include_directories(transverse_field_ising_vmc_optimize PRIVATE ${BLAS_INCLUDE_DIR} ${hptt_INCLUDE_DIR})
+target_include_directories(transverse_field_ising_vmc_optimize PRIVATE ${BLAS_INCLUDE_DIRS} ${hptt_INCLUDE_DIR})
 target_link_libraries(transverse_field_ising_vmc_optimize
     ${hptt_LIBRARY}
     BLAS::BLAS
