@@ -280,10 +280,103 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
   }
   qlpeps::MPI_Bcast(split_index_tps_bcast, comm, qlten::hp_numeric::kMPIMasterRank);
 
+  std::vector<double> weights;
+  std::vector<TenElemT> e_loc_set;
+  // Accumulators: S_O and S_{EO} (see Doxygen above)
+  SplitIndexTPSType Ostar_weighted_sum(Ly, Lx, split_index_tps_bcast.PhysicalDim());            // S_O
+  SplitIndexTPSType ELocConj_Ostar_weighted_sum(Ly, Lx, split_index_tps_bcast.PhysicalDim());   // S_{EO}
+
+  // Exact summation over the configurations assigned for different ranks
+  for (size_t i = rank; i < all_configs.size(); i += mpi_size) {
+    auto &config = all_configs[i];
+
+    TPSWaveFunctionComponent<TenElemT, QNT>
+        tps_sample(split_index_tps_bcast, config, trun_para);
+    weights.push_back(std::norm(tps_sample.amplitude));
+    TensorNetwork2D<TenElemT, QNT> holes_dag(Ly, Lx);// \partial_{theta^*} \Psi^*
+    TenElemT e_loc =
+        model.template CalEnergyAndHoles<TenElemT, QNT, true>(
+            &split_index_tps_bcast, &tps_sample, holes_dag);
+    e_loc_set.push_back(e_loc);
+
+    // Per-configuration increment to S_O (see Doxygen mapping): O^*(S) weighted by |Ψ(S)|^2
+    SplitIndexTPSType Ostar_weighted_increment(Ly, Lx, split_index_tps_bcast.PhysicalDim());
+    for (size_t row = 0; row < Ly; row++) {
+      for (size_t col = 0; col < Lx; col++) {
+        size_t basis = tps_sample.config({row, col});
+
+        // Handle gradient calculation based on particle type
+        if constexpr (Index<QNT>::IsFermionic()) {
+          // Fermion system: Use complex tensor contractions
+          auto psi_partial_psi_dag = EvaluateLocalPsiPartialPsiDag(holes_dag({row, col}), tps_sample.tn({row, col}));
+          Ostar_weighted_increment({row, col})[basis] = psi_partial_psi_dag;
+        } else {
+          // Boson system: |Psi|^2 * \Delta, where \Delta = \partial_{\theta^*} ln(\Psi^*)
+          Ostar_weighted_increment({row, col})[basis] = tps_sample.amplitude * holes_dag({row, col});
+        }
+      }
+    }
+    // S_O += w_raw(S) · O*(S)
+    Ostar_weighted_sum += Ostar_weighted_increment;
+    // S_{EO} += w_raw(S) · E_loc*(S) · O*(S)
+    ELocConj_Ostar_weighted_sum += ComplexConjugate(e_loc) * Ostar_weighted_increment;
+  }
+
+  // Calculate weight and e_loc of different ranks
+  double weight_rank = 0.0;
+  TenElemT e_loc_rank = TenElemT(0.0);
+  for (size_t j = 0; j < e_loc_set.size(); j++) {
+    e_loc_rank += e_loc_set[j] * weights[j];
+    weight_rank += weights[j];
+  }
+
+  //Receive S_O and S_{EO} from different ranks and calculate the sum
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
-    // Master computes using single-process evaluator on the broadcasted state
-    return ExactSumEnergyEvaluator<ModelT, TenElemT, QNT>(
-        split_index_tps_bcast, all_configs, trun_para, model, Ly, Lx);
+    for (size_t source = 1; source < mpi_size; source++) {
+      SplitIndexTPSType Ostar_weighted_rank;            // S_O of different ranks
+      SplitIndexTPSType ELocConj_Ostar_weighted_rank;   // S_{EO} of different ranks
+      MPI_Status status_Ostar_weighted = qlpeps::MPI_Recv(Ostar_weighted_rank, source, comm, 0);
+      MPI_Status status_ELocConj_Ostar_weighted = qlpeps::MPI_Recv(ELocConj_Ostar_weighted_rank, source, comm, 1);
+      Ostar_weighted_sum += Ostar_weighted_rank;
+      ELocConj_Ostar_weighted_sum += ELocConj_Ostar_weighted_rank;
+    }
+  } else {
+    qlpeps::MPI_Send(Ostar_weighted_sum, qlten::hp_numeric::kMPIMasterRank, comm, 0);
+    qlpeps::MPI_Send(ELocConj_Ostar_weighted_sum, qlten::hp_numeric::kMPIMasterRank, comm, 1);
+  }
+  
+  double weight_sum = 0.0;
+  TenElemT e_loc_sum = TenElemT(0.0);
+  HANDLE_MPI_ERROR(::MPI_Reduce(&weight_rank, 
+                                &weight_sum, 
+                                1, 
+                                MPI_DOUBLE, 
+                                MPI_SUM, 
+                                qlten::hp_numeric::kMPIMasterRank, 
+                                comm));
+  HANDLE_MPI_ERROR(::MPI_Reduce(&e_loc_rank, 
+                                &e_loc_sum, 
+                                1, 
+                                hp_numeric::GetMPIDataType<TenElemT>(), 
+                                MPI_SUM, 
+                                qlten::hp_numeric::kMPIMasterRank, 
+                                comm));
+
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+
+    TenElemT energy = e_loc_sum / weight_sum;
+
+    // Calculate gradient
+    // (S_{EO} − E^* S_O) / W_sum
+    SplitIndexTPSType gradient = (ELocConj_Ostar_weighted_sum - ComplexConjugate(energy) * Ostar_weighted_sum) * (1.0 / weight_sum);
+
+    // Apply fermion parity operations only for fermion systems
+    if constexpr (Index<QNT>::IsFermionic()) {
+      gradient.ActFermionPOps();
+    }
+
+    return {energy, gradient, 0.0}; // Error is 0 for exact summation
+    
   } else {
     // Non-master returns placeholders(zeros)
     SplitIndexTPSType zero_grad(Ly, Lx, split_index_tps_bcast.PhysicalDim());
