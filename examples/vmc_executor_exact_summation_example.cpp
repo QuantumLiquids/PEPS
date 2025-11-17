@@ -105,8 +105,8 @@ void DemonstrateVMCExecutorExactSummation() {
     
     // 🔧 EXACT SUMMATION INTEGRATION: Replace Monte Carlo with exact computation (unified interface)
     auto exact_energy_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
-        auto [energy, gradient, error] = ExactSumEnergyEvaluator(
-            state, all_configs, trun_para, heisenberg_model, Ly, Lx);
+        auto [energy, gradient, error] = ExactSumEnergyEvaluatorMPI(
+            state, all_configs, trun_para, heisenberg_model, Ly, Lx, MPI_COMM_WORLD, qlten::hp_numeric::kMPIMasterRank, 1);
         
         // Check if we're in MPI environment and print only from master rank
         int rank = 0;

@@ -321,13 +321,16 @@ TEST_F(Z2SpinlessFreeFermionTools, ExactSumGradientOptWithVMCOptimizer) {
     auto &split_index_tps = split_index_tps_list[i];
 
     // RESTORED: Single-process ExactSumEnergyEvaluator call (memory-safe)
-    auto [initial_energy, initial_gradient, initial_error] = ExactSumEnergyEvaluator(
+    auto [initial_energy, initial_gradient, initial_error] = ExactSumEnergyEvaluatorMPI(
       split_index_tps,
       all_configs,
       trun_para,
       spinless_fermion_model,
       Ly,
-      Lx);
+      Lx,
+      this->comm,
+      hp_numeric::kMPIMasterRank,
+      1);
 
     std::cout << "Initial energy: " << initial_energy << ", Expected: " << energy_exact << std::endl;
     std::cout << "Initial gradient norm: " << initial_gradient.NormSquare() << std::endl;
