@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 
-include_guard(GLOBAL)
+include_guard(DIRECTORY)
 
 option(HP_NUMERIC_USE_MKL "Use Intel MKL as BLAS backend" OFF)
 option(HP_NUMERIC_USE_AOCL "Use AMD AOCL as BLAS backend" OFF)
@@ -68,11 +68,11 @@ elseif (HP_NUMERIC_USE_AOCL)
     endif ()
 
     add_definitions(-DHP_NUMERIC_BACKEND_AOCL)
-    set(BLA_VENDOR AOCL CACHE STRING "" FORCE)
+    set(BLA_VENDOR AOCL_mt CACHE STRING "" FORCE)
     set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} $ENV{AOCL_ROOT})
     set(BLAS_INCLUDE_DIRS "$ENV{AOCL_ROOT}/include" CACHE STRING "" FORCE)
 elseif (HP_NUMERIC_USE_OPENBLAS)
-    add_definitions(-DUSE_OPENBLAS -DHP_NUMERIC_BACKEND_OPENBLAS)
+    add_definitions(-DHP_NUMERIC_BACKEND_OPENBLAS)
     set(BLA_VENDOR OpenBLAS CACHE STRING "" FORCE)
     if (CMAKE_SYSTEM_PROCESSOR MATCHES "arm64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
         set(OpenBLAS_ROOT "/opt/homebrew/opt/openblas/")

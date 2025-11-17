@@ -4,7 +4,7 @@
 ## Prerequisites
 - **C++ Compiler:** C++20 or above
 - **Build System:** CMake (version 3.12 or higher)
-- **BLAS/LAPACK:** Intel MKL or OpenBLAS
+- **BLAS/LAPACK:** Intel MKL, AOCL or OpenBLAS
 - **Parallelization:** MPI
 - **Tensor&MPS:** [QuantumLiquids/TensorToolkit](https://github.com/QuantumLiquids/TensorToolkit); [QuantumLiquids/UltraDMRG](https://github.com/QuantumLiquids/UltraDMRG)
 

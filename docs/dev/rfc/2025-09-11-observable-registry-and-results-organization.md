@@ -107,7 +107,7 @@ struct PsiSummary {
    - 派生类必须使用传入尺寸填充真实 shape。
 2. **Metadata 规范**
    - `shape` 必须与数据长度匹配。标量 `{}`；site 级 `{ly, lx}`；横向 bond `{ly, lx-1}`；纵向 `{ly-1, lx}`；对角 `{ly-1, lx-1}`。
-  - `index_labels` 可空；若填写，应与 shape 轴一一对应（如 `{ "bond_y", "bond_x" }` 表示起点坐标）。
+   - `index_labels` 可空；若填写，应与 shape 轴一一对应（如 `{ "bond_y", "bond_x" }` 表示起点坐标）。
 3. **Measurer 更新**
    - `MCPEPSMeasurer` 在构造时调用 `DescribeObservables(engine_.Ly(), engine_.Lx())`。
    - Dump 逻辑直接利用 `shape` 创建矩阵；shape 与数据不匹配时抛出异常。
