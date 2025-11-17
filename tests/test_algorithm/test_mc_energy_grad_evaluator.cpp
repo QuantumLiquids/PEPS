@@ -274,13 +274,16 @@ TEST_F(SpinlessFermionExactVsMCTest, EnergyAndGradientMatch) {
                                     std::make_optional<double>(1e-14),
                                     std::make_optional<size_t>(10));
   std::vector<Configuration> all_configs = GenerateAllPermutationConfigs({2, 2}, Lx, Ly);
-  auto [energy_exact, grad_exact, err_exact] = ExactSumEnergyEvaluator<SquareSpinlessFermion, TenElemT, QNT>(
+  auto [energy_exact, grad_exact, err_exact] = ExactSumEnergyEvaluatorMPI<SquareSpinlessFermion, TenElemT, QNT>(
     sitps,
     all_configs,
     trun_para,
     model,
     Ly,
-    Lx);
+    Lx,
+    comm,
+    qlten::hp_numeric::kMPIMasterRank,
+    1);
 
   // 3) MC evaluator with moderate samples (fast + stable)
   Configuration half_filling(Ly, Lx);
