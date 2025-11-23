@@ -85,7 +85,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     // J1 bond energies split by orientation; J2 only enter energy scalar
     std::vector<TenElemT> e_h; if (lx > 1) e_h.reserve(ly * (lx - 1));
     std::vector<TenElemT> e_v; if (ly > 1) e_v.reserve((ly - 1) * lx);
-    std::vector<TenElemT> e_diag; if (lx > 1 && ly > 1) e_diag.reserve((ly - 1) * (lx - 1));
+    std::vector<TenElemT> e_ur; if (lx > 1 && ly > 1) e_ur.reserve((ly - 1) * (lx - 1));
     TenElemT energy_total(0);    // accumulate J1 + j2_*J2
     TenElemT energy_j2_total(0); // accumulate J2 only, added with factor j2_
 
@@ -173,7 +173,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
                                                      (*split_index_tps)(ru)[config(ld)]);
             eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
           }
-          e_diag.push_back(eb);
+          e_ur.push_back(eb);
           energy_total += eb;
           if (col + 2 < lx) tn.BTen2MoveStep(RIGHT, row);
         }
@@ -244,7 +244,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     out["energy"] = {energy_total + j2_ * energy_j2_total};
     if (!e_h.empty()) out["bond_energy_h"] = std::move(e_h);
     if (!e_v.empty()) out["bond_energy_v"] = std::move(e_v);
-    if (!e_diag.empty()) out["bond_energy_diag"] = std::move(e_diag);
+    if (!e_ur.empty()) out["bond_energy_ur"] = std::move(e_ur);
     // psi_list is not emitted via registry; Measurer computes PsiSummary separately
 
     // All-to-all SzSz packed
@@ -279,7 +279,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
         {"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {row_corr_len}, {"segment"}},
         {"bond_energy_h", "Bond energy on horizontal NN bonds (flat)", {bond_len_horizontal}, {"bond"}},
         {"bond_energy_v", "Bond energy on vertical NN bonds (flat)", {bond_len_vertical}, {"bond"}},
-        {"bond_energy_diag", "Bond energy on diagonal (triangular) bonds (flat)", {bond_len_diag}, {"bond"}},
+        {"bond_energy_ur", "Bond energy on diagonal (triangular, Up-Right) bonds (flat)", {bond_len_diag}, {"bond"}},
         {"SzSz_all2all", "All-to-all SzSz correlations (upper-tri packed)", {site_num * (site_num + 1) / 2}, {"pair_packed_upper_tri"}}
     };
   }

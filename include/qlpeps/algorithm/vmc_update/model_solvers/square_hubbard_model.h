@@ -137,7 +137,11 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
         meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
         meta.index_labels = {"bond_y", "bond_x"};
       }
-      if (meta.key == "bond_energy_diag") {
+      if (meta.key == "bond_energy_dr") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_ur") {
         meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
         meta.index_labels = {"bond_y", "bond_x"};
       }

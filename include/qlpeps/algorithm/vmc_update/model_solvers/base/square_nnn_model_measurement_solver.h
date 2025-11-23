@@ -58,7 +58,8 @@ class SquareNNNModelMeasurementSolver
     // Accumulators for bond energies
     std::vector<TenElemT> e_h; if (lx > 1) e_h.reserve(ly * (lx - 1));
     std::vector<TenElemT> e_v; if (ly > 1) e_v.reserve((ly - 1) * lx);
-    std::vector<TenElemT> e_diag; if constexpr (has_nnn_interaction) { if (lx > 1 && ly > 1) e_diag.reserve((ly - 1) * (lx - 1)); }
+    std::vector<TenElemT> e_dr; if constexpr (has_nnn_interaction) { if (lx > 1 && ly > 1) e_dr.reserve((ly - 1) * (lx - 1)); }
+    std::vector<TenElemT> e_ur; if constexpr (has_nnn_interaction) { if (lx > 1 && ly > 1) e_ur.reserve((ly - 1) * (lx - 1)); }
     std::vector<TenElemT> sc_h;
     std::vector<TenElemT> sc_v;
     if constexpr (kHasSCFlag) {
@@ -105,7 +106,7 @@ class SquareNNNModelMeasurementSolver
       }
     };
 
-    // NNN link measurement functor (accumulate LEFTUP_TO_RIGHTDOWN to preserve legacy semantics)
+      // NNN link measurement functor (accumulate LEFTUP_TO_RIGHTDOWN to preserve legacy semantics)
     auto nnn_link_measure_func = [&](const SiteIdx site1, const SiteIdx site2, const DIAGONAL_DIR dir,
                                      const TenElemT inv_psi_row, std::optional<TenElemT> &fermion_psi) {
       if constexpr (!has_nnn_interaction) { return; }
@@ -119,11 +120,15 @@ class SquareNNNModelMeasurementSolver
         eb = derived->EvaluateNNNEnergy(site1, site2, config(site1), config(site2), dir, tn,
                                         (*split_index_tps)(site1), (*split_index_tps)(site2), inv_psi_row);
       }
-      // Preserve old behavior: only record and sum LEFTUP_TO_RIGHTDOWN
+      // Sum energy from both diagonals for general square NNN models (e.g. J1-J2).
+      // For models with only one diagonal interaction (like triangular mapped to square),
+      // the derived class must ensure EvaluateNNNEnergy returns 0 for the non-interacting direction.
       if (dir == LEFTUP_TO_RIGHTDOWN) {
-        e_diag.push_back(eb);
-        energy_bond_total += eb;
+        e_dr.push_back(eb);
+      } else if (dir == LEFTDOWN_TO_RIGHTUP) {
+        e_ur.push_back(eb);
       }
+      energy_bond_total += eb;
     };
 
     // No off-diagonal long-range measurement at this layer
@@ -149,7 +154,10 @@ class SquareNNNModelMeasurementSolver
 
     if (!e_h.empty()) out["bond_energy_h"] = std::move(e_h);
     if (!e_v.empty()) out["bond_energy_v"] = std::move(e_v);
-    if constexpr (has_nnn_interaction) { if (!e_diag.empty()) out["bond_energy_diag"] = std::move(e_diag); }
+    if constexpr (has_nnn_interaction) {
+      if (!e_dr.empty()) out["bond_energy_dr"] = std::move(e_dr);
+      if (!e_ur.empty()) out["bond_energy_ur"] = std::move(e_ur);
+    }
     if constexpr (kHasSCFlag) {
       if (ModelType::enable_sc_measurement) {
         if (!sc_h.empty()) out["SC_bond_singlet_h"] = std::move(sc_h);
@@ -179,8 +187,12 @@ class SquareNNNModelMeasurementSolver
                    {(ly > 0 ? ly - 1 : 0), lx},
                    {"bond_y", "bond_x"}});
     if constexpr (has_nnn_interaction) {
-      out.push_back({"bond_energy_diag",
-                     "Bond energy on diagonal NNN bonds",
+      out.push_back({"bond_energy_dr",
+                     "Bond energy on diagonal NNN bonds (LeftUp-RightDown)",
+                     {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)},
+                     {"bond_y", "bond_x"}});
+      out.push_back({"bond_energy_ur",
+                     "Bond energy on anti-diagonal NNN bonds (LeftDown-RightUp)",
                      {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)},
                      {"bond_y", "bond_x"}});
     }

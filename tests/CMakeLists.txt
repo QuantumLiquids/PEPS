@@ -153,56 +153,56 @@ add_unittest(test_duomatrix test_2d_tn/test_duomatrix.cpp "" "" "" "")
 # Test TenMatrix class
 add_unittest(test_ten_mat
         "test_2d_tn/test_ten_matrix.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 # Test Configuration class
 add_unittest(test_configuration
         "test_2d_tn/test_configuration.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 ## Test 2D tensor networks.
 add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 add_unittest(test_split_index_tps
         "test_2d_tn/test_split_index_tps.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 
 # MPI functionality tests for SplitIndexTPS
 add_mpi_unittest(test_split_index_tps_mpi
         "test_2d_tn/test_split_index_tps_mpi.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "/Users/wanghaoxin/GitHub/PEPS/tests/test_data/"
 )
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 
 ## Test monte carlo tools
 add_unittest(test_statistics
         "test_monte_carlo_tools/test_statistics.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 add_mpi_unittest(test_statistics_mpi
         "test_monte_carlo_tools/test_statistics_mpi.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
 add_unittest(test_suwa_todo_update
         "test_monte_carlo_tools/test_suwa_todo_update.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" ""
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 
 ## Test model solvers
 add_unittest(test_tJ_model_solver
         "test_model_solvers/test_tJ_model_solver.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
@@ -215,20 +215,20 @@ add_unittest(test_tJ_model_solver
 # Test boson simple update
 add_two_type_unittest(test_boson_simple_update
         "test_algorithm/test_boson_simple_update.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
 # Test fermion simple update
 add_two_type_unittest(test_fermion_simple_update
         "test_algorithm/test_fermion_simple_update.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 # DEPRECATED: Loop update test moved to test_deprecated/
 # add_two_type_unittest(test_loop_update
 #        "test_deprecated/test_loop_update_deprecated.cpp"
-#        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+#        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
 #        ""
 # )
 
@@ -237,14 +237,14 @@ add_two_type_unittest(test_fermion_simple_update
 # Test optimizer
 add_two_type_unittest(test_optimizer
         "test_optimizer/test_optimizer.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
 # Test VMC PEPS optimizer executor
 add_two_type_unittest(test_vmc_peps_optimizer
         "test_algorithm/test_vmc_peps_optimizer.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
@@ -255,7 +255,7 @@ add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
 ## Optimizer exact-sum AdaGrad test (pure optimizer, deterministic gradients)
 add_two_type_unittest(test_optimizer_adagrad_exact_sum
         "test_optimizer/test_optimizer_adagrad_exact_sum.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 
 # Add MPI test runs for optimizer exact-sum AdaGrad to verify MPI-aware ExactSumEnergyEvaluator
@@ -265,7 +265,7 @@ add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_complex "4" " ")
 # Test pure exact summation evaluator (separated from optimizer complexity)
 add_two_type_unittest(test_exact_summation_evaluator
         "test_algorithm/test_exact_summation_evaluator.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 
 # Add MPI test runs for exact summation evaluator to verify MPI-aware computation
@@ -276,7 +276,7 @@ add_mpi_unittest_run(test_exact_summation_evaluator_complex "4" " ")
 ## Optimizer exact-sum SGD test (pure optimizer, deterministic gradients)
 add_two_type_unittest(test_optimizer_sgd_exact_sum
         "test_optimizer/test_optimizer_sgd_exact_sum.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" " "
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 add_mpi_unittest_run(test_optimizer_sgd_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_sgd_exact_sum_complex "4" " ")
@@ -285,7 +285,7 @@ add_mpi_unittest_run(test_optimizer_sgd_exact_sum_complex "4" " ")
 # Learning rate scheduler unit tests (header-only, no extra libs)
 add_unittest(test_lr_schedulers
         "test_optimizer/test_lr_schedulers.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
@@ -293,21 +293,21 @@ add_unittest(test_lr_schedulers
 # Optimizer params utility tests
 add_unittest(test_optimizer_params
         "test_optimizer/test_optimizer_params.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
 # Optimizer gradient preprocessing integration (single-rank)
 add_unittest(test_optimizer_gradient_preprocessing
         "test_optimizer/test_optimizer_gradient_preprocessing.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
 # Fast tests (2x2 systems, quick execution)
 add_two_type_unittest(test_mc_peps_measure
         "test_algorithm/test_mc_peps_measure.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "test_data/tps_square_heisenberg2x2D4Double"
 )
 
@@ -315,14 +315,14 @@ add_two_type_unittest(test_mc_peps_measure
 # Independent MC energy+gradient evaluator smoke test
 add_two_type_unittest(test_mc_energy_grad_evaluator_smoke
         "test_algorithm/test_mc_energy_grad_evaluator_smoke.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
 # 2x2 classical Ising (h=0) smoke test using MonteCarloMeasure
 add_two_type_unittest(test_api_smoke
         "test_algorithm/test_api_smoke.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
@@ -333,7 +333,7 @@ add_mpi_unittest_run(test_api_smoke_complex "4" " ")
 # 2x2 spinless fermion exact vs MC evaluator test
 add_two_type_unittest(test_mc_energy_grad_evaluator
         "test_algorithm/test_mc_energy_grad_evaluator.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
 
@@ -344,13 +344,13 @@ add_mpi_unittest_run(test_mc_energy_grad_evaluator_complex "4" " ")
 ## Test utility
 add_unittest(test_conjugate_gradient_solver
         "test_utility/test_conjugate_gradient_solver.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
 
 add_mpi_unittest(test_conjugate_gradient_mpi_solver
         "test_utility/test_conjugate_gradient_mpi_solver.cpp"
-        "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}" "3"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3"
         ""
 )
 
@@ -360,19 +360,19 @@ if(BUILD_SLOW_TESTS)
     # Slow tests (4x4 systems, long execution)
     add_two_type_unittest(test_boson_measure
             "slow_tests/test_boson_mc_peps_measure.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             "slow_tests/test_data/tps_square_heisenberg4x4D8Double"
     )
     
     add_two_type_unittest(test_fermion_measure
             "slow_tests/test_fermion_mc_peps_measure.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
 
     add_unittest(test_fermion_mc_updater
             "slow_tests/test_fermion_mc_updater_large_size.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             "${CMAKE_CURRENT_LIST_DIR}/test_data/"
     )
 
@@ -381,7 +381,7 @@ if(BUILD_SLOW_TESTS)
     # To run all MPI integration tests: ctest -V -L mpi-integration --test-dir build
     add_two_type_unittest(test_square_heisenberg
             "integration_tests/test_square_heisenberg.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
@@ -397,7 +397,7 @@ if(BUILD_SLOW_TESTS)
 
     add_two_type_unittest(test_square_nn_spinless_free_fermion
             "integration_tests/test_square_nn_spinless_free_fermion.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
@@ -413,7 +413,7 @@ if(BUILD_SLOW_TESTS)
 
     add_two_type_unittest(test_square_j1j2_xxz
             "integration_tests/test_square_j1j2_xxz.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
@@ -426,7 +426,7 @@ if(BUILD_SLOW_TESTS)
 
     add_two_type_unittest(test_triangle_heisenberg
             "integration_tests/test_triangle_heisenberg.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
@@ -438,7 +438,7 @@ if(BUILD_SLOW_TESTS)
 
     add_two_type_unittest(test_triangle_j1j2_heisenberg
             "integration_tests/test_triangle_j1j2_heisenberg.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
@@ -465,7 +465,7 @@ if(BUILD_SLOW_TESTS)
 
     add_two_type_unittest(test_square_tj_model
             "integration_tests/test_square_tj_model.cpp"
-            "${BLAS_INCLUDE_DIR}" "" "${MATH_LIB_LINK_FLAGS}"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
             " "
     )
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)

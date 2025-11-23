@@ -58,7 +58,7 @@ ObservableMap<TenElemT> EvaluateObservables(
 
 ## 8. 命名规范（强制）
 - 不使用泛化的 `one_point`、`two_point` 键。必须使用语义明确的键：`spin_z`、`sigma_x`、`charge`、`SzSz_row`、`SC_bond_singlet` 等。
-- `bond_energy` 默认不导出；如需，可按几何拆分：`bond_energy_h`、`bond_energy_v`、`bond_energy_diag`（为 PBC/三角格子预留）。
+- `bond_energy` 默认不导出；如需，可按几何拆分：`bond_energy_h`、`bond_energy_v`、`bond_energy_dr`（Down-Right，对应 $\searrow$）、`bond_energy_ur`（Up-Right，对应 $\nearrow$）。
  - 超导相关：若仅有键-单线态幅度，命名为 `SC_bond_singlet`；含相位结构需另行命名（如确认 d-wave 再命名）。
 
 ### 上三角打包（all-to-all 配对量节省内存约定）

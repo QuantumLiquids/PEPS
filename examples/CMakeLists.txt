@@ -26,7 +26,7 @@ include_directories(${CMAKE_SOURCE_DIR}/../include)
 # add_executable(migration_example migration_example.cpp)
 
 # Link libraries
-# target_include_directories(migration_example PRIVATE ${BLAS_INCLUDE_DIR} ${hptt_INCLUDE_DIR})
+# target_include_directories(migration_example PRIVATE ${BLAS_INCLUDE_DIRS} ${hptt_INCLUDE_DIR})
 # target_link_libraries(migration_example
 #     ${hptt_LIBRARY}
 #     BLAS::BLAS
