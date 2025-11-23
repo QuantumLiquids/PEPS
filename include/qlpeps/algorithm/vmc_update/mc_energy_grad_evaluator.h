@@ -59,6 +59,7 @@ class MCEnergyGradEvaluator {
   using Tensor = qlten::QLTensor<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
 
   struct Result {
     TenElemT energy;                 // Broadcast to all ranks
@@ -247,8 +248,8 @@ class MCEnergyGradEvaluator {
 
     // Gradient estimation and MPI mean per tensor component
     SITPST Ostar_mean(ly, lx);
-    Ostar_mean = Ostar_sum * (1.0 / sample_num);
-    grad = ELocConj_Ostar_sum * (1.0 / sample_num) + ComplexConjugate(-energy) * Ostar_mean;
+    Ostar_mean = Ostar_sum * (RealT(1.0) / RealT(sample_num));
+    grad = ELocConj_Ostar_sum * (RealT(1.0) / RealT(sample_num)) + ComplexConjugate(-energy) * Ostar_mean;
 
     for (size_t row = 0; row < ly; row++) {
       for (size_t col = 0; col < lx; col++) {

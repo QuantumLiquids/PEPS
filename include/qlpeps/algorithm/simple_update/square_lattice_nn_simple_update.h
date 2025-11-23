@@ -23,6 +23,7 @@ template<typename TenElemT, typename QNT>
 class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+  using RealT = typename SimpleUpdateExecutor<TenElemT, QNT>::RealT;
  public:
   /**
    *
@@ -85,11 +86,11 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
   Tensor ConstructEvolveOperator(const TenElemT h1, const Tensor &on_site_term1,
                                  const TenElemT h2, const Tensor &on_site_term2,
                                  const Tensor &id) const {
-    return TaylorExpMatrix(this->update_para.tau,
+    return TaylorExpMatrix(RealT(this->update_para.tau),
                            ConstructBondHamiltonian(h1, on_site_term1, h2, on_site_term2, id));
   }
 
-  double SimpleUpdateSweep_(void) override;
+  RealT SimpleUpdateSweep_(void) override;
 
   Tensor ham_two_site_term_; //uniform bond term
 
@@ -105,7 +106,7 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
 template<typename TenElemT, typename QNT>
 void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
   if (ham_on_site_terms_(0, 0) == nullptr || ham_on_site_terms_(0, 0)->IsDefault()) {
-    Tensor evolve_gate_nn = TaylorExpMatrix(this->update_para.tau, ham_two_site_term_);
+    Tensor evolve_gate_nn = TaylorExpMatrix(RealT(this->update_para.tau), ham_two_site_term_);
     for (auto &ten : horizontal_nn_ham_set_) {
       ten = ham_two_site_term_;
     }
@@ -125,7 +126,7 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
       std::cerr << "Index direction of on-site hamiltonian is unexpected." << std::endl;
     }
     for (size_t i = 0; i < id.GetShape()[0]; i++) {
-      id({i, i}) = 1.0;
+      id({i, i}) = RealT(1.0);
     }
     if (Tensor::IsFermionic()) {
       id.ActFermionPOps();
@@ -133,119 +134,119 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
 
     for (size_t col = 0; col < this->lx_ - 1; col++) {
       for (size_t row = 1; row < this->ly_ - 1; row++) {
-        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(0.25, ham_on_site_terms_({row, col}),
-                                                                      0.25, ham_on_site_terms_({row, col + 1}),
+        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(0.25), ham_on_site_terms_({row, col}),
+                                                                      RealT(0.25), ham_on_site_terms_({row, col + 1}),
                                                                       id);
-        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(0.25, ham_on_site_terms_({row, col}),
-                                                                             0.25, ham_on_site_terms_({row, col + 1}),
+        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(0.25), ham_on_site_terms_({row, col}),
+                                                                             RealT(0.25), ham_on_site_terms_({row, col + 1}),
                                                                              id);
       }
     }
     for (size_t col = 1; col < this->lx_ - 1; col++) {
       for (size_t row = 0; row < this->ly_ - 1; row++) {
-        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(0.25, ham_on_site_terms_({row, col}),
-                                                                    0.25, ham_on_site_terms_({row + 1, col}),
+        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(0.25), ham_on_site_terms_({row, col}),
+                                                                    RealT(0.25), ham_on_site_terms_({row + 1, col}),
                                                                     id);
-        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(0.25, ham_on_site_terms_({row, col}),
-                                                                           0.25, ham_on_site_terms_({row + 1, col}),
+        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(0.25), ham_on_site_terms_({row, col}),
+                                                                           RealT(0.25), ham_on_site_terms_({row + 1, col}),
                                                                            id);
       }
     }
 
     for (size_t col = 1; col < this->lx_ - 2; col++) {
-      horizontal_nn_evolve_gate_set_({0, col}) = ConstructEvolveOperator(0.375, ham_on_site_terms_({0, col}),
-                                                                         0.375, ham_on_site_terms_({0, col + 1}), id);
+      horizontal_nn_evolve_gate_set_({0, col}) = ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({0, col}),
+                                                                         RealT(0.375), ham_on_site_terms_({0, col + 1}), id);
       horizontal_nn_evolve_gate_set_({this->ly_ - 1, col}) =
-          ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 1, col}),
-                                  0.375, ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
+          ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col}),
+                                  RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
 
-      horizontal_nn_ham_set_({0, col}) = ConstructBondHamiltonian(0.375, ham_on_site_terms_({0, col}),
-                                                                  0.375, ham_on_site_terms_({0, col + 1}), id);
+      horizontal_nn_ham_set_({0, col}) = ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({0, col}),
+                                                                  RealT(0.375), ham_on_site_terms_({0, col + 1}), id);
       horizontal_nn_ham_set_({this->ly_ - 1, col}) =
-          ConstructBondHamiltonian(0.375, ham_on_site_terms_({this->ly_ - 1, col}),
-                                   0.375, ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
+          ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col}),
+                                   RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
     }
 
     for (size_t row = 1; row < this->ly_ - 2; row++) {
-      vertical_nn_evolve_gate_set_({row, 0}) = ConstructEvolveOperator(0.375, ham_on_site_terms_({row, 0}),
-                                                                       0.375, ham_on_site_terms_({row + 1, 0}), id);
+      vertical_nn_evolve_gate_set_({row, 0}) = ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({row, 0}),
+                                                                       RealT(0.375), ham_on_site_terms_({row + 1, 0}), id);
       vertical_nn_evolve_gate_set_({row, this->lx_ - 1}) =
-          ConstructEvolveOperator(0.375, ham_on_site_terms_({row, this->lx_ - 1}),
-                                  0.375, ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
+          ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({row, this->lx_ - 1}),
+                                  RealT(0.375), ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
 
-      vertical_nn_ham_set_({row, 0}) = ConstructBondHamiltonian(0.375, ham_on_site_terms_({row, 0}),
-                                                                0.375, ham_on_site_terms_({row + 1, 0}), id);
+      vertical_nn_ham_set_({row, 0}) = ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({row, 0}),
+                                                                RealT(0.375), ham_on_site_terms_({row + 1, 0}), id);
       vertical_nn_ham_set_({row, this->lx_ - 1}) =
-          ConstructBondHamiltonian(0.375, ham_on_site_terms_({row, this->lx_ - 1}),
-                                   0.375, ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
+          ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({row, this->lx_ - 1}),
+                                   RealT(0.375), ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
     }
 
     //corner terms
-    horizontal_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(0.5, ham_on_site_terms_({0, 0}),
-                                                                     0.375, ham_on_site_terms_({0, 1}), id);
+    horizontal_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({0, 0}),
+                                                                     RealT(0.375), ham_on_site_terms_({0, 1}), id);
     horizontal_nn_evolve_gate_set_({this->ly_ - 1, 0}) =
-        ConstructEvolveOperator(0.5, ham_on_site_terms_({this->ly_ - 1, 0}),
-                                0.375, ham_on_site_terms_({this->ly_ - 1, 1}), id);
-    vertical_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(0.5, ham_on_site_terms_({0, 0}),
-                                                                   0.375, ham_on_site_terms_({1, 0}), id);
+        ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({this->ly_ - 1, 0}),
+                                RealT(0.375), ham_on_site_terms_({this->ly_ - 1, 1}), id);
+    vertical_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({0, 0}),
+                                                                   RealT(0.375), ham_on_site_terms_({1, 0}), id);
     vertical_nn_evolve_gate_set_({0, this->lx_ - 1}) =
-        ConstructEvolveOperator(0.5, ham_on_site_terms_({0, this->lx_ - 1}),
-                                0.375, ham_on_site_terms_({1, this->lx_ - 1}), id);
+        ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({0, this->lx_ - 1}),
+                                RealT(0.375), ham_on_site_terms_({1, this->lx_ - 1}), id);
 
-    horizontal_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(0.5, ham_on_site_terms_({0, 0}),
-                                                              0.375, ham_on_site_terms_({0, 1}), id);
-    horizontal_nn_ham_set_({this->ly_ - 1, 0}) = ConstructBondHamiltonian(0.5,
+    horizontal_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(RealT(0.5), ham_on_site_terms_({0, 0}),
+                                                              RealT(0.375), ham_on_site_terms_({0, 1}), id);
+    horizontal_nn_ham_set_({this->ly_ - 1, 0}) = ConstructBondHamiltonian(RealT(0.5),
                                                                           ham_on_site_terms_({this->ly_ - 1, 0}),
-                                                                          0.375,
+                                                                          RealT(0.375),
                                                                           ham_on_site_terms_({this->ly_ - 1, 1}),
                                                                           id);
-    vertical_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(0.5, ham_on_site_terms_({0, 0}),
-                                                            0.375, ham_on_site_terms_({1, 0}), id);
-    vertical_nn_ham_set_({0, this->lx_ - 1}) = ConstructBondHamiltonian(0.5,
+    vertical_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(RealT(0.5), ham_on_site_terms_({0, 0}),
+                                                            RealT(0.375), ham_on_site_terms_({1, 0}), id);
+    vertical_nn_ham_set_({0, this->lx_ - 1}) = ConstructBondHamiltonian(RealT(0.5),
                                                                         ham_on_site_terms_({0, this->lx_ - 1}),
-                                                                        0.375,
+                                                                        RealT(0.375),
                                                                         ham_on_site_terms_({1, this->lx_ - 1}),
                                                                         id);
 
     horizontal_nn_evolve_gate_set_({0, this->lx_ - 2}) =
-        ConstructEvolveOperator(0.375, ham_on_site_terms_({0, this->lx_ - 2}),
-                                0.5, ham_on_site_terms_({0, this->lx_ - 1}), id);
+        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({0, this->lx_ - 2}),
+                                RealT(0.5), ham_on_site_terms_({0, this->lx_ - 1}), id);
     vertical_nn_evolve_gate_set_({this->ly_ - 2, 0}) =
-        ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 2, 0}),
-                                0.5, ham_on_site_terms_({this->ly_ - 1, 0}), id);
+        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 2, 0}),
+                                RealT(0.5), ham_on_site_terms_({this->ly_ - 1, 0}), id);
     horizontal_nn_evolve_gate_set_({this->ly_ - 1, this->lx_ - 2}) =
-        ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
-                                0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
+                                RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
     vertical_nn_evolve_gate_set_({this->ly_ - 2, this->lx_ - 1}) =
-        ConstructEvolveOperator(0.375, ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
-                                0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
+                                RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
 
-    horizontal_nn_ham_set_({0, this->lx_ - 2}) = ConstructBondHamiltonian(0.375,
+    horizontal_nn_ham_set_({0, this->lx_ - 2}) = ConstructBondHamiltonian(RealT(0.375),
                                                                           ham_on_site_terms_({0, this->lx_ - 2}),
-                                                                          0.5,
+                                                                          RealT(0.5),
                                                                           ham_on_site_terms_({0, this->lx_ - 1}),
                                                                           id);
-    vertical_nn_ham_set_({this->ly_ - 2, 0}) = ConstructBondHamiltonian(0.375,
+    vertical_nn_ham_set_({this->ly_ - 2, 0}) = ConstructBondHamiltonian(RealT(0.375),
                                                                         ham_on_site_terms_({this->ly_ - 2, 0}),
-                                                                        0.5,
+                                                                        RealT(0.5),
                                                                         ham_on_site_terms_({this->ly_ - 1, 0}),
                                                                         id);
     horizontal_nn_ham_set_({this->ly_ - 1, this->lx_ - 2}) =
-        ConstructBondHamiltonian(0.375, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
-                                 0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+        ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
+                                 RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
     vertical_nn_ham_set_({this->ly_ - 2, this->lx_ - 1}) =
-        ConstructBondHamiltonian(0.375, ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
-                                 0.5, ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
+        ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
+                                 RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
   }
 }
 
 template<typename TenElemT, typename QNT>
-double SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+typename SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   TenElemT e0(0.0);
-  double norm = 1.0;
-  double middle_bond_trunc_err;
+  RealT norm = 1.0;
+  RealT middle_bond_trunc_err;
 #ifdef QLPEPS_TIMING_MODE
   Timer vertical_nn_projection_timer("vertical_nn_projection");
 #endif

@@ -537,7 +537,6 @@ void SetUpCoordInfoForGrowBTen2(const BTenPOSITION post,
                                 size_t &mps1_idx,
                                 size_t &mps2_idx,
                                 std::vector<size_t> &mpo1_transpose_axes) {
-  using DTensor = QLTensor<QLTEN_Double, QNT>;
   switch (post) {
     case DOWN: {
       /*
@@ -609,7 +608,7 @@ void SetUpCoordInfoForGrowBTen2(const BTenPOSITION post,
       break;
     }
   }
-  mpo1_transpose_axes = GenMpoTen1TransposeAxesForBrowBTen2<DTensor::IsFermionic()>(post);
+  mpo1_transpose_axes = GenMpoTen1TransposeAxesForBrowBTen2<Index<QNT>::IsFermionic()>(post);
 }
 
 /**

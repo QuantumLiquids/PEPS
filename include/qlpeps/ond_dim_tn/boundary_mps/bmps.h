@@ -20,7 +20,6 @@ namespace qlpeps {
 using qlten::Index;
 using qlten::QNSector;
 using qlten::QLTensor;
-using qlten::QLTEN_Double;
 using qlmps::TenVec;
 using qlmps::MPSTenCanoType;
 using qlmps::kUncentralizedCenterIdx;
@@ -139,7 +138,8 @@ template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
+    using RealT = qlten::RealTypeTrait<TenElemT>::type;
+  using DTenT = QLTensor<RealT, QNT>;
   using IndexT = Index<QNT>;
   using TransferMPO = std::vector<Tensor *>;
 
@@ -195,7 +195,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   // MPS local operations. Only tensors near the target site are needed in memory.
   void LeftCanonicalizeTen(const size_t);
 
-  qlten::QLTensor<qlten::QLTEN_Double, QNT> RightCanonicalizeTen(const size_t);
+  qlten::QLTensor<RealT, QNT> RightCanonicalizeTen(const size_t);
 
   //return (D, trunc_err)
   std::pair<size_t, double> RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);

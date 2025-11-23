@@ -182,6 +182,7 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
     int mpi_size
 ) {
   using SplitIndexTPSType = SplitIndexTPS<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
 
   // Broadcast input state from master to all ranks when mpi_size > 1 (to satisfy contract; computation remains master-only)
   SplitIndexTPSType split_index_tps_bcast;
@@ -287,7 +288,7 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 
     // Calculate gradient
     // (S_{EO} − E^* S_O) / W_sum
-    SplitIndexTPSType gradient = (ELocConj_Ostar_weighted_sum - ComplexConjugate(energy) * Ostar_weighted_sum) * (1.0 / weight_sum);
+    SplitIndexTPSType gradient = (ELocConj_Ostar_weighted_sum - ComplexConjugate(energy) * Ostar_weighted_sum) * (RealT(1.0) / RealT(weight_sum));
 
     // Apply fermion parity operations only for fermion systems
     if constexpr (Index<QNT>::IsFermionic()) {

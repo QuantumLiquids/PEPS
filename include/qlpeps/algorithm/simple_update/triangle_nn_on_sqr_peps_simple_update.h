@@ -21,6 +21,8 @@ template<typename TenElemT, typename QNT>
 class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+  using RealT = typename SimpleUpdateExecutor<TenElemT, QNT>::RealT;
+
  public:
   /**
    * @param ham_nn     nearest-neighbor interaction, involving bonds on upper and left edges of the lattice
@@ -35,11 +37,11 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
 
  private:
   void SetEvolveGate_(void) override {
-    evolve_gate_nn_ = TaylorExpMatrix(this->update_para.tau, ham_nn_);
-    evolve_gate_tri_ = TaylorExpMatrix(this->update_para.tau, ham_tri_);
+    evolve_gate_nn_ = TaylorExpMatrix(RealT(this->update_para.tau), ham_nn_);
+    evolve_gate_tri_ = TaylorExpMatrix(RealT(this->update_para.tau), ham_tri_);
   }
 
-  double SimpleUpdateSweep_(void) override;
+  RealT SimpleUpdateSweep_(void) override;
 
   Tensor ham_nn_;
   Tensor ham_tri_;
@@ -48,10 +50,10 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
 };
 
 template<typename TenElemT, typename QNT>
-double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+typename TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::RealT TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  double norm_a(1), norm_b(1);
+  RealT norm_a(1), norm_b(1);
 
   for (size_t row = 0; row < this->ly_ - 1; row++) {
     auto proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {row, 0}, VERTICAL, para);
@@ -66,7 +68,7 @@ double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdat
     }
   }
 
-  double e_a = -std::log(norm_a) / this->update_para.tau;
+  RealT e_a = -std::log(norm_a) / this->update_para.tau;
   for (size_t col = 0; col < this->lx_ - 1; col++) {
     for (size_t row = 0; row < this->ly_ - 1; row++) {
       auto proj_res = this->peps_.UpperLeftTriangleProject(evolve_gate_tri_, {row, col}, para);
@@ -80,7 +82,7 @@ double TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdat
     norm_b *= proj_res.norm;
   }
 
-  double e_b = -std::log(norm_b) / this->update_para.tau;
+  RealT e_b = -std::log(norm_b) / this->update_para.tau;
   double sweep_time = simple_update_sweep_timer.Elapsed();
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed

@@ -173,7 +173,7 @@ void BMPS<TenElemT, QNT>::LeftCanonicalizeTen(const size_t site_idx) {
 }
 
 template<typename TenElemT, typename QNT>
-qlten::QLTensor<qlten::QLTEN_Double, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
+qlten::QLTensor<typename BMPS<TenElemT, QNT>::RealT, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
   ///< TODO: using LU decomposition
   assert(site_idx > 0);
   size_t ldims = 1;

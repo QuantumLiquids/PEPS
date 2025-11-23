@@ -19,11 +19,14 @@ using namespace qlten;
 
 /**
  * Simple update for square lattice model with uniform NN and NNN interaction.
+ * TODO: introduce on-site terms
  */
 template<typename TenElemT, typename QNT>
 class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+  using RealT = typename SimpleUpdateExecutor<TenElemT, QNT>::RealT;
+
  public:
   /**
    *
@@ -53,31 +56,33 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
     extend_ham_nnn.Transpose({0, 1, 4, 5, 2, 3});
     Contract(&ham_nn, {}, &id, {}, &extend_ham_nn_left);
     Contract(&id, {}, &ham_nn, {}, &extend_ham_nn_right);
-    ham_tri_ = extend_ham_nnn + 0.5 * extend_ham_nn_right + 0.5 * extend_ham_nn_left;
+    ham_tri_ = extend_ham_nnn + RealT(0.5) * extend_ham_nn_right + RealT(0.5) * extend_ham_nn_left;
   }
 
  private:
   void SetEvolveGate_(void) override {
-    evolve_gate_nn_ = TaylorExpMatrix(this->update_para.tau, ham_nn_);
-    evolve_gate_nn_half_ = TaylorExpMatrix(this->update_para.tau / 2, ham_nn_);
-    evolve_gate_tri_ = TaylorExpMatrix(this->update_para.tau, ham_tri_);
+    evolve_gate_nn_ = TaylorExpMatrix(RealT(this->update_para.tau), ham_nn_);
+    evolve_gate_nn_half_ = TaylorExpMatrix(RealT(this->update_para.tau) / 2, ham_nn_);
+    evolve_gate_tri_ = TaylorExpMatrix(RealT(this->update_para.tau), ham_tri_);
   }
 
-  double SimpleUpdateSweep_(void) override;
+  RealT SimpleUpdateSweep_(void) override;
 
   Tensor ham_nn_;
-  Tensor ham_tri_;  // A-B-C 3-site, A-B and B-C are NN connect, A-C is NNN connect
-  // A-B or B-C has half of J1 interaction, A-C has a J2 interaction
+  Tensor ham_tri_;// Hamiltonian term on A-B-C 3-site,
+    //with A-B and B-C are NN bonds, A-C is NNN bond.
+  // ham_tri_ term contains half of J1 interaction on bond A-B and B-C,
+  // while contain the whole of J2 interaction on bond A-C
   Tensor evolve_gate_nn_;
   Tensor evolve_gate_nn_half_;  // half of J1 interaction
   Tensor evolve_gate_tri_;
 };
 
 template<typename TenElemT, typename QNT>
-double SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  double e0 = 0.0;
+  RealT e0 = 0.0;
 
   for (size_t col = 1; col < this->lx_; col++) {  //first row
     ProjectionRes<TenElemT>
@@ -99,7 +104,7 @@ double SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(v
           proj_res = this->peps_.LowerRightTriangleProject(evolve_gate_tri_, {row, col}, para);
       e0 += -std::log(proj_res.norm) / this->update_para.tau;
 
-      double norm = this->peps_.LowerLeftTriangleProject(evolve_gate_tri_, {row, col - 1}, para);
+      RealT norm = this->peps_.LowerLeftTriangleProject(evolve_gate_tri_, {row, col - 1}, para);
       e0 += -std::log(norm) / this->update_para.tau;
     }
   }

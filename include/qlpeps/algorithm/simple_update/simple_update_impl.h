@@ -65,8 +65,9 @@ std::vector<size_t> DuplicateElements(const std::vector<size_t> &input) {
  *          0         1         2
  */
 template<typename TenElemT, typename QNT>
-QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElemT, QNT> &ham) {
+QLTensor<TenElemT, QNT> TaylorExpMatrix(const typename qlten::RealTypeTrait<TenElemT>::type tau, const QLTensor<TenElemT, QNT> &ham) {
   using Tensor = QLTensor<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const size_t N = ham.Rank() / 2;
   Tensor ham_scale = -tau * ham;
   //transpose so that in leg first.
@@ -82,7 +83,7 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
   shape.erase(shape.begin() + N, shape.end());
   std::vector<CoorsT> all_coors = GenAllCoors(shape);
   for (const auto &coor : all_coors) {
-    id(DuplicateElements(coor)) = 1.0;
+    id(DuplicateElements(coor)) = RealT(1.0);
   }
   id.Transpose(transpose_axes);
   if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() == OUT) {
@@ -94,12 +95,15 @@ QLTensor<TenElemT, QNT> TaylorExpMatrix(const double tau, const QLTensor<TenElem
   std::vector<size_t> ctrct_axes1(N), ctrct_axes2(N);
   std::iota(ctrct_axes1.begin(), ctrct_axes1.end(), N);
   std::iota(ctrct_axes2.begin(), ctrct_axes2.end(), 0);
+  
+  const RealT kEpsilon = (sizeof(RealT) == sizeof(double)) ? kDoubleEpsilon : kFloatEpsilon;
+
   for (size_t n = 2; n < kMaxTaylorExpansionOrder; n++) {
     Tensor tmp;
     Contract(&taylor_terms.back(), ctrct_axes1, &ham_scale, ctrct_axes2, &tmp);
-    tmp *= 1.0 / double(n);
+    tmp *= RealT(1.0) / RealT(n);
     taylor_terms.emplace_back(tmp);
-    if (tmp.GetQuasi2Norm() < kDoubleEpsilon) {
+    if (tmp.GetQuasi2Norm() < kEpsilon) {
       std::cout << "calculate the evolution gate taylor series order: " << n << std::endl;
       break;
     }
@@ -158,18 +162,18 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
   SetStatus(qlten::FINISH);
 }
 
-template<typename QNT>
-void PrintLambda(const QLTensor<QLTEN_Double, QNT> &lambda) {
+template<typename RealT, typename QNT>
+void PrintLambda(const QLTensor<RealT, QNT> &lambda) {
   std::cout << std::setprecision(4) << std::scientific;
 
   // Extract the diagonal elements of lambda into a vector
-  std::vector<double> diagonal_elements(lambda.GetShape()[0]);
+  std::vector<RealT> diagonal_elements(lambda.GetShape()[0]);
   for (size_t i = 0; i < lambda.GetShape()[0]; i++) {
     diagonal_elements[i] = lambda({i, i});
   }
 
   // Sort the diagonal elements in descending order
-  std::sort(diagonal_elements.begin(), diagonal_elements.end(), std::greater<double>());
+  std::sort(diagonal_elements.begin(), diagonal_elements.end(), std::greater<RealT>());
 
   // Print the sorted elements
   std::cout << "[";
