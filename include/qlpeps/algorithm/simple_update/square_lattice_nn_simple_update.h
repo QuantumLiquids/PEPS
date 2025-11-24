@@ -133,110 +133,52 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
     }
 
     for (size_t col = 0; col < this->lx_ - 1; col++) {
-      for (size_t row = 1; row < this->ly_ - 1; row++) {
-        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(0.25), ham_on_site_terms_({row, col}),
-                                                                      RealT(0.25), ham_on_site_terms_({row, col + 1}),
+      for (size_t row = 0; row < this->ly_; row++) {
+        size_t Coordination1 = 4; // Coordination number of site_1
+        size_t Coordination2 = 4; // Coordination number of site_2
+        if (row == 0 || row == this->ly_ - 1) {
+          Coordination1 -= 1;
+          Coordination2 -= 1;
+        }
+        if (col == 0) Coordination1 -= 1;
+        if (col == this->lx_ - 2) Coordination2 -= 1;
+
+        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1.0 / static_cast<double>(Coordination1)), 
+                                                                      ham_on_site_terms_({row, col}),
+                                                                      RealT(1.0 / static_cast<double>(Coordination2)), 
+                                                                      ham_on_site_terms_({row, col + 1}),
                                                                       id);
-        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(0.25), ham_on_site_terms_({row, col}),
-                                                                             RealT(0.25), ham_on_site_terms_({row, col + 1}),
+        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1.0 / static_cast<double>(Coordination1)), 
+                                                                             ham_on_site_terms_({row, col}),
+                                                                             RealT(1.0 / static_cast<double>(Coordination2)), 
+                                                                             ham_on_site_terms_({row, col + 1}),
                                                                              id);
       }
     }
-    for (size_t col = 1; col < this->lx_ - 1; col++) {
+
+    for (size_t col = 0; col < this->lx_; col++) {
       for (size_t row = 0; row < this->ly_ - 1; row++) {
-        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(0.25), ham_on_site_terms_({row, col}),
-                                                                    RealT(0.25), ham_on_site_terms_({row + 1, col}),
+        size_t Coordination1 = 4; // Coordination number of site_1
+        size_t Coordination2 = 4; // Coordination number of site_2
+        if (col == 0 || col == this->lx_ - 1) {
+          Coordination1 -= 1;
+          Coordination2 -= 1;
+        }
+        if (row == 0) Coordination1 -= 1;
+        if (row == this->ly_ - 2) Coordination2 -= 1;
+
+        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1.0 / static_cast<double>(Coordination1)), 
+                                                                    ham_on_site_terms_({row, col}),
+                                                                    RealT(1.0 / static_cast<double>(Coordination2)), 
+                                                                    ham_on_site_terms_({row + 1, col}),
                                                                     id);
-        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(0.25), ham_on_site_terms_({row, col}),
-                                                                           RealT(0.25), ham_on_site_terms_({row + 1, col}),
+        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1.0 / static_cast<double>(Coordination1)), 
+                                                                           ham_on_site_terms_({row, col}),
+                                                                           RealT(1.0 / static_cast<double>(Coordination2)), 
+                                                                           ham_on_site_terms_({row + 1, col}),
                                                                            id);
       }
     }
-
-    for (size_t col = 1; col < this->lx_ - 2; col++) {
-      horizontal_nn_evolve_gate_set_({0, col}) = ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({0, col}),
-                                                                         RealT(0.375), ham_on_site_terms_({0, col + 1}), id);
-      horizontal_nn_evolve_gate_set_({this->ly_ - 1, col}) =
-          ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col}),
-                                  RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
-
-      horizontal_nn_ham_set_({0, col}) = ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({0, col}),
-                                                                  RealT(0.375), ham_on_site_terms_({0, col + 1}), id);
-      horizontal_nn_ham_set_({this->ly_ - 1, col}) =
-          ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col}),
-                                   RealT(0.375), ham_on_site_terms_({this->ly_ - 1, col + 1}), id);
-    }
-
-    for (size_t row = 1; row < this->ly_ - 2; row++) {
-      vertical_nn_evolve_gate_set_({row, 0}) = ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({row, 0}),
-                                                                       RealT(0.375), ham_on_site_terms_({row + 1, 0}), id);
-      vertical_nn_evolve_gate_set_({row, this->lx_ - 1}) =
-          ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({row, this->lx_ - 1}),
-                                  RealT(0.375), ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
-
-      vertical_nn_ham_set_({row, 0}) = ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({row, 0}),
-                                                                RealT(0.375), ham_on_site_terms_({row + 1, 0}), id);
-      vertical_nn_ham_set_({row, this->lx_ - 1}) =
-          ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({row, this->lx_ - 1}),
-                                   RealT(0.375), ham_on_site_terms_({row + 1, this->lx_ - 1}), id);
-    }
-
-    //corner terms
-    horizontal_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({0, 0}),
-                                                                     RealT(0.375), ham_on_site_terms_({0, 1}), id);
-    horizontal_nn_evolve_gate_set_({this->ly_ - 1, 0}) =
-        ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({this->ly_ - 1, 0}),
-                                RealT(0.375), ham_on_site_terms_({this->ly_ - 1, 1}), id);
-    vertical_nn_evolve_gate_set_({0, 0}) = ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({0, 0}),
-                                                                   RealT(0.375), ham_on_site_terms_({1, 0}), id);
-    vertical_nn_evolve_gate_set_({0, this->lx_ - 1}) =
-        ConstructEvolveOperator(RealT(0.5), ham_on_site_terms_({0, this->lx_ - 1}),
-                                RealT(0.375), ham_on_site_terms_({1, this->lx_ - 1}), id);
-
-    horizontal_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(RealT(0.5), ham_on_site_terms_({0, 0}),
-                                                              RealT(0.375), ham_on_site_terms_({0, 1}), id);
-    horizontal_nn_ham_set_({this->ly_ - 1, 0}) = ConstructBondHamiltonian(RealT(0.5),
-                                                                          ham_on_site_terms_({this->ly_ - 1, 0}),
-                                                                          RealT(0.375),
-                                                                          ham_on_site_terms_({this->ly_ - 1, 1}),
-                                                                          id);
-    vertical_nn_ham_set_({0, 0}) = ConstructBondHamiltonian(RealT(0.5), ham_on_site_terms_({0, 0}),
-                                                            RealT(0.375), ham_on_site_terms_({1, 0}), id);
-    vertical_nn_ham_set_({0, this->lx_ - 1}) = ConstructBondHamiltonian(RealT(0.5),
-                                                                        ham_on_site_terms_({0, this->lx_ - 1}),
-                                                                        RealT(0.375),
-                                                                        ham_on_site_terms_({1, this->lx_ - 1}),
-                                                                        id);
-
-    horizontal_nn_evolve_gate_set_({0, this->lx_ - 2}) =
-        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({0, this->lx_ - 2}),
-                                RealT(0.5), ham_on_site_terms_({0, this->lx_ - 1}), id);
-    vertical_nn_evolve_gate_set_({this->ly_ - 2, 0}) =
-        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 2, 0}),
-                                RealT(0.5), ham_on_site_terms_({this->ly_ - 1, 0}), id);
-    horizontal_nn_evolve_gate_set_({this->ly_ - 1, this->lx_ - 2}) =
-        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
-                                RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
-    vertical_nn_evolve_gate_set_({this->ly_ - 2, this->lx_ - 1}) =
-        ConstructEvolveOperator(RealT(0.375), ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
-                                RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
-
-    horizontal_nn_ham_set_({0, this->lx_ - 2}) = ConstructBondHamiltonian(RealT(0.375),
-                                                                          ham_on_site_terms_({0, this->lx_ - 2}),
-                                                                          RealT(0.5),
-                                                                          ham_on_site_terms_({0, this->lx_ - 1}),
-                                                                          id);
-    vertical_nn_ham_set_({this->ly_ - 2, 0}) = ConstructBondHamiltonian(RealT(0.375),
-                                                                        ham_on_site_terms_({this->ly_ - 2, 0}),
-                                                                        RealT(0.5),
-                                                                        ham_on_site_terms_({this->ly_ - 1, 0}),
-                                                                        id);
-    horizontal_nn_ham_set_({this->ly_ - 1, this->lx_ - 2}) =
-        ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 2}),
-                                 RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
-    vertical_nn_ham_set_({this->ly_ - 2, this->lx_ - 1}) =
-        ConstructBondHamiltonian(RealT(0.375), ham_on_site_terms_({this->ly_ - 2, this->lx_ - 1}),
-                                 RealT(0.5), ham_on_site_terms_({this->ly_ - 1, this->lx_ - 1}), id);
   }
 }
 
