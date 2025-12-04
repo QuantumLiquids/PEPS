@@ -93,6 +93,96 @@ struct PsiSummary {
 - Developer/user docs updated (custom solver guide, model observables guide) to reflect registry flow.
 - Validation: `ctest --test-dir build -R mc_peps_measure` (double/complex) + partial default `ctest` run; no regressions observed.
 
+## Refactoring Plan: Structured Matrix Accumulators (2025-12-04)
+
+### Context
+The current implementation of `EvaluateObservables` relies on `std::vector` flattening with manual index arithmetic (e.g., `row * Lx + col`) or implicit assumptions about traversal order (e.g., `push_back`). This is fragile, especially for vertical bonds or diagonal interactions where traversal order (often column-major) conflicts with the expected storage layout (row-major for CSV dumping).
+
+### Proposal
+Introduce a lightweight **`ObservableMatrix<T>`** (or `DenseGrid<T>`) helper class to decouple data storage from traversal logic.
+
+#### 1. New Utility Class
+Create `include/qlpeps/utility/observable_matrix.h`.
+
+```cpp
+template <typename T>
+class ObservableMatrix {
+ public:
+  // Initialize with shape. Layout is logically Row-Major.
+  ObservableMatrix(size_t rows, size_t cols, T init_val = T(0));
+
+  // Random access (bounds checked in debug mode)
+  // Returns reference for easy assignment: mat(r, c) = val;
+  T& operator()(size_t row, size_t col);
+  const T& operator()(size_t row, size_t col) const;
+
+  // For accumulation (e.g. averaging components)
+  void Add(size_t row, size_t col, T val);
+
+  // Export to registry-compatible flat vector (Canonical Row-Major)
+  std::vector<T> Flatten() const;
+  
+  // Move internal vector out to avoid copy
+  std::vector<T> Extract();
+
+ private:
+  size_t rows_, cols_;
+  std::vector<T> data_;
+};
+```
+
+#### 2. Integration Strategy
+Update `SquareNNNModelMeasurementSolver` and derived models to use `ObservableMatrix` instead of raw vectors.
+
+**Before (Fragile):**
+```cpp
+// Vertical bond traversal (Column-Major)
+std::vector<T> sc_v; 
+sc_v.resize((Ly-1)*Lx);
+// ... inside loop ...
+// Manual arithmetic required to fix layout
+sc_v[site1.row() * Lx + site1.col()] = val; 
+```
+
+**After (Robust):**
+```cpp
+// Init with physical dimensions
+ObservableMatrix<T> sc_v_mat(Ly - 1, Lx);
+
+// ... inside loop ...
+// Direct semantic addressing. 
+// The class handles the layout mapping internally.
+sc_v_mat(site1.row(), site1.col()) = val;
+
+// ... at the end ...
+out["SC_bond_singlet_v"] = sc_v_mat.Extract();
+```
+
+### Benefits
+1.  **Readability**: Code reflects physical intent (`mat(row, col)`) rather than memory layout (`idx = ...`).
+2.  **Correctness**: Guaranteed Row-Major output for CSV dumps, regardless of traversal order (horizontal vs. vertical).
+3.  **Safety**: Centralized bounds checking and layout logic.
+4.  **Zero Overhead**: Lightweight wrapper around `std::vector`; `Extract()` allows zero-copy transfer to the Registry.
+
+### Implementation Scope (files & responsibilities)
+
+| 文件 | 责任 |
+| --- | --- |
+| `include/qlpeps/utility/observable_matrix.h` | ✅ 已引入 `ObservableMatrix<T>`（含 `(row,col)`、`operator()(SiteIdx)`、`Add`、`Flatten/Extract`）。 |
+| `include/qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h` | ✅ `e_h/e_v/e_dr/e_ur/sc_h/sc_v` 全部改用矩阵容器，扁平索引逻辑移除，`Extract()` 输出行优先数据。 |
+| `include/qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h` | 🔄 继承层自然获得新实现；若未来新增缓存，同样使用 `ObservableMatrix`。 |
+| `include/qlpeps/algorithm/vmc_update/model_solvers/*`（t-J、Hubbard、Triangular、Transverse Ising 等） | ✅ 自定义测量代码（如三角 Heisenberg、横场 Ising）已迁移；其余模型复用基类无需额外工作。 |
+| `include/qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer_impl.h` | ✅ `DumpStatsMatrix_` 注明 Row-Major 合约；仍接收 `Flatten()` 产出的 `std::vector`，Dump 行列与 `DescribeObservables` 对齐。 |
+| `tests/test_utility/test_observable_matrix.cpp` | ✅ 新增单测覆盖矩阵 API，确保行优先约定。 |
+
+### Follow-up
+- ✅ `ObservableMatrix` 已提供 `(row,col)` 与 `operator()(SiteIdx)`，可直接写 `mat(site) = val;`。
+- ✅ `SquareNNNModelMeasurementSolver` 及依赖均使用矩阵累加器；新增观测量也应沿用该容器。
+- 🔄 `DumpStatsMatrix_` 继续接受 `std::vector`，但由 `ObservableMatrix::Extract()` 保证 Row-Major；若需直接传矩阵，可在此基础上升级。
+- ✅ `DescribeObservables` 与矩阵维度一致，Dump 层注释已说明行优先约定。
+
+---
+
 ## API Refactor Plan (No Backward Compatibility Required)
 
 ### Goals
@@ -157,5 +247,3 @@ struct PsiSummary {
      over model classes, lattice sizes, and expected registry keys, reducing boilerplate.
    - Provide helpers to read registry metadata at runtime, so new keys automatically enter the
      assertions.
-
-

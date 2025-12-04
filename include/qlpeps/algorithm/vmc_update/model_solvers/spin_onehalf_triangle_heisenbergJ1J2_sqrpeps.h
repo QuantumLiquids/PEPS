@@ -10,6 +10,7 @@
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"    //ModelEnergySolver
 #include "qlpeps/utility/helpers.h"                             //ComplexConjugate
+#include "qlpeps/utility/observable_matrix.h"
 namespace qlpeps {
 using namespace qlten;
 
@@ -83,9 +84,12 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     }
 
     // J1 bond energies split by orientation; J2 only enter energy scalar
-    std::vector<TenElemT> e_h; if (lx > 1) e_h.reserve(ly * (lx - 1));
-    std::vector<TenElemT> e_v; if (ly > 1) e_v.reserve((ly - 1) * lx);
-    std::vector<TenElemT> e_ur; if (lx > 1 && ly > 1) e_ur.reserve((ly - 1) * (lx - 1));
+    ObservableMatrix<TenElemT> e_h;
+    ObservableMatrix<TenElemT> e_v;
+    ObservableMatrix<TenElemT> e_ur;
+    if (lx > 1) e_h.Resize(ly, lx - 1);
+    if (ly > 1) e_v.Resize(ly - 1, lx);
+    if (lx > 1 && ly > 1) e_ur.Resize(ly - 1, lx - 1);
     TenElemT energy_total(0);    // accumulate J1 + j2_*J2
     TenElemT energy_j2_total(0); // accumulate J2 only, added with factor j2_
 
@@ -110,7 +114,9 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
                                                     (*split_index_tps)(s2)[config(s1)]);
             eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
-          e_h.push_back(eb);
+          if (e_h.size() != 0) {
+            e_h(row, col) = eb;
+          }
           energy_total += eb;
           tn.BTenMoveStep(RIGHT);
         }
@@ -173,7 +179,9 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
                                                      (*split_index_tps)(ru)[config(ld)]);
             eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
           }
-          e_ur.push_back(eb);
+          if (e_ur.size() != 0) {
+            e_ur(row, col) = eb;
+          }
           energy_total += eb;
           if (col + 2 < lx) tn.BTen2MoveStep(RIGHT, row);
         }
@@ -215,7 +223,9 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
                                                   (*split_index_tps)(s2)[config(s1)]);
           eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
-        e_v.push_back(eb);
+        if (e_v.size() != 0) {
+          e_v(row, col) = eb;
+        }
         energy_total += eb;
         if (row + 2 < ly) tn.BTenMoveStep(DOWN);
       }
@@ -242,9 +252,9 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     }
 
     out["energy"] = {energy_total + j2_ * energy_j2_total};
-    if (!e_h.empty()) out["bond_energy_h"] = std::move(e_h);
-    if (!e_v.empty()) out["bond_energy_v"] = std::move(e_v);
-    if (!e_ur.empty()) out["bond_energy_ur"] = std::move(e_ur);
+    if (e_h.size() != 0) out["bond_energy_h"] = e_h.Extract();
+    if (e_v.size() != 0) out["bond_energy_v"] = e_v.Extract();
+    if (e_ur.size() != 0) out["bond_energy_ur"] = e_ur.Extract();
     // psi_list is not emitted via registry; Measurer computes PsiSummary separately
 
     // All-to-all SzSz packed

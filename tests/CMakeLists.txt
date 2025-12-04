@@ -348,6 +348,12 @@ add_unittest(test_conjugate_gradient_solver
         ""
 )
 
+add_unittest(test_observable_matrix
+        "test_utility/test_observable_matrix.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
 add_mpi_unittest(test_conjugate_gradient_mpi_solver
         "test_utility/test_conjugate_gradient_mpi_solver.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3"

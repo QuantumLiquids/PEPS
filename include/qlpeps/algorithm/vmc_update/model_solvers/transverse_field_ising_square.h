@@ -11,6 +11,7 @@
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
+#include "qlpeps/utility/observable_matrix.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 #include <complex>
 #include <cmath>
@@ -73,8 +74,8 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
 
     // Accumulators
     TenElemT energy_ex(0); // off-diagonal part
-    std::vector<TenElemT> sigma_x;
-    sigma_x.reserve(lx * ly);
+    ObservableMatrix<TenElemT> sigma_x_mat;
+    sigma_x_mat.Resize(ly, lx);
     std::vector<TenElemT> two_point;
     two_point.reserve(lx / 2 * 3);
 
@@ -89,11 +90,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
         const SiteIdx site{row, col};
         TenElemT ex_term = EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*sitps)(site), inv_psi);
         energy_ex += ex_term;
-        if (h_ != 0.0) {
-          sigma_x.push_back((-ex_term) / static_cast<double>(h_));
-        } else {
-          sigma_x.push_back(TenElemT(0));
-        }
+        sigma_x_mat(site) = (h_ != 0.0) ? (-ex_term) / static_cast<double>(h_) : TenElemT(0);
         if (col < lx - 1) {
           tn.BTenMoveStep(RIGHT);
         }
@@ -125,7 +122,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
       out["spin_z"] = std::move(spin_z);
     }
 
-    if (!sigma_x.empty()) out["sigma_x"] = std::move(sigma_x);
+    out["sigma_x"] = sigma_x_mat.Extract();
     if (!two_point.empty()) out["SzSz_row"] = std::move(two_point);
     // psi_list is not emitted via registry; Measurer computes PsiSummary separately
 

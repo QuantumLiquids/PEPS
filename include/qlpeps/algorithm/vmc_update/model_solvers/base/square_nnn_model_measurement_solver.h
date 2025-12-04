@@ -11,12 +11,13 @@
 
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/bond_traversal_mixin.h"
+#include "qlpeps/utility/observable_matrix.h"
 
 namespace qlpeps {
 
 // SquareNNNModelMeasurementSolver: base for square-lattice models with (optional) NNN interactions.
 // Provides registry-based EvaluateObservables; derived models supply bond evaluators and optional
-// site-local fields. Psi is handled via BuildPsiList and the executor, not the registry. 
+// site-local fields. Psi is handled via BuildPsiList and the executor, not the registry.
 
 template<typename ModelType, bool has_nnn_interaction = true>
 class SquareNNNModelMeasurementSolver
@@ -55,17 +56,33 @@ class SquareNNNModelMeasurementSolver
       out["charge"] = std::move(ch);
     }
 
-    // Accumulators for bond energies
-    std::vector<TenElemT> e_h; if (lx > 1) e_h.reserve(ly * (lx - 1));
-    std::vector<TenElemT> e_v; if (ly > 1) e_v.reserve((ly - 1) * lx);
-    std::vector<TenElemT> e_dr; if constexpr (has_nnn_interaction) { if (lx > 1 && ly > 1) e_dr.reserve((ly - 1) * (lx - 1)); }
-    std::vector<TenElemT> e_ur; if constexpr (has_nnn_interaction) { if (lx > 1 && ly > 1) e_ur.reserve((ly - 1) * (lx - 1)); }
-    std::vector<TenElemT> sc_h;
-    std::vector<TenElemT> sc_v;
-    if constexpr (kHasSCFlag) {
-      if (ModelType::enable_sc_measurement) {
-        if (lx > 1) sc_h.reserve(ly * (lx - 1));
-        if (ly > 1) sc_v.reserve((ly - 1) * lx);
+    ObservableMatrix<TenElemT> e_h;
+    ObservableMatrix<TenElemT> e_v;
+    ObservableMatrix<TenElemT> e_dr;
+    ObservableMatrix<TenElemT> e_ur;
+    ObservableMatrix<TenElemT> sc_h;
+    ObservableMatrix<TenElemT> sc_v;
+
+    if (lx > 1) {
+      e_h.Resize(ly, lx - 1);
+      if constexpr (kHasSCFlag) {
+        if (ModelType::enable_sc_measurement) {
+          sc_h.Resize(ly, lx - 1);
+        }
+      }
+    }
+    if (ly > 1) {
+      e_v.Resize(ly - 1, lx);
+      if constexpr (kHasSCFlag) {
+        if (ModelType::enable_sc_measurement) {
+          sc_v.Resize(ly - 1, lx);
+        }
+      }
+    }
+    if constexpr (has_nnn_interaction) {
+      if (lx > 1 && ly > 1) {
+        e_dr.Resize(ly - 1, lx - 1);
+        e_ur.Resize(ly - 1, lx - 1);
       }
     }
     TenElemT energy_bond_total = 0;
@@ -83,9 +100,13 @@ class SquareNNNModelMeasurementSolver
                                          (*split_index_tps)(site1), (*split_index_tps)(site2), inv_psi_row_or_col);
       }
       if (orient == HORIZONTAL) {
-        e_h.push_back(eb);
+        if (e_h.size() != 0) {
+          e_h(site1.row(), site1.col()) = eb;
+        }
       } else if (orient == VERTICAL) {
-        e_v.push_back(eb);
+        if (e_v.size() != 0) {
+          e_v(site1.row(), site1.col()) = eb;
+        }
       }
       energy_bond_total += eb;
 
@@ -97,10 +118,15 @@ class SquareNNNModelMeasurementSolver
           }
           auto sc_pair = derived->EvaluateBondSC(site1, site2, config(site1), config(site2), orient, tn,
                                                  (*split_index_tps)(site1), (*split_index_tps)(site2), sc_psi);
+          TenElemT sc_val = (ComplexConjugate(sc_pair.first) + sc_pair.second) / TenElemT(2.0);
           if (orient == HORIZONTAL) {
-            sc_h.push_back(sc_pair.second);
+            if (sc_h.size() != 0) {
+              sc_h(site1.row(), site1.col()) = sc_val;
+            }
           } else if (orient == VERTICAL) {
-            sc_v.push_back(sc_pair.second);
+            if (sc_v.size() != 0) {
+              sc_v(site1.row(), site1.col()) = sc_val;
+            }
           }
         }
       }
@@ -124,9 +150,14 @@ class SquareNNNModelMeasurementSolver
       // For models with only one diagonal interaction (like triangular mapped to square),
       // the derived class must ensure EvaluateNNNEnergy returns 0 for the non-interacting direction.
       if (dir == LEFTUP_TO_RIGHTDOWN) {
-        e_dr.push_back(eb);
+        if (e_dr.size() != 0) {
+          e_dr(site1.row(), site1.col()) = eb;
+        }
       } else if (dir == LEFTDOWN_TO_RIGHTUP) {
-        e_ur.push_back(eb);
+        if (e_ur.size() != 0) {
+          size_t mapped_row = site1.row() - 1;  // LEFTDOWN anchor -> shift to top cell
+          e_ur(mapped_row, site1.col()) = eb;
+        }
       }
       energy_bond_total += eb;
     };
@@ -152,16 +183,16 @@ class SquareNNNModelMeasurementSolver
     auto psi_summary = this->template ComputePsiSummary<TenElemT>(psi_list);
     this->template SetLastPsiSummary<TenElemT>(psi_summary.psi_mean, psi_summary.psi_rel_err);
 
-    if (!e_h.empty()) out["bond_energy_h"] = std::move(e_h);
-    if (!e_v.empty()) out["bond_energy_v"] = std::move(e_v);
+    if (e_h.size() != 0) out["bond_energy_h"] = e_h.Extract();
+    if (e_v.size() != 0) out["bond_energy_v"] = e_v.Extract();
     if constexpr (has_nnn_interaction) {
-      if (!e_dr.empty()) out["bond_energy_dr"] = std::move(e_dr);
-      if (!e_ur.empty()) out["bond_energy_ur"] = std::move(e_ur);
+      if (e_dr.size() != 0) out["bond_energy_dr"] = e_dr.Extract();
+      if (e_ur.size() != 0) out["bond_energy_ur"] = e_ur.Extract();
     }
     if constexpr (kHasSCFlag) {
       if (ModelType::enable_sc_measurement) {
-        if (!sc_h.empty()) out["SC_bond_singlet_h"] = std::move(sc_h);
-        if (!sc_v.empty()) out["SC_bond_singlet_v"] = std::move(sc_v);
+        if (sc_h.size() != 0) out["SC_bond_singlet_h"] = sc_h.Extract();
+        if (sc_v.size() != 0) out["SC_bond_singlet_v"] = sc_v.Extract();
       }
     }
     return out;

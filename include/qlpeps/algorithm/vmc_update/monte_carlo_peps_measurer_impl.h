@@ -372,6 +372,13 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
   GatherStatistic_();
 }
 
+  /**
+   * Layout contract:
+   *  - `vals` MUST be Row-Major packed: idx = row * cols + col.
+   *  - ObservableMatrix::Flatten/Extract already enforces this upstream.
+   *  - DescribeObservables.shape = {rows, cols}, so CSV rows/cols align with lattice.
+   * Any caller producing column-major buffers must transpose before invoking this helper.
+   */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
 void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsMatrix_(
   const std::string &dir,

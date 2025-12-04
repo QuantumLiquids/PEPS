@@ -466,8 +466,8 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
         meta.index_labels = {"bond_y", "bond_x"};
       }
     }
-    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
-    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
     return base;
   }
 };
@@ -515,8 +515,8 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
         meta.index_labels = {"bond_y", "bond_x"};
       }
     }
-    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
-    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
     return base;
   }
 };
