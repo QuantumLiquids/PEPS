@@ -298,15 +298,17 @@ class SquareLatticePEPS {
   );
 
   ProjectionRes<TenElemT> LowerRightTriangleProject(
-      const TenT &,
-      const SiteIdx &,
-      const SimpleUpdateTruncatePara &tunc_para
+      const TenT &gate_ten,
+      const SiteIdx &upper_site,
+      const SimpleUpdateTruncatePara &tunc_para,
+      const TenT &ham_ten = TenT()
   );
 
-  RealT LowerLeftTriangleProject(
+  ProjectionRes<TenElemT> LowerLeftTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_left_site,
-      const SimpleUpdateTruncatePara &trunc_para
+      const SimpleUpdateTruncatePara &trunc_para,
+      const TenT &ham_ten = TenT()
   );
 
   ///< fix the convenction of index direction: from left to right, from up to down. For the convention of index direction may be broken after loop update.
