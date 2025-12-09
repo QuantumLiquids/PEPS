@@ -19,16 +19,17 @@ using namespace qlten;
 template<typename TenElemT, typename QNT>
 struct HOSVDRes {
   using Tensor = QLTensor<TenElemT, QNT>;
-  using DTensor = QLTensor<QLTEN_Double, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  using DTensor = QLTensor<RealT, QNT>;
   std::vector<Tensor> u_tens;
   std::vector<DTensor> lambda_tens; // rank-2 tensors
   Tensor middle_ten;
   std::vector<size_t> actual_D;
-  std::vector<double> actual_trunc_err;
+  std::vector<RealT> actual_trunc_err;
 
   HOSVDRes(const size_t n) : u_tens(n), lambda_tens(n), middle_ten(), actual_D(n), actual_trunc_err(n) {}
 
-  double MaxTruncErr(void) const {
+  RealT MaxTruncErr(void) const {
     return *std::max_element(actual_trunc_err.cbegin(), actual_trunc_err.cend());
   }
 
@@ -68,8 +69,9 @@ HOSVDRes<TenElemT, QNT> HOSVD(
     const QLTensor<TenElemT, QNT> &t,
     const std::vector<size_t> &ldims,
     const std::vector<QNT> &lqns,
-    const size_t Dmin, const size_t Dmax, const double trunc_err
+    const size_t Dmin, const size_t Dmax, const typename qlten::RealTypeTrait<TenElemT>::type trunc_err
 ) {
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   size_t n = ldims.size();
   assert(n == lqns.size());
   HOSVDRes<TenElemT, QNT> res(n);
@@ -89,7 +91,7 @@ HOSVDRes<TenElemT, QNT> HOSVD(
   //Split out lambdas
   const size_t rank_core = iterative_core_ten.Rank();
   for (int i = n - 1; i >= 0; i--) {
-    QLTensor<QLTEN_Double, QNT> inv_lambda = DiagMatInv(res.lambda_tens[i], trunc_err);
+    QLTensor<RealT, QNT> inv_lambda = DiagMatInv(res.lambda_tens[i], trunc_err);
     Tensor tmp;
     Contract<TenElemT, QNT, true, false>(inv_lambda, iterative_core_ten, 1, rank_core - 1, 1, tmp);
     iterative_core_ten = tmp;

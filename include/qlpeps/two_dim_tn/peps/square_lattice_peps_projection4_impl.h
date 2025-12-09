@@ -28,21 +28,22 @@ template<typename TenElemT, typename QNT>
 void MatSVD(
     const QLTensor<TenElemT, QNT> &t,
     const QNT &lqndiv,
-    const QLTEN_Double trunc_err, const size_t Dmin, const size_t Dmax,
+    const typename qlten::RealTypeTrait<TenElemT>::type trunc_err, const size_t Dmin, const size_t Dmax,
     QLTensor<TenElemT, QNT> &u,
-    QLTensor<QLTEN_Double, QNT> &s,
+    QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &s,
     QLTensor<TenElemT, QNT> &vt,
-    QLTEN_Double *pactual_trunc_err, size_t *pD
+    typename qlten::RealTypeTrait<TenElemT>::type *pactual_trunc_err, size_t *pD
 ) {
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   assert(t.Rank() == 2);
   assert(t.GetIndex(0).GetDir() != t.GetIndex(1).GetDir());
   if (t.GetIndex(0).GetDir() == IN) {
-    SVD(&t, 1, lqndiv, trunc_err, Dmin, Dmax, &u, &s, &vt, pactual_trunc_err, pD);
+    SVD<RealT, QNT>(&t, 1, lqndiv, trunc_err, Dmin, Dmax, &u, &s, &vt, pactual_trunc_err, pD);
     return;
   } else {
     QLTensor<TenElemT, QNT> transpose_t = t;
     transpose_t.Transpose({1, 0});
-    SVD(&transpose_t, 1, t.Div() + (-lqndiv), trunc_err, Dmin, Dmax, &vt, &s, &u, pactual_trunc_err, pD);
+    SVD<RealT, QNT>(&transpose_t, 1, t.Div() + (-lqndiv), trunc_err, Dmin, Dmax, &vt, &s, &u, pactual_trunc_err, pD);
     u.Transpose({1, 0});
     s.Transpose({1, 0});
     vt.Transpose({1, 0});
@@ -55,18 +56,19 @@ void MatSVD(
     const QLTensor<TenElemT, QNT> &t,
     const QNT &lqndiv,
     QLTensor<TenElemT, QNT> &u,
-    QLTensor<QLTEN_Double, QNT> &s,
+    QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &s,
     QLTensor<TenElemT, QNT> &vt
 ) {
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   assert(t.Rank() == 2);
   assert(t.GetIndex(0).GetDir() != t.GetIndex(1).GetDir());
   if (t.GetIndex(0).GetDir() == IN) {
-    SVD(&t, 1, lqndiv, &u, &s, &vt);
+    SVD<RealT, QNT>(&t, 1, lqndiv, &u, &s, &vt);
     return;
   } else {
     QLTensor<TenElemT, QNT> transpose_t = t;
     transpose_t.Transpose({1, 0});
-    SVD(&transpose_t, 1, t.Div() + (-lqndiv), &vt, &s, &u);
+    SVD<RealT, QNT>(&transpose_t, 1, t.Div() + (-lqndiv), &vt, &s, &u);
     u.Transpose({1, 0});
     s.Transpose({1, 0});
     vt.Transpose({1, 0});
@@ -94,8 +96,8 @@ void TransposeGammaTensorIndicesIntoMPSOrder(std::array<QLTensor<TenElemT, QNT>,
 ///< indices order of gamma are not changed
 template<typename TenElemT, typename QNT>
 void Eat2EnvLambdasInMPSOrderGamma(QLTensor<TenElemT, QNT> &gamma,
-                                   const QLTensor<QLTEN_Double, QNT> &env_lambda_l,
-                                   const QLTensor<QLTEN_Double, QNT> &env_lambda_r) {
+                                   const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_l,
+                                   const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_r) {
   QLTensor<TenElemT, QNT> tmp, res;
   Contract(&gamma, {2}, &env_lambda_l, {1}, &tmp);
   Contract(&tmp, {2}, &env_lambda_r, {1}, &res);
@@ -113,8 +115,8 @@ void TransposeBackGammaTensorIndicesFromMPSOrder(std::array<QLTensor<TenElemT, Q
 
 template<typename TenElemT, typename QNT>
 void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
-                                         const QLTensor<QLTEN_Double, QNT> &env_lambda_l,
-                                         const QLTensor<QLTEN_Double, QNT> &env_lambda_r
+                                         const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_l,
+                                         const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_r
 ) {
   QLTensor<TenElemT, QNT> tmp, res;
   auto inv_lambda_l = DiagMatInv(env_lambda_l, 1e-200);
@@ -129,9 +131,9 @@ void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
 template<typename TenElemT, typename QNT>
 void WeightedTraceGaugeFixingInSquareLocalLoop(
     const ArnoldiParams &arnoldi_params,
-    const double,
+    const typename qlten::RealTypeTrait<TenElemT>::type,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
-    std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
+    std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
 );
 
@@ -149,11 +151,12 @@ SquareLatticePEPS<TenElemT, QNT>::GetLoopGammas_(const qlpeps::SiteIdx upper_lef
 }
 
 template<typename TenElemT, typename QNT>
-std::array<QLTensor<QLTEN_Double, QNT>, 4>
+std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4>
 SquareLatticePEPS<TenElemT, QNT>::GetLoopInternalLambdas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
-  std::array<QLTensor<QLTEN_Double, QNT>, 4> lambdas;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  std::array<QLTensor<RealT, QNT>, 4> lambdas;
   lambdas[0] = lambda_horiz({row, col + 1});
   lambdas[1] = lambda_vert({row + 1, col + 1});
   lambdas[2] = lambda_horiz({row + 1, col + 1});
@@ -164,11 +167,12 @@ SquareLatticePEPS<TenElemT, QNT>::GetLoopInternalLambdas_(const qlpeps::SiteIdx 
 }
 
 template<typename TenElemT, typename QNT>
-std::pair<std::array<QLTensor<QLTEN_Double, QNT>, 4>, std::array<QLTensor<QLTEN_Double, QNT>, 4>>
+std::pair<std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4>, std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4>>
 SquareLatticePEPS<TenElemT, QNT>::GetLoopEnvLambdas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
-  std::array<QLTensor<QLTEN_Double, QNT>, 4> env_lambda_ls, env_lambda_rs;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  std::array<QLTensor<RealT, QNT>, 4> env_lambda_ls, env_lambda_rs;
   env_lambda_ls[0] = lambda_horiz({row, col});
   env_lambda_rs[0] = lambda_vert({row, col});
   env_lambda_ls[1] = lambda_horiz({row, col + 2});
@@ -187,7 +191,7 @@ SquareLatticePEPS<TenElemT, QNT>::GetLoopEnvLambdas_(const qlpeps::SiteIdx upper
 template<typename TenElemT, typename QNT>
 TenElemT LoopTrace(
     const QLTensor<TenElemT, QNT> &Upsilon,
-    const QLTensor<QLTEN_Double, QNT> &lambda
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &lambda
 ) {
   QLTensor<TenElemT, QNT> temp0, scale_ten;
   auto lambda_dag = Dag(lambda);
@@ -228,7 +232,7 @@ QLTensor<TenElemT, QNT> CalTransferMatOfGamma(
 template<typename TenElemT, typename QNT>
 std::array<QLTensor<TenElemT, QNT>, 4> ConstructUpsilons(
     const std::array<QLTensor<TenElemT, QNT>, 4> &gammas,
-    const std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas
+    const std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
   std::array<QLTensor<TenElemT, QNT>, 4> gamma_gamma_dags, Upsilons;
@@ -259,9 +263,9 @@ std::array<QLTensor<TenElemT, QNT>, 4> ConstructUpsilons(
 template<typename TenElemT, typename QNT>
 TenElemT GammaLambdaMPSLoopOverlap(
     const std::array<QLTensor<TenElemT, QNT>, 4> &gammas0,
-    const std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas0,
+    const std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas0,
     const std::array<QLTensor<TenElemT, QNT>, 4> &gammas1,
-    const std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas1
+    const std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas1
 ) {
   std::array<QLTensor<TenElemT, QNT>, 4> eaten_gammas0, eaten_gammas1;
   for (size_t i = 0; i < 4; i++) {
@@ -294,11 +298,12 @@ TenElemT GammaLambdaMPSLoopOverlap(
 }
 
 template<typename TenElemT, typename QNT>
-std::pair<double, double> SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
+std::pair<typename qlten::RealTypeTrait<TenElemT>::type, typename qlten::RealTypeTrait<TenElemT>::type> SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProject(
     const qlpeps::SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopGateT &gate_tens,
     const qlpeps::SiteIdx &upper_left_site,
     const qlpeps::LoopUpdateTruncatePara &params,
     const bool print_time) {
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
   auto gammas_original = GetLoopGammas_(upper_left_site);
@@ -357,7 +362,7 @@ std::pair<double, double> SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopProje
 
   TransposeBackGammaTensorIndicesFromMPSOrder(gammas);
   // normalize Lambda and return the normalization factor
-  double norm = 1.0;
+  RealT norm = 1.0;
   for (auto &lambda : lambdas) {
     norm *= lambda.QuasiNormalize();
   }
@@ -415,7 +420,8 @@ template<typename TenElemT, typename QNT>
 void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
     const qlpeps::SquareLatticePEPS<TenElemT, QNT>::LocalSquareLoopGateT &gate_tens,
     const qlpeps::SiteIdx &upper_left_site) {
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  using DTenT = QLTensor<RealT, QNT>;
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
 #ifndef NDEBUG
@@ -496,34 +502,34 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
 
 /// < quasi-positive means some diagonal elements may be negative but with very small absolutely value
 /// < induced from the numeric errors.
-template<typename QNT>
-QLTensor<QLTEN_Double, QNT> QuasiSquareRootDiagMat(
-    const QLTensor<QLTEN_Double, QNT> &quasi_positive_mat,
-    const double tolerance = 1e-15
+template<typename RealT, typename QNT>
+QLTensor<RealT, QNT> QuasiSquareRootDiagMat(
+    const QLTensor<RealT, QNT> &quasi_positive_mat,
+    const RealT tolerance = static_cast<RealT>(1e-15)
 ) {
-  if constexpr (QLTensor<QLTEN_Double, QNT>::IsFermionic()) {
+  if constexpr (QLTensor<RealT, QNT>::IsFermionic()) {
     assert(quasi_positive_mat.GetIndex(0).GetDir() == IN);
   }
-  QLTensor<QLTEN_Double, QNT> sqrt = quasi_positive_mat;
+  QLTensor<RealT, QNT> sqrt = quasi_positive_mat;
   for (size_t i = 0; i < sqrt.GetShape()[0]; i++) {
-    double elem = sqrt({i, i});
-    if (elem >= 0) {
-      sqrt({i, i}) = std::sqrt(elem);
+    RealT elem = sqrt({i, i});
+    if (elem >= static_cast<RealT>(0)) {
+      sqrt({i, i}) = static_cast<RealT>(std::sqrt(static_cast<double>(elem)));
     } else {
       if (elem < -tolerance)
         std::cout << "warning: trying to find square root of " << std::scientific << elem << std::endl;
-      sqrt({i, i}) = 0.0;
+      sqrt({i, i}) = static_cast<RealT>(0.0);
     }
   }
   return sqrt;
 }
 
-template<typename QNT>
+template<typename RealT, typename QNT>
 void FixSignForDiagMat(
-    QLTensor<QLTEN_Double, QNT> &diag_mat
+    QLTensor<RealT, QNT> &diag_mat
 ) {
-  double diag_sum = 0.0;
-  if constexpr (QLTensor<QLTEN_Double, QNT>::IsFermionic()) {
+  RealT diag_sum = 0.0;
+  if constexpr (QLTensor<RealT, QNT>::IsFermionic()) {
     auto index = diag_mat.GetIndex(0);
     for (size_t i = 0; i < diag_mat.GetShape()[0]; i++) {
       if (index.GetQNSctFromActualCoor(i).IsFermionParityEven()) {
@@ -535,8 +541,8 @@ void FixSignForDiagMat(
       diag_sum += diag_mat({i, i});
     }
   }
-  if (diag_sum < 0) {
-    diag_mat *= -1;
+  if (diag_sum < static_cast<RealT>(0)) {
+    diag_mat *= static_cast<RealT>(-1);
   }
 }
 
@@ -579,15 +585,16 @@ void SymmetrizeMat(
 template<typename TenElemT, typename QNT>
 ArnoldiRes<TenElemT, QNT> PowerMethod(
     const QLTensor<TenElemT, QNT> &Upsilon,
-    const QLTensor<QLTEN_Double, QNT> &sigma,
-    const QLTensor<QLTEN_Double, QNT> &sigma_dag,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &vec0,
     TransfTenMultiVec<TenElemT, QNT> transfer_tens_multiple_vec
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const size_t iter_max = 100;
-  const double iter_tol = 1e-15;
-  double eigen_value_last = 0;
+  const RealT iter_tol = static_cast<RealT>(1e-15);
+  RealT eigen_value_last = 0;
   size_t iter;
   TenT vec = vec0;
   vec.QuasiNormalize();
@@ -598,7 +605,7 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
   }
   for (iter = 0; iter < iter_max; iter++) {
     vec = transfer_tens_multiple_vec(vec, sigma, sigma_dag, Upsilon);
-    double eigen_value = vec.QuasiNormalize();
+    RealT eigen_value = vec.QuasiNormalize();
     if (iter > 5 && std::abs((eigen_value - eigen_value_last) / eigen_value) < iter_tol) {
       QLTensor<TenElemT, QNT> overlap_ten;
       Contract(&vec_last_dag, {0, 1}, &vec, {0, 1}, &overlap_ten);
@@ -636,13 +643,14 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
 template<typename TenElemT, typename QNT>
 void WeightedTraceGaugeFixing(
     const ArnoldiParams &arnoldi_params,
-    const double inv_tol,
+    const typename qlten::RealTypeTrait<TenElemT>::type inv_tol,
     QLTensor<TenElemT, QNT> &Upsilon,
-    QLTensor<QLTEN_Double, QNT> &sigma,
+    QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
     QLTensor<TenElemT, QNT> &gamma_head,
     QLTensor<TenElemT, QNT> &gamma_tail
 ) {
-  double diff;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  RealT diff;
 #ifndef NDEBUG
   diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
   assert(diff < 1e-12);
@@ -650,7 +658,7 @@ void WeightedTraceGaugeFixing(
 
   const auto qn0 = sigma.Div();
   using TenT = QLTensor<TenElemT, QNT>;
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
+  using DTenT = QLTensor<RealT, QNT>;
 
   DTenT sigma_dag = Dag(sigma);
   //calculate the left/right eigen vectors
@@ -778,9 +786,9 @@ void WeightedTraceGaugeFixing(
 template<typename TenElemT, typename QNT>
 void WeightedTraceGaugeFixingInSquareLocalLoop(
     const ArnoldiParams &arnoldi_params,
-    const double inv_tol,
+    const typename qlten::RealTypeTrait<TenElemT>::type inv_tol,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
-    std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
+    std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas, //input & output
     std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
 ) {
   // Construct the Upsilon_i tensor
@@ -874,13 +882,13 @@ struct BtenMat {
   TenT b_ten;
 };
 
-template<typename QNT>
-double diag_mat_diff(const QLTensor<QLTEN_Double, QNT> &sigma1,
-                     const QLTensor<QLTEN_Double, QNT> &sigma2) {
+template<typename RealT, typename QNT>
+double diag_mat_diff(const QLTensor<RealT, QNT> &sigma1,
+                     const QLTensor<RealT, QNT> &sigma2) {
   if (sigma1.GetShape()[0] != sigma2.GetShape()[0]) {
     return std::numeric_limits<double>::infinity();
   }
-  QLTensor<QLTEN_Double, QNT> diff_ten = sigma1 + (-sigma2);
+  QLTensor<RealT, QNT> diff_ten = sigma1 + (-sigma2);
   double sigma_norm = sigma1.GetQuasi2Norm();
   if (sigma_norm > 0.0) {
     return diff_ten.GetQuasi2Norm() / sigma_norm;
@@ -910,18 +918,19 @@ template<typename TenElemT, typename QNT>
 std::pair<QLTensor<TenElemT, QNT>, QLTensor<TenElemT, QNT>>
 FullEnvironmentTruncate(
     const QLTensor<TenElemT, QNT> &Upsilon,
-    QLTensor<QLTEN_Double, QNT> &sigma, //input & output
+    QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma, //input & output
     const FullEnvironmentTruncateParams &trunc_params
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  using DTenT = QLTensor<RealT, QNT>;
   using PtenVecT = PtenVec<TenElemT, QNT>;
   using BtenMatT = BtenMat<TenElemT, QNT>;
   QNT qn0 = sigma.Div();
   TenT sigma_Upsilon_tmp;
   Contract(&Upsilon, {0, 2}, &sigma, {1, 0}, &sigma_Upsilon_tmp);
   TenT sigma_orig;
-  if constexpr (std::is_same<TenElemT, double>::value) {
+  if constexpr (std::is_same<TenElemT, RealT>::value) {
     sigma_orig = sigma;
   } else {
     sigma_orig = ToComplex(sigma);
@@ -931,7 +940,7 @@ FullEnvironmentTruncate(
   sigma = DTenT();
   TenT u, vdag;
   //initialize u, vdag, and sigma_tilde
-  double actual_trunc_err;
+  RealT actual_trunc_err;
   size_t actual_D;
   MatSVD(sigma_orig, qn0, trunc_params.trunc_err, trunc_params.Dmin, trunc_params.Dmax,
          vdag, sigma, u, &actual_trunc_err, &actual_D);
@@ -1015,7 +1024,7 @@ template<typename TenElemT, typename QNT>
 void FullEnvironmentTruncateInSquareLocalLoop(
     const FullEnvironmentTruncateParams &trunc_params,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
-    std::array<QLTensor<QLTEN_Double, QNT>, 4> &lambdas, //input & output
+    std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas, //input & output
     const std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //input & output
 ) {
   using TenT = QLTensor<TenElemT, QNT>;

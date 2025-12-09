@@ -8,8 +8,9 @@
 #ifndef QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_IMPL_H
 #define QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_IMPL_H
 
+#include "qlten/qlten.h"
+
 namespace qlpeps {
-using qlten::QLTEN_Double;
 using qlmps::DuoVector;
 using qlmps::kUncentralizedCenterIdx;
 using qlmps::IN;
@@ -178,7 +179,7 @@ qlten::QLTensor<typename BMPS<TenElemT, QNT>::RealT, QNT> BMPS<TenElemT, QNT>::R
   assert(site_idx > 0);
   size_t ldims = 1;
   Tensor u;
-  QLTensor<QLTEN_Double, QNT> s;
+  QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> s;
   auto pvt = new Tensor;
   auto qndiv = Div((*this)[site_idx]);
   mock_qlten::SVD((*this)(site_idx), ldims, qndiv - qndiv, &u, &s, pvt);
@@ -201,14 +202,14 @@ qlten::QLTensor<typename BMPS<TenElemT, QNT>::RealT, QNT> BMPS<TenElemT, QNT>::R
 }
 
 template<typename TenElemT, typename QNT>
-std::pair<size_t, double>
+std::pair<size_t, typename qlten::RealTypeTrait<TenElemT>::type>
 BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t Dmin,
-                                               const size_t Dmax, const double trunc_err) {
+                                               const size_t Dmax, const typename qlten::RealTypeTrait<TenElemT>::type trunc_err) {
 
-  QLTensor<QLTEN_Double, QNT> s;
+  QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> s;
   auto pvt = new Tensor;
   Tensor u;
-  double actual_trunc_err;
+  typename qlten::RealTypeTrait<TenElemT>::type actual_trunc_err;
   size_t D;
   SVD((*this)(site),
       1, qn0_, trunc_err, Dmin, Dmax,
@@ -241,7 +242,7 @@ BMPS<TenElemT, QNT>::RightCanonicalizeTruncate(const size_t site, const size_t D
 }
 
 template<typename TenElemT, typename QNT>
-std::vector<double> BMPS<TenElemT, QNT>::GetEntanglementEntropy(size_t
+std::vector<typename qlten::RealTypeTrait<TenElemT>::type> BMPS<TenElemT, QNT>::GetEntanglementEntropy(size_t
                                                                 n) {
   size_t N = this->size();
   std::vector<double> ee_list(N - 1);
@@ -250,15 +251,15 @@ std::vector<double> BMPS<TenElemT, QNT>::GetEntanglementEntropy(size_t
 
   for (size_t i = N - 1; i >= 1; --i) { // site
     auto s = RightCanonicalizeTen(i);
-    double ee = 0;
-    double sum_of_p2n = 0.0;
+    typename qlten::RealTypeTrait<TenElemT>::type ee = 0;
+    typename qlten::RealTypeTrait<TenElemT>::type sum_of_p2n = 0.0;
     for (size_t k = 0; k < s.GetShape()[0]; ++k) { // indices of singular value matrix
-      double singular_value = s(k, k);
+      typename qlten::RealTypeTrait<TenElemT>::type singular_value = s(k, k);
       double p = singular_value * singular_value;
       if (n == 1) {
         ee += (-p * std::log(p));
       } else {
-        double p_to_n = p;
+        typename qlten::RealTypeTrait<TenElemT>::type p_to_n = p;
         for (size_t j = 1; j < n; j++) { // order of power
           p_to_n *= p;
         }
@@ -311,7 +312,7 @@ template<typename TenElemT, typename QNT>
 void
 BMPS<TenElemT, QNT>::InplaceMultipleMPO(BMPS::TransferMPO &mpo,
                                         const size_t Dmin, const size_t Dmax,
-                                        const double trunc_err, const size_t iter_max,
+                                        const typename qlten::RealTypeTrait<TenElemT>::type trunc_err, const size_t iter_max,
                                         const CompressMPSScheme &scheme) {
   auto res = this->MultipleMPO(mpo, Dmin, Dmax, trunc_err, iter_max, scheme);
   (*this) = res;
@@ -383,15 +384,16 @@ template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme &scheme,
                                  const size_t Dmin, const size_t Dmax,
-                                 const double trunc_err,
-                                 const std::optional<double> variational_converge_tol,
+                                 const RealT trunc_err,
+                                 const std::optional<RealT> variational_converge_tol,
                                  const std::optional<size_t> max_iter //only valid for variational methods
 ) const {
+  using RealT = typename BMPS<TenElemT, QNT>::RealT;
   const size_t N = this->size();
   assert(mpo.size() == N);
   AlignTransferMPOTensorOrder_(mpo);
   if (N == 2 || scheme == CompressMPSScheme::SVD_COMPRESS) {
-    double actual_trunc_err_max;
+    RealT actual_trunc_err_max;
     size_t actual_D_max;
     return MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err, actual_D_max, actual_trunc_err_max);
   }
@@ -430,8 +432,9 @@ template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
                                            const size_t Dmin, const size_t Dmax,
-                                           const double trunc_err, const size_t iter_max,
+                                           const RealT trunc_err, const size_t iter_max,
                                            const CompressMPSScheme &scheme) const {
+  using RealT = typename BMPS<TenElemT, QNT>::RealT;
   assert(mpo.size() == this->size());
   size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
   size_t next_post = ((size_t) (position_) + 1) % 4;
@@ -508,7 +511,7 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
       return res;
     }
     case CompressMPSScheme::VARIATION2Site: {
-      const double converge_tol = 1e-15;
+      const RealT converge_tol = RealT(1e-15);
       size_t N = this->size();
       if (N == 2) {
         return MultipleMPOWithPhyIdx(mpo, Dmin, Dmax,
@@ -548,7 +551,7 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
       Tensor s12bond_last;
       for (size_t iter = 0; iter < iter_max; iter++) {
         //left move
-        QLTensor<QLTEN_Double, QNT> s;
+        QLTensor<RealT, QNT> s;
         for (size_t i = 0; i < N - 2; i++) {
           Tensor tmp[6];
           Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[i], 2, 0, 1, tmp[0]);
@@ -559,8 +562,8 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
           tmp[4].Dag();
           Tensor *pu = new Tensor(), vt;
-          s = QLTensor<QLTEN_Double, QNT>();
-          double actual_trunc_err;
+          s = QLTensor<RealT, QNT>();
+          RealT actual_trunc_err;
           size_t D;
           SVD(tmp + 4,
               3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
@@ -587,8 +590,8 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
           Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
           tmp[4].Dag();
           Tensor u, *pvt = new Tensor();
-          s = QLTensor<QLTEN_Double, QNT>();
-          double actual_trunc_err;
+          s = QLTensor<RealT, QNT>();
+          RealT actual_trunc_err;
           size_t D;
           SVD(tmp + 4,
               3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
@@ -623,8 +626,8 @@ BMPS<TenElemT, QNT>::MultipleMPOWithPhyIdx(BMPS::TransferMPO &mpo,
       Contract(tmp + 1, {2, 0}, tmp + 3, {4, 1}, tmp + 4);
       tmp[4].Dag();
       Tensor u, *pvt = new Tensor();
-      QLTensor<QLTEN_Double, QNT> s;
-      double actual_trunc_err;
+      DTenT s;
+      RealT actual_trunc_err;
       size_t D;
       SVD(tmp + 4,
           3, res_dag[i].Div(), trunc_err, Dmin, Dmax,
@@ -677,8 +680,10 @@ void BMPS<TenElemT, QNT>::AlignTransferMPOTensorOrder_(TransferMPO &mpo) const {
 template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
-                                             const size_t Dmin, const size_t Dmax, const double trunc_err,
-                                             size_t &actual_Dmax, double &actual_trunc_err_max) const {
+                                             const size_t Dmin, const size_t Dmax, const RealT trunc_err,
+                                             size_t &actual_Dmax,
+                                             typename qlten::RealTypeTrait<TenElemT>::type &actual_trunc_err_max) const {
+  using RealT = typename BMPS<TenElemT, QNT>::RealT;
   const size_t N = this->size();
 #ifndef NDEBUG
   assert(mpo.size() == N);
@@ -781,9 +786,10 @@ BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPO2SiteVariationalCompress_(const TransferMPO &mpo,
                                                           const size_t Dmin,
                                                           const size_t Dmax,
-                                                          const double trunc_err,
-                                                          const double variational_converge_tol,
+                                                          const RealT trunc_err,
+                                                          const RealT variational_converge_tol,
                                                           const size_t max_iter) const {
+  using RealT = typename BMPS<TenElemT, QNT>::RealT;
 //  static_assert(!Tensor::IsFermionic());
   assert(!Tensor::IsFermionic());
   const size_t N = this->size();
@@ -822,10 +828,10 @@ BMPS<TenElemT, QNT>::MultipleMPO2SiteVariationalCompress_(const TransferMPO &mpo
     renvs.emplace_back(renv_next);
   }
 
-  QLTensor<QLTEN_Double, QNT> s12bond_last;
+QLTensor<RealT, QNT> s12bond_last;
   for (size_t iter = 0; iter < max_iter; iter++) {
     //left move
-    QLTensor<QLTEN_Double, QNT> s;
+    QLTensor<RealT, QNT> s;
     for (size_t i = 0; i < N - 2; i++) {
       Tensor tmp[6];
       Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[i], 2, 0, 1, tmp[0]);
@@ -836,8 +842,8 @@ BMPS<TenElemT, QNT>::MultipleMPO2SiteVariationalCompress_(const TransferMPO &mpo
       Contract(tmp + 1, {2, 0}, tmp + 3, {3, 1}, tmp + 4);
       tmp[4].Dag();
       Tensor *pu = new Tensor(), *pvt = new Tensor();
-      s = QLTensor<QLTEN_Double, QNT>();
-      double actual_trunc_err;
+      s = QLTensor<RealT, QNT>();
+      RealT actual_trunc_err;
       size_t D;
       SVD(tmp + 4,
           2, res_dag[i].Div(), trunc_err, Dmin, Dmax,
@@ -865,8 +871,8 @@ BMPS<TenElemT, QNT>::MultipleMPO2SiteVariationalCompress_(const TransferMPO &mpo
       Contract(tmp + 1, {2, 0}, tmp + 3, {3, 1}, tmp + 4);
       tmp[4].Dag();
       Tensor *pu = new Tensor(), *pvt = new Tensor();
-      s = QLTensor<QLTEN_Double, QNT>();
-      double actual_trunc_err;
+      s = QLTensor<RealT, QNT>();
+      RealT actual_trunc_err;
       size_t D;
       SVD(tmp + 4,
           2, res_dag[i].Div(), trunc_err, Dmin, Dmax,
@@ -905,8 +911,8 @@ BMPS<TenElemT, QNT>::MultipleMPO2SiteVariationalCompress_(const TransferMPO &mpo
   Contract(tmp + 1, {2, 0}, tmp + 3, {3, 1}, tmp + 4);
   tmp[4].Dag();
   Tensor u, *pvt = new Tensor();
-  QLTensor<QLTEN_Double, QNT> s;
-  double actual_trunc_err;
+      QLTensor<RealT, QNT> s;
+      RealT actual_trunc_err;
   size_t D;
   SVD(tmp + 4,
       2, res_dag[0].Div(), trunc_err, Dmin, Dmax,
@@ -942,9 +948,10 @@ BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo,
                                                           const size_t Dmin,
                                                           const size_t Dmax,
-                                                          const double trunc_err,
-                                                          const double variational_converge_tol,
+                                                          const RealT trunc_err,
+                                                          const RealT variational_converge_tol,
                                                           const size_t max_iter) const {
+  using RealT = typename BMPS<TenElemT, QNT>::RealT;
 //  static_assert(!Tensor::IsFermionic());
   assert(!Tensor::IsFermionic());
   const size_t N = this->size();
@@ -986,7 +993,7 @@ BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo
   // do once 2 site update to make sure the bond dimension = Dmax
   {
     //right moving
-    QLTensor<QLTEN_Double, QNT> s;
+    QLTensor<RealT, QNT> s;
     for (size_t i = 0; i < N - 2; i++) {
       Tensor tmp[6];
       Contract<TenElemT, QNT, true, true>(lenvs.back(), (*this)[i], 2, 0, 1, tmp[0]);
@@ -997,8 +1004,8 @@ BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo
       Contract(tmp + 1, {2, 0}, tmp + 3, {3, 1}, tmp + 4);
       tmp[4].Dag();
       Tensor *pu = new Tensor(), *pvt = new Tensor();
-      s = QLTensor<QLTEN_Double, QNT>();
-      double actual_trunc_err;
+      s = QLTensor<RealT, QNT>();
+      RealT actual_trunc_err;
       size_t D;
       SVD(tmp + 4,
           2, res_dag[i].Div(), trunc_err, Dmax, Dmax,
@@ -1026,8 +1033,8 @@ BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo
       Contract(tmp + 1, {2, 0}, tmp + 3, {3, 1}, tmp + 4);
       tmp[4].Dag();
       Tensor *pu = new Tensor(), *pvt = new Tensor();
-      s = QLTensor<QLTEN_Double, QNT>();
-      double actual_trunc_err;
+      s = QLTensor<RealT, QNT>();
+      RealT actual_trunc_err;
       size_t D;
       SVD(tmp + 4,
           2, res_dag[i].Div(), trunc_err, Dmax, Dmax,
@@ -1053,8 +1060,8 @@ BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo
   Contract(tmp + 1, {2, 0}, tmp + 3, {3, 1}, tmp + 4);
   tmp[4].Dag();
   Tensor u, *pvt = new Tensor();
-  QLTensor<QLTEN_Double, QNT> s;
-  double actual_trunc_err;
+  QLTensor<RealT, QNT> s;
+  RealT actual_trunc_err;
   size_t D;
   SVD(tmp + 4,
       2, res_dag[0].Div(), trunc_err, Dmin, Dmax,
@@ -1073,7 +1080,7 @@ BMPS<TenElemT, QNT>::MultipleMPO1SiteVariationalCompress_(const TransferMPO &mpo
   renvs.emplace_back(tmp[5]);
 
   // one site update begin
-  double last_r_norm = 0, r_norm = 0;
+  RealT last_r_norm = 0, r_norm = 0;
   for (size_t iter = 0; iter < max_iter; iter++) {
     //right moving
     for (size_t i = 0; i < N - 1; i++) {
@@ -1145,7 +1152,7 @@ BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(const BMPS::TransferMPO &mpo,
                                                                const size_t Dmin,
                                                                const size_t Dmax,
-                                                               const double trunc_err) const {
+                                                               const RealT trunc_err) const {
 //  const size_t N = this->size();
 //  BMPS<TenElemT, QNT> multip_init(position_, N);
 //  for (size_t i = 0; i < N; i++) {
@@ -1168,7 +1175,7 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(const BMPS::Trans
   for (size_t i = mps_copy.size() - 1; i > 0; --i) {
     mps_copy.RightCanonicalizeTruncate(i, 1, 2, 0.0);
   }
-  double actual_trunc_err_max;
+  RealT actual_trunc_err_max;
   size_t actual_D_max;
   auto multip_init = mps_copy.MultipleMPOSVDCompress_(mpo, Dmin, Dmax, trunc_err, actual_D_max, actual_trunc_err_max);
 
@@ -1186,7 +1193,7 @@ BMPS<TenElemT, QNT>
 BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplicationWithPhyIdx_(const BMPS::TransferMPO &mpo,
                                                                          const size_t Dmin,
                                                                          const size_t Dmax,
-                                                                         const double trunc_err) const {
+                                                                         const RealT trunc_err) const {
 //  const size_t N = this->size();
 //  BMPS<TenElemT, QNT> multip_init(position_, N);
 //  for (size_t i = 0; i < N; i++) {
@@ -1221,14 +1228,15 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplicationWithPhyIdx_(const B
 }
 
 template<typename TenElemT, typename QNT>
-double
+typename qlten::RealTypeTrait<TenElemT>::type
 BMPS<TenElemT, QNT>::RightCanonicalizeTruncateWithPhyIdx_(const size_t site, const size_t Dmin,
-                                                          const size_t Dmax, const double trunc_err) {
+                                                          const size_t Dmax, const RealT trunc_err) {
 
-  QLTensor<QLTEN_Double, QNT> s;
+  using RealT = typename BMPS<TenElemT, QNT>::RealT;
+  QLTensor<RealT, QNT> s;
   auto pvt = new Tensor;
   Tensor u;
-  double actual_trunc_err;
+  RealT actual_trunc_err;
   size_t D;
   SVD(
       (*this)(site),

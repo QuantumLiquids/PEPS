@@ -341,8 +341,8 @@ bool SquareLatticePEPS<TenElemT, QNT>::IsBondDimensionUniform(void) const {
 }
 
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::NormalizeAllTensor() {
-  double norm(1.0);
+typename SquareLatticePEPS<TenElemT, QNT>::RealT SquareLatticePEPS<TenElemT, QNT>::NormalizeAllTensor() {
+  RealT norm(1.0);
   for (auto &gamma : Gamma) {
     norm *= gamma.QuasiNormalize();
   }
@@ -504,14 +504,14 @@ bool SquareLatticePEPS<TenElemT, QNT>::Load(const std::string path) {
   return true; // Successfully loaded all tensors
 }
 
-template<typename QNT>
-QLTensor<QLTEN_Double, QNT> SquareRootDiagMat(
-    const QLTensor<QLTEN_Double, QNT> &positive_diag_mat
+template<typename ElemT, typename QNT>
+QLTensor<ElemT, QNT> SquareRootDiagMat(
+    const QLTensor<ElemT, QNT> &positive_diag_mat
 ) {
-  if (!QLTensor<QLTEN_Double, QNT>::IsFermionic() || positive_diag_mat.GetIndex(0).GetDir() == IN) {
-    QLTensor<QLTEN_Double, QNT> sqrt = positive_diag_mat;
+  if (!QLTensor<ElemT, QNT>::IsFermionic() || positive_diag_mat.GetIndex(0).GetDir() == IN) {
+    QLTensor<ElemT, QNT> sqrt = positive_diag_mat;
     for (size_t i = 0; i < sqrt.GetShape()[0]; i++) {
-      double elem = sqrt({i, i});
+      ElemT elem = sqrt({i, i});
       if (elem > 0) {
         sqrt({i, i}) = std::sqrt(elem);
       } else if (elem < 0) {
@@ -576,7 +576,7 @@ void SquareLatticePEPS<TenElemT, QNT>::RegularizeIndexDir() {
       if (lam.GetIndex(0).GetDir() != IN) {
         DTenT u, vt;
         DTenT s;
-        qlmps::mock_qlten::SVD<QLTEN_Double, QNT>(&lam, 1, qn0_, &u, &s, &vt);
+        qlmps::mock_qlten::SVD<RealT, QNT>(&lam, 1, qn0_, &u, &s, &vt);
         lam = std::move(s);
         TenT tmp0, tmp1;
 
@@ -753,7 +753,7 @@ template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT>
 SquareLatticePEPS<TenElemT, QNT>::QTenSplitOutLambdas_(const QLTensor<TenElemT, QNT> &q, const SiteIdx &site,
                                                        const BTenPOSITION remaining_idx,
-                                                       double inv_tolerance) const {
+                                                       typename SquareLatticePEPS<TenElemT, QNT>::RealT inv_tolerance) const {
   TenT tmp_ten[2], res;
   DTenT inv_lambda;
   const size_t row = site[0], col = site[1];

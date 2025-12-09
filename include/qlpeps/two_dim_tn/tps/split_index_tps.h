@@ -61,7 +61,7 @@ inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,
  * @note This class uses helper functions with trailing underscores for private
  * methods following the coding convention.
  * 
- * @tparam TenElemT Tensor element type (typically QLTEN_Double or QLTEN_Complex)
+ * @tparam TenElemT Tensor element type (typically real or complex; real part deduced by RealTypeTrait)
  * @tparam QNT Quantum number type (e.g., U1QN for U(1) symmetry)
  * 
  * @see TPS for the non-split index version

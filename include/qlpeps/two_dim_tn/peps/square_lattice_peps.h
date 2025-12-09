@@ -72,8 +72,9 @@ struct LoopUpdateTruncatePara {
 
 template<typename ElemT>
 struct ProjectionRes {
-  double norm;      // normalization factor
-  double trunc_err; // actual truncation error
+  using RealT = typename qlten::RealTypeTrait<ElemT>::type;
+  RealT norm;      // normalization factor
+  RealT trunc_err; // actual truncation error
   size_t D;         // actual bond dimension
   std::optional<ElemT> e_loc;    // local energy
 };
@@ -157,7 +158,8 @@ template<typename TenElemT, typename QNT>
 class SquareLatticePEPS {
  public:
   using TenT = QLTensor<TenElemT, QNT>;
-  using DTenT = QLTensor<QLTEN_Double, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  using DTenT = QLTensor<RealT, QNT>;
 
 //  // Constructor with size
 //  SquareLatticePEPS(size_t rows, size_t cols) : rows_(rows), cols_(cols), Gamma(rows, cols), lambda_vert(rows + 1, cols),
@@ -266,7 +268,7 @@ class SquareLatticePEPS {
   // if the bond dimensions of each lambda are the same, except boundary lambdas
   bool IsBondDimensionUniform(void) const;
 
-  double NormalizeAllTensor(void);
+  RealT NormalizeAllTensor(void);
 
   /// useful when in debug.
   IndexVec<QNT> GatherAllIndices(void) const;
@@ -280,7 +282,7 @@ class SquareLatticePEPS {
       const TenT &ham_ten = TenT()
   );
 
-  double NextNearestNeighborSiteProject(
+  RealT NextNearestNeighborSiteProject(
       const TenT &gate_ten,
       const SiteIdx &first_site,
       const BondOrientation &orientation,
@@ -299,7 +301,7 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &tunc_para
   );
 
-  double LowerLeftTriangleProject(
+  RealT LowerLeftTriangleProject(
       const TenT &gate_ten,
       const SiteIdx &upper_left_site,
       const SimpleUpdateTruncatePara &trunc_para
@@ -309,7 +311,7 @@ class SquareLatticePEPS {
   void RegularizeIndexDir();
 
   using LocalSquareLoopGateT = std::array<TenT, 4>;
-  std::pair<double, double> LocalSquareLoopProject(
+  std::pair<RealT, RealT> LocalSquareLoopProject(
       const LocalSquareLoopGateT &gate_tens,
       const SiteIdx &upper_left_site,
       const LoopUpdateTruncatePara &params,
@@ -358,7 +360,7 @@ class SquareLatticePEPS {
   TenT Eat3SurroundLambdas_(const SiteIdx &site, const BTenPOSITION leaving_post) const;
 
   TenT QTenSplitOutLambdas_(const TenT &q, const SiteIdx &site,
-                            const BTenPOSITION leaving_post, double inv_tolerance) const;
+                            const BTenPOSITION leaving_post, RealT inv_tolerance) const;
 
   void PatSquareLocalLoopProjector_(
       const LocalSquareLoopGateT &gate_tens,
@@ -366,8 +368,8 @@ class SquareLatticePEPS {
   );
 
   std::array<QLTensor<TenElemT, QNT>, 4> GetLoopGammas_(const SiteIdx upper_left_site) const;
-  std::array<QLTensor<QLTEN_Double, QNT>, 4> GetLoopInternalLambdas_(const SiteIdx upper_left_site) const;
-  std::pair<std::array<QLTensor<QLTEN_Double, QNT>, 4>, std::array<QLTensor<QLTEN_Double, QNT>, 4>>
+  std::array<QLTensor<RealT, QNT>, 4> GetLoopInternalLambdas_(const SiteIdx upper_left_site) const;
+  std::pair<std::array<QLTensor<RealT, QNT>, 4>, std::array<QLTensor<RealT, QNT>, 4>>
   GetLoopEnvLambdas_(const SiteIdx upper_left_site) const;
 
   static const QNT qn0_;

@@ -9,6 +9,7 @@
 #define VMC_PEPS_TWO_DIM_TN_PEPS_ARNOLDI_SOLVER_H
 
 
+#include "qlten/qlten.h"
 #include "qlten/framework/hp_numeric/backend_selector.h" //lapacke
 
 #include <functional>
@@ -18,7 +19,6 @@
 namespace qlpeps {
 using ArnoldiParams = qlmps::LanczosParams;
 using qlten::QLTensor;
-using qlten::QLTEN_Double;
 
 template<typename TenElemT, typename QNT>
 struct ArnoldiRes {
@@ -29,8 +29,8 @@ struct ArnoldiRes {
 template<typename TenElemT, typename QNT>
 using TransfTenMultiVec = std::function<QLTensor<TenElemT, QNT>(
     const QLTensor<TenElemT, QNT> &,
-    const QLTensor<QLTEN_Double, QNT> &,
-    const QLTensor<QLTEN_Double, QNT> &,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &,
     const QLTensor<TenElemT, QNT> &)>;
 
 /**
@@ -43,8 +43,8 @@ using TransfTenMultiVec = std::function<QLTensor<TenElemT, QNT>(
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> left_vec_multiple_transfer_tens(
     const QLTensor<TenElemT, QNT> &left_vec,
-    const QLTensor<QLTEN_Double, QNT> &sigma,
-    const QLTensor<QLTEN_Double, QNT> &sigma_dag,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &Upsilon
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
@@ -65,8 +65,8 @@ QLTensor<TenElemT, QNT> left_vec_multiple_transfer_tens(
 template<typename TenElemT, typename QNT>
 QLTensor<TenElemT, QNT> right_vec_multiple_transfer_tens(
     const QLTensor<TenElemT, QNT> &right_vec,
-    const QLTensor<QLTEN_Double, QNT> &sigma,
-    const QLTensor<QLTEN_Double, QNT> &sigma_dag,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &Upsilon
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
@@ -184,13 +184,14 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
 template<typename TenElemT, typename QNT>
 ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
     const QLTensor<TenElemT, QNT> &Upsilon,
-    const QLTensor<QLTEN_Double, QNT> &sigma,
-    const QLTensor<QLTEN_Double, QNT> &sigma_dag,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
+    const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &vec0,
     const ArnoldiParams &params,
     TransfTenMultiVec<TenElemT, QNT> transfer_tens_multiple_vec
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const size_t mat_eff_dim = vec0.size();
   const size_t max_iter = std::min(mat_eff_dim, params.max_iterations);
   std::vector<TenT *> bases(max_iter);
@@ -204,7 +205,7 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
     bases_dag[0]->ActFermionPOps();
   }
 //  std::optional<TenElemT> eigenvalue_last;
-  double max_abs_h_elem(0.0);
+  RealT max_abs_h_elem(0.0);
   for (size_t k = 1; k < max_iter; k++) {
     bases[k] = new TenT();
     *bases[k] = transfer_tens_multiple_vec(*bases[k - 1], sigma, sigma_dag, Upsilon);

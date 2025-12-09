@@ -43,55 +43,61 @@ std::string CompressMPSSchemeString(CompressMPSScheme scheme) {
   }
 }
 
-struct BMPSTruncatePara {
+template<typename TenElemT>
+struct BMPSTruncateParams {
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   size_t D_min;
   size_t D_max;
-  double trunc_err;
+  RealT trunc_err;
   CompressMPSScheme compress_scheme;
-  std::optional<double> convergence_tol;
+  std::optional<RealT> convergence_tol;
   std::optional<size_t> iter_max;
 
-  BMPSTruncatePara(void) = default;
+  BMPSTruncateParams(void) = default;
 
-  BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
-                   CompressMPSScheme compress_scheme,
-                   std::optional<double> convergence_tol,
-                   std::optional<size_t> iter_max)
+  BMPSTruncateParams(size_t d_min, size_t d_max, RealT trunc_error,
+                     CompressMPSScheme compress_scheme,
+                     std::optional<RealT> convergence_tol,
+                     std::optional<size_t> iter_max)
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error), compress_scheme(compress_scheme),
         convergence_tol(convergence_tol), iter_max(iter_max) {}
 
   // Convenience constructor for SVD compression (variational parameters unused)
-  BMPSTruncatePara(size_t d_min, size_t d_max, double trunc_error,
-                   std::enable_if_t<true, CompressMPSScheme> compress_scheme)
+  BMPSTruncateParams(size_t d_min, size_t d_max, RealT trunc_error,
+                     std::enable_if_t<true, CompressMPSScheme> compress_scheme)
       : D_min(d_min), D_max(d_max), trunc_err(trunc_error),
         compress_scheme(compress_scheme), convergence_tol(std::nullopt), iter_max(std::nullopt) {}
 
   // Static factories to avoid misuse and clarify intent
   // SVD compression: only D_min, D_max, trunc_err are relevant
-  static BMPSTruncatePara SVD(size_t d_min, size_t d_max, double trunc_error) {
-    return BMPSTruncatePara(d_min, d_max, trunc_error,
-                            CompressMPSScheme::SVD_COMPRESS,
-                            std::nullopt, std::nullopt);
+  static BMPSTruncateParams SVD(size_t d_min, size_t d_max, RealT trunc_error) {
+    return BMPSTruncateParams(d_min, d_max, trunc_error,
+                              CompressMPSScheme::SVD_COMPRESS,
+                              std::nullopt, std::nullopt);
   }
 
   // Two-site variational compression: require convergence_tol and iter_max
-  static BMPSTruncatePara Variational2Site(size_t d_min, size_t d_max, double trunc_error,
-                                           double convergence_tol, size_t iter_max) {
-    return BMPSTruncatePara(d_min, d_max, trunc_error,
-                            CompressMPSScheme::VARIATION2Site,
-                            std::make_optional<double>(convergence_tol),
-                            std::make_optional<size_t>(iter_max));
+  static BMPSTruncateParams Variational2Site(size_t d_min, size_t d_max, RealT trunc_error,
+                                             RealT convergence_tol, size_t iter_max) {
+    return BMPSTruncateParams(d_min, d_max, trunc_error,
+                              CompressMPSScheme::VARIATION2Site,
+                              std::make_optional<RealT>(convergence_tol),
+                              std::make_optional<size_t>(iter_max));
   }
 
   // One-site variational compression: require convergence_tol and iter_max
-  static BMPSTruncatePara Variational1Site(size_t d_min, size_t d_max, double trunc_error,
-                                           double convergence_tol, size_t iter_max) {
-    return BMPSTruncatePara(d_min, d_max, trunc_error,
-                            CompressMPSScheme::VARIATION1Site,
-                            std::make_optional<double>(convergence_tol),
-                            std::make_optional<size_t>(iter_max));
+  static BMPSTruncateParams Variational1Site(size_t d_min, size_t d_max, RealT trunc_error,
+                                             RealT convergence_tol, size_t iter_max) {
+    return BMPSTruncateParams(d_min, d_max, trunc_error,
+                              CompressMPSScheme::VARIATION1Site,
+                              std::make_optional<RealT>(convergence_tol),
+                              std::make_optional<size_t>(iter_max));
   }
 };
+
+// Backward compatibility:
+// - BMPSTruncatePara is deprecated alias of double-specialized BMPSTruncateParams
+using BMPSTruncatePara [[deprecated("Use BMPSTruncateParams<> instead")]] = BMPSTruncateParams<qlten::QLTEN_Double>;
 
 /**
  * Boundary Matrix Product State class which is used in the contraction of single-layer 2D tensor network.
@@ -138,7 +144,7 @@ template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
-    using RealT = qlten::RealTypeTrait<TenElemT>::type;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   using DTenT = QLTensor<RealT, QNT>;
   using IndexT = Index<QNT>;
   using TransferMPO = std::vector<Tensor *>;
@@ -198,7 +204,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   qlten::QLTensor<RealT, QNT> RightCanonicalizeTen(const size_t);
 
   //return (D, trunc_err)
-  std::pair<size_t, double> RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const double);
+  std::pair<size_t, RealT> RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const RealT);
 
   int GetCenter(void) const { return center_; }
 
@@ -210,11 +216,11 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
     return tens_cano_type_[idx];
   }
 
-  std::vector<double> GetEntanglementEntropy(size_t n);
+  std::vector<RealT> GetEntanglementEntropy(size_t n);
 
   void Reverse();
 
-  void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const double,
+  void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const RealT,
                           const size_t max_iter, //only valid for variational methods
                           const CompressMPSScheme &scheme);
 
@@ -225,12 +231,12 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
    * @return
    */
   BMPS MultipleMPO(TransferMPO &, const CompressMPSScheme &,
-                   const size_t, const size_t, const double,
-                   const std::optional<double> variational_converge_tol,//only valid for variational methods
+                   const size_t, const size_t, const RealT,
+                   const std::optional<RealT> variational_converge_tol,//only valid for variational methods
                    const std::optional<size_t> max_iter
   ) const;
 
-  BMPS MultipleMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const double,
+  BMPS MultipleMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const RealT,
                              const size_t max_iter, //only valid for variational methods
                              const CompressMPSScheme &) const;
 
@@ -242,26 +248,26 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   void AlignTransferMPOTensorOrder_(TransferMPO &) const;
 
   BMPS MultipleMPOSVDCompress_(const TransferMPO &,
-                               const size_t, const size_t, const double,
-                               size_t &actual_Dmax, double &actual_trunc_err_max) const;
+                               const size_t, const size_t, const RealT,
+                               size_t &actual_Dmax, RealT &actual_trunc_err_max) const;
 
-  BMPS MultipleMPO2SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const double,
-                                            const double variational_converge_tol, const size_t max_iter) const;
+  BMPS MultipleMPO2SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
+                                            const RealT variational_converge_tol, const size_t max_iter) const;
 
   // strictly, 1-site variational compress method is only suitable for the cases those tensors have no symmetry constrain.
-  BMPS MultipleMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const double,
-                                            const double variational_converge_tol, const size_t max_iter) const;
-  BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const double) const;
+  BMPS MultipleMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
+                                            const RealT variational_converge_tol, const size_t max_iter) const;
+  BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const RealT) const;
 
   // todo code.
-  double RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const double);
+  RealT RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const RealT);
 
   // todo code.
   BMPS
   InitGuessForVariationalMPOMultiplicationWithPhyIdx_(const TransferMPO &,
                                                       const size_t,
                                                       const size_t,
-                                                      const double) const;
+                                                      const RealT) const;
 
   const BMPSPOSITION
       position_; //possible to remove this member and replace it with function parameter if the function needs

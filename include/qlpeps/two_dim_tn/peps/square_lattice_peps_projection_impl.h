@@ -45,13 +45,13 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
                                                                                      const BondOrientation &orientation,
                                                                                      const SimpleUpdateTruncatePara &trunc_para,
                                                                                      const TenT &ham) {
-  double norm;
+  RealT norm;
   std::optional<TenElemT> e_loc;
   const size_t row = site[0], col = site[1];
   TenT tmp_ten[7];
   TenT q0, r0, q1, r1;
   TenT u, vt;
-  double actual_trunc_err;
+  RealT actual_trunc_err;
   size_t actual_D;
   TenT inv_lambda;
 #ifndef NDEBUG
@@ -201,17 +201,17 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
 }
 
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const TenT &gate_ten,
+typename SquareLatticePEPS<TenElemT, QNT>::RealT SquareLatticePEPS<TenElemT, QNT>::NextNearestNeighborSiteProject(const TenT &gate_ten,
                                                                         const qlpeps::SiteIdx &first_site,
                                                                         const qlpeps::BondOrientation &orientation,
                                                                         const qlpeps::SimpleUpdateTruncatePara &trunc_para) {
-  double norm;
+  RealT norm;
   const size_t row = first_site[0], col = first_site[1];
   TenT tmp_ten[11];
   TenT q0, r0, q1, r1;
   TenT u1, vt1, u2, vt2;
-  QLTensor<QLTEN_Double, QNT> s1, s2;
-  double actual_trunc_err;
+  QLTensor<RealT, QNT> s1, s2;
+  RealT actual_trunc_err;
   size_t actual_D;
   TenT inv_lambda;
   switch (orientation) {
@@ -269,7 +269,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
 #ifndef NDEBUG
   auto physical_index = Gamma(left_upper_site).GetIndex(4);
 #endif
-  double norm = 1;
+  RealT norm = 1;
   size_t row = left_upper_site[0], col = left_upper_site[1];
   size_t right_col = (col + 1) % lambda_horiz.cols();
   size_t lower_row = (row + 1) % lambda_vert.rows();
@@ -296,7 +296,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   tmp_ten[5].Transpose({0, 4, 5, 1, 2, 6, 3});
   TenT u1, vt1, u2, vt2;
   DTenT s1, s2;
-  double trunc_err1, trunc_err2;
+  RealT trunc_err1, trunc_err2;
   size_t D1, D2;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
@@ -369,7 +369,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
 #ifndef NDEBUG
   auto physical_index = Gamma(upper_site).GetIndex(4);
 #endif
-  double norm = 1;
+  RealT norm = 1;
   size_t row = upper_site[0], col = upper_site[1];
   size_t lower_row = (row + 1) % lambda_vert.rows();
   size_t left_col = (col + lambda_horiz.cols() - 1) % lambda_horiz.cols();
@@ -395,7 +395,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   tmp_ten[5].Transpose({6, 3, 0, 1, 5, 4, 2});
   TenT u1, vt1, u2, vt2;
   DTenT s1, s2;
-  double trunc_err1, trunc_err2;
+  RealT trunc_err1, trunc_err2;
   size_t D1, D2;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
@@ -457,10 +457,10 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
  * @return
  */
 template<typename TenElemT, typename QNT>
-double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor<TenElemT, QNT> &gate_ten,
+typename SquareLatticePEPS<TenElemT, QNT>::RealT SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor<TenElemT, QNT> &gate_ten,
                                                                   const qlpeps::SiteIdx &upper_left_site,
                                                                   const qlpeps::SimpleUpdateTruncatePara &trunc_para) {
-  double norm = 1;
+  RealT norm = 1;
   size_t row = upper_left_site[0], col = upper_left_site[1];
   size_t lower_row = (row + 1) % lambda_vert.rows();
   size_t right_col = (col + 1) % lambda_horiz.cols();
@@ -500,7 +500,7 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
   tmp_ten[5].Transpose({0, 4, 5, 1, 2, 6, 3}); //(0,4) for upper site, (5,1,2) for left-lower site, (6,3) for right site
   TenT u1, vt1, u2, vt2;
   DTenT s1, s2;
-  double trunc_err;
+  RealT trunc_err;
   size_t D;
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,

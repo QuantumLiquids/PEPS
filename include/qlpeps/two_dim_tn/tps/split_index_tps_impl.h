@@ -431,10 +431,11 @@ SplitIndexTPS<TenElemT, QNT> &SplitIndexTPS<TenElemT, QNT>::operator-=(const Spl
   return *this;
 }
 
-template<typename QNT>
-SplitIndexTPS<QLTEN_Complex, QNT>
-operator*(const QLTEN_Double scalar, const SplitIndexTPS<QLTEN_Complex, QNT> &split_idx_tps) {
-  return split_idx_tps * QLTEN_Complex(scalar, 0.0);
+template<typename ComplexT,typename QNT>
+SplitIndexTPS<ComplexT, QNT>
+operator*(const typename qlten::RealTypeTrait<ComplexT>::type scalar,
+          const SplitIndexTPS<ComplexT, QNT> &split_idx_tps) {
+  return split_idx_tps * ComplexT(scalar, 0.0);
 }
 
 // =============================
