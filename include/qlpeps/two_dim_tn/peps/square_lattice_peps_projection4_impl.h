@@ -3,13 +3,14 @@
 * Creation Date: 2024-07-23
 *
 * Description: QuantumLiquids/PEPS project. The square PEPS class, project 4-site projectors implementation.
+*              Note: Current implementation only supports Open Boundary Condition (OBC).
 * Reference: [1] PRB 102, 075147 (2020), "Loop update for iPEPS in 2D".
 *            [2] arXiv: 1801.05390v2, Glen Evenbly
 */
 
 
-#ifndef VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION4_IMPL_H
-#define VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION4_IMPL_H
+#ifndef QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION4_IMPL_H
+#define QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION4_IMPL_H
 
 #include "arnoldi_solver.h"
 
@@ -1032,4 +1033,4 @@ void FullEnvironmentTruncateInSquareLocalLoop(
 }
 }//qlpeps
 
-#endif //VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION4_IMPL_H
+#endif //QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION4_IMPL_H

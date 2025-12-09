@@ -4,12 +4,12 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-07-21
 *
-* Description: QuantumLiquids/PEPS project. The generic PEPS class, implementation.
+* Description: QuantumLiquids/PEPS project. Square Lattice PEPS implementation (Projections).
 */
 
 
-#ifndef VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION_IMPL_H
-#define VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_PROJECTION_IMPL_H
+#ifndef QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION_IMPL_H
+#define QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION_IMPL_H
 
 #include "qlmps/utilities.h"       //mock_qlten::SVD
 
@@ -76,8 +76,10 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
        *                          1                                         1
        */
       const size_t lcol = col;
-      const size_t rcol = lcol + 1;
-      assert(rcol < Cols());
+      const size_t rcol = (lcol + 1) % lambda_horiz.cols();
+      if (this->boundary_condition_ == BoundaryCondition::Open) {
+        assert(lcol + 1 < this->Cols());
+      }
       const SiteIdx r_site = {row, rcol};
 
       //Contract left site 3 lambdas
@@ -144,14 +146,19 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
       *                            |
       *                            1
       */
-      assert(row + 1 < this->Rows());
+      size_t next_row = (row + 1) % lambda_vert.rows();
+      if (this->boundary_condition_ == BoundaryCondition::Open) {
+        assert(row + 1 < this->Rows());
+        next_row = row + 1;
+      }
+
       tmp_ten[0] = Eat3SurroundLambdas_(site, DOWN);
       QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
 
-      tmp_ten[1] = Eat3SurroundLambdas_({row + 1, col}, UP);
+      tmp_ten[1] = Eat3SurroundLambdas_({next_row, col}, UP);
       QR(tmp_ten + 1, 3, tmp_ten[1].Div(), &q1, &r1);
 
-      Contract<TenElemT, QNT, true, true>(r0, lambda_vert({row + 1, col}), 2, 0, 1, tmp_ten[2]);
+      Contract<TenElemT, QNT, true, true>(r0, lambda_vert({next_row, col}), 2, 0, 1, tmp_ten[2]);
       Contract<TenElemT, QNT, true, false>(tmp_ten[2], r1, 2, 2, 1, tmp_ten[3]);
       Contract(tmp_ten + 3, {1, 3}, &gate_ten, {0, 1}, tmp_ten + 4);
 
@@ -161,10 +168,10 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
         e_loc = EvaluateTwoSiteEnergy(ham, *state);
       }
       tmp_ten[4].Transpose({0, 2, 1, 3});
-      lambda_vert({row + 1, col}) = DTenT();
+      lambda_vert({next_row, col}) = DTenT();
       SVD(tmp_ten + 4, 2, qn0_,
           trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
-          &u, lambda_vert(row + 1, col), &vt,
+          &u, lambda_vert(next_row, col), &vt,
           &actual_trunc_err, &actual_D);
 
       // hand over lambdas from q0, q1, contract u or vt, setting Gammas
@@ -173,10 +180,10 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
       Contract<TenElemT, QNT, true, true>(tmp_ten[5], u, 3, 0, 1, Gamma(site));
       Gamma(site).Transpose({2, 4, 0, 1, 3});
 
-      tmp_ten[6] = QTenSplitOutLambdas_(q1, {row + 1, col}, UP, trunc_para.trunc_err);
-      Gamma({row + 1, col}) = TenT();
-      Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({row + 1, col}));
-      Gamma({row + 1, col}).Transpose({2, 1, 0, 4, 3});
+      tmp_ten[6] = QTenSplitOutLambdas_(q1, {next_row, col}, UP, trunc_para.trunc_err);
+      Gamma({next_row, col}) = TenT();
+      Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({next_row, col}));
+      Gamma({next_row, col}).Transpose({2, 1, 0, 4, 3});
       break;
     }
     default: {
@@ -185,7 +192,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
   }
 #ifndef NDEBUG
   assert(physical_index == Gamma(row, col)->GetIndex(4));
-  assert(Gamma(row, col)->GetIndex(1) == lambda_vert(row + 1, col)->GetIndex(1));
+  assert(Gamma(row, col)->GetIndex(1) == GetLambdaVertSouth(row, col).GetIndex(1));
   for (size_t i = 0; i < 7; i++) {
     assert(!tmp_ten[i].HasNan());
   }
@@ -264,8 +271,10 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
 #endif
   double norm = 1;
   size_t row = left_upper_site[0], col = left_upper_site[1];
-  SiteIdx right_site = {row, col + 1};
-  SiteIdx lower_site = {row + 1, col};
+  size_t right_col = (col + 1) % lambda_horiz.cols();
+  size_t lower_row = (row + 1) % lambda_vert.rows();
+  SiteIdx right_site = {row, right_col};
+  SiteIdx lower_site = {lower_row, col};
   TenT tmp_ten[11], q0, r0, q1, r1;
   tmp_ten[0] = Eat3SurroundLambdas_(right_site, LEFT);
   QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
@@ -362,8 +371,10 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
 #endif
   double norm = 1;
   size_t row = upper_site[0], col = upper_site[1];
-  SiteIdx left_site = {row + 1, col - 1};
-  SiteIdx right_down_site = {row + 1, col};
+  size_t lower_row = (row + 1) % lambda_vert.rows();
+  size_t left_col = (col + lambda_horiz.cols() - 1) % lambda_horiz.cols();
+  SiteIdx left_site = {lower_row, left_col};
+  SiteIdx right_down_site = {lower_row, col};
   TenT tmp_ten[11], q0, r0, q1, r1;
   tmp_ten[0] = Eat3SurroundLambdas_(left_site, RIGHT);
   QR(tmp_ten, 3, tmp_ten[0].Div(), &q0, &r0);
@@ -415,9 +426,9 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   Gamma(left_site).Transpose({1, 2, 3, 0, 4});
   auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = DiagMatInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({(row + 2) % lambda_vert.rows(), col}), trunc_para.trunc_err);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 1, 0, 1, tmp_ten[10]);
-  inv_lam = DiagMatInv(lambda_horiz({row + 1, col + 1}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({(row + 1) % lambda_horiz.rows(), (col + 1) % lambda_horiz.cols()}), trunc_para.trunc_err);
   Gamma({right_down_site}) = TenT();
   Contract<TenElemT, QNT, false, true>(tmp_ten[10], inv_lam, 0, 0, 1, Gamma({right_down_site}));
   Gamma({right_down_site}).Transpose({2, 3, 4, 1, 0});
@@ -451,8 +462,10 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
                                                                   const qlpeps::SimpleUpdateTruncatePara &trunc_para) {
   double norm = 1;
   size_t row = upper_left_site[0], col = upper_left_site[1];
-  SiteIdx lower_left_site = {row + 1, col};
-  SiteIdx lower_right_site = {row + 1, col + 1};
+  size_t lower_row = (row + 1) % lambda_vert.rows();
+  size_t right_col = (col + 1) % lambda_horiz.cols();
+  SiteIdx lower_left_site = {lower_row, col};
+  SiteIdx lower_right_site = {lower_row, right_col};
 #ifndef NDEBUG
   auto index_1 = Gamma(upper_left_site).GetIndexes();
   auto index_2 = Gamma(lower_left_site).GetIndexes();
@@ -534,9 +547,9 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
 
   auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = DiagMatInv(lambda_vert({row + 2, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({(row + 2) % lambda_vert.rows(), col}), trunc_para.trunc_err);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 3, 0, 1, tmp_ten[10]);
-  inv_lam = DiagMatInv(lambda_horiz({row + 1, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({(row + 1) % lambda_horiz.rows(), col}), trunc_para.trunc_err);
   Gamma({lower_left_site}) = TenT();
   Contract<TenElemT, QNT, false, false>(tmp_ten[10], inv_lam, 3, 1, 1, Gamma({lower_left_site}));
   Gamma({lower_left_site}).Transpose({4, 0, 1, 2, 3});
@@ -553,4 +566,4 @@ double SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProject(const QLTensor
 
 }//qlpeps
 
-#endif //VMC_PEPS_TWO_DIM_TN_PEPS_PEPS_BASIC_IMPL_H
+#endif //QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION_IMPL_H

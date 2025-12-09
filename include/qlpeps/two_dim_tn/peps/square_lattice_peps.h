@@ -4,7 +4,7 @@
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2023-07-20
 *
-* Description: QuantumLiquids/VMC-SquareLatticePEPS project. The SquareLatticePEPS class.
+* Description: QuantumLiquids/PEPS project. Square Lattice PEPS class definition.
 */
 
 
@@ -53,6 +53,11 @@ struct FullEnvironmentTruncateParams {
   ConjugateGradientParams cg_params;
 };
 
+enum class BoundaryCondition {
+  Open,
+  Periodic
+};
+
 struct LoopUpdateTruncatePara {
   LoopUpdateTruncatePara(const ArnoldiParams &arnoldi_params,
                          const double inv_tol,
@@ -74,21 +79,77 @@ struct ProjectionRes {
 };
 
 /**
- *           3
- *           |
- *   0--Gamma[rows_][cols_]--2,   also contain physical index 4
- *           |
- *           1
+ * PEPS Network Layout & Indexing
+ * ==============================
  *
+ * OBC Layout (Rows=2, Cols=2)
+ * ---------------------------
+ * The lambda indices follow the convention:
+ * - lambda_vert[r][c] is the vertical bond ABOVE Gamma[r][c].
+ * - lambda_vert[Rows][c] is the boundary bond BELOW Gamma[Rows-1][c].
+ * - lambda_horiz[r][c] is the horizontal bond LEFT of Gamma[r][c].
+ * - lambda_horiz[r][Cols] is the boundary bond RIGHT of Gamma[r][Cols-1].
  *
- *   0--Lambda[rows_][cols_]--1
+ *       lv(0,0)     lv(0,1)
+ *          |           |
+ * lh(0,0)--G(0,0)--lh(0,1)--G(0,1)--lh(0,2)
+ *          |           |
+ *       lv(1,0)     lv(1,1)
+ *          |           |
+ * lh(1,0)--G(1,0)--lh(1,1)--G(1,1)--lh(1,2)
+ *          |           |
+ *       lv(2,0)     lv(2,1)
  *
+ * where G is short for Gamma, lv is short for lambda_vert, lh is short for lambda_horiz.
  *
- *       0
- *       |
- *   Lambda[rows_][cols_]
- *       |
- *       1
+ * PBC Layout (Rows=2, Cols=2)
+ * ---------------------------
+ * In Periodic Boundary Conditions, the grid wraps around.
+ * - lambda_vert[r][c] is the vertical bond ABOVE Gamma[r][c].
+ * - lambda_vert[0][c] connects Gamma[R-1][c] (bottom) to Gamma[0][c] (top).
+ * - lambda_horiz[r][c] is the horizontal bond LEFT of Gamma[r][c].
+ * - lambda_horiz[r][0] connects Gamma[r][C-1] (right) to Gamma[r][0] (left).
+ *
+ * Note:
+ * - lv(0,0) is shared: it is the North bond of G(0,0) and South bond of G(1,0).
+ * - lh(0,0) is shared: it is the West bond of G(0,0) and East bond of G(0,1).
+ *
+ *       lv(0,0)     lv(0,1)   <-- connected to bottom G(1,x)
+ *          |           |
+ * lh(0,0)--G(0,0)--lh(0,1)--G(0,1)--lh(0,0) (wraps)
+ *          |           |
+ *       lv(1,0)     lv(1,1)
+ *          |           |
+ * lh(1,0)--G(1,0)--lh(1,1)--G(1,1)--lh(1,0) (wraps)
+ *          |           |
+ *       lv(0,0)     lv(0,1) (wraps)
+ *
+ * Tensor Index Order:
+ * -------------------
+ * The order of indices for the tensors is as follows:
+ *
+ * Gamma[row][col]: (West, South, East, North, Physical) = (0, 1, 2, 3, 4)
+ *          3 (North)
+ *          |
+ *          v
+ *          |
+ *  0 -->-- Gamma -->-- 2 (East)
+ * (West)   |
+ *          v
+ *          |
+ *          1 (South)
+ * (The direction is obeyed in constructor, but not guaranteed in projection functions.)
+ *
+ * lambda_vert[row][col]: (Up, Down) = (0, 1)
+ *          0 (Up, connects to Gamma South)
+ *          |
+ *       lambda
+ *          |
+ *          1 (Down, connects to Gamma North)
+ *
+ * lambda_horiz[row][col]: (Left, Right) = (0, 1)
+ *  0 (Left) -- lambda -- 1 (Right)
+ *
  * @tparam TenElemT
  * @tparam QNT
  */
@@ -102,16 +163,16 @@ class SquareLatticePEPS {
 //  SquareLatticePEPS(size_t rows, size_t cols) : rows_(rows), cols_(cols), Gamma(rows, cols), lambda_vert(rows + 1, cols),
 //                                   lambda_horiz(rows, cols + 1) {}
   //Constructors
-  SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces);
+  SquareLatticePEPS(const HilbertSpaces<QNT> &hilbert_spaces, BoundaryCondition bc = BoundaryCondition::Open);
 
-  SquareLatticePEPS(const Index<QNT> &local_hilbert_space, size_t rows, size_t cols);
+  SquareLatticePEPS(const Index<QNT> &local_hilbert_space, size_t rows, size_t cols, BoundaryCondition bc = BoundaryCondition::Open);
 
   // Copy constructor
   SquareLatticePEPS(const SquareLatticePEPS<TenElemT, QNT> &rhs) = default;
 
   // Move constructor
   SquareLatticePEPS(SquareLatticePEPS<TenElemT, QNT> &&rhs) noexcept
-      : rows_(rhs.rows_), cols_(rhs.cols_), Gamma(std::move(rhs.Gamma)), lambda_vert(std::move(rhs.lambda_vert)),
+      : rows_(rhs.rows_), cols_(rhs.cols_), boundary_condition_(rhs.boundary_condition_), Gamma(std::move(rhs.Gamma)), lambda_vert(std::move(rhs.lambda_vert)),
         lambda_horiz(std::move(rhs.lambda_horiz)) {}
 
   // Assignment operator
@@ -122,6 +183,7 @@ class SquareLatticePEPS {
     if (this != &rhs) {
       rows_ = rhs.rows_;
       cols_ = rhs.cols_;
+      boundary_condition_ = rhs.boundary_condition_;
       Gamma = std::move(rhs.Gamma);
       lambda_vert = std::move(rhs.lambda_vert);
       lambda_horiz = std::move(rhs.lambda_horiz);
@@ -138,6 +200,59 @@ class SquareLatticePEPS {
   void Initial(std::vector<std::vector<size_t>> &activates);
 
   //Getters
+  BoundaryCondition GetBoundaryCondition() const { return boundary_condition_; }
+
+  // Boundary-aware Lambda Accessors
+  // -------------------------------
+
+  // Get the vertical lambda tensor ABOVE the site (row, col)
+  const DTenT& GetLambdaVertNorth(size_t row, size_t col) const {
+    return lambda_vert({row, col});
+  }
+  DTenT& GetLambdaVertNorth(size_t row, size_t col) {
+    return lambda_vert({row, col});
+  }
+
+  // Get the vertical lambda tensor BELOW the site (row, col)
+  const DTenT& GetLambdaVertSouth(size_t row, size_t col) const {
+    if (boundary_condition_ == BoundaryCondition::Open) {
+      return lambda_vert({row + 1, col});
+    } else {
+      return lambda_vert({(row + 1) % rows_, col});
+    }
+  }
+  DTenT& GetLambdaVertSouth(size_t row, size_t col) {
+    if (boundary_condition_ == BoundaryCondition::Open) {
+      return lambda_vert({row + 1, col});
+    } else {
+      return lambda_vert({(row + 1) % rows_, col});
+    }
+  }
+
+  // Get the horizontal lambda tensor to the LEFT of the site (row, col)
+  const DTenT& GetLambdaHorizWest(size_t row, size_t col) const {
+    return lambda_horiz({row, col});
+  }
+  DTenT& GetLambdaHorizWest(size_t row, size_t col) {
+    return lambda_horiz({row, col});
+  }
+
+  // Get the horizontal lambda tensor to the RIGHT of the site (row, col)
+  const DTenT& GetLambdaHorizEast(size_t row, size_t col) const {
+    if (boundary_condition_ == BoundaryCondition::Open) {
+      return lambda_horiz({row, col + 1});
+    } else {
+      return lambda_horiz({row, (col + 1) % cols_});
+    }
+  }
+  DTenT& GetLambdaHorizEast(size_t row, size_t col) {
+    if (boundary_condition_ == BoundaryCondition::Open) {
+      return lambda_horiz({row, col + 1});
+    } else {
+      return lambda_horiz({row, (col + 1) % cols_});
+    }
+  }
+
   // Function to get the number of rows in the SquareLatticePEPS
   size_t Rows(void) const { return rows_; }
 
@@ -149,7 +264,7 @@ class SquareLatticePEPS {
   size_t GetMaxBondDim(void) const;
 
   // if the bond dimensions of each lambda are the same, except boundary lambdas
-  bool IsBondDimensionEven(void) const;
+  bool IsBondDimensionUniform(void) const;
 
   double NormalizeAllTensor(void);
 
@@ -190,7 +305,7 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &trunc_para
   );
 
-  // from left to right, from up to down. This convention of index diretion may be broken after loop update.
+  ///< fix the convenction of index direction: from left to right, from up to down. For the convention of index direction may be broken after loop update.
   void RegularizeIndexDir();
 
   using LocalSquareLoopGateT = std::array<TenT, 4>;
@@ -228,6 +343,18 @@ class SquareLatticePEPS {
   //Helper For Projecting Gate
   TenT EatSurroundLambdas_(const SiteIdx &site) const;
 
+  /**
+   * @brief Absorbs 3 surrounding Lambda tensors into the Gamma tensor.
+   *
+   * Contracts the Gamma tensor at `site` with the Lambda tensors on three sides,
+   * leaving the bond in the `leaving_post` direction open (i.e., not contracted with its Lambda).
+   * This is typically used to prepare the effective tensor for the QR decomposition step in Simple Update,
+   * where the open bond connects to the bond being updated.
+   *
+   * @param site The coordinates of the site.
+   * @param leaving_post The direction where the Lambda tensor is NOT absorbed.
+   * @return A rank-5 tensor formed by contracting Gamma with 3 Lambdas.
+   */
   TenT Eat3SurroundLambdas_(const SiteIdx &site, const BTenPOSITION leaving_post) const;
 
   TenT QTenSplitOutLambdas_(const TenT &q, const SiteIdx &site,
@@ -247,6 +374,7 @@ class SquareLatticePEPS {
 
   size_t rows_; // Number of rows in the SquareLatticePEPS
   size_t cols_; // Number of columns in the SquareLatticePEPS
+  BoundaryCondition boundary_condition_;
 };
 
 template<typename TenElemT, typename QNT>
