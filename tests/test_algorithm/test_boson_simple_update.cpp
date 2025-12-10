@@ -21,6 +21,8 @@ using qlten::special_qn::Z2QN;
 
 using TenElemT = TEN_ELEM_TYPE;
 
+namespace {
+
 template<typename T>
 struct MatrixElement {
   std::vector<size_t> coors;
@@ -66,6 +68,38 @@ std::string GenTPSPath(std::string model_name, size_t Dmax) {
 #endif
 }
 
+struct UpdateStage {
+  size_t D;
+  double trunc_err;
+  double step_len;
+  size_t steps = 0;
+};
+
+template<typename ExecutorT, typename QNT>
+void RunStages(ExecutorT& exe, const std::string& model_name, const std::vector<UpdateStage>& stages, bool dump_last = false) {
+  for (size_t i = 0; i < stages.size(); ++i) {
+    const auto& stage = stages[i];
+    exe.update_para.Dmax = stage.D;
+    exe.update_para.Trunc_err = stage.trunc_err;
+    if (stage.steps > 0) exe.update_para.steps = stage.steps;
+    exe.ResetStepLenth(stage.step_len);
+    exe.Execute();
+
+    // Dump logic (mimicking original test behavior for intermediate dumps)
+    // Original test dumped at D=4 and D=8.
+    // Here we just dump if D >= 4 for debugging/verification, or as requested.
+    if (stage.D >= 4) {
+      bool is_last = (i == stages.size() - 1);
+      // Keep tensors alive for ToTPS; dump without releasing memory.
+      exe.DumpResult(GenPEPSPath(model_name, stage.D), false);
+      auto tps = qlpeps::ToTPS<TenElemT, QNT>(exe.GetPEPS());
+      tps.Dump(GenTPSPath(model_name, stage.D));
+    }
+  }
+}
+
+} // namespace
+
 // XX + Z
 struct TransverseFieldIsing : public testing::Test {
   using IndexT = Index<Z2QN>;
@@ -91,8 +125,10 @@ struct TransverseFieldIsing : public testing::Test {
   DTensor xx_term = DTensor({pb_in, pb_out, pb_in, pb_out});
   DTensor z_term = DTensor({pb_in, pb_out});
   using PEPST = SquareLatticePEPS<TenElemT, Z2QN>;
-  PEPST peps0 = PEPST(pb_out, Ly, Lx);
-  void SetUp(void) {
+  // peps0 is initialized in SetUp/InitializePEPS now
+  std::optional<PEPST> peps0;
+
+  void SetUp(void) override {
     z_term({0, 0}) = 1.0 * h;
     z_term({1, 1}) = -1.0 * h;
 
@@ -101,51 +137,73 @@ struct TransverseFieldIsing : public testing::Test {
     xx_term({1, 0, 0, 1}) = 1.0;
     xx_term({0, 1, 1, 0}) = 1.0;
 
-    std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx, 1));
-    peps0.Initial(activates);
+    InitializePEPS(BoundaryCondition::Open);
+  }
+
+  void InitializePEPS(BoundaryCondition bc) {
+    peps0.emplace(pb_out, Ly, Lx, bc);
+    std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx));
+    // AFM initial state works better in PBC
+    for (size_t y = 0; y < Ly; y++) {
+      for (size_t x = 0; x < Lx; x++) {
+        activates[y][x] = (x + y) % 2;
+      }
+    }
+    peps0->Initial(activates);
   }
 };
 
-TEST_F(TransverseFieldIsing, SimpleUpdate) {
+TEST_F(TransverseFieldIsing, SimpleUpdateOBC) {
   std::string model_name = "square_transverse_field_ising";
   qlten::hp_numeric::SetTensorManipulationThreads(1);
-  // stage 1, D = 2
+  
+  // Initial stage (no dump)
   SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
   auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, Z2QN>>(update_para,
-                                                                                   peps0,
+                                                                                   *peps0,
                                                                                    xx_term,
                                                                                    z_term);
   su_exe->Execute();
 
-  // stage 2, D = 4
-  su_exe->update_para.Dmax = 4;
-  su_exe->update_para.Trunc_err = 1e-10;
-  su_exe->ResetStepLenth(0.01); // call to re-evaluate the evolution gates
-  su_exe->Execute();
-  auto tps_d4 = qlpeps::ToTPS<TenElemT, Z2QN>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
-  tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
+  std::vector<UpdateStage> stages = {
+      {4, 1e-10, 0.01},
+      {6, 1e-12, 0.001},
+      {8, 1e-15, 0.0001, 100}
+  };
+  
+  RunStages<decltype(*su_exe), Z2QN>(*su_exe, model_name, stages, true);
 
-  // stage 3, D = 6
-  su_exe->update_para.Dmax = 6;
-  su_exe->update_para.Trunc_err = 1e-12;
-  su_exe->ResetStepLenth(0.001); // call to re-evaluate the evolution gates
-  su_exe->Execute();
-
-  // stage 4, D = 8
-  su_exe->update_para.Dmax = 8;
-  su_exe->update_para.Trunc_err = 1e-15;
-  su_exe->update_para.steps = 100;
-  su_exe->ResetStepLenth(0.0001);
-  su_exe->Execute();
-  auto tps_d8 = qlpeps::ToTPS<TenElemT, Z2QN>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
-  tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
   double E_est = su_exe->GetEstimatedEnergy();
   // check the energy
   double ex_energy = -50.186623882777752;
   EXPECT_NEAR(ex_energy, E_est, 0.2);
+}
 
+TEST_F(TransverseFieldIsing, SimpleUpdatePBC) {
+  InitializePEPS(BoundaryCondition::Periodic);
+  std::string model_name = "square_transverse_field_ising_pbc";
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+
+  SimpleUpdatePara update_para(50, 0.1, 1, 2, 1e-5);
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, Z2QN>>(update_para,
+                                                                                   *peps0,
+                                                                                   xx_term,
+                                                                                   z_term * (1.0/3.0));
+  su_exe->Execute();
+
+  std::vector<UpdateStage> stages = {
+      {4, 1e-10, 0.1,100},
+      {6, 1e-12, 0.001},
+      {8, 1e-15, 0.0001, 100}
+  };
+
+  RunStages<decltype(*su_exe), Z2QN>(*su_exe, model_name, stages, true);
+  EXPECT_TRUE(su_exe->GetPEPS().IsBondDimensionUniform());
+  // ED ground state energy = -51.44812913320619 (h=3.0, PBC, 4x4), near the critical point, difficult mode.
+  // ED ground state energy = -34.01059755084629 (h=1.0, PBC, 4x4)
+  double E_est = su_exe->GetEstimatedEnergy();
+  double ex_energy_pbc = -34.01059755084629;
+  EXPECT_NEAR(ex_energy_pbc, E_est, 0.01);
 }
 
 //spin one-half system with trivial symmetry to match exact energy reference
@@ -192,8 +250,9 @@ struct SpinOneHalfSystemSimpleUpdateTrivial : public testing::Test {
     {{1, 0, 0, 1}, 0.5},
   };
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
-  PEPST peps0 = PEPST(pb_out, Ly, Lx);
-  void SetUp(void) {
+  std::optional<PEPST> peps0;
+
+  void SetUp(void) override {
     for (const auto &element : ham_ising_nn_elements) {
       ham_ising_nn(element.coors) = element.elem;
     }
@@ -223,16 +282,19 @@ struct SpinOneHalfSystemSimpleUpdateTrivial : public testing::Test {
       }
     }
 
-    // initial peps as classical Neel state
-    std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx));
+    InitializePEPS(BoundaryCondition::Open);
+  }
 
+  void InitializePEPS(BoundaryCondition bc) {
+    peps0.emplace(pb_out, Ly, Lx, bc);
+    std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx));
     for (size_t y = 0; y < Ly; y++) {
       for (size_t x = 0; x < Lx; x++) {
         size_t sz_int = x + y;
         activates[y][x] = sz_int % 2;
       }
     }
-    peps0.Initial(activates);
+    peps0->Initial(activates);
   }
 };
 
@@ -286,8 +348,9 @@ struct SpinOneHalfSystemSimpleUpdateU1 : public testing::Test {
     {{1, 0, 0, 1}, 0.5},
   };
   using PEPST = SquareLatticePEPS<TenElemT, U1QN>;
-  PEPST peps0 = PEPST(pb_out, Ly, Lx);
-  void SetUp(void) {
+  std::optional<PEPST> peps0;
+
+  void SetUp(void) override {
     for (const auto &element : ham_ising_nn_elements) {
       ham_ising_nn(element.coors) = element.elem;
     }
@@ -317,118 +380,123 @@ struct SpinOneHalfSystemSimpleUpdateU1 : public testing::Test {
       }
     }
 
-    // initial peps as classical Neel state
-    std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx));
+    InitializePEPS(BoundaryCondition::Open);
+  }
 
+  void InitializePEPS(BoundaryCondition bc) {
+    peps0.emplace(pb_out, Ly, Lx, bc);
+    std::vector<std::vector<size_t> > activates(Ly, std::vector<size_t>(Lx));
     for (size_t y = 0; y < Ly; y++) {
       for (size_t x = 0; x < Lx; x++) {
         size_t sz_int = x + y;
         activates[y][x] = sz_int % 2;
       }
     }
-    peps0.Initial(activates);
+    peps0->Initial(activates);
   }
 };
 
-TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, AFM_ClassicalIsing) {
+TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, AFM_ClassicalIsingOBC) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
   SimpleUpdatePara update_para(50, 0.01, 1, 1, 1e-5);
   auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(update_para,
-                                                                                    peps0,
+                                                                                    *peps0,
                                                                                     ham_ising_nn);
   su_exe->Execute();
   double ex_energy = -0.25 * ((Lx - 1) * Ly + (Ly - 1) * Lx);
   EXPECT_NEAR(ex_energy, su_exe->GetEstimatedEnergy(), 1e-10);
-
 }
 
-TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenberg) {
-  std::string model_name = "square_nn_hei";
-  // stage 1,
+TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, AFM_ClassicalIsingPBC) {
+  InitializePEPS(BoundaryCondition::Periodic);
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+  SimpleUpdatePara update_para(50, 0.01, 1, 1, 1e-5);
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(update_para,
+                                                                                    *peps0,
+                                                                                    ham_ising_nn);
+  su_exe->Execute();
+  // For Lx=3 (odd) PBC, the horizontal ring is frustrated:
+  // each row has 2 satisfied bonds (-0.25) and 1 frustrated bond (+0.25) => -0.25 per row.
+  // Vertical direction (Ly=4 even) is unfrustrated: 3 columns * 4 bonds/col * (-0.25) = -3.
+  // Total = -0.25*4 + (-3) = -4.0
+  double ex_energy = -4.0;
+  EXPECT_NEAR(ex_energy, su_exe->GetEstimatedEnergy(), 1e-6);
+}
 
+TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenbergOBC) {
+  std::string model_name = "square_nn_hei";
+  
   auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.2, 1, 2, 1e-5),
-                                                                                    peps0,
+                                                                                    *peps0,
                                                                                     ham_hei_nn);
   su_exe->Execute();
 
-  // stage 2,
-  su_exe->update_para.Dmax = 4;
-  su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->ResetStepLenth(0.1); // call to re-evaluate the evolution gates
-  su_exe->Execute();
-  auto tps_d4 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
-  tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
+  std::vector<UpdateStage> stages = {
+      {4, 1e-6, 0.1},
+      {8, 1e-10, 0.02, 50}
+  };
 
-  // stage 3,
-  su_exe->update_para.Dmax = 8;
-  su_exe->update_para.Trunc_err = 1e-10;
-  su_exe->update_para.steps = 50;
-  su_exe->ResetStepLenth(0.02);
-  su_exe->Execute();
-  auto tps_d8 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
-  tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
+  RunStages<decltype(*su_exe), QNT>(*su_exe, model_name, stages, true);
 
   double en_exact = -6.691680193514947;
   EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.5);
-
 }
 
+TEST_F(SpinOneHalfSystemSimpleUpdateU1, SquareNNHeisenbergPBC) {
+  InitializePEPS(BoundaryCondition::Periodic);
+  std::string model_name = "square_nn_hei_pbc";
+  
+  auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.2, 1, 2, 1e-5),
+                                                                                    *peps0,
+                                                                                    ham_hei_nn);
+  su_exe->Execute();
 
-TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningField) {
+  std::vector<UpdateStage> stages = {
+      {4, 1e-6, 0.1},
+      {8, 1e-10, 0.02, 50}
+  };
+
+  RunStages<decltype(*su_exe), QNT>(*su_exe, model_name, stages, true);
+
+  double en_exact = -7.368217694134078; // ED ground state energy (3x4 PBC)
+  EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.5);
+}
+
+TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningFieldOBC) {
   std::string model_name = "square_nn_hei_pin";
-  // stage 1, D = 2
-
+  
   auto su_exe = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.1, 1, 2, 1e-5),
-                                                                                    peps0,
+                                                                                    *peps0,
                                                                                     ham_hei_nn,
                                                                                     afm_pinning_field);
   su_exe->Execute();
 
-  // stage 2, D = 4
-  su_exe->update_para.Dmax = 4;
-  su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->ResetStepLenth(0.05); // call to re-evaluate the evolution gates
-  su_exe->Execute();
-  auto tps_d4 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), false);
-  tps_d4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
+  std::vector<UpdateStage> stages = {
+      {4, 1e-6, 0.05},
+      {8, 1e-10, 0.01, 50}
+  };
 
-  // stage 3, D = 8
-  su_exe->update_para.Dmax = 8;
-  su_exe->update_para.Trunc_err = 1e-10;
-  su_exe->update_para.steps = 50;
-  su_exe->ResetStepLenth(0.01);
-  su_exe->Execute();
-  auto tps_d8 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
-  tps_d8.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
+  RunStages<decltype(*su_exe), QNT>(*su_exe, model_name, stages, true);
 
   double en_exact = -6.878533413625821;
   EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.3);
-
 }
 
-TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, TriangleNNHeisenberg) {
+TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, TriangleNNHeisenbergOBC) {
   std::string model_name = "tri_nn_hei";
   SimpleUpdatePara update_para(20, 0.1, 1, 2, 1e-5);
 
   auto su_exe = std::make_unique<TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>>(update_para,
-                                                                                              peps0,
+                                                                                              *peps0,
                                                                                               ham_hei_nn,
                                                                                               ham_hei_tri);
   su_exe->Execute();
 
-  su_exe->update_para.Dmax = 4;
-  su_exe->update_para.Trunc_err = 1e-6;
-  su_exe->ResetStepLenth(0.05);
-  su_exe->Execute();
-
-  auto tps4 = qlpeps::ToTPS<TenElemT, QNT>(su_exe->GetPEPS());
-  su_exe->DumpResult(GenPEPSPath(model_name, su_exe->update_para.Dmax), true);
-  tps4.Dump(GenTPSPath(model_name, su_exe->update_para.Dmax));
-
+  std::vector<UpdateStage> stages = {
+      {4, 1e-6, 0.05}
+  };
+  
+  RunStages<decltype(*su_exe), QNT>(*su_exe, model_name, stages, true);
 }
 
 int main(int argc, char *argv[]) {

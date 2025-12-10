@@ -57,6 +57,7 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   using TransferMPO = std::vector<Tensor *>;
   using BMPST = BMPS<TenElemT, QNT>;
   using SITPS = SplitIndexTPS<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
  public:
   /**
    * @brief Constructs empty tensor network with specified dimensions
@@ -109,7 +110,7 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
    * @return Map of position to vector of boundary MPS
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GenerateBMPSApproach(BMPSPOSITION post, const BMPSTruncatePara &trunc_para);
+  GenerateBMPSApproach(BMPSPOSITION post, const BMPSTruncateParams<RealT> &trunc_para);
 
   /**
    * Generate the boundary MPS for the row-th MPO.
@@ -118,23 +119,23 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
    * @return
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForRow(const size_t row, const BMPSTruncatePara &trunc_para);
+  GrowBMPSForRow(const size_t row, const BMPSTruncateParams<RealT> &trunc_para);
 
   /**
    * Same functionality with GrowBMPSForRow but only return the corresponding boundary MPS
    * @param row
    * @return
    */
-  const std::pair<BMPST, BMPST> GetBMPSForRow(const size_t row, const BMPSTruncatePara &trunc_para);
+  const std::pair<BMPST, BMPST> GetBMPSForRow(const size_t row, const BMPSTruncateParams<RealT> &trunc_para);
 
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForCol(const size_t col, const BMPSTruncatePara &trunc_para);
+  GrowBMPSForCol(const size_t col, const BMPSTruncateParams<RealT> &trunc_para);
 
-  const std::pair<BMPST, BMPST> GetBMPSForCol(const size_t col, const BMPSTruncatePara &trunc_para);
+  const std::pair<BMPST, BMPST> GetBMPSForCol(const size_t col, const BMPSTruncateParams<RealT> &trunc_para);
 
-  void BMPSMoveStep(const BMPSPOSITION position, const BMPSTruncatePara &trunc_para);
+  void BMPSMoveStep(const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para);
 
-  void GrowFullBMPS(const BMPSPOSITION position, const BMPSTruncatePara &trunc_para);
+  void GrowFullBMPS(const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para);
 
   void DeleteInnerBMPS(const BMPSPOSITION position) {
     if (!bmps_set_[position].empty()) {
@@ -224,9 +225,9 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
  * @param position
  * @return
  */
-  size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const BMPSTruncatePara &);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const BMPSTruncateParams<RealT> &);
 
-  size_t GrowBMPSStep_(const BMPSPOSITION position, const BMPSTruncatePara &);
+  size_t GrowBMPSStep_(const BMPSPOSITION position, const BMPSTruncateParams<RealT> &);
 
   /**
    *

@@ -65,6 +65,35 @@ double CalGroundStateEnergyForSpinlessNNFreeFermionOBC(
   return ground_state_energy;
 }
 
+double CalGroundStateEnergyForSpinlessNNFreeFermionPBC(
+    const size_t Lx,
+    const size_t Ly,
+    const size_t particle_num
+) {
+  const size_t num_sites = Lx * Ly;
+  std::vector<double> energy_levels;
+  energy_levels.reserve(num_sites);
+
+  const double two_pi = 2.0 * M_PI;
+  for (size_t kx = 0; kx < Lx; ++kx) {
+    for (size_t ky = 0; ky < Ly; ++ky) {
+      double theta_x = two_pi * static_cast<double>(kx) / static_cast<double>(Lx);
+      double theta_y = two_pi * static_cast<double>(ky) / static_cast<double>(Ly);
+      double energy = -2.0 * std::cos(theta_x) - 2.0 * std::cos(theta_y);
+      energy_levels.push_back(energy);
+    }
+  }
+
+  std::sort(energy_levels.begin(), energy_levels.end());
+
+  double ground_state_energy = 0.0;
+  for (size_t i = 0; i < particle_num; ++i) {
+    ground_state_energy += energy_levels[i];
+  }
+
+  return ground_state_energy;
+}
+
 struct Z2SpinlessFreeFermionTools : public testing::Test {
   using QNT = qlten::special_qn::fZ2QN;
   using IndexT = Index<QNT>;
@@ -180,6 +209,82 @@ TEST_F(Z2SpinlessFreeFermionTools, HalfFillingSimpleUpdate) {
     // Clean up
     delete su_exe;
   }
+}
+
+struct Z2SpinlessFreeFermionPBCTools : public testing::Test {
+  using QNT = qlten::special_qn::fZ2QN;
+  using IndexT = Index<QNT>;
+  using QNSctT = QNSector<QNT>;
+  using QNSctVecT = QNSectorVec<QNT>;
+  using TenElemT = QLTEN_Double;
+  using Tensor = QLTensor<TenElemT, QNT>;
+
+  size_t Lx = 3; // cols
+  size_t Ly = 4;
+  size_t Dmax = 4;
+
+  size_t ele_num = 6; // half filling on 3x4
+  double t = 1.0;
+  double mu; // chemical potential for half filling (PBC)
+
+  QNT qn0 = QNT(0);
+  IndexT loc_phy_ket = IndexT({QNSctT(QNT(1), 1),  // |1> occupied
+                               QNSctT(QNT(0), 1)}, // |0> empty state
+                              TenIndexDirType::IN
+  );
+  IndexT loc_phy_bra = InverseIndex(loc_phy_ket);
+
+  Tensor c = Tensor({loc_phy_ket, loc_phy_bra});   // annihilation operator
+  Tensor cdag = Tensor({loc_phy_ket, loc_phy_bra});// creation operator
+  Tensor n = Tensor({loc_phy_ket, loc_phy_bra});   // density operator
+
+  Tensor ham_nn = Tensor({loc_phy_ket, loc_phy_ket, loc_phy_bra, loc_phy_bra}); // site: i-j-j-i (i<j)
+
+  void SetUp(void) override {
+    n({0, 0}) = 1.0;
+    n.Transpose({1, 0});
+    c({1, 0}) = 1;
+    cdag({0, 1}) = 1;
+
+    ham_nn({1, 0, 1, 0}) = -t;
+    ham_nn({0, 1, 0, 1}) = -t;
+    ham_nn.Transpose({3, 0, 2, 1}); // match simple update convention
+
+    mu = (CalGroundStateEnergyForSpinlessNNFreeFermionPBC(Lx, Ly, ele_num + 1)
+        - CalGroundStateEnergyForSpinlessNNFreeFermionPBC(Lx, Ly, ele_num - 1)) / 2.0;
+  }
+};
+
+TEST_F(Z2SpinlessFreeFermionPBCTools, HalfFillingSimpleUpdatePBC) {
+  qlten::hp_numeric::SetTensorManipulationThreads(4);
+
+  SquareLatticePEPS<TenElemT, QNT> peps0(loc_phy_ket, Ly, Lx, BoundaryCondition::Periodic);
+
+  std::vector<std::vector<size_t>> activates(Ly, std::vector<size_t>(Lx));
+  for (size_t y = 0; y < Ly; y++) {
+    for (size_t x = 0; x < Lx; x++) {
+      activates[y][x] = (x + y) % 2; // half filling pattern
+    }
+  }
+  peps0.Initial(activates);
+
+  SimpleUpdatePara update_para(150, 0.1, 1, Dmax, 1e-10);
+  SimpleUpdateExecutor<TenElemT, QNT>
+      *su_exe = new SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>(update_para, peps0,
+                                                                       ham_nn,
+                                                                       -mu * n);
+  su_exe->Execute();
+  // su_exe->update_para.Dmax = 8;
+  su_exe->ResetStepLenth(0.01);
+  su_exe->Execute();
+
+  double exact_gs_energy = CalGroundStateEnergyForSpinlessNNFreeFermionPBC(Lx, Ly, ele_num)
+      - mu * static_cast<double>(ele_num); // include chemical potential shift
+  double estimated_energy = su_exe->GetEstimatedEnergy();
+
+  EXPECT_NEAR(exact_gs_energy, estimated_energy, 0.4); // 0.2% error, It's OK.
+
+  delete su_exe;
 }
 
 /*

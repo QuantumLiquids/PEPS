@@ -6,8 +6,8 @@
 *
 * Description: QuantumLiquids/PEPS project.
 *              Simple update implementation for
- *             nearest-neighbor interaction models in square lattice,
- *             allowed additional on-site terms.
+*              nearest-neighbor interaction models in square lattice,
+*              allowed additional on-site terms.
 */
 
 #ifndef QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
@@ -21,10 +21,10 @@ using namespace qlten;
 
 template<typename TenElemT, typename QNT>
 class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
-  using Tensor = QLTensor<TenElemT, QNT>;
-  using PEPST = SquareLatticePEPS<TenElemT, QNT>;
-  using RealT = typename SimpleUpdateExecutor<TenElemT, QNT>::RealT;
  public:
+    using Tensor = QLTensor<TenElemT, QNT>;
+    using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+    using RealT = typename SimpleUpdateExecutor<TenElemT, QNT>::RealT;
   /**
    *
    * @param update_para
@@ -41,10 +41,10 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
                                       const Tensor &ham_onsite = Tensor()) :
       SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_two_site_term_(ham_nn),
       ham_on_site_terms_(this->ly_, this->lx_),
-      horizontal_nn_ham_set_(this->ly_, this->lx_ - 1),
-      vertical_nn_ham_set_(this->ly_ - 1, this->lx_),
-      horizontal_nn_evolve_gate_set_(this->ly_, this->lx_ - 1),
-      vertical_nn_evolve_gate_set_(this->ly_ - 1, this->lx_) {
+      horizontal_nn_ham_set_(this->ly_, peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      vertical_nn_ham_set_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, this->lx_),
+      horizontal_nn_evolve_gate_set_(this->ly_, peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      vertical_nn_evolve_gate_set_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, this->lx_) {
     if (!ham_onsite.IsDefault())
       for (auto &ten : ham_on_site_terms_) {
         ten = ham_onsite;
@@ -59,10 +59,10 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
                                       const TenMatrix<Tensor> &ham_onsite_terms) :
       SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_two_site_term_(ham_nn),
       ham_on_site_terms_(ham_onsite_terms),
-      horizontal_nn_ham_set_(this->ly_, this->lx_ - 1),
-      vertical_nn_ham_set_(this->ly_ - 1, this->lx_),
-      horizontal_nn_evolve_gate_set_(this->ly_, this->lx_ - 1),
-      vertical_nn_evolve_gate_set_(this->ly_ - 1, this->lx_) {
+      horizontal_nn_ham_set_(this->ly_, peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      vertical_nn_ham_set_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, this->lx_),
+      horizontal_nn_evolve_gate_set_(this->ly_, peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      vertical_nn_evolve_gate_set_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, this->lx_) {
     assert(ham_on_site_terms_.rows() == this->ly_);
     assert(ham_on_site_terms_.cols() == this->lx_);
   }
@@ -132,50 +132,60 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
       id.ActFermionPOps();
     }
 
-    for (size_t col = 0; col < this->lx_ - 1; col++) {
-      for (size_t row = 0; row < this->ly_; row++) {
-        size_t Coordination1 = 4; // Coordination number of site_1
-        size_t Coordination2 = 4; // Coordination number of site_2
-        if (row == 0 || row == this->ly_ - 1) {
-          Coordination1 -= 1;
-          Coordination2 -= 1;
-        }
-        if (col == 0) Coordination1 -= 1;
-        if (col == this->lx_ - 2) Coordination2 -= 1;
+    const bool is_pbc = (this->peps_.GetBoundaryCondition() == BoundaryCondition::Periodic);
+    const size_t hor_bond_limit = is_pbc ? this->lx_ : this->lx_ - 1;
+    const size_t ver_bond_limit = is_pbc ? this->ly_ : this->ly_ - 1;
 
-        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1) / RealT(Coordination1),
+    for (size_t col = 0; col < hor_bond_limit; col++) {
+      for (size_t row = 0; row < this->ly_; row++) {
+        size_t coord_num1 = 4; // Coordination number of site_1
+        size_t coord_num2 = 4; // Coordination number of site_2
+        if (!is_pbc) {
+          if (row == 0 || row == this->ly_ - 1) {
+            coord_num1 -= 1;
+            coord_num2 -= 1;
+          }
+          if (col == 0) coord_num1 -= 1;
+          if (col == this->lx_ - 2) coord_num2 -= 1;
+        }
+
+        const size_t col2 = (col + 1) % this->lx_;
+        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1) / RealT(coord_num1),
                                                                       ham_on_site_terms_({row, col}),
-                                                                      RealT(1) / RealT(Coordination2),
-                                                                      ham_on_site_terms_({row, col + 1}),
+                                                                      RealT(1) / RealT(coord_num2),
+                                                                      ham_on_site_terms_({row, col2}),
                                                                       id);
-        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1) / RealT(Coordination1),
+        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1) / RealT(coord_num1),
                                                                              ham_on_site_terms_({row, col}),
-                                                                             RealT(1) / RealT(Coordination2),
-                                                                             ham_on_site_terms_({row, col + 1}),
+                                                                             RealT(1) / RealT(coord_num2),
+                                                                             ham_on_site_terms_({row, col2}),
                                                                              id);
       }
     }
 
     for (size_t col = 0; col < this->lx_; col++) {
-      for (size_t row = 0; row < this->ly_ - 1; row++) {
-        size_t Coordination1 = 4; // Coordination number of site_1
-        size_t Coordination2 = 4; // Coordination number of site_2
-        if (col == 0 || col == this->lx_ - 1) {
-          Coordination1 -= 1;
-          Coordination2 -= 1;
+      for (size_t row = 0; row < ver_bond_limit; row++) {
+        size_t coord_num1 = 4; // Coordination number of site_1
+        size_t coord_num2 = 4; // Coordination number of site_2
+        if (!is_pbc) {
+          if (col == 0 || col == this->lx_ - 1) {
+            coord_num1 -= 1;
+            coord_num2 -= 1;
+          }
+          if (row == 0) coord_num1 -= 1;
+          if (row == this->ly_ - 2) coord_num2 -= 1;
         }
-        if (row == 0) Coordination1 -= 1;
-        if (row == this->ly_ - 2) Coordination2 -= 1;
 
-        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1) / RealT(Coordination1),
+        const size_t row2 = (row + 1) % this->ly_;
+        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1) / RealT(coord_num1),
                                                                     ham_on_site_terms_({row, col}),
-                                                                    RealT(1) / RealT(Coordination2),
-                                                                    ham_on_site_terms_({row + 1, col}),
+                                                                    RealT(1) / RealT(coord_num2),
+                                                                    ham_on_site_terms_({row2, col}),
                                                                     id);
-        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1) / RealT(Coordination1),
+        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1) / RealT(coord_num1),
                                                                            ham_on_site_terms_({row, col}),
-                                                                           RealT(1) / RealT(Coordination2),
-                                                                           ham_on_site_terms_({row + 1, col}),
+                                                                           RealT(1) / RealT(coord_num2),
+                                                                           ham_on_site_terms_({row2, col}),
                                                                            id);
       }
     }
@@ -189,11 +199,16 @@ typename SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattice
   TenElemT e0(0.0);
   RealT norm = 1.0;
   RealT middle_bond_trunc_err;
+
+  const bool is_pbc = (this->peps_.GetBoundaryCondition() == BoundaryCondition::Periodic);
+  const size_t hor_bond_limit = is_pbc ? this->lx_ : this->lx_ - 1;
+  const size_t ver_bond_limit = is_pbc ? this->ly_ : this->ly_ - 1;
+
 #ifdef QLPEPS_TIMING_MODE
   Timer vertical_nn_projection_timer("vertical_nn_projection");
 #endif
   for (size_t col = 0; col < this->lx_; col++) {
-    for (size_t row = 0; row < this->ly_ - 1; row++) {
+    for (size_t row = 0; row < ver_bond_limit; row++) {
       SiteIdx upper_site{row, col};
       auto proj_res = this->peps_.NearestNeighborSiteProject(vertical_nn_evolve_gate_set_(upper_site),
                                                              upper_site,
@@ -212,7 +227,7 @@ typename SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattice
   vertical_nn_projection_timer.PrintElapsed();
   Timer horizontal_nn_projection_timer("horizontal_nn_projection");
 #endif
-  for (size_t col = 0; col < this->lx_ - 1; col++) {
+  for (size_t col = 0; col < hor_bond_limit; col++) {
     for (size_t row = 0; row < this->ly_; row++) {
       SiteIdx left_site = {row, col};
       auto proj_res = this->peps_.NearestNeighborSiteProject(horizontal_nn_evolve_gate_set_(left_site),
