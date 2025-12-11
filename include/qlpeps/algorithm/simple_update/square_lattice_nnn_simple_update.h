@@ -79,14 +79,14 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
 
   /**
    * @return h_{ABC} = ham_{nnn}^A \otimes id \otimes ham_{nnn}^C
-   *                 + id \otimes ham_{nn}^{BC} / BondTri\_horizontal
-   *                 + ham_{nn}^{AB} \otimes id / BondTri\_vertical
+   *                 + id \otimes ham_{nn}^{BC} / bondtri\_horizontal
+   *                 + ham_{nn}^{AB} \otimes id / bondtri\_vertical
    *                 + ham\_on\_site\_terms_A \otimes id \otimes id / site\_share\_tri_A
    *                 + id \otimes ham\_on\_site\_terms_B \otimes id / site\_share\_tri_B
    *                 + id \otimes id \otimes ham\_on\_site\_terms_C / site\_share\_tri_C
    *
    *     LowerLeftTriangle                       LowerRightTriangle
-   *      (LeftRight == 0)                         (LeftRight == 1)
+   *      (leftright == 0)                         (leftright == 1)
    *      |             |                          |             |
    *      |             |                          |             |
    * -----A----------------------             -------------------A--------
@@ -97,12 +97,12 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
    *      |             |                          |             |
    *      |             |                          |             |
    */
-  Tensor ConstructTriHamiltonian(const SiteIdx &upper_site, const size_t LeftRight) const {
+  Tensor ConstructTriHamiltonian(const SiteIdx &upper_site, const size_t leftright) const {
     Tensor extend_ham_nnn, extend_ham_nn_horizontal, extend_ham_nn_vertical;
     std::vector<SiteIdx> tri_site(3);
 
     tri_site[0] = upper_site;
-    if (LeftRight == 0) { // LowerLeft
+    if (leftright == 0) { // LowerLeft
       tri_site[1] = {upper_site[0] + 1, upper_site[1]};
       tri_site[2] = {upper_site[0] + 1, upper_site[1] + 1};
     } else { // LowerRight
@@ -133,15 +133,15 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
     extend_ham_nnn.Transpose({0, 1, 4, 5, 2, 3});
 
     // NN term
-    size_t BondTri_horizontal = 2; // Number of triangle shared the horizontal NN bond
-    size_t BondTri_vertical = 2; // Number of triangle shared the vertical NN bond
-    if (LeftRight == 0 && upper_site[1] == 0) BondTri_vertical = 1; // LowerLeft, first column
-    else if (LeftRight == 1 && upper_site[1] == this->lx_ - 1) BondTri_vertical = 1; // LowerRight, last column
+    size_t bondtri_horizontal = 2; // Number of triangle shared the horizontal NN bond
+    size_t bondtri_vertical = 2; // Number of triangle shared the vertical NN bond
+    if (leftright == 0 && upper_site[1] == 0) bondtri_vertical = 1; // LowerLeft, first column
+    else if (leftright == 1 && upper_site[1] == this->lx_ - 1) bondtri_vertical = 1; // LowerRight, last column
 
     Contract(&id, {}, &ham_nn_, {}, &extend_ham_nn_horizontal);
-    extend_ham_nn_horizontal *= static_cast<TenElemT>(RealT(1.0 / static_cast<double>(BondTri_horizontal)));
+    extend_ham_nn_horizontal *= RealT(1) / RealT(bondtri_horizontal);
     Contract(&ham_nn_, {}, &id, {}, &extend_ham_nn_vertical);
-    extend_ham_nn_vertical *= static_cast<TenElemT>(RealT(1.0 / static_cast<double>(BondTri_vertical)));
+    extend_ham_nn_vertical *= RealT(1) / RealT(bondtri_vertical);
 
      // on-site term
     if (ham_on_site_terms_(0, 0) == nullptr || ham_on_site_terms_(0, 0)->IsDefault()) {
@@ -169,25 +169,25 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
       const Tensor & on_site_term1 = ham_on_site_terms_({tri_site[0][0], tri_site[0][1]});
       Contract(&on_site_term1, {}, &id, {}, &term1);
       Contract(&term1, {}, &id, {}, &extend_on_site1);
-      extend_on_site1 *=  RealT(static_cast<TenElemT>(1.0 / static_cast<double>(site_share_tri[0])));
+      extend_on_site1 *=  RealT(1) / RealT(site_share_tri[0]);
       // site B
       const Tensor & on_site_term2 = ham_on_site_terms_({tri_site[1][0], tri_site[1][1]});
       Contract(&id, {}, &on_site_term2, {}, &term2);
       Contract(&term2, {}, &id, {}, &extend_on_site2);
-      extend_on_site2 *=  RealT(static_cast<TenElemT>(1.0 / static_cast<double>(site_share_tri[1])));
+      extend_on_site2 *=  RealT(1) / RealT(site_share_tri[1]);
       // site C
       const Tensor & on_site_term3 = ham_on_site_terms_({tri_site[2][0], tri_site[2][1]});
       Contract(&id, {}, &id, {}, &term3);
       Contract(&term3, {}, &on_site_term3, {}, &extend_on_site3);
-      extend_on_site3 *= RealT(static_cast<TenElemT>(1.0 / static_cast<double>(site_share_tri[2])));
+      extend_on_site3 *= RealT(1) / RealT(site_share_tri[2]);
 
       return extend_ham_nnn + extend_ham_nn_horizontal + extend_ham_nn_vertical
           + extend_on_site1 + extend_on_site2 + extend_on_site3;
     }
   }
 
-  Tensor ConstructEvolveOperator(const SiteIdx &upper_site, const size_t LeftRight) const {
-    return TaylorExpMatrix(RealT(this->update_para.tau), ConstructTriHamiltonian(upper_site, LeftRight));
+  Tensor ConstructEvolveOperator(const SiteIdx &upper_site, const size_t leftright) const {
+    return TaylorExpMatrix(RealT(this->update_para.tau), ConstructTriHamiltonian(upper_site, leftright));
   }
 
   RealT SimpleUpdateSweep_(void) override;
@@ -226,7 +226,7 @@ template<typename TenElemT, typename QNT>
 typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
-  RealT e0(0.0);
+  TenElemT e0(0.0);
   RealT norm = 1.0;
   RealT max_trunc_err = 0.0;
 
@@ -270,7 +270,7 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0
             << "Estimated En =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
-            << std::right << -std::log(norm) / RealT(this->update_para.tau)
+            << std::right << -std::log(norm) / this->update_para.tau
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " TruncErr = " << std::setprecision(2) << std::scientific << max_trunc_err << std::fixed
             << " SweepTime = " << std::setw(8) << sweep_time
