@@ -56,7 +56,7 @@ double RunPureOptimizerSGD(
   ModelT &model,
   SITPST &split_index_tps,
   const std::vector<Configuration> &all_configs,
-  const BMPSTruncatePara &trun_para,
+  const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trun_para,
   size_t Ly,
   size_t Lx,
   double energy_exact,
@@ -144,10 +144,11 @@ struct Z2SpinlessFreeFermionSGDTools : public MPITest {
 };
 
 TEST_F(Z2SpinlessFreeFermionSGDTools, ExactSumGradientOptWithSGD) {
-  auto trun_para = BMPSTruncatePara(8, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
   using Model = SquareSpinlessFermion;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = fZ2QN;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(8, 8, 1e-16);
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
 
   for (size_t i = 0; i < t2_list.size(); i++) {
@@ -209,10 +210,11 @@ struct TrivialHeisenbergSGDTools : public MPITest {
 };
 
 TEST_F(TrivialHeisenbergSGDTools, ExactSumGradientOptWithSGD) {
-  auto trun_para = BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
   using Model = SquareSpinOneHalfXXZModel;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
 
   auto energy_exact = Calculate2x2HeisenbergEnergy(J);
@@ -277,10 +279,11 @@ struct TrivialTransverseIsingSGDTools : public MPITest {
 };
 
 TEST_F(TrivialTransverseIsingSGDTools, ExactSumGradientOptWithSGD) {
-  auto trun_para = BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
   using Model = TransverseFieldIsingSquare;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
 
   auto energy_exact = Calculate2x2OBCTransverseIsingEnergy(J, h);
@@ -343,10 +346,11 @@ struct Z2tJSGDTools : public MPITest {
 };
 
 TEST_F(Z2tJSGDTools, ExactSumGradientOptWithSGD) {
-  auto trun_para = BMPSTruncatePara(Db, Db, 0, CompressMPSScheme::SVD_COMPRESS, std::optional<double>(), std::optional<size_t>());
   using Model = SquaretJVModel;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = fZ2QN;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(Db, Db, 0);
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
 
   Model model(t, 0, J, J / 4, mu);

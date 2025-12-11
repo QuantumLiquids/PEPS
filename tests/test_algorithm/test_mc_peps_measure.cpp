@@ -458,7 +458,7 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
   
   // Create unified parameter structure with explicit dump path control  
   MonteCarloParams mc_params(50, 50, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
-  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps,
                                           2 * Dpeps,
                                           1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
@@ -552,7 +552,7 @@ TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
   
   // Create unified parameter structure with explicit dump path control
   MonteCarloParams mc_params(50, 50, 1, random_config, false, output_dir + "/final_config");  // explicit config dump path
-  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps,
                                           2 * Dpeps,
                                           1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
@@ -635,7 +635,7 @@ TEST_F(Test2x2MCPEPSFermion, SpinlessFermionModel) {
   
   // Create unified parameter structure with explicit dump path control
   MonteCarloParams mc_params(50, 50, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
-  PEPSParams peps_params(BMPSTruncatePara(Dpeps,
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps,
                                           2 * Dpeps,
                                           1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
@@ -724,7 +724,7 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
   
   // Create unified parameter structure with explicit dump path control
   MonteCarloParams mc_params(10, 100, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
-  PEPSParams peps_params = PEPSParams(BMPSTruncatePara::SVD(Dpeps, 2 * Dpeps, 1e-15));
+  PEPSParams peps_params = PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, 2 * Dpeps, 1e-15));
   MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");  // explicit measurement dump path
 
   Model tj_model(t, 0, J, J / 4, mu);

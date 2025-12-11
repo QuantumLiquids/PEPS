@@ -16,6 +16,7 @@
 #include "qlpeps/two_dim_tn/framework/ten_matrix.h"
 #include "qlpeps/two_dim_tn/framework/site_idx.h"
 #include "qlpeps/consts.h"                            //kPepsPath
+#include "qlpeps/two_dim_tn/common/boundary_condition.h"
 #include "qlpeps/two_dim_tn/tps/tps.h"                //ToTPS()
 #include "qlpeps/basic.h"                             //BondOrientation
 #include "qlpeps/utility/conjugate_gradient_solver.h"
@@ -51,11 +52,6 @@ struct FullEnvironmentTruncateParams {
   double tolerance;
   size_t max_iter;
   ConjugateGradientParams cg_params;
-};
-
-enum class BoundaryCondition {
-  Open,
-  Periodic
 };
 
 struct LoopUpdateTruncatePara {

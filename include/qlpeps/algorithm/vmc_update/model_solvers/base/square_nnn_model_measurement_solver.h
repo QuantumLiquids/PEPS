@@ -37,7 +37,8 @@ class SquareNNNModelMeasurementSolver
     ObservableMap<TenElemT> out;
     auto &tn = tps_sample->tn;
     const Configuration &config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+    const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t ly = tn.rows();
     const size_t lx = tn.cols();
 

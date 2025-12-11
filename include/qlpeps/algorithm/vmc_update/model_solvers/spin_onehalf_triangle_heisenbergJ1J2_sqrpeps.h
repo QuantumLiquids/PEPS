@@ -67,12 +67,13 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
   ObservableMap<TenElemT> EvaluateObservables(
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     ObservableMap<TenElemT> out;
     std::vector<TenElemT> psi_list;
 
     auto &tn = tps_sample->tn;
     const Configuration &config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t ly = tn.rows();
     const size_t lx = tn.cols();
 
@@ -305,10 +306,11 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                       TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
                       TensorNetwork2D<TenElemT, QNT> &hole_res,
                       std::vector<TenElemT> &psi_list) {
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   TenElemT e1(0), e2(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   const Configuration &config = tps_sample->config;
-  const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+  const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
   tn.GenerateBMPSApproach(UP, trunc_para);
   psi_list.reserve(tn.rows() + tn.cols());

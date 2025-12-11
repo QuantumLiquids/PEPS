@@ -141,7 +141,7 @@ double Calculate2x2OBCTransverseIsingEnergy(double J, double h) {
  * @param model The model to test
  * @param split_index_tps Initial TPS state
  * @param all_configs All possible configurations
- * @param trun_para BMPSTruncatePara for truncation
+ * @param trun_para BMPSTruncateParams<> for truncation
  * @param Ly Number of rows
  * @param Lx Number of columns
  * @param energy_expect Expected exact energy
@@ -156,7 +156,7 @@ bool RunExactSummationTest(
     ModelT& model,
     const SITPST& split_index_tps,
     const std::vector<Configuration>& all_configs,
-    const BMPSTruncatePara& trun_para,
+    const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type>& trun_para,
     size_t Ly,
     size_t Lx,
     double energy_expect,
@@ -297,8 +297,8 @@ struct Z2SpinlessFreeFermionTest : public MPITest {
 };
 
 TEST_F(Z2SpinlessFreeFermionTest, LowestState) {
-  auto trun_para = BMPSTruncatePara(8, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, 
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(8, 8, 1e-16);
   
 
   for (size_t i = 0; i < t2_list.size(); i++) {
@@ -325,8 +325,8 @@ TEST_F(Z2SpinlessFreeFermionTest, LowestState) {
 }
 
 TEST_F(Z2SpinlessFreeFermionTest, SimpleUpdateState) {
-  auto trun_para = BMPSTruncatePara(8, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, 
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(8, 8, 1e-16);
   
   // Actual computed values from single process run using Simple Update TPS data
   std::vector<double> energy_simple_update_values = {
@@ -429,8 +429,8 @@ struct TrivialHeisenbergTest : public MPITest {
 };
 
 TEST_F(TrivialHeisenbergTest, LowestState) {
-  auto trun_para = BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS,
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   
   auto energy_gs_exact = Calculate2x2HeisenbergEnergy(J);  // Exact analytical calculation
   SquareSpinOneHalfXXZModel model(J, J, 0); // XY model
@@ -452,8 +452,8 @@ TEST_F(TrivialHeisenbergTest, LowestState) {
 }
 
 TEST_F(TrivialHeisenbergTest, SimpleUpdateState) {
-  auto trun_para = BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS,
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   
   // Actual computed value from single process run using Simple Update TPS data
   double energy_simple_update_expect = -1.99521278793;  // computed from simple_update TPS
@@ -552,8 +552,8 @@ struct TrivialTransverseIsingTest : public MPITest {
 };
 
 TEST_F(TrivialTransverseIsingTest, LowestState) {
-  auto trun_para = BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS,
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   
   auto energy_gs_exact = Calculate2x2OBCTransverseIsingEnergy(J, h);  // Exact analytical calculation
   TransverseFieldIsingSquare model(h);
@@ -575,8 +575,8 @@ TEST_F(TrivialTransverseIsingTest, LowestState) {
 }
 
 TEST_F(TrivialTransverseIsingTest, SimpleUpdateState) {
-  auto trun_para = BMPSTruncatePara(1, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS,
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   
   // Actual computed value from single process run using Simple Update TPS data
   double energy_simple_update_expect = -5.19991995228;  // computed from simple_update TPS
@@ -674,8 +674,8 @@ struct Z2tJTest : public MPITest {
 };
 
 TEST_F(Z2tJTest, LowestState) {
-  auto trun_para = BMPSTruncatePara(Db, Db, 0, CompressMPSScheme::SVD_COMPRESS,
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(Db, Db, 0);
   
   SquaretJVModel model(t, 0, J, J / 4, mu);
   
@@ -696,8 +696,8 @@ TEST_F(Z2tJTest, LowestState) {
 }
 
 TEST_F(Z2tJTest, SimpleUpdateState) {
-  auto trun_para = BMPSTruncatePara(Db, Db, 0, CompressMPSScheme::SVD_COMPRESS,
-                                   std::optional<double>(), std::optional<size_t>());
+  using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+  auto trun_para = BMPSTruncateParams<RealT>::SVD(Db, Db, 0);
   
   // Actual computed value from single process run using Simple Update TPS data
   double energy_simple_update_expect = -2.78008187385;  // computed from simple_update TPS

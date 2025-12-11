@@ -48,9 +48,10 @@ class SpinOneHalfTriHeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriH
       TensorNetwork2D<TenElemT, QNT> &hole_res,
       std::vector<TenElemT> &psi_list
   ) {
+    using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
     const Configuration &sample_config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     return this->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(split_index_tps,
                                                                          sample_config,
                                                                          sample_tn,
@@ -66,7 +67,7 @@ class SpinOneHalfTriHeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriH
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       const Configuration &config,
       TensorNetwork2D<TenElemT, QNT> &tn,
-      const BMPSTruncatePara &trunc_para,
+      const BMPSTruncateParams<typename RealTypeTrait<TenElemT>::type> &trunc_para,
       TensorNetwork2D<TenElemT, QNT> &hole_res,
       std::vector<TenElemT> &psi_list
   );
@@ -76,12 +77,13 @@ class SpinOneHalfTriHeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalfTriH
   ObservableMap<TenElemT> EvaluateObservables(
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     ObservableMap<TenElemT> out;
     std::vector<TenElemT> psi_list;
 
     auto &tn = tps_sample->tn;
     const Configuration &config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t ly = tn.rows();
     const size_t lx = tn.cols();
 
@@ -288,7 +290,7 @@ TenElemT SpinOneHalfTriHeisenbergSqrPEPS::
 CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                       const qlpeps::Configuration &config,
                       TensorNetwork2D<TenElemT, QNT> &tn,
-                      const qlpeps::BMPSTruncatePara &trunc_para,
+                      const qlpeps::BMPSTruncateParams<typename RealTypeTrait<TenElemT>::type> &trunc_para,
                       TensorNetwork2D<TenElemT, QNT> &hole_res,
                       std::vector<TenElemT> &psi_list) {
   TenElemT e(0);

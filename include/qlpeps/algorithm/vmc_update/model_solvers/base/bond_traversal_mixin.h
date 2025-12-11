@@ -31,7 +31,7 @@ class BondTraversalMixin {
   template<typename TenElemT, typename QNT, typename BondMeasureFunc, typename NNNLinkMeasureFunc, typename OffDiagLongRangeMeasureFunc>
   static void TraverseAllBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
-      const BMPSTruncatePara &trunc_para,
+      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       BondMeasureFunc &&bond_measure_func,
       NNNLinkMeasureFunc &&nnn_link_measure_func,
       OffDiagLongRangeMeasureFunc &&off_diag_long_range_measure_func,
@@ -53,7 +53,7 @@ class BondTraversalMixin {
   template<typename TenElemT, typename QNT, typename BondMeasureFunc, typename NNNLinkMeasureFunc, typename OffDiagLongRangeMeasureFunc>
   static void TraverseHorizontalBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
-      const BMPSTruncatePara &trunc_para,
+      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       BondMeasureFunc &&bond_measure_func,
       NNNLinkMeasureFunc &&nnn_link_measure_func,
       OffDiagLongRangeMeasureFunc &&off_diag_long_range_measure_func,
@@ -111,7 +111,7 @@ class BondTraversalMixin {
   template<typename TenElemT, typename QNT, typename BondMeasureFunc>
   static void TraverseVerticalBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
-      const BMPSTruncatePara &trunc_para,
+      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       BondMeasureFunc &&bond_measure_func,
       std::vector<TenElemT> &psi_list // gather the wave function amplitudes
   ) {

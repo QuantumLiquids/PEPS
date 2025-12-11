@@ -61,7 +61,7 @@ TEST_F(SmokeEvaluator2x2, EvaluateEnergyAndGradient) {
   Configuration config(Ly, Lx);
   config.Random(std::vector<size_t>(2, Lx * Ly / 2));
   MonteCarloParams mc_params(50, 20, 1, config, false);
-  PEPSParams peps_params(BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
                                           std::make_optional<double>(1e-14),
                                           std::make_optional<size_t>(10)));

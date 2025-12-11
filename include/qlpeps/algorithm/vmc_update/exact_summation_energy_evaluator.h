@@ -173,7 +173,7 @@ template<typename ModelT, typename TenElemT, typename QNT>
 std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(
     const SplitIndexTPS<TenElemT, QNT> &split_index_tps_master_only,
     const std::vector<Configuration> &all_configs,
-    const BMPSTruncatePara &trun_para,
+    const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trun_para,
     ModelT &model,
     size_t Ly,
     size_t Lx,

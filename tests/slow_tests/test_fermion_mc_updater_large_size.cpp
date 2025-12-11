@@ -50,7 +50,7 @@ struct Z2tJModelTools : public testing::Test {
   std::string tps_path = "tps_from_ipeps_tJ_doping" + std::to_string(doping) + "_D4";
   Configuration measurement_config{Ly, Lx, OccupancyNum({(N - hole_num) / 2, (N - hole_num) / 2, hole_num})};
   MonteCarloParams measurement_mc_params{MC_samples, WarmUp, 1, measurement_config, false}; // not warmed up initially
-  PEPSParams measurement_peps_params{BMPSTruncatePara(Db_min, Db_max, 1e-10,
+  PEPSParams measurement_peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(Db_min, Db_max, 1e-10,
                                                       CompressMPSScheme::SVD_COMPRESS,
                                                       std::make_optional<double>(1e-14),
                                                       std::make_optional<size_t>(10))};

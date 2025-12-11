@@ -60,15 +60,13 @@ protected:
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
                        false), // not warmed up initially
-      PEPSParams(BMPSTruncatePara(6, 12, 1e-15, CompressMPSScheme::SVD_COMPRESS,
-                                  std::make_optional<double>(1e-14), 
-                                  std::make_optional<size_t>(10))));
+      PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(6, 12, 1e-15)));
 
   MonteCarloParams measure_mc_params{1000, 1000, 1,
                                      Configuration(Ly, Lx,
                                                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
                                      false}; // not warmed up initially
-  PEPSParams measure_peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+  PEPSParams measure_peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                                   CompressMPSScheme::SVD_COMPRESS,
                                                   std::make_optional<double>(1e-14),
                                                   std::make_optional<size_t>(10))};

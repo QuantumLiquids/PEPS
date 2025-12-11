@@ -267,7 +267,7 @@ TEST_F(SpinlessFermionExactVsMCTest, EnergyAndGradientMatch) {
   SquareSpinlessFermion model(t, t2, 0);
 
   // 2) Exact enumeration over all half-filling configurations (two occupied, two empty)
-  auto trun_para = BMPSTruncatePara(Dpeps,
+  auto trun_para = BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps,
                                     3 * Dpeps,
                                     1e-15,
                                     CompressMPSScheme::SVD_COMPRESS,

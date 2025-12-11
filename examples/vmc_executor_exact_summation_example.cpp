@@ -77,8 +77,7 @@ void DemonstrateVMCExecutorExactSummation() {
     }
     
     // Truncation parameters
-    auto trun_para = BMPSTruncatePara(8, 8, 1e-16, CompressMPSScheme::SVD_COMPRESS, 
-                                      std::optional<double>(), std::optional<size_t>());
+    auto trun_para = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(8, 8, 1e-16);
     
     // Create Heisenberg model
     Model heisenberg_model(J, J, 0); // Jx = Jy = J, Jz = 0 (XY model)

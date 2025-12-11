@@ -80,7 +80,7 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
       .WithSGD()
       .Build();
   MonteCarloParams mc_params(10, 10, 1, init_config, false);
-  PEPSParams peps_params(BMPSTruncatePara(2, 4, 1e-15,
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(2, 4, 1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
                                           std::make_optional<double>(1e-14),
                                           std::make_optional<size_t>(10)));

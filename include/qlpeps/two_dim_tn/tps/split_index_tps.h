@@ -15,6 +15,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/framework/ten_matrix.h"
 #include "qlpeps/two_dim_tn/tps/tps.h"                  // TPS
+#include "qlpeps/two_dim_tn/common/boundary_condition.h"
 
 namespace qlpeps {
 
@@ -100,8 +101,10 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * 
    * @param rows Number of rows in the lattice
    * @param cols Number of columns in the lattice
+   * @param bc Boundary condition
    */
-  SplitIndexTPS(const size_t rows, const size_t cols) : TenMatrix<std::vector<Tensor>>(rows, cols) {}
+  SplitIndexTPS(const size_t rows, const size_t cols, const BoundaryCondition bc = BoundaryCondition::Open) 
+      : TenMatrix<std::vector<Tensor>>(rows, cols), boundary_condition_(bc) {}
   
   /**
    * @brief Constructor with dimensions and physical dimension
@@ -112,8 +115,10 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @param rows Number of rows in the lattice
    * @param cols Number of columns in the lattice  
    * @param phy_dim Physical dimension at each site
+   * @param bc Boundary condition
    */
-  SplitIndexTPS(const size_t rows, const size_t cols, const size_t phy_dim) : SplitIndexTPS(rows, cols) {
+  SplitIndexTPS(const size_t rows, const size_t cols, const size_t phy_dim, const BoundaryCondition bc = BoundaryCondition::Open) 
+      : SplitIndexTPS(rows, cols, bc) {
     for (auto &split_ten : *this) {
       split_ten = std::vector<Tensor>(phy_dim);
     }
@@ -124,7 +129,8 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * 
    * @param rhs The SplitIndexTPS to copy from
    */
-  SplitIndexTPS(const SplitIndexTPS &rhs) : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(rhs) {}
+  SplitIndexTPS(const SplitIndexTPS &rhs) 
+      : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(rhs), boundary_condition_(rhs.boundary_condition_) {}
   
   /**
    * @brief Move constructor
@@ -141,21 +147,12 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    */
   SplitIndexTPS &operator=(SplitIndexTPS &&other) noexcept;
 
-
-  /**
-   * @brief Constructor from regular TPS
-   * 
-   * Converts a regular TPS to split-index format by projecting each tensor
-   * onto its physical index components. For fermionic tensors, proper quantum
-   * number handling is maintained.
-   * 
-   * @param tps The source TPS to convert from
-   * 
-   * @note The physical index is assumed to be at position 4 in the tensor.
-   * @note For fermionic tensors, appropriate quantum number sectors are created.
-   */
-  [[deprecated("Use ToSplitIndexTPS(tps) in qlpeps::api::conversions instead")]]
-  SplitIndexTPS(const TPST &tps) : SplitIndexTPS(FromTPS(tps)) {}
+  // Assignment operator
+  SplitIndexTPS &operator=(const SplitIndexTPS &rhs) {
+    TenMatrix<std::vector<Tensor>>::operator=(rhs);
+    boundary_condition_ = rhs.boundary_condition_;
+    return *this;
+  }
 
   /**
    * @brief Explicit conversion helper from TPS to split-index representation.
@@ -165,12 +162,8 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    */
   static SplitIndexTPS FromTPS(const TPST &tps);
 
-  // using TenMatrix<std::vector<Tensor>>::operator=;
-  // Using explicit definition below for compatibility with lower version of g++
-  SplitIndexTPS &operator=(const SplitIndexTPS &rhs) {
-    TenMatrix<std::vector<Tensor>>::operator=(rhs);
-    return *this;
-  }
+  BoundaryCondition GetBoundaryCondition() const { return boundary_condition_; }
+  void SetBoundaryCondition(BoundaryCondition bc) { boundary_condition_ = bc; }
 
   /**
    * @brief Convert split-index TPS back to regular TPS format
@@ -186,7 +179,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @note For bosonic tensors, uses weighted sum with projection tensors
    */
   TPST GroupIndices(const Index<QNT> &phy_idx) const {
-    TPST tps(this->rows(), this->cols());
+    TPST tps(this->rows(), this->cols(), boundary_condition_);
     for (size_t row = 0; row < this->rows(); row++) {
       for (size_t col = 0; col < this->cols(); col++) {
         const std::vector<Tensor> &split_tens = (*this)({row, col});
@@ -582,6 +575,8 @@ private:
   
   /// Helper function to create a properly initialized result SplitIndexTPS
   SplitIndexTPS CreateInitializedResult_() const;
+
+  BoundaryCondition boundary_condition_ = BoundaryCondition::Open;
 };
 
 // Out-of-place free functions for element-wise operations

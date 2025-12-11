@@ -272,10 +272,7 @@ TEST_F(TransverseIsingLoopUpdate, TransverseIsing) {
   std::string tps_path = "TPS_TransverseIsing" + std::to_string(Lx) + "x" + std::to_string(Ly);
   Configuration measure_config(Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2)));
   MonteCarloParams measure_mc_params(mc_samples, mc_warmup, 1, measure_config, false); // not warmed up initially
-  PEPSParams measure_peps_params(BMPSTruncatePara(4, 8, 1e-10,
-                                                  CompressMPSScheme::VARIATION2Site,
-                                                  std::make_optional<double>(1e-14),
-                                                  std::make_optional<size_t>(10)));
+  PEPSParams measure_peps_params(BMPSTruncateParams<qlten::QLTEN_Double>::Variational2Site(4, 8, 1e-10, 1e-14, 10));
   MCMeasurementParams mc_measure_para(measure_mc_params, measure_peps_params);
   auto measure_executor =
       new MCPEPSMeasurer<TenElemT, U1QN, MCUpdateSquareNNFullSpaceUpdateT, Model>(mc_measure_para,
@@ -489,7 +486,7 @@ TEST_F(HeisenbergLoopUpdate, Heisenberg) {
   std::string tps_path = "TPS_Heisenberg" + std::to_string(Lx) + "x" + std::to_string(Ly);
   Configuration measure_config2(Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2)));
   MonteCarloParams measure_mc_params2(mc_samples, mc_warmup, 1, measure_config2, false); // not warmed up initially
-  PEPSParams measure_peps_params2(BMPSTruncatePara(4, 8, 1e-10,
+  PEPSParams measure_peps_params2(BMPSTruncateParams<qlten::QLTEN_Double>(4, 8, 1e-10,
                                                    CompressMPSScheme::VARIATION2Site,
                                                    std::make_optional<double>(1e-14),
                                                    std::make_optional<size_t>(10)));
@@ -797,7 +794,7 @@ TEST_F(TriangleHeisenbergLoopUpdate, MultiThread) {
   size_t mc_warmup = 100;
   Configuration measure_config3(Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2)));
   MonteCarloParams measure_mc_params3(mc_samples, mc_warmup, 1, measure_config3, false); // not warmed up initially
-  PEPSParams measure_peps_params3(BMPSTruncatePara(4, 8, 1e-10,
+  PEPSParams measure_peps_params3(BMPSTruncateParams<qlten::QLTEN_Double>(4, 8, 1e-10,
                                                    CompressMPSScheme::VARIATION2Site,
                                                    std::make_optional<double>(1e-14),
                                                    std::make_optional<size_t>(10)));

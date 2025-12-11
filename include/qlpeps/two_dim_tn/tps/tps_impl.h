@@ -80,15 +80,17 @@ size_t TPS<TenElemT, QNT>::GetMaxBondDimension(void) const {
 
 ///< OBC
 template<typename TenElemT, typename QNT>
-bool TPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
+bool TPS<TenElemT, QNT>::IsBondDimensionUniform(void) const {
   size_t d = (*this)(0, 0)->GetShape()[1];
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
       const TenT *tensor = (*this)(row, col);
-      if (row != 0 && d != tensor->GetShape()[4]) {
+      bool check_vertical = (row != 0) || (boundary_condition_ == BoundaryCondition::Periodic);
+      if (check_vertical && d != tensor->GetShape()[3]) {
         return false;
       }
-      if (col != 0 && d != tensor->GetShape()[0]) {
+      bool check_horizontal = (col != 0) || (boundary_condition_ == BoundaryCondition::Periodic);
+      if (check_horizontal && d != tensor->GetShape()[0]) {
         return false;
       }
     }
@@ -99,6 +101,14 @@ bool TPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
 template<typename TenElemT, typename QNT>
 void TPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool release_mem) {
   EnsureDirectoryExists(tps_path);
+  // Write Metadata
+  {
+    std::string meta_file = tps_path + "/tps_meta.txt";
+    std::ofstream ofs(meta_file);
+    if (ofs) {
+      ofs << this->rows() << " " << this->cols() << " " << static_cast<int>(boundary_condition_) << std::endl;
+    }
+  }
   std::string file;
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
@@ -110,6 +120,21 @@ void TPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool release_me
 
 template<typename TenElemT, typename QNT>
 bool TPS<TenElemT, QNT>::Load(const std::string &tps_path) {
+  std::string meta_file = tps_path + "/tps_meta.txt";
+  std::ifstream ifs(meta_file);
+  if (ifs) {
+    size_t r, c;
+    int bc_int;
+    ifs >> r >> c >> bc_int;
+    if (ifs) {
+      if (r != this->rows() || c != this->cols()) {
+         *this = TPS<TenElemT, QNT>(r, c, static_cast<BoundaryCondition>(bc_int));
+      } else {
+         boundary_condition_ = static_cast<BoundaryCondition>(bc_int);
+      }
+    }
+  }
+
   std::string file;
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {

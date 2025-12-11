@@ -60,7 +60,7 @@ struct Z2SpinlessFreeFermionTools : public testing::Test {
 
   Configuration mc_config{Ly, Lx, OccupancyNum({N / 2, N / 2})};
   MonteCarloParams mc_params{file_params.MC_samples, file_params.WarmUp, 1, mc_config, false}; // not warmed up initially
-  PEPSParams peps_params{BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
+  PEPSParams peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(file_params.Db_min, file_params.Db_max, 1e-10,
                                           CompressMPSScheme::SVD_COMPRESS,
                                           std::make_optional<double>(1e-14),
                                           std::make_optional<size_t>(10))};
@@ -142,7 +142,7 @@ struct Z2tJModelTools : public testing::Test {
   );
   Configuration mc_config2{Ly, Lx, OccupancyNum({(N - hole_num) / 2, (N - hole_num) / 2, hole_num})};
   MonteCarloParams mc_params2{file_params.MC_samples, file_params.WarmUp, 1, mc_config2, false}; // not warmed up initially
-  PEPSParams peps_params2{BMPSTruncatePara(file_params.Db_min, file_params.Db_max, 1e-10,
+  PEPSParams peps_params2{BMPSTruncateParams<qlten::QLTEN_Double>(file_params.Db_min, file_params.Db_max, 1e-10,
                                            CompressMPSScheme::SVD_COMPRESS,
                                            std::make_optional<double>(1e-14),
                                            std::make_optional<size_t>(10))};

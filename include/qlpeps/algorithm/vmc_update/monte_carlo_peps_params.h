@@ -13,7 +13,7 @@
 #include <string>                                    // std::string
 #include <stdexcept>                                // std::runtime_error
 #include "qlpeps/vmc_basic/configuration.h"       // Configuration
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  // BMPSTruncatePara
+#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams
 
 namespace qlpeps {
 /**
@@ -87,11 +87,11 @@ struct MonteCarloParams {
  * Simplified structure - user handles TPS I/O separately.
  */
 struct PEPSParams {
-  BMPSTruncatePara truncate_para;
+  BMPSTruncateParams<qlten::QLTEN_Double> truncate_para;
 
   PEPSParams() = default;
 
-  explicit PEPSParams(const BMPSTruncatePara &trunc_para)
+  explicit PEPSParams(const BMPSTruncateParams<qlten::QLTEN_Double> &trunc_para)
     : truncate_para(trunc_para) {
   }
 };
@@ -124,7 +124,7 @@ struct MCMeasurementParams {
   }
 
   // Explicit accessors - no implicit conversions
-  BMPSTruncatePara GetTruncatePara() const {
+  BMPSTruncateParams<qlten::QLTEN_Double> GetTruncatePara() const {
     return peps_params.truncate_para;
   }
   const MonteCarloParams& GetMCParams() const {

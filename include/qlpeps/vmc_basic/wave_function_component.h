@@ -9,7 +9,7 @@
 #define QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 
 #include "qlpeps/vmc_basic/configuration.h"         // Configuration
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    // BMPSTruncatePara
+#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"  // SplitIndexTPS
 #include "qlpeps/vmc_basic/jastrow_factor.h"        // JastrowFactor
 namespace qlpeps {
@@ -64,14 +64,14 @@ struct JastrowDress {
 template<typename TenElemT, typename QNT, typename Dress = qlpeps::NoDress>
 struct TPSWaveFunctionComponent {
  public:
-
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   ///< No initialized construct. considering to be removed in future.
-  TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncatePara &truncate_para) :
+  TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncateParams<RealT> &truncate_para) :
       config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para) {}
 
   TPSWaveFunctionComponent(const SplitIndexTPS<TenElemT, QNT> &sitps,
                            const Configuration &config,
-                           const BMPSTruncatePara &truncate_para)
+                           const BMPSTruncateParams<RealT> &truncate_para)
       : config(config), tn(config.rows(), config.cols()), trun_para(truncate_para) {
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config); // projection
     EvaluateAmplitude();
@@ -157,7 +157,7 @@ struct TPSWaveFunctionComponent {
   Configuration config;
   TenElemT amplitude;
   TensorNetwork2D<TenElemT, QNT> tn;
-  BMPSTruncatePara trun_para;
+  BMPSTruncateParams<RealT> trun_para;
   Dress dress;
  private:
   void UpdateSingleSite_(const SiteIdx &site,

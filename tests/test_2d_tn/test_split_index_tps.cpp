@@ -46,7 +46,7 @@ struct SplitIdxTPSData : public testing::Test {
   DSITPS dsitps = DSITPS(Ly, Lx);
 
   void SetUp() override {
-    dtps = CreateRandTestTPS();
+    dtps = CreateRandTestTPS(BoundaryCondition::Open);
     dsitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(dtps);
   }
 
@@ -57,8 +57,8 @@ struct SplitIdxTPSData : public testing::Test {
     }
   }
 
-  DTPS CreateRandTestTPS() {
-    DTPS tps(Ly, Lx);
+  DTPS CreateRandTestTPS(BoundaryCondition bc) {
+    DTPS tps(Ly, Lx, bc);
     size_t d_sec = D / 3;
     IndexT virt_out_idx = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), d_sec),
                                   QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), d_sec),
@@ -188,6 +188,7 @@ TEST_F(SplitIdxTPSData, MoveSemantics) {
   DSITPS c = std::move(a);
   EXPECT_EQ(c.rows(), b.rows());
   EXPECT_EQ(c.cols(), b.cols());
+  EXPECT_EQ(c.GetBoundaryCondition(), b.GetBoundaryCondition());
   EXPECT_NEAR((c - b).NormSquare(), 0.0, 1e-12);
 
   // a should be in a valid but unspecified (likely empty) state
@@ -199,8 +200,68 @@ TEST_F(SplitIdxTPSData, MoveSemantics) {
   d = std::move(c);
   EXPECT_EQ(d.rows(), b.rows());
   EXPECT_EQ(d.cols(), b.cols());
+  EXPECT_EQ(d.GetBoundaryCondition(), b.GetBoundaryCondition());
   EXPECT_NEAR((d - b).NormSquare(), 0.0, 1e-12);
   EXPECT_TRUE(c.empty() || c.rows() == 0);
+}
+
+struct SplitIdxTPSPBCData : public SplitIdxTPSData {
+  void SetUp() override {
+    dtps = CreateRandTestTPS(BoundaryCondition::Periodic);
+    dsitps = ToSplitIndexTPS<QLTEN_Double, U1QN>(dtps);
+  }
+};
+
+TEST_F(SplitIdxTPSPBCData, CheckBC) {
+  EXPECT_EQ(dsitps.GetBoundaryCondition(), BoundaryCondition::Periodic);
+  EXPECT_EQ(dtps.GetBoundaryCondition(), BoundaryCondition::Periodic);
+}
+
+TEST_F(SplitIdxTPSPBCData, DumpAndLoadPBC) {
+  dsitps.Dump(tps_path);
+  DSITPS loaded_dsitps;
+  loaded_dsitps.Load(tps_path);
+
+  EXPECT_EQ(loaded_dsitps.GetBoundaryCondition(), BoundaryCondition::Periodic);
+  EXPECT_EQ(loaded_dsitps.rows(), dsitps.rows());
+  EXPECT_EQ(loaded_dsitps.cols(), dsitps.cols());
+  
+  // Verify content equality
+  for (size_t row = 0; row < dsitps.rows(); ++row) {
+    for (size_t col = 0; col < dsitps.cols(); ++col) {
+      for (size_t i = 0; i < dsitps.PhysicalDim(); ++i) {
+        auto diff_ten = dsitps({row, col})[i] + (-loaded_dsitps({row, col})[i]);
+        EXPECT_NEAR(diff_ten.Get2Norm(), 0.0, 1e-12);
+      }
+    }
+  }
+}
+
+TEST_F(SplitIdxTPSPBCData, GroupIndicesPBC) {
+  DTPS dtps2 = dsitps.GroupIndices(pb_out);
+  EXPECT_EQ(dtps2.GetBoundaryCondition(), BoundaryCondition::Periodic);
+  // EXPECT_EQ(dtps2, dtps); // Currently operator== might not check BC, but let's check content equality via existing means if possible or just assume visual inspection?
+  // Let's rely on structural equality or similar. 
+  // Wait, operator== for TenMatrix checks dimensions. TPS inherits from TenMatrix.
+  // TPS implementation of operator== ?
+  // TenMatrix inherits DuoMatrix.
+  // DuoMatrix equality checks elements.
+  // It doesn't check 'boundary_condition_' member of TPS if not overloaded.
+  
+  // Manual check for BC is done above.
+  // Check dimensions
+  EXPECT_EQ(dtps2.rows(), dtps.rows());
+  EXPECT_EQ(dtps2.cols(), dtps.cols());
+}
+
+TEST_F(SplitIdxTPSPBCData, IsBondDimensionEvenPBC) {
+  EXPECT_TRUE(dsitps.IsBondDimensionEven());
+}
+
+TEST_F(SplitIdxTPSPBCData, ToSplitIndexTPS_From_PBC_TPS) {
+  DSITPS dsitps2 = ToSplitIndexTPS<QLTEN_Double, U1QN>(dtps);
+  EXPECT_EQ(dsitps2.GetBoundaryCondition(), BoundaryCondition::Periodic);
+  EXPECT_EQ(dsitps2.rows(), dtps.rows());
 }
 
 // =============================

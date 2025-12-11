@@ -270,7 +270,7 @@ struct OBCIsing2DTenNetWithoutZ2 : public testing::Test {
 template<typename TenElemT, typename QNT>
 std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
   TensorNetwork2D<TenElemT, QNT> tn2d,
-  BMPSTruncatePara trunc_para
+  BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> trunc_para
 ) {
   std::vector<TenElemT> amplitudes;
   amplitudes.reserve(26);
@@ -398,25 +398,23 @@ std::vector<TenElemT> Contract2DTNFromDifferentPositionAndMethods(
 }
 
 TEST_F(OBCIsing2DTenNetWithoutZ2, TestIsingTenNetRealNumberContraction) {
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10,
-                                                 30,
-                                                 1e-15,
-                                                 CompressMPSScheme::VARIATION2Site,
-                                                 std::make_optional<double>(1e-14),
-                                                 std::make_optional<size_t>(10));
-  auto Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  // Test with Variational2Site compression
+  auto trunc_para_2site = BMPSTruncateParams<qlten::QLTEN_Double>::Variational2Site(10, 30, 1e-15, 1e-14, 10);
+  auto Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para_2site);
   for (size_t i = 1; i < Z_set.size(); i++) {
     EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
 
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
-  Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  // Test with Variational1Site compression
+  auto trunc_para_1site = BMPSTruncateParams<qlten::QLTEN_Double>::Variational1Site(10, 30, 1e-15, 1e-14, 10);
+  Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para_1site);
   for (size_t i = 1; i < Z_set.size(); i++) {
     EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
 
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
-  Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  // Test with SVD compression
+  auto trunc_para_svd = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(10, 30, 1e-15);
+  Z_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para_svd);
   for (size_t i = 1; i < Z_set.size(); i++) {
     EXPECT_NEAR(-(std::log(Z_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
@@ -577,39 +575,37 @@ struct OBCIsing2DZ2TenNet : public testing::Test {
 };
 
 TEST_F(OBCIsing2DZ2TenNet, TestTrace) {
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(1,
-                                                 10,
-                                                 1e-15,
-                                                 CompressMPSScheme::SVD_COMPRESS,
-                                                 std::make_optional<double>(1e-14),
-                                                 std::make_optional<size_t>(10));
-  auto dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  // Test with SVD compression
+  auto trunc_para_svd = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(1, 10, 1e-15);
+  auto dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para_svd);
   for (size_t i = 0; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
-  auto zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  auto zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para_svd);
   for (size_t i = 0; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::VARIATION1Site;
-  dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  // Test with Variational1Site compression
+  auto trunc_para_var1 = BMPSTruncateParams<qlten::QLTEN_Double>::Variational1Site(1, 10, 1e-15, 1e-14, 10);
+  dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para_var1);
   for (size_t i = 0; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
-  zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para_var1);
   for (size_t i = 0; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
   }
 
-  trunc_para.compress_scheme = qlpeps::CompressMPSScheme::SVD_COMPRESS;
-  dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para);
+  // Test with SVD compression (again)
+  auto trunc_para_svd2 = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(1, 10, 1e-15);
+  dZ_set = Contract2DTNFromDifferentPositionAndMethods(dtn2d, trunc_para_svd2);
   for (size_t i = 0; i < dZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(dZ_set[i]) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
   }
-  zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para);
+  zZ_set = Contract2DTNFromDifferentPositionAndMethods(ztn2d, trunc_para_svd2);
   for (size_t i = 0; i < zZ_set.size(); i++) {
     EXPECT_NEAR(-(std::log(zZ_set[i].real()) + tn_free_en_norm_factor) / Lx / Ly / beta, F_ex, 1e-8);
     EXPECT_NEAR(zZ_set[i].imag(), 0.0, 1e-15);
@@ -618,12 +614,7 @@ TEST_F(OBCIsing2DZ2TenNet, TestTrace) {
 
 TEST_F(OBCIsing2DZ2TenNet, TestCopy) {
   auto ztn2d_cp = ztn2d;
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(10,
-                                                 30,
-                                                 1e-15,
-                                                 CompressMPSScheme::VARIATION2Site,
-                                                 std::make_optional<double>(1e-14),
-                                                 std::make_optional<size_t>(10));
+  auto trunc_para = BMPSTruncateParams<qlten::QLTEN_Double>::Variational2Site(10, 30, 1e-15, 1e-14, 10);
   ztn2d.GrowBMPSForRow(2, trunc_para);
   ztn2d.InitBTen(BTenPOSITION::LEFT, 2);
   ztn2d.GrowFullBTen(BTenPOSITION::RIGHT, 2, 2, true);
@@ -675,7 +666,7 @@ struct ProjectedtJTensorNetwork : public testing::Test {
     qlten::hp_numeric::SetTensorManipulationThreads(1);
     SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps = CreateFiniteSizeOBCtJTPS();
 
-    auto trun_para = BMPSTruncatePara(Db_min,
+    auto trun_para = BMPSTruncateParams<qlten::QLTEN_Double>(Db_min,
                                       Db_max,
                                       1e-10,
                                       CompressMPSScheme::SVD_COMPRESS,
@@ -805,7 +796,7 @@ struct ProjectedtJTensorNetwork : public testing::Test {
 };
 
 TEST_F(ProjectedtJTensorNetwork, TestTrace) {
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(Db_min,
+  BMPSTruncateParams<qlten::QLTEN_Double> trunc_para = BMPSTruncateParams<qlten::QLTEN_Double>(Db_min,
                                                  Db_max,
                                                  1e-15,
                                                  CompressMPSScheme::SVD_COMPRESS,
@@ -852,12 +843,7 @@ struct ProjectedSpinTenNet : public testing::Test {
 
   TensorNetwork2D<QLTEN_Double, U1QN> tn2d = TensorNetwork2D<QLTEN_Double, U1QN>(Ly, Lx);
 
-  BMPSTruncatePara trunc_para = BMPSTruncatePara(4,
-                                                 8,
-                                                 1e-12,
-                                                 CompressMPSScheme::VARIATION2Site,
-                                                 std::make_optional<double>(1e-14),
-                                                 std::make_optional<size_t>(10));
+  BMPSTruncateParams<qlten::QLTEN_Double> trunc_para = BMPSTruncateParams<qlten::QLTEN_Double>::Variational2Site(4, 8, 1e-12, 1e-14, 10);
 
   using Tensor = QLTensor<QLTEN_Double, U1QN>;
   void SetUp() {

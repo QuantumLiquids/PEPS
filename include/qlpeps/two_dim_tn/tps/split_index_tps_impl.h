@@ -104,10 +104,12 @@ std::vector<size_t> SplitIndexTPS<TenElemT, QNT>::GetAllInnerBondDimensions() co
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
       const Tensor &tensor = (*this)({row, col})[0];
-      if (row < this->rows() - 1) {
+      bool has_south = (row < this->rows() - 1) || (boundary_condition_ == BoundaryCondition::Periodic);
+      if (has_south) {
         bond_dims.push_back(tensor.GetShape()[1]);
       }
-      if (col < this->cols() - 1) {
+      bool has_east = (col < this->cols() - 1) || (boundary_condition_ == BoundaryCondition::Periodic);
+      if (has_east) {
         bond_dims.push_back(tensor.GetShape()[2]);
       }
     }
@@ -121,10 +123,12 @@ bool SplitIndexTPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
   for (size_t row = 0; row < this->rows(); ++row) {
     for (size_t col = 0; col < this->cols(); ++col) {
       const Tensor &tensor = (*this)({row, col})[0];
-      if (row < this->rows() - 1 && d != tensor.GetShape()[1]) {
+      bool has_south = (row < this->rows() - 1) || (boundary_condition_ == BoundaryCondition::Periodic);
+      if (has_south && d != tensor.GetShape()[1]) {
         return false;
       }
-      if (col < this->cols() - 1 && d != tensor.GetShape()[2]) {
+      bool has_east = (col < this->cols() - 1) || (boundary_condition_ == BoundaryCondition::Periodic);
+      if (has_east && d != tensor.GetShape()[2]) {
         return false;
       }
     }
@@ -311,7 +315,7 @@ void SplitIndexTPS<TenElemT, QNT>::Dump(const std::string &tps_path, const bool 
   if (!ofs.is_open()) {
     throw std::ios_base::failure("Failed to open metadata file: " + file);
   }
-  ofs << this->rows() << " " << this->cols() << " " << phy_dim;
+  ofs << this->rows() << " " << this->cols() << " " << phy_dim << " " << static_cast<int>(boundary_condition_);
   if (ofs.fail()) {
     throw std::ios_base::failure("Failed to write metadata to file: " + file);
   }
@@ -335,7 +339,15 @@ bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
   if (ifs.good()) {
     // New format
     size_t rows = 0, cols = 0;
+    int bc_int = 0;
     ifs >> rows >> cols >> phy_dim;
+    if (ifs >> bc_int) {
+        // has bc info
+    } else {
+        ifs.clear(); // Reset error state if EOF reached
+        bc_int = static_cast<int>(BoundaryCondition::Open);
+    }
+
     if (ifs.fail()) {
 #ifndef NDEBUG
       std::cerr << "[SplitIndexTPS::Load][DEBUG] Failed to parse metadata file: "
@@ -346,9 +358,9 @@ bool SplitIndexTPS<TenElemT, QNT>::Load(const std::string &tps_path) {
 #ifndef NDEBUG
     std::cerr << "[SplitIndexTPS::Load][DEBUG] Using new format metadata. path="
               << tps_path << ", rows=" << rows << ", cols=" << cols
-              << ", phy_dim=" << phy_dim << std::endl;
+              << ", phy_dim=" << phy_dim << ", bc=" << bc_int << std::endl;
 #endif
-    *this = SplitIndexTPS<TenElemT, QNT>(rows, cols);
+    *this = SplitIndexTPS<TenElemT, QNT>(rows, cols, static_cast<BoundaryCondition>(bc_int));
   } else {
     // Old format
     std::string old_meta_file = tps_path + "/" + "phys_dim";
@@ -607,8 +619,8 @@ void MPI_Send(
   using Tensor = QLTensor<TenElemT, QNT>;
   
   // Send dimensions first
-  size_t peps_size[3] = {split_index_tps.rows(), split_index_tps.cols(), split_index_tps.PhysicalDim()};
-  HANDLE_MPI_ERROR(::MPI_Send(peps_size, 3, MPI_UNSIGNED_LONG_LONG, dest, tag, comm));
+  size_t peps_size[4] = {split_index_tps.rows(), split_index_tps.cols(), split_index_tps.PhysicalDim(), static_cast<size_t>(split_index_tps.GetBoundaryCondition())};
+  HANDLE_MPI_ERROR(::MPI_Send(peps_size, 4, MPI_UNSIGNED_LONG_LONG, dest, tag, comm));
   
   // Send all tensors
   for (const auto &tens : split_index_tps) {
@@ -642,9 +654,9 @@ MPI_Status MPI_Recv(
   using Tensor = QLTensor<TenElemT, QNT>;
   
   // Receive dimensions first
-  size_t peps_size[3];
+  size_t peps_size[4];
   MPI_Status status;
-  HANDLE_MPI_ERROR(::MPI_Recv(peps_size, 3, MPI_UNSIGNED_LONG_LONG, src, tag, comm, &status));
+  HANDLE_MPI_ERROR(::MPI_Recv(peps_size, 4, MPI_UNSIGNED_LONG_LONG, src, tag, comm, &status));
   int actual_src = src;
   if (src == MPI_ANY_SOURCE) {
     actual_src = status.MPI_SOURCE;
@@ -658,8 +670,8 @@ MPI_Status MPI_Recv(
             << ", tag=" << tag << std::endl;
   #endif
   
-  auto [rows, cols, phy_dim] = peps_size;
-  split_index_tps = SplitIndexTPS<TenElemT, QNT>(rows, cols);
+  auto [rows, cols, phy_dim, bc_int] = peps_size;
+  split_index_tps = SplitIndexTPS<TenElemT, QNT>(rows, cols, static_cast<BoundaryCondition>(bc_int));
   
   // Receive all tensors
   for (auto &tens : split_index_tps) {
@@ -674,19 +686,20 @@ MPI_Status MPI_Recv(
 
 template<typename TenElemT, typename QNT>
 SplitIndexTPS<TenElemT, QNT>::SplitIndexTPS(SplitIndexTPS &&other) noexcept
-    : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(std::move(other)) {
+    : TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>(std::move(other)), boundary_condition_(other.boundary_condition_) {
 }
 
 template<typename TenElemT, typename QNT>
 SplitIndexTPS<TenElemT, QNT> &SplitIndexTPS<TenElemT, QNT>::operator=(SplitIndexTPS &&other) noexcept {
   TenMatrix<std::vector<QLTensor<TenElemT, QNT>>>::operator=(std::move(other));
+  boundary_condition_ = other.boundary_condition_;
   return *this;
 }
 
 template<typename TenElemT, typename QNT>
 SplitIndexTPS<TenElemT, QNT>
 SplitIndexTPS<TenElemT, QNT>::FromTPS(const TPST &tps) {
-  SplitIndexTPS<TenElemT, QNT> result(tps.rows(), tps.cols());
+  SplitIndexTPS<TenElemT, QNT> result(tps.rows(), tps.cols(), tps.GetBoundaryCondition());
   const size_t phy_idx = 4;
   for (size_t row = 0; row < tps.rows(); row++) {
     for (size_t col = 0; col < tps.cols(); col++) {
@@ -734,19 +747,20 @@ void MPI_Bcast(
   MPI_Comm_rank(comm, &rank);
   
   // Broadcast dimensions first
-  size_t peps_size[3];
+  size_t peps_size[4];
   if (rank == root) {
     peps_size[0] = v.rows();
     peps_size[1] = v.cols();
     peps_size[2] = v.PhysicalDim();
+    peps_size[3] = static_cast<size_t>(v.GetBoundaryCondition());
   }
-  HANDLE_MPI_ERROR(::MPI_Bcast(peps_size, 3, MPI_UNSIGNED_LONG_LONG, root, comm));
+  HANDLE_MPI_ERROR(::MPI_Bcast(peps_size, 4, MPI_UNSIGNED_LONG_LONG, root, comm));
   
-  auto [rows, cols, phy_dim] = peps_size;
+  auto [rows, cols, phy_dim, bc_int] = peps_size;
   
   // Initialize tensor structure on non-root ranks
   if (rank != root) {
-    v = SplitIndexTPS<TenElemT, QNT>(rows, cols);
+    v = SplitIndexTPS<TenElemT, QNT>(rows, cols, static_cast<BoundaryCondition>(bc_int));
     for (auto &tens : v) {
       tens = std::vector<Tensor>(phy_dim);
     }

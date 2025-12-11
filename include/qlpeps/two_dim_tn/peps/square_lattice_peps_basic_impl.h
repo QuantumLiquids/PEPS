@@ -625,7 +625,7 @@ void SquareLatticePEPS<TenElemT, QNT>::RegularizeIndexDir() {
 template<typename TenElemT, typename QNT>
 TPS<TenElemT, QNT>
 SquareLatticePEPS<TenElemT, QNT>::ToTPS() const {
-  auto tps = TPS<TenElemT, QNT>(rows_, cols_);
+  auto tps = TPS<TenElemT, QNT>(rows_, cols_, boundary_condition_);
   SquareLatticePEPS peps_copy = (*this);
   if constexpr (TenT::IsFermionic()) {
     peps_copy.RegularizeIndexDir();

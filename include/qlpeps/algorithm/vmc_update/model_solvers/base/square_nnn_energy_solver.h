@@ -110,7 +110,8 @@ CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_in
                                     std::vector<TenElemT> &bond_energy_set,
                                     std::vector<TenElemT> &psi_list) {
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
-  const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
   tn.GenerateBMPSApproach(UP, trunc_para);
   psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {

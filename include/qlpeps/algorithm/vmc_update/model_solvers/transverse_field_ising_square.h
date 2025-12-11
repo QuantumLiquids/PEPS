@@ -41,9 +41,10 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
       TensorNetwork2D<TenElemT, QNT> &hole_res,
       std::vector<TenElemT> &psi_list
   ) {
+    using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
     const Configuration &sample_config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     return this->template CalEnergyAndHolesImplParsed<TenElemT, QNT, calchols>(split_index_tps,
                                                                                sample_config,
                                                                                sample_tn,
@@ -63,9 +64,10 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
     std::vector<TenElemT> psi_list;
 
     // Local references
+    using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     auto &tn = tps_sample->tn;
     const Configuration &config = tps_sample->config;
-    const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
+    const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t lx = tn.cols();
     const size_t ly = tn.rows();
 
@@ -144,7 +146,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
       const SplitIndexTPS<TenElemT, QNT> *sitps,
       const Configuration &sample_config,
       TensorNetwork2D<TenElemT, QNT> &sample_tn,
-      const BMPSTruncatePara &trunc_para,
+      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       TensorNetwork2D<TenElemT, QNT> &hole_res,
       std::vector<TenElemT> &psi_list
   );
@@ -204,7 +206,7 @@ template<typename TenElemT, typename QNT, bool calchols>
 TenElemT TransverseFieldIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                             const qlpeps::Configuration &config,
                                                             TensorNetwork2D<TenElemT, QNT> &tn,
-                                                            const qlpeps::BMPSTruncatePara &trunc_para,
+                                                            const qlpeps::BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
                                                             TensorNetwork2D<TenElemT, QNT> &hole_res,
                                                             std::vector<TenElemT> &psi_list) {
   TenElemT energy(0);

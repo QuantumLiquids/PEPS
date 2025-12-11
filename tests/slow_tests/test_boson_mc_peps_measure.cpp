@@ -56,7 +56,7 @@ struct SqrHeiMCPEPS : MPITest {
   double e0_state = -9.18912;
   Configuration config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, N / 2))};
   MonteCarloParams mc_params{1000, 1000, 1, config, false}; // not warmed up initially
-  PEPSParams peps_params{BMPSTruncatePara(Dpeps, 2 * Dpeps, 1e-15,
+  PEPSParams peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
                                           std::make_optional<double>(1e-14),
                                           std::make_optional<size_t>(10))};
@@ -141,10 +141,7 @@ struct SpinSystemMCPEPS : public testing::Test {
 
   Configuration measurement_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, N / 2))};
   MonteCarloParams measurement_mc_params{params.MC_samples, params.WarmUp, 1, measurement_config, false}; // not warmed up initially
-  PEPSParams measurement_peps_params{BMPSTruncatePara(params.Db_min, params.Db_max, 1e-10,
-                                                      CompressMPSScheme::VARIATION2Site,
-                                                      std::make_optional<double>(1e-14),
-                                                      std::make_optional<size_t>(10))};
+  PEPSParams measurement_peps_params{BMPSTruncateParams<qlten::QLTEN_Double>::Variational2Site(params.Db_min, params.Db_max, 1e-10, 1e-14, 10)};
   MCMeasurementParams mc_measurement_para{measurement_mc_params, measurement_peps_params};
 
   const MPI_Comm comm = MPI_COMM_WORLD;

@@ -165,10 +165,10 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
     std::string output_tps_path = "./optimized_tps";    // Working directory
     
     MonteCarloParams mc_params(10, 10, 1, random_config, false, output_config_path);  // Added explicit config output path
-    PEPSParams peps_params(BMPSTruncatePara(4, 8, 1e-15,
+    PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(4, 8, 1e-15,
                                             CompressMPSScheme::SVD_COMPRESS,
                                             std::make_optional<double>(1e-14),
-                                            std::make_optional<size_t>(10)));  // Only needs BMPSTruncatePara
+                                            std::make_optional<size_t>(10)));  // Only needs BMPSTruncateParams
     optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params, output_tps_path);  // TPS output path
   }
 };
@@ -485,19 +485,16 @@ TEST_F(VMCPEPSOptimizerUnitTest, DataDumping) {
   delete executor;
 }
 
-// Test VMC PEPS Optimizer BMPSTruncatePara
-TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncatePara) {
+// Test VMC PEPS Optimizer BMPSTruncateParams
+TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncateParams) {
   using Model = SquareSpinOneHalfXXZModel;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
 
-  // Test different BMPSTruncatePara configurations
+  // Test different BMPSTruncateParams configurations
   VMCPEPSOptimizerParams para = optimize_para;
-  para.peps_params.truncate_para = BMPSTruncatePara(2, 4, 1e-10,
-                                                    CompressMPSScheme::VARIATION1Site,
-                                                    std::make_optional<double>(1e-9),
-                                                    std::make_optional<size_t>(5));
+  para.peps_params.truncate_para = BMPSTruncateParams<qlten::QLTEN_Double>::Variational1Site(2, 4, 1e-10, 1e-9, 5);
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
       para, valid_test_tps, comm, model);

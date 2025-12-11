@@ -76,7 +76,7 @@ int main(int argc, char* argv[]) {
 
     // PEPS contraction params (BMPS truncation)
     // SVD compression: variational parameters are unused
-    BMPSTruncatePara trunc_para = BMPSTruncatePara::SVD(
+    BMPSTruncateParams<qlten::QLTEN_Double> trunc_para = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(
         /*D_min=*/2,
         /*D_max=*/8,
         /*trunc_err=*/1e-14);

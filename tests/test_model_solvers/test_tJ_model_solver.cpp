@@ -34,7 +34,7 @@ TEST(tJModelSolverTest, HandlesMeasureDiagonalOrder) {
 
   using Ten = QLTEN_Double;
   SplitIndexTPS<Ten, qlten::special_qn::fZ2QN> sitps(Ly, Lx);
-  BMPSTruncatePara trun_para; // default truncation for unit test
+  BMPSTruncateParams<qlten::QLTEN_Double> trun_para; // default truncation for unit test
   TPSWaveFunctionComponent<Ten, qlten::special_qn::fZ2QN> tps_sample(sitps, configuration, trun_para);
 
   auto obs = model_solver.template EvaluateObservables<Ten, qlten::special_qn::fZ2QN>(&sitps, &tps_sample);
