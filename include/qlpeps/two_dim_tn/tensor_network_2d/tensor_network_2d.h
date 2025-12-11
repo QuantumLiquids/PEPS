@@ -16,6 +16,7 @@
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/basic.h"                           //BMPSTruncatePara
 #include "qlpeps/vmc_basic/configuration.h"    //Configure
+#include "qlpeps/two_dim_tn/common/boundary_condition.h"
 
 namespace qlpeps {
 
@@ -66,7 +67,7 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
    * @param cols Number of columns in the network
    * @note Boundary MPS data is not initialized
    */
-  TensorNetwork2D(const size_t rows, const size_t cols);
+  TensorNetwork2D(const size_t rows, const size_t cols, const BoundaryCondition bc = BoundaryCondition::Open);
 
   /**
    * @brief Constructs tensor network by projecting the state from split-index TPS with specific configuration
@@ -78,6 +79,8 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config);
 
   TensorNetwork2D<TenElemT, QNT> &operator=(const TensorNetwork2D<TenElemT, QNT> &tn);
+
+  BoundaryCondition GetBoundaryCondition() const { return boundary_condition_; }
 
   /**
    * @brief Updates one site tensor by projecting from wavefunction (in form of split-index TPS) and new local configuration
@@ -247,6 +250,8 @@ class TensorNetwork2D : public TenMatrix<QLTensor<TenElemT, QNT>> {
   std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> bmps_set_;
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layers between two bmps
+
+  BoundaryCondition boundary_condition_;
 };
 
 }//qlpeps

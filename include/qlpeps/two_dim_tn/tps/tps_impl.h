@@ -19,7 +19,7 @@ template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT> TPS<TenElemT, QNT>::Project(const Configuration &config) const {
   const size_t rows = this->rows();
   const size_t cols = this->cols();
-  TensorNetwork2D<TenElemT, QNT> tn(rows, cols);
+  TensorNetwork2D<TenElemT, QNT> tn(rows, cols, boundary_condition_);
 
   //TODO: optimize
   Index<QNT> physical_index; // We suppose each site has the same hilbert space
@@ -45,6 +45,7 @@ TensorNetwork2D<TenElemT, QNT> TPS<TenElemT, QNT>::Project(const Configuration &
 template<typename TenElemT, typename QNT>
 void TPS<TenElemT, QNT>::UpdateConfigurationTN(const std::vector<SiteIdx> &site_set, const std::vector<size_t> &config,
                                                TensorNetwork2D<TenElemT, QNT> &tn2d) const {
+  assert(boundary_condition_ == tn2d.GetBoundaryCondition() && "Boundary condition mismatch between TPS and TensorNetwork2D");
 
   Index<QNT> physical_index; // We suppose each site has the same hilbert space
   physical_index = (*this)(0, 0)->GetIndex(4);

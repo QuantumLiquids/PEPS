@@ -17,8 +17,8 @@
 namespace qlpeps {
 
 template<typename TenElemT, typename QNT>
-TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t cols)
-    : TenMatrix<QLTensor<TenElemT, QNT>>(rows, cols) {
+TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t cols, const BoundaryCondition bc)
+    : TenMatrix<QLTensor<TenElemT, QNT>>(rows, cols), boundary_condition_(bc) {
   for (size_t post_int = 0; post_int < 4; post_int++) {
     const BMPSPOSITION post = static_cast<BMPSPOSITION>(post_int);
     bmps_set_.insert(std::make_pair(post, std::vector<BMPS<TenElemT, QNT>>()));
@@ -31,7 +31,7 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const size_t rows, const size_t 
 
 template<typename TenElemT, typename QNT>
 TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QNT> &tps, const Configuration &config)
-    :TensorNetwork2D(tps.rows(), tps.cols()) {
+    :TensorNetwork2D(tps.rows(), tps.cols(), tps.GetBoundaryCondition()) {
   assert(config.rows() == tps.rows());
   assert(config.cols() == tps.cols());
   
@@ -84,6 +84,7 @@ TensorNetwork2D<TenElemT, QNT> &TensorNetwork2D<TenElemT, QNT>::operator=(const 
     bmps_set_[post] = tn.bmps_set_.at(post);
   }
   bten_set_ = tn.bten_set_;
+  boundary_condition_ = tn.boundary_condition_;
   return *this;
 }
 
@@ -96,6 +97,7 @@ void TensorNetwork2D<TenElemT, QNT>::InitBMPS(void) {
 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::InitBMPS(const qlpeps::BMPSPOSITION post) {
+  assert(boundary_condition_ == BoundaryCondition::Open && "BMPS initialization is only valid for Open Boundary Condition");
   assert(bmps_set_.at(post).empty());
   const size_t mps_size = this->length(Rotate(Orientation(post)));
   std::vector<IndexT> boundary_indices;
