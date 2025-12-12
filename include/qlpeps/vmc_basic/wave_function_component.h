@@ -12,6 +12,7 @@
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"  // SplitIndexTPS
 #include "qlpeps/vmc_basic/jastrow_factor.h"        // JastrowFactor
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" // BMPSContractor
 namespace qlpeps {
 
 ///< abstract wave function component, useless up to now.
@@ -67,13 +68,16 @@ struct TPSWaveFunctionComponent {
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   ///< No initialized construct. considering to be removed in future.
   TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncateParams<RealT> &truncate_para) :
-      config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para) {}
+      config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para), contractor(rows, cols) {
+        contractor.Init(tn);
+      }
 
   TPSWaveFunctionComponent(const SplitIndexTPS<TenElemT, QNT> &sitps,
                            const Configuration &config,
                            const BMPSTruncateParams<RealT> &truncate_para)
-      : config(config), tn(config.rows(), config.cols()), trun_para(truncate_para) {
+      : config(config), tn(config.rows(), config.cols()), trun_para(truncate_para), contractor(config.rows(), config.cols()) {
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config); // projection
+    contractor.Init(tn);
     EvaluateAmplitude();
   }
 
@@ -89,20 +93,22 @@ struct TPSWaveFunctionComponent {
                   const std::vector<size_t> &occupancy_num) {
     this->config.Random(occupancy_num);
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, this->config);
+    contractor.Init(tn);
     EvaluateAmplitude();
   }
 
   void ReplaceGlobalConfig(const SplitIndexTPS<TenElemT, QNT> &sitps, const Configuration &config_new) {
     this->config = config_new;
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config);
+    contractor.Init(tn);
     EvaluateAmplitude();
   }
 
   TenElemT EvaluateAmplitude() {
-    tn.GrowBMPSForRow(0, this->trun_para);
-    tn.GrowFullBTen(RIGHT, 0, 2, true);
-    tn.InitBTen(LEFT, 0);
-    this->amplitude = tn.Trace({0, 0}, HORIZONTAL);
+    contractor.GrowBMPSForRow(tn, 0, this->trun_para);
+    contractor.GrowFullBTen(tn, RIGHT, 0, 2, true);
+    contractor.InitBTen(tn, LEFT, 0);
+    this->amplitude = contractor.Trace(tn, {0, 0}, HORIZONTAL);
     if (!IsAmplitudeSquareLegal()) {
       std::cout << "warning : wavefunction amplitude = "
                 << this->amplitude
@@ -157,6 +163,7 @@ struct TPSWaveFunctionComponent {
   Configuration config;
   TenElemT amplitude;
   TensorNetwork2D<TenElemT, QNT> tn;
+  BMPSContractor<TenElemT, QNT> contractor;
   BMPSTruncateParams<RealT> trun_para;
   Dress dress;
  private:
@@ -164,7 +171,8 @@ struct TPSWaveFunctionComponent {
                          const size_t new_config,
                          const SplitIndexTPS<TenElemT, QNT> &sitps) {
     config(site) = new_config;
-    tn.UpdateSiteTensor(site, new_config, sitps);
+    tn.UpdateSiteTensor(site, new_config, sitps); 
+    contractor.InvalidateEnvs(site);
   }
 };
 

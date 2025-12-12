@@ -102,7 +102,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
 }
 
 template<class ExplicitlyModel, bool has_nnn_interaction>
-template<typename TenElemT, typename QNT, bool calchols>
+  template<typename TenElemT, typename QNT, bool calchols>
 void SquareNNNModelEnergySolver<ExplicitlyModel, has_nnn_interaction>::
 CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                     TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
@@ -112,7 +112,7 @@ CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_in
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
-  tn.GenerateBMPSApproach(UP, trunc_para);
+  tps_sample->contractor.GenerateBMPSApproach(tn, UP, trunc_para);
   psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     this->template CalHorizontalBondEnergyAndHolesSweepRowImpl<TenElemT, QNT, calchols>(row,
@@ -122,7 +122,7 @@ CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_in
                                                                                         bond_energy_set,
                                                                                         psi_list);
     if (row < tn.rows() - 1) {
-      tn.BMPSMoveStep(DOWN, trunc_para);
+      tps_sample->contractor.BMPSMoveStep(tn, DOWN, trunc_para);
     }
   }
 }
@@ -137,12 +137,13 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                             std::vector<TenElemT> &bond_energy_set,
                                             std::vector<TenElemT> &psi_list) {
   auto &tn = tps_sample->tn;
-  tn.InitBTen(LEFT, row);
-  tn.GrowFullBTen(RIGHT, row, 1, true);
+  auto &contractor = tps_sample->contractor;
+  contractor.InitBTen(tn, LEFT, row);
+  contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
   bool psi_added = false; // only valid for Ferimonic case
   TenElemT inv_psi; // only useful for Bosonic case
   if constexpr (!Index<QNT>::IsFermionic()) {
-    auto psi = tn.Trace({row, 0}, HORIZONTAL);
+    auto psi = contractor.Trace(tn, {row, 0}, HORIZONTAL);
     if (psi == TenElemT(0)) [[unlikely]] {
       throw std::runtime_error("Wavefunction amplitude is near zero, causing division by zero.");
     }
@@ -153,7 +154,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
     const SiteIdx site1 = {row, col};
     //Calculate the holes
     if constexpr (calchols) {
-      hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL)); // natural match to complex number wave-function case.
+      hole_res(site1) = Dag(contractor.PunchHole(tn, site1, HORIZONTAL)); // natural match to complex number wave-function case.
     }
     if (col < tn.cols() - 1) {
       //Calculate horizontal bond energy contribution
@@ -169,6 +170,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                (tps_sample->config(site2)),
                                                                                HORIZONTAL,
                                                                                tn,
+                                                                               contractor,
                                                                                (*split_index_tps)(site1),
                                                                                (*split_index_tps)(site2),
                                                                                psi);
@@ -183,19 +185,20 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                (tps_sample->config(site2)),
                                                                                HORIZONTAL,
                                                                                tn,
+                                                                               contractor,
                                                                                (*split_index_tps)(site1),
                                                                                (*split_index_tps)(site2),
                                                                                inv_psi);
       }
       bond_energy_set.push_back(bond_energy);
-      tn.BTenMoveStep(RIGHT);
+      contractor.BTenMoveStep(tn, RIGHT);
     }
   }
   if constexpr (has_nnn_interaction) {
     if (row < tn.rows() - 1) {
       // NNN energy contribution
-      tn.InitBTen2(LEFT, row);
-      tn.GrowFullBTen2(RIGHT, row, 2, true);
+      contractor.InitBTen2(tn, LEFT, row);
+      contractor.GrowFullBTen2(tn, RIGHT, row, 2, true);
       for (size_t col = 0; col < tn.cols() - 1; col++) {
         SiteIdx site1 = {row, col};
         SiteIdx site2 = {row + 1, col + 1};
@@ -209,6 +212,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                tps_sample->config(site2),
                                                                                LEFTUP_TO_RIGHTDOWN,
                                                                                tn,
+                                                                               contractor,
                                                                                (*split_index_tps)(site1),
                                                                                (*split_index_tps)(site2),
                                                                                inv_psi);
@@ -218,6 +222,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                (tps_sample->config(site2)),
                                                                                LEFTUP_TO_RIGHTDOWN,
                                                                                tn,
+                                                                               contractor,
                                                                                (*split_index_tps)(site1),
                                                                                (*split_index_tps)(site2),
                                                                                psi);
@@ -231,6 +236,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                 tps_sample->config(site2),
                                                                                 LEFTDOWN_TO_RIGHTUP,
                                                                                 tn,
+                                                                                contractor,
                                                                                 (*split_index_tps)(site1),
                                                                                 (*split_index_tps)(site2),
                                                                                 inv_psi);
@@ -240,13 +246,14 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                 (tps_sample->config(site2)),
                                                                                 LEFTDOWN_TO_RIGHTUP,
                                                                                 tn,
+                                                                                contractor,
                                                                                 (*split_index_tps)(site1),
                                                                                 (*split_index_tps)(site2),
                                                                                 psi);
         }
         bond_energy_set.push_back(nnn_energy);
 
-        tn.BTen2MoveStep(RIGHT, row);
+        contractor.BTen2MoveStep(tn, RIGHT, row);
       }
     }
   } // evaluate NNN energy.
@@ -262,6 +269,7 @@ CalVerticalBondEnergyImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
   const Configuration &config = tps_sample->config;
   BondTraversalMixin::TraverseVerticalBonds(
       tps_sample->tn,
+      tps_sample->contractor,
       tps_sample->trun_para,
       [&, split_index_tps](const SiteIdx &site1,
                            const SiteIdx &site2,
@@ -277,6 +285,7 @@ CalVerticalBondEnergyImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                                        (config(site2)),
                                                                        bond_orient,
                                                                        tps_sample->tn,
+                                                                       tps_sample->contractor,
                                                                        (*split_index_tps)(site1),
                                                                        (*split_index_tps)(site2),
                                                                        fermion_psi);
@@ -288,6 +297,7 @@ CalVerticalBondEnergyImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                                        (config(site2)),
                                                                        bond_orient,
                                                                        tps_sample->tn,
+                                                                       tps_sample->contractor,
                                                                        (*split_index_tps)(site1),
                                                                        (*split_index_tps)(site2),
                                                                        inv_psi);

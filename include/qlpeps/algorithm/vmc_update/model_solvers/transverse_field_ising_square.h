@@ -13,6 +13,7 @@
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/observable_matrix.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" //BMPSContractor
 #include <complex>
 #include <cmath>
 
@@ -43,11 +44,13 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
   ) {
     using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     TensorNetwork2D<TenElemT, QNT> &sample_tn = tps_sample->tn;
+    BMPSContractor<TenElemT, QNT> &contractor = tps_sample->contractor;
     const Configuration &sample_config = tps_sample->config;
     const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     return this->template CalEnergyAndHolesImplParsed<TenElemT, QNT, calchols>(split_index_tps,
                                                                                sample_config,
                                                                                sample_tn,
+                                                                               contractor,
                                                                                trunc_para,
                                                                                hole_res,
                                                                                psi_list);
@@ -66,13 +69,14 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
     // Local references
     using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
     auto &tn = tps_sample->tn;
+    auto &contractor = tps_sample->contractor;
     const Configuration &config = tps_sample->config;
     const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t lx = tn.cols();
     const size_t ly = tn.rows();
 
     // Prepare environment
-    tn.GenerateBMPSApproach(UP, trunc_para);
+    contractor.GenerateBMPSApproach(tn, UP, trunc_para);
 
     // Accumulators
     TenElemT energy_ex(0); // off-diagonal part
@@ -82,19 +86,19 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
     two_point.reserve(lx / 2 * 3);
 
     for (size_t row = 0; row < ly; ++row) {
-      tn.InitBTen(LEFT, row);
-      tn.GrowFullBTen(RIGHT, row, 1, true);
+      contractor.InitBTen(tn, LEFT, row);
+      contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
       // push psi at row-begin for consistency check
-      auto psi = tn.Trace({row, 0}, HORIZONTAL);
+      auto psi = contractor.Trace(tn, {row, 0}, HORIZONTAL);
       psi_list.push_back(psi);
       auto inv_psi = TenElemT(1.0) / psi;
       for (size_t col = 0; col < lx; ++col) {
         const SiteIdx site{row, col};
-        TenElemT ex_term = EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*sitps)(site), inv_psi);
+        TenElemT ex_term = EvaluateOnSiteOffDiagEnergy(site, config(site), tn, contractor, (*sitps)(site), inv_psi);
         energy_ex += ex_term;
         sigma_x_mat(site) = (h_ != 0.0) ? (-ex_term) / static_cast<double>(h_) : TenElemT(0);
         if (col < lx - 1) {
-          tn.BTenMoveStep(RIGHT);
+          contractor.BTenMoveStep(tn, RIGHT);
         }
       }
       if (row == ly / 2) {
@@ -108,7 +112,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
         }
       }
       if (row < ly - 1) {
-        tn.BMPSMoveStep(DOWN, trunc_para);
+        contractor.BMPSMoveStep(tn, DOWN, trunc_para);
       }
     }
 
@@ -146,6 +150,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
       const SplitIndexTPS<TenElemT, QNT> *sitps,
       const Configuration &sample_config,
       TensorNetwork2D<TenElemT, QNT> &sample_tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       TensorNetwork2D<TenElemT, QNT> &hole_res,
       std::vector<TenElemT> &psi_list
@@ -187,10 +192,11 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
   [[nodiscard]] TenElemT EvaluateOnSiteOffDiagEnergy(
       const SiteIdx site, const size_t config,
       const TensorNetwork2D<TenElemT, QNT> &tn, // environment info
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site,
       TenElemT inv_psi
   ) {
-    TenElemT psi_ex = tn.ReplaceOneSiteTrace(site,
+    TenElemT psi_ex = contractor.ReplaceOneSiteTrace(tn, site,
                                              split_index_tps_on_site[1 - config],
                                              HORIZONTAL);
     TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
@@ -206,33 +212,34 @@ template<typename TenElemT, typename QNT, bool calchols>
 TenElemT TransverseFieldIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                             const qlpeps::Configuration &config,
                                                             TensorNetwork2D<TenElemT, QNT> &tn,
+                                                            BMPSContractor<TenElemT, QNT> &contractor,
                                                             const qlpeps::BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
                                                             TensorNetwork2D<TenElemT, QNT> &hole_res,
                                                             std::vector<TenElemT> &psi_list) {
   TenElemT energy(0);
   psi_list.reserve(tn.rows() + tn.cols());
-  tn.GenerateBMPSApproach(UP, trunc_para);
+  contractor.GenerateBMPSApproach(tn, UP, trunc_para);
   for (size_t row = 0; row < tn.rows(); row++) {
-    tn.InitBTen(LEFT, row);
-    tn.GrowFullBTen(RIGHT, row, 1, true);
+    contractor.InitBTen(tn, LEFT, row);
+    contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
     // update the amplitude so that the error of ratio of amplitude can reduce by cancellation.
-    auto psi = tn.Trace({row, 0}, HORIZONTAL);
+    auto psi = contractor.Trace(tn, {row, 0}, HORIZONTAL);
     auto inv_psi = 1.0 / psi;
     psi_list.push_back(psi);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site = {row, col};
       //Calculate the holes
       if constexpr (calchols) {
-        hole_res(site) = Dag(tn.PunchHole(site, HORIZONTAL)); // natural match to complex number wave-function case.
+        hole_res(site) = Dag(contractor.PunchHole(tn, site, HORIZONTAL)); // natural match to complex number wave-function case.
       }
       //transverse-field terms
-      energy += EvaluateOnSiteOffDiagEnergy(site, config(site), tn, (*split_index_tps)(site), inv_psi);
+      energy += EvaluateOnSiteOffDiagEnergy(site, config(site), tn, contractor, (*split_index_tps)(site), inv_psi);
       if (col < tn.cols() - 1) {
-        tn.BTenMoveStep(RIGHT);
+        contractor.BTenMoveStep(tn, RIGHT);
       }
     }
     if (row < tn.rows() - 1) {
-      tn.BMPSMoveStep(DOWN, trunc_para);
+      contractor.BMPSMoveStep(tn, DOWN, trunc_para);
     }
   }
   energy += CalDiagTermEnergy<TenElemT>(config);

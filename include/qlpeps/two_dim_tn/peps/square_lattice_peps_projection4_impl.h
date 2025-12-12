@@ -447,7 +447,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   tmp->Transpose({1, 4, 0, 3, 5, 2, 6});
   QR(tmp, 5, qn0_, q, r);
   Contract(r, {1}, lambdas[0], {0}, tmp + 1);
-  mock_qlten::SVD(tmp + 1, 1, qn0_, u, s, vt);
+  qlmps::mock_qlten::SVD(tmp + 1, 1, qn0_, u, s, vt);
   Contract(q, {5}, u, {0}, tmp + 2);  // tmp + 2 is gamma0
   *lambdas[0] = std::move(s[0]);
 
@@ -457,7 +457,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   tmp[4].Transpose({0, 2, 3, 4, 1, 5});
   QR(tmp + 4, 4, qn0_, q + 1, r + 1);
   Contract(r + 1, {1}, lambdas[1], {0}, tmp + 5);
-  mock_qlten::SVD(tmp + 5, 1, qn0_, u + 1, s + 1, vt + 1);
+  qlmps::mock_qlten::SVD(tmp + 5, 1, qn0_, u + 1, s + 1, vt + 1);
   Gamma1 = TenT();
   Contract(q + 1, {4}, u + 1, {0}, &Gamma1);
   Gamma1.Transpose({0, 4, 1, 2, 3});
@@ -469,7 +469,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   tmp[7].Transpose({0, 2, 3, 4, 1, 5});
   QR(tmp + 7, 4, qn0_, q + 2, r + 2);
   Contract(r + 2, {1}, lambdas[2], {0}, tmp + 8);
-  mock_qlten::SVD(tmp + 8, 1, qn0_, u + 2, s + 2, vt + 2);
+  qlmps::mock_qlten::SVD(tmp + 8, 1, qn0_, u + 2, s + 2, vt + 2);
   Gamma2 = TenT();
   Contract(q + 2, {4}, u + 2, {0}, &Gamma2);
   Gamma2.Transpose({4, 1, 2, 0, 3});
@@ -482,7 +482,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   tmp[10].Transpose({0, 1, 2, 4, 3, 5});
   QR(tmp + 10, 4, qn0_, q + 3, r + 3);
   Contract(r + 3, {1}, lambdas[3], {0}, tmp + 11);
-  mock_qlten::SVD(tmp + 11, 1, qn0_, u + 3, s + 3, vt + 3);
+  qlmps::mock_qlten::SVD(tmp + 11, 1, qn0_, u + 3, s + 3, vt + 3);
   Gamma3 = TenT();
   Contract(q + 3, {4}, u + 3, {0}, &Gamma3);
   Gamma3.Transpose({1, 2, 0, 4, 3});

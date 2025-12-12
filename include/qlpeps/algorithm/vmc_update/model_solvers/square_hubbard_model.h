@@ -10,6 +10,7 @@
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" //BMPSContractor
 
 namespace qlpeps {
 using namespace qlten;
@@ -89,6 +90,7 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
       const size_t config1, const size_t config2,
       const BondOrientation orient,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -180,6 +182,7 @@ TenElemT SquareHubbardModel::EvaluateBondEnergy(
     const size_t config1, const size_t config2,
     const BondOrientation orient,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi
@@ -188,7 +191,7 @@ TenElemT SquareHubbardModel::EvaluateBondEnergy(
     psi.reset();
     return 0;
   } else {
-    psi = tn.Trace(site1, site2, orient);
+    psi = contractor.Trace(tn, site1, site2, orient);
     if ((HubbardSingleSiteState(config1) == HubbardSingleSiteState::Empty
         && (HubbardSingleSiteState(config2) == HubbardSingleSiteState::SpinUp
             || HubbardSingleSiteState(config2) == HubbardSingleSiteState::SpinDown))
@@ -196,7 +199,7 @@ TenElemT SquareHubbardModel::EvaluateBondEnergy(
             && (HubbardSingleSiteState(config1) == HubbardSingleSiteState::SpinUp
                 || HubbardSingleSiteState(config1) == HubbardSingleSiteState::SpinDown))) {
       //one electron case
-      TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                               split_index_tps_on_site1[size_t(config2)],
                                               split_index_tps_on_site2[size_t(config1)]);
       TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
@@ -208,17 +211,17 @@ TenElemT SquareHubbardModel::EvaluateBondEnergy(
             && ((HubbardSingleSiteState) config1 == HubbardSingleSiteState::SpinUp || (HubbardSingleSiteState) config1
                 == HubbardSingleSiteState::SpinDown))) {
       //3 electrons case
-      TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                               split_index_tps_on_site1[config2],
                                               split_index_tps_on_site2[config1]);
       TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
       return t_ * ratio;
     } else if ((HubbardSingleSiteState) config1 == HubbardSingleSiteState::SpinUp
         && (HubbardSingleSiteState) config2 == HubbardSingleSiteState::SpinDown) {
-      TenElemT psi_ex1 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex1 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                                split_index_tps_on_site1[size_t(HubbardSingleSiteState::Empty)],
                                                split_index_tps_on_site2[size_t(HubbardSingleSiteState::DoubleOccupancy)]);
-      TenElemT psi_ex2 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex2 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                                split_index_tps_on_site1[size_t(HubbardSingleSiteState::DoubleOccupancy)],
                                                split_index_tps_on_site2[size_t(HubbardSingleSiteState::Empty)]);
       TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi.value());
@@ -226,20 +229,20 @@ TenElemT SquareHubbardModel::EvaluateBondEnergy(
       return (-t_) * (ratio1 + ratio2);
     } else if ((HubbardSingleSiteState) config1 == HubbardSingleSiteState::SpinDown && (HubbardSingleSiteState) config2
         == HubbardSingleSiteState::SpinUp) {
-      TenElemT psi_ex1 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex1 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                                split_index_tps_on_site1[size_t(HubbardSingleSiteState::Empty)],
                                                split_index_tps_on_site2[size_t(HubbardSingleSiteState::DoubleOccupancy)]);
-      TenElemT psi_ex2 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex2 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                                split_index_tps_on_site1[size_t(HubbardSingleSiteState::DoubleOccupancy)],
                                                split_index_tps_on_site2[size_t(HubbardSingleSiteState::Empty)]);
       TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi.value());
       TenElemT ratio2 = ComplexConjugate(psi_ex2 / psi.value());
       return t_ * (ratio1 + ratio2);
     } else { // |Double Occupancy, Empty> or |Empty, Double Occupancy>
-      TenElemT psi_ex1 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex1 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                                split_index_tps_on_site1[size_t(HubbardSingleSiteState::SpinUp)],
                                                split_index_tps_on_site2[size_t(HubbardSingleSiteState::SpinDown)]);
-      TenElemT psi_ex2 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex2 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                                split_index_tps_on_site1[size_t(HubbardSingleSiteState::SpinDown)],
                                                split_index_tps_on_site2[size_t(HubbardSingleSiteState::SpinUp)]);
       TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi.value());

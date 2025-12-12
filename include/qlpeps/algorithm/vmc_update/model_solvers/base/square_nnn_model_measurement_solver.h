@@ -93,11 +93,12 @@ class SquareNNNModelMeasurementSolver
                                  const BondOrientation orient, const TenElemT inv_psi_row_or_col) {
       TenElemT eb;
       std::optional<TenElemT> fermion_psi;
+      auto& contractor = tps_sample->contractor;
       if constexpr (Index<QNT>::IsFermionic()) {
-        eb = derived->EvaluateBondEnergy(site1, site2, config(site1), config(site2), orient, tn,
+        eb = derived->EvaluateBondEnergy(site1, site2, config(site1), config(site2), orient, tn, contractor,
                                          (*split_index_tps)(site1), (*split_index_tps)(site2), fermion_psi);
       } else {
-        eb = derived->EvaluateBondEnergy(site1, site2, config(site1), config(site2), orient, tn,
+        eb = derived->EvaluateBondEnergy(site1, site2, config(site1), config(site2), orient, tn, contractor,
                                          (*split_index_tps)(site1), (*split_index_tps)(site2), inv_psi_row_or_col);
       }
       if (orient == HORIZONTAL) {
@@ -117,7 +118,7 @@ class SquareNNNModelMeasurementSolver
           if constexpr (Index<QNT>::IsFermionic()) {
             sc_psi = fermion_psi;
           }
-          auto sc_pair = derived->EvaluateBondSC(site1, site2, config(site1), config(site2), orient, tn,
+          auto sc_pair = derived->EvaluateBondSC(site1, site2, config(site1), config(site2), orient, tn, contractor,
                                                  (*split_index_tps)(site1), (*split_index_tps)(site2), sc_psi);
           TenElemT sc_val = (ComplexConjugate(sc_pair.first) + sc_pair.second) / TenElemT(2.0);
           if (orient == HORIZONTAL) {
@@ -137,14 +138,15 @@ class SquareNNNModelMeasurementSolver
     auto nnn_link_measure_func = [&](const SiteIdx site1, const SiteIdx site2, const DIAGONAL_DIR dir,
                                      const TenElemT inv_psi_row, std::optional<TenElemT> &fermion_psi) {
       if constexpr (!has_nnn_interaction) { return; }
+      auto& contractor = tps_sample->contractor;
       // Reconstruct psi for fermions if needed
       if constexpr (Index<QNT>::IsFermionic()) { fermion_psi = TenElemT(1.0) / inv_psi_row; }
       TenElemT eb;
       if constexpr (Index<QNT>::IsFermionic()) {
-        eb = derived->EvaluateNNNEnergy(site1, site2, config(site1), config(site2), dir, tn,
+        eb = derived->EvaluateNNNEnergy(site1, site2, config(site1), config(site2), dir, tn, contractor,
                                         (*split_index_tps)(site1), (*split_index_tps)(site2), fermion_psi);
       } else {
-        eb = derived->EvaluateNNNEnergy(site1, site2, config(site1), config(site2), dir, tn,
+        eb = derived->EvaluateNNNEnergy(site1, site2, config(site1), config(site2), dir, tn, contractor,
                                         (*split_index_tps)(site1), (*split_index_tps)(site2), inv_psi_row);
       }
       // Sum energy from both diagonals for general square NNN models (e.g. J1-J2).
@@ -170,11 +172,11 @@ class SquareNNNModelMeasurementSolver
     psi_list.reserve(ly + lx);
 
     if constexpr (has_nnn_interaction) {
-      BondTraversalMixin::TraverseAllBonds(tn, trunc_para, bond_measure_func, nnn_link_measure_func,
+      BondTraversalMixin::TraverseAllBonds(tn, tps_sample->contractor, trunc_para, bond_measure_func, nnn_link_measure_func,
                                            off_diag_long_range_measure_func, psi_list);
     } else {
       // Pass nullptr to skip NNN traversal
-      BondTraversalMixin::TraverseAllBonds(tn, trunc_para, bond_measure_func, nullptr,
+      BondTraversalMixin::TraverseAllBonds(tn, tps_sample->contractor, trunc_para, bond_measure_func, nullptr,
                                            off_diag_long_range_measure_func, psi_list);
     }
 

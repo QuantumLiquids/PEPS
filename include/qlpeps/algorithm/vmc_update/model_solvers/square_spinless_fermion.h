@@ -10,6 +10,7 @@
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" //BMPSContractor
 
 namespace qlpeps {
 using namespace qlten;
@@ -62,6 +63,7 @@ class SquareSpinlessFermion : public SquareNNNModelEnergySolver<SquareSpinlessFe
       const size_t config1, const size_t config2,
       const BondOrientation orient,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -73,6 +75,7 @@ class SquareSpinlessFermion : public SquareNNNModelEnergySolver<SquareSpinlessFe
       const size_t config1, const size_t config2,
       const DIAGONAL_DIR diagonal_dir,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -124,6 +127,7 @@ TenElemT SquareSpinlessFermion::EvaluateBondEnergy(
     const size_t config1, const size_t config2,
     const BondOrientation orient,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi
@@ -135,8 +139,8 @@ TenElemT SquareSpinlessFermion::EvaluateBondEnergy(
     psi.reset();
     return e_intert;
   } else {// one site empty, the other site filled
-    psi = tn.Trace(site1, site2, orient);
-    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[config2],
                                             split_index_tps_on_site2[config1]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
@@ -150,6 +154,7 @@ TenElemT SquareSpinlessFermion::EvaluateNNNEnergy(
     const size_t config1, const size_t config2,
     const DIAGONAL_DIR diagonal_dir,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -165,13 +170,13 @@ TenElemT SquareSpinlessFermion::EvaluateNNNEnergy(
     }
 
     if (!psi.has_value()) {
-      psi = tn.ReplaceNNNSiteTrace(left_up_site,
+      psi = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                    diagonal_dir,
                                    HORIZONTAL,
                                    split_index_tps_on_site1[size_t(config1)],
                                    split_index_tps_on_site2[size_t(config2)]);
     }
-    TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+    TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                              diagonal_dir,
                                              HORIZONTAL,
                                              split_index_tps_on_site1[size_t(config2)],
@@ -180,6 +185,6 @@ TenElemT SquareSpinlessFermion::EvaluateNNNEnergy(
     return -t2_ * ratio;
   }
 }
-}//qlpeps
+} //qlpeps
 
 #endif //QLPEPS_ALGORITHM_VMC_PEPS_MODEL_SOLVERS_SQUARE_SPINLESS_FREE_FERMION

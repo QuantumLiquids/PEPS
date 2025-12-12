@@ -28,10 +28,11 @@ class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctio
                   std::vector<double> &accept_rates) {
     size_t flip_accept_num = 0;
     auto &tn = tps_component.tn;
-    tn.GenerateBMPSApproach(UP, tps_component.trun_para);
+    auto &contractor = tps_component.contractor;
+    contractor.GenerateBMPSApproach(tn, UP, tps_component.trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
-      tn.InitBTen(LEFT, row);
-      tn.GrowFullBTen(RIGHT, row, 2, true);
+      contractor.InitBTen(tn, LEFT, row);
+      contractor.GrowFullBTen(tn, RIGHT, row, 2, true);
       for (size_t col = 0; col < tn.cols() - 1; col++) {
         flip_accept_num += static_cast<MCUpdater *>(this)->TwoSiteNNUpdateLocalImpl({row, col},
                                                                                     {row, col + 1},
@@ -39,21 +40,21 @@ class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctio
                                                                                     sitps,
                                                                                     tps_component);
         if (col < tn.cols() - 2) {
-          tn.BTenMoveStep(RIGHT);
+          contractor.BTenMoveStep(tn, RIGHT);
         }
       }
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN, tps_component.trun_para);
+        contractor.BMPSMoveStep(tn, DOWN, tps_component.trun_para);
       }
     }
 
-    tn.DeleteInnerBMPS(LEFT);
-    tn.DeleteInnerBMPS(RIGHT);
+    contractor.DeleteInnerBMPS(LEFT);
+    contractor.DeleteInnerBMPS(RIGHT);
 
-    tn.GenerateBMPSApproach(LEFT, tps_component.trun_para);
+    contractor.GenerateBMPSApproach(tn, LEFT, tps_component.trun_para);
     for (size_t col = 0; col < tn.cols(); col++) {
-      tn.InitBTen(UP, col);
-      tn.GrowFullBTen(DOWN, col, 2, true);
+      contractor.InitBTen(tn, UP, col);
+      contractor.GrowFullBTen(tn, DOWN, col, 2, true);
       for (size_t row = 0; row < tn.rows() - 1; row++) {
         flip_accept_num += static_cast<MCUpdater *>(this)->TwoSiteNNUpdateLocalImpl({row, col},
                                                                                     {row + 1, col},
@@ -61,15 +62,15 @@ class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctio
                                                                                     sitps,
                                                                                     tps_component);
         if (row < tn.rows() - 2) {
-          tn.BTenMoveStep(DOWN);
+          contractor.BTenMoveStep(tn, DOWN);
         }
       }
       if (col < tn.cols() - 1) {
-        tn.BMPSMoveStep(RIGHT, tps_component.trun_para);
+        contractor.BMPSMoveStep(tn, RIGHT, tps_component.trun_para);
       }
     }
 
-    tn.DeleteInnerBMPS(UP);
+    contractor.DeleteInnerBMPS(UP);
     double bond_num = tn.cols() * (tn.rows() - 1) + tn.rows() * (tn.cols() - 1);
     accept_rates = {double(flip_accept_num) / bond_num};
   }
@@ -109,7 +110,7 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
                  == sitps(site1)[tps_component.config(site2)].GetIndexes());
     }
 #endif
-    TenElemT psi_b = tps_component.tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
+    TenElemT psi_b = tps_component.contractor.ReplaceNNSiteTrace(tps_component.tn, site1, site2, bond_dir,
                                                          sitps(site1)[tps_component.config(site2)],
                                                          sitps(site2)[tps_component.config(site1)]);
     bool exchange;
@@ -150,6 +151,7 @@ class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpda
                                 const SplitIndexTPS<TenElemT, QNT> &sitps,
                                 TPSWaveFunctionComponent<TenElemT, QNT> &tps_component) {
     auto &tn = tps_component.tn;
+    auto &contractor = tps_component.contractor;
     size_t dim = sitps.PhysicalDim();
     std::vector<TenElemT> alternative_psi(dim * dim);
     size_t init_config = tps_component.config(site1) * dim + tps_component.config(site2);
@@ -161,7 +163,7 @@ class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpda
         size_t config = config1 * dim + config2;
         if (config != init_config) {
           alternative_psi[config] =
-              tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
+              contractor.ReplaceNNSiteTrace(tn, site1, site2, bond_dir,
                                     sitps(site1)[config1],
                                     sitps(site2)[config2]);
         }
@@ -204,7 +206,7 @@ class MCUpdateSquareNNExchangeJastrowDressedTJ : public MCUpdateSquareNNUpdateBa
     }
 
     // Compute new amplitude (PEPS part)
-    TenElemT psi_b = tps_component.tn.ReplaceNNSiteTrace(site1, site2, bond_dir,
+    TenElemT psi_b = tps_component.contractor.ReplaceNNSiteTrace(tps_component.tn, site1, site2, bond_dir,
                                                          sitps(site1)[config2],
                                                          sitps(site2)[config1]);
 
