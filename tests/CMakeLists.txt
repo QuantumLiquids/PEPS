@@ -184,6 +184,10 @@ add_unittest(test_bmps_contractor
         "test_2d_tn/test_bmps_contractor.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+add_unittest(test_trg_contractor
+        "test_2d_tn/test_trg_contractor.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
