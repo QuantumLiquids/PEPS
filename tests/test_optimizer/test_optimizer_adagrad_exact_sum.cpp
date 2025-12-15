@@ -534,7 +534,7 @@ struct TrivialTransverseIsingTools : public MPITest {
 };
 
 TEST_F(TrivialTransverseIsingTools, ExactSumGradientOptWithVMCOptimizer) {
-  using Model = TransverseFieldIsingSquare;
+  using Model = TransverseFieldIsingSquareOBC;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;

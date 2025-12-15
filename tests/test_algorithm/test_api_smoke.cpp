@@ -14,7 +14,7 @@
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/api/vmc_api.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square_obc.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 
 #include "../test_mpi_env.h"
@@ -86,11 +86,11 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
                                           std::make_optional<size_t>(10)));
   VMCPEPSOptimizerParams vmc_params(opt_params, mc_params, peps_params);
 
-  TransverseFieldIsingSquare model(/*h=*/0.0);
+  TransverseFieldIsingSquareOBC model(/*h=*/0.0);
 
   auto opt = VmcOptimize<TenElemT, QNT,
                          MCUpdateSquareNNFullSpaceUpdate,
-                         TransverseFieldIsingSquare>(
+                         TransverseFieldIsingSquareOBC>(
       vmc_params, sitps, comm, model, MCUpdateSquareNNFullSpaceUpdate{});
 
   if (rank == hp_numeric::kMPIMasterRank) {
@@ -101,7 +101,7 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
 
   auto meas = MonteCarloMeasure<TenElemT, QNT,
                                 MCUpdateSquareNNFullSpaceUpdate,
-                                TransverseFieldIsingSquare>(
+                                TransverseFieldIsingSquareOBC>(
       opt->GetState(), MCMeasurementParams(mc_params, peps_params), comm, model, MCUpdateSquareNNFullSpaceUpdate{});
 
   auto [energy, en_err] = meas->OutputEnergy();

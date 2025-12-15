@@ -536,7 +536,7 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
 
 // Test Transverse Ising model
 TEST_F(Test2x2MCPEPSBoson, TransverseIsingModel) {
-  using Model = TransverseFieldIsingSquare;
+  using Model = TransverseFieldIsingSquareOBC;
 
   double J = 1.0;
   double h = 1.0;

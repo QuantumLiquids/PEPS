@@ -25,15 +25,15 @@ using namespace qlten;
  * sigma^z & sigma^x are Pauli matrix with matrix element 1.
  */
 
-class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsingSquare>,
-                              public ModelMeasurementSolver<TransverseFieldIsingSquare> {
+class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIsingSquareOBC>,
+                              public ModelMeasurementSolver<TransverseFieldIsingSquareOBC> {
  public:
-  TransverseFieldIsingSquare(void) = delete;
+  TransverseFieldIsingSquareOBC(void) = delete;
 
-  TransverseFieldIsingSquare(double h) : h_(h) {}
+  TransverseFieldIsingSquareOBC(double h) : h_(h) {}
   using ModelEnergySolver::CalEnergyAndHoles;
-  using ModelMeasurementSolver<TransverseFieldIsingSquare>::EvaluateObservables;
-  using ModelMeasurementSolver<TransverseFieldIsingSquare>::DescribeObservables;
+  using ModelMeasurementSolver<TransverseFieldIsingSquareOBC>::EvaluateObservables;
+  using ModelMeasurementSolver<TransverseFieldIsingSquareOBC>::DescribeObservables;
 
   template<typename TenElemT, typename QNT, bool calchols>
   TenElemT CalEnergyAndHolesImpl(
@@ -209,7 +209,7 @@ class TransverseFieldIsingSquare : public ModelEnergySolver<TransverseFieldIsing
 };
 
 template<typename TenElemT, typename QNT, bool calchols>
-TenElemT TransverseFieldIsingSquare::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+TenElemT TransverseFieldIsingSquareOBC::CalEnergyAndHolesImplParsed(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                             const qlpeps::Configuration &config,
                                                             TensorNetwork2D<TenElemT, QNT> &tn,
                                                             BMPSContractor<TenElemT, QNT> &contractor,

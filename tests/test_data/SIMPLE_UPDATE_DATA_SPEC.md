@@ -4,7 +4,7 @@
 
 ### Data Generation Parameters
 
-**Lattice**: 2×2 square, OBC  
+**Lattice**: 2×2 square, OBC (existing) + PBC (TFIM only, see below)  
 **Bond Dimension**: Dmax=4 (all models), Dmin=4 (spinless fermion), Dmin=1 (spin models)  
 **Convergence**: 100 steps (spinless), 50 steps (Heisenberg/Transverse Ising)  
 **Trotter Step**: τ=0.1  
@@ -53,6 +53,19 @@ t = 1.0, J = 0.3, μ = 0.0
 ### Data Format
 
 - **Naming**: `{model}_tps_{type}_from_simple_update` + `double` | `complex`
+
+### PBC Transverse-field Ising (2×2) Dataset
+
+We also provide a PBC simple-update dataset for TFIM on 2×2 (used by TRG-based PBC solvers/tests):
+- `transverse_ising_tps_pbc_double_from_simple_update/`
+- `transverse_ising_tps_pbc_complex_from_simple_update/`
+
+Regeneration:
+
+```bash
+cmake --build build -j 8 --target gen_tfim_2x2_pbc_simple_update_data
+./build/tests/gen_tfim_2x2_pbc_simple_update_data
+```
 
 ### Usage
 

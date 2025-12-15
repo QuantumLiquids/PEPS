@@ -65,10 +65,10 @@ class ModelEnergySolver {
    * @param hole_res    the gradient hole sample data, valid only when calchols==true
    * @return  evaluated total energy in current Monte Carlo samples
    */
-  template<typename TenElemT, typename QNT, bool calchols>
+  template<typename TenElemT, typename QNT, bool calchols, typename WaveFunctionComponentT>
   TenElemT CalEnergyAndHoles(
       const SplitIndexTPS<TenElemT, QNT> *sitps,
-      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+      WaveFunctionComponentT *tps_sample,
       TensorNetwork2D<TenElemT, QNT> &hole_res  // the return value
   ) {
     std::vector<TenElemT> psi_list;
@@ -82,20 +82,17 @@ class ModelEnergySolver {
 //                                                                                                         trunc_para,
 //                                                                                                         hole_res,
 //                                                                                                         psi_list);
-    TenElemT energy =
-        static_cast<ConcreteModelSolver *>(this)->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(sitps,
-                                                                                                          tps_sample,
-                                                                                                          hole_res,
-                                                                                                          psi_list);
+    TenElemT energy = static_cast<ConcreteModelSolver *>(this)
+                          ->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(sitps, tps_sample, hole_res, psi_list);
 
     WaveFunctionAmplitudeConsistencyCheck(psi_list, wave_function_component_accuracy);
     return energy;
   }
 
-  template<typename TenElemT, typename QNT>
+  template<typename TenElemT, typename QNT, typename WaveFunctionComponentT>
   TenElemT CalEnergy(
       const SplitIndexTPS<TenElemT, QNT> *sitps,
-      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample
+      WaveFunctionComponentT *tps_sample
   ) {
     TensorNetwork2D<TenElemT, QNT> hole_res(1, 1);
     return CalEnergyAndHoles<TenElemT, QNT, false>(sitps, tps_sample, hole_res);

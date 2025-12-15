@@ -169,7 +169,7 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
  * @param mpi_size MPI world size
  * @return (energy, gradient, error) valid only at master rank. Others return placeholders. Error is always 0 for exact summation.
  */
-template<typename ModelT, typename TenElemT, typename QNT>
+template<typename ModelT, typename TenElemT, typename QNT, template<typename, typename> class ContractorT = BMPSContractor>
 std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(
     const SplitIndexTPS<TenElemT, QNT> &split_index_tps_master_only,
     const std::vector<Configuration> &all_configs,
@@ -201,7 +201,7 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
   for (size_t i = rank; i < all_configs.size(); i += mpi_size) {
     auto &config = all_configs[i];
 
-    TPSWaveFunctionComponent<TenElemT, QNT>
+    TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, ContractorT>
         tps_sample(split_index_tps_bcast, config, trun_para);
     weights.push_back(std::norm(tps_sample.amplitude));
     TensorNetwork2D<TenElemT, QNT> holes_dag(Ly, Lx);// \partial_{theta^*} \Psi^*
