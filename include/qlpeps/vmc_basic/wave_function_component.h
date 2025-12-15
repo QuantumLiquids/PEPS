@@ -8,12 +8,68 @@
 #ifndef QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 #define QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 
+#include <optional>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
 #include "qlpeps/vmc_basic/configuration.h"         // Configuration
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"  // SplitIndexTPS
 #include "qlpeps/vmc_basic/jastrow_factor.h"        // JastrowFactor
 #include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" // BMPSContractor
 namespace qlpeps {
+
+namespace detail {
+template <class Contractor, class TenElemT, class QNT>
+concept HasBMPSWorkflow = requires(Contractor c, TensorNetwork2D<TenElemT, QNT>& tn, BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> tp) {
+  c.GrowBMPSForRow(tn, 0, tp);
+  c.GrowFullBTen(tn, RIGHT, 0, 2, true);
+  c.InitBTen(tn, LEFT, 0);
+  c.Trace(tn, SiteIdx{0, 0}, HORIZONTAL);
+};
+
+template <class Contractor>
+concept HasSetTruncateParams = requires(Contractor c, const typename Contractor::TruncateParams& tp) {
+  c.SetTruncateParams(tp);
+};
+
+template <class Contractor>
+concept HasTrialType = requires { typename Contractor::Trial; };
+
+template <class Contractor, bool kHasTrial = HasTrialType<Contractor>>
+struct TrialTokenHelper_ {
+  using type = std::monostate;
+};
+
+template <class Contractor>
+struct TrialTokenHelper_<Contractor, true> {
+  using type = typename Contractor::Trial;
+};
+
+template <class Contractor>
+using TrialTokenT = typename TrialTokenHelper_<Contractor>::type;
+
+template <class Contractor, class SiteIdxT, class TensorT>
+concept HasBeginTrialWithReplacement =
+    HasTrialType<Contractor> &&
+    requires(const Contractor c, const std::vector<std::pair<SiteIdxT, TensorT>>& repl) {
+      { c.BeginTrialWithReplacement(repl) } -> std::same_as<typename Contractor::Trial>;
+    };
+
+template <class Contractor, class SiteIdxT, class TensorT>
+concept HasTraceWithReplacement = requires(const Contractor c, const std::vector<std::pair<SiteIdxT, TensorT>>& repl) {
+  c.TraceWithReplacement(repl);
+};
+
+template <class Contractor>
+concept HasCommitTrial =
+    HasTrialType<Contractor> &&
+    requires(Contractor c, typename Contractor::Trial t) {
+      c.CommitTrial(std::move(t));
+    };
+}  // namespace detail
 
 ///< abstract wave function component, useless up to now.
 template<typename TenElemT>
@@ -62,10 +118,14 @@ struct JastrowDress {
  *
  * We hope it can support the spin inversion symmetry in the future.
  */
-template<typename TenElemT, typename QNT, typename Dress = qlpeps::NoDress>
+template<typename TenElemT, typename QNT, typename Dress = qlpeps::NoDress, template<typename, typename> class ContractorT = BMPSContractor>
 struct TPSWaveFunctionComponent {
  public:
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  using Contractor = ContractorT<TenElemT, QNT>;
+  using Tensor = typename Contractor::Tensor;
+  using TruncateParams = BMPSTruncateParams<RealT>;
+  using TrialToken = detail::TrialTokenT<Contractor>;
   ///< No initialized construct. considering to be removed in future.
   TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncateParams<RealT> &truncate_para) :
       config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para), contractor(rows, cols) {
@@ -105,10 +165,22 @@ struct TPSWaveFunctionComponent {
   }
 
   TenElemT EvaluateAmplitude() {
-    contractor.GrowBMPSForRow(tn, 0, this->trun_para);
-    contractor.GrowFullBTen(tn, RIGHT, 0, 2, true);
-    contractor.InitBTen(tn, LEFT, 0);
-    this->amplitude = contractor.Trace(tn, {0, 0}, HORIZONTAL);
+    // Keep component and contractor in sync: no pending trial should exist here.
+    pending_trial_.reset();
+
+    if constexpr (detail::HasSetTruncateParams<Contractor>) {
+      contractor.SetTruncateParams(this->trun_para);
+    }
+
+    if constexpr (detail::HasBMPSWorkflow<Contractor, TenElemT, QNT>) {
+      contractor.GrowBMPSForRow(tn, 0, this->trun_para);
+      contractor.GrowFullBTen(tn, RIGHT, 0, 2, true);
+      contractor.InitBTen(tn, LEFT, 0);
+      this->amplitude = contractor.Trace(tn, {0, 0}, HORIZONTAL);
+    } else {
+      this->amplitude = contractor.Trace(tn);
+    }
+
     if (!IsAmplitudeSquareLegal()) {
       std::cout << "warning : wavefunction amplitude = "
                 << this->amplitude
@@ -117,6 +189,71 @@ struct TPSWaveFunctionComponent {
     }
     return this->amplitude;
   }
+
+  /**
+   * @brief Start a trial move by temporarily replacing local tensors, without touching tn/config.
+   *
+   * This is the only safe place to create "shadow caches" for a trial move. The resulting trial
+   * token is kept until AcceptTrial/RejectTrial.
+   *
+   * @param replacements (site, new_tensor) list.
+   * @param new_configs (site, new_config) list (must correspond to replacements).
+   */
+  TenElemT BeginTrial(const std::vector<std::pair<SiteIdx, Tensor>>& replacements,
+                     const std::vector<std::pair<SiteIdx, size_t>>& new_configs) {
+    if (detail::HasSetTruncateParams<Contractor>) {
+      contractor.SetTruncateParams(this->trun_para);
+    }
+
+    PendingTrial trial;
+    trial.replacements = replacements;
+    trial.new_configs = new_configs;
+
+    if constexpr (detail::HasBeginTrialWithReplacement<Contractor, SiteIdx, Tensor> && detail::HasCommitTrial<Contractor>) {
+      trial.token = contractor.BeginTrialWithReplacement(trial.replacements);
+      trial.amplitude = trial.token.amplitude;
+    } else if constexpr (detail::HasTraceWithReplacement<Contractor, SiteIdx, Tensor>) {
+      // Fallback: compute amplitude only; AcceptTrial will force a full re-trace if needed.
+      trial.amplitude = contractor.TraceWithReplacement(trial.replacements);
+    } else {
+      throw std::logic_error("BeginTrial: contractor does not support trial evaluation.");
+    }
+
+    pending_trial_ = std::move(trial);
+    return pending_trial_->amplitude;
+  }
+
+  /**
+   * @brief Commit the pending trial: update config/tn, and swap-in contractor caches if supported.
+   */
+  void AcceptTrial(const SplitIndexTPS<TenElemT, QNT>& sitps) {
+    if (!pending_trial_.has_value()) throw std::logic_error("AcceptTrial: no pending trial.");
+
+    // 1) Commit contractor caches first (so it doesn't see a dirty flag from UpdateSingleSite_()).
+    if constexpr (detail::HasCommitTrial<Contractor>) {
+      // Only meaningful if token holds a real trial.
+      if constexpr (!std::is_same_v<TrialToken, std::monostate>) {
+        contractor.CommitTrial(std::move(pending_trial_->token));
+      }
+    }
+
+    // 2) Apply to config + TN (source of truth for tensors).
+    for (const auto& sc : pending_trial_->new_configs) {
+      const SiteIdx& site = sc.first;
+      const size_t cfg = sc.second;
+      config(site) = cfg;
+      tn.UpdateSiteTensor(site, cfg, sitps);
+    }
+
+    // 3) Update amplitude and clear trial.
+    amplitude = pending_trial_->amplitude;
+    pending_trial_.reset();
+  }
+
+  /**
+   * @brief Discard the pending trial (no state changes).
+   */
+  void RejectTrial() { pending_trial_.reset(); }
 
   bool IsAmplitudeSquareLegal() const {
     const double min_positive = std::numeric_limits<double>::min();
@@ -163,10 +300,17 @@ struct TPSWaveFunctionComponent {
   Configuration config;
   TenElemT amplitude;
   TensorNetwork2D<TenElemT, QNT> tn;
-  BMPSContractor<TenElemT, QNT> contractor;
+  Contractor contractor;
   BMPSTruncateParams<RealT> trun_para;
   Dress dress;
  private:
+  struct PendingTrial {
+    TenElemT amplitude{};
+    std::vector<std::pair<SiteIdx, Tensor>> replacements;
+    std::vector<std::pair<SiteIdx, size_t>> new_configs;
+    TrialToken token{};
+  };
+
   void UpdateSingleSite_(const SiteIdx &site,
                          const size_t new_config,
                          const SplitIndexTPS<TenElemT, QNT> &sitps) {
@@ -174,6 +318,8 @@ struct TPSWaveFunctionComponent {
     tn.UpdateSiteTensor(site, new_config, sitps); 
     contractor.InvalidateEnvs(site);
   }
+
+  std::optional<PendingTrial> pending_trial_;
 };
 
 template<typename MonteCarloSweepUpdater>

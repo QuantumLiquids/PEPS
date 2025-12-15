@@ -12,6 +12,9 @@
 
 #include <cassert>
 #include <string>
+#include <algorithm>
+#include <set>
+#include <map>
 
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "trg_contractor.h"
@@ -28,6 +31,7 @@ template <typename TenElemT, typename QNT>
 void TRGContractor<TenElemT, QNT>::ClearCache() {
   scales_.clear();
   dirty_scale0_.clear();
+  tensors_initialized_ = false;
 }
 
 template <typename TenElemT, typename QNT>
@@ -46,22 +50,20 @@ void TRGContractor<TenElemT, QNT>::Init(const TensorNetwork2D<TenElemT, QNT>& tn
   }
 
   ClearCache();
-  scales_.resize(1);
-  scales_[0].tens.resize(rows_ * cols_);
-  // Note: we intentionally do not deep-copy tensors here. TRG pipeline will read from `tn`
-  // when building coarse-grained tensors. The scale-0 tensor vector is kept for future
-  // implementations that may want to store projected/renormalized tensors explicitly.
   BuildScale0GraphPBCSquare_();
+  BuildTopology_(); // Build skeleton for all scales
 }
 
 template <typename TenElemT, typename QNT>
 void TRGContractor<TenElemT, QNT>::BuildScale0GraphPBCSquare_() {
+  scales_.resize(1);
   auto& g = scales_[0].graph;
   const size_t n = rows_;
   const size_t N = n * n;
   g.nbr.assign(N, {});
   g.sublattice.resize(N);
   g.split_dir.resize(N);
+  scales_[0].tens.resize(N);
 
   auto mod = [n](size_t x) { return (x + n) % n; };
 
@@ -78,12 +80,6 @@ void TRGContractor<TenElemT, QNT>::BuildScale0GraphPBCSquare_() {
       const uint32_t down_id = NodeId_(down_r, c);
       const uint32_t up_id = NodeId_(up_r, c);
 
-      // Leg order: 0=left, 1=down, 2=right, 3=up.
-      // PBC adjacency:
-      //  - my 0 <-> left 2
-      //  - my 2 <-> right 0
-      //  - my 1 <-> down 3
-      //  - my 3 <-> up 1
       g.nbr[id][0] = Neighbor{left_id, 2};
       g.nbr[id][2] = Neighbor{right_id, 0};
       g.nbr[id][1] = Neighbor{down_id, 3};
@@ -91,26 +87,122 @@ void TRGContractor<TenElemT, QNT>::BuildScale0GraphPBCSquare_() {
 
       const bool is_a = ((r + c) & 1U) == 0U;
       g.sublattice[id] = is_a ? SubLattice::A : SubLattice::B;
-
-      // Navy–Levin TRG convention: A/B use different split directions.
-      // We intentionally keep this explicit instead of sprinkling if-else across the code.
       g.split_dir[id] = is_a ? SplitDir::Horizontal : SplitDir::Vertical;
     }
   }
+}
 
-#ifndef NDEBUG
-  // Sanity check: nbr symmetry.
-  for (uint32_t u = 0; u < static_cast<uint32_t>(N); ++u) {
-    for (uint8_t leg = 0; leg < 4; ++leg) {
-      const Neighbor v = g.nbr[u][leg];
-      assert(v.node < N);
-      assert(v.leg < 4);
-      const Neighbor back = g.nbr[v.node][v.leg];
-      assert(back.node == u);
-      assert(back.leg == leg);
+template <typename TenElemT, typename QNT>
+void TRGContractor<TenElemT, QNT>::BuildTopology_() {
+  // Pre-calculate fine_to_coarse and coarse_to_fine maps for all scales.
+  // We simulate the RG flow purely with indices.
+  
+  size_t n = rows_;
+  size_t scale_idx = 0;
+  
+  while (n > 1) {
+    // Current scale is `scale_idx` (size n x n)
+    // Next scale is `scale_idx + 1` (size n x n/2 roughly, but stored as flat vector)
+    
+    scales_.resize(scale_idx + 2);
+    auto& fine_layer = scales_[scale_idx];
+    auto& coarse_layer = scales_[scale_idx + 1];
+    
+    // Resize topology maps
+    size_t fine_size = (scale_idx == 0) ? (rows_ * cols_) : scales_[scale_idx].tens.size();
+    
+    fine_layer.fine_to_coarse.assign(fine_size, {0xFFFFFFFF, 0xFFFFFFFF});
+    
+    if (scale_idx % 2 == 0) {
+      // Even -> Odd (Plaquette RG)
+      // n x n -> n x n/2 (embedded)
+      size_t coarse_count = (n * n) / 2;
+      coarse_layer.tens.resize(coarse_count);
+      coarse_layer.coarse_to_fine.resize(coarse_count);
+      
+      auto mod = [n](size_t x) { return (x + n) % n; };
+      auto id_even = [n](size_t r, size_t c) { return r * n + c; };
+      auto id_odd = [n](size_t r, size_t c) { return r * (n / 2) + (c / 2); };
+      
+      for (size_t r = 0; r < n; ++r) {
+        for (size_t c = 0; c < n; ++c) {
+          if (((r + c) & 1U) != 0U) continue; // Only process 'even' top-left corners
+          
+          uint32_t coarse_id = static_cast<uint32_t>(id_odd(r, c));
+          
+          // Inputs
+          uint32_t tl = static_cast<uint32_t>(id_even(r, c));
+          uint32_t tr = static_cast<uint32_t>(id_even(r, mod(c + 1)));
+          uint32_t bl = static_cast<uint32_t>(id_even(mod(r + 1), c));
+          uint32_t br = static_cast<uint32_t>(id_even(mod(r + 1), mod(c + 1)));
+          
+          // Map Coarse -> Fine
+          coarse_layer.coarse_to_fine[coarse_id] = {tl, tr, bl, br};
+          
+          // Map Fine -> Coarse
+          // Each fine tensor is used in exactly 2 plaquettes.
+          // We assume sequential filling: first slot 0, then slot 1.
+          auto add_parent = [&](uint32_t f, uint32_t c_id) {
+            if (fine_layer.fine_to_coarse[f][0] == 0xFFFFFFFF) fine_layer.fine_to_coarse[f][0] = c_id;
+            else fine_layer.fine_to_coarse[f][1] = c_id;
+          };
+          
+          add_parent(tl, coarse_id);
+          add_parent(tr, coarse_id);
+          add_parent(bl, coarse_id);
+          add_parent(br, coarse_id);
+        }
+      }
+    } else {
+      // Odd -> Even (Diamond RG)
+      // Embedded size n -> n/2
+      // Odd tensors: n*n/2 count. Even tensors (next): (n/2)*(n/2).
+      size_t n_embed = n; // The 'n' from previous loop
+      size_t n_next = n / 2;
+      size_t coarse_count = n_next * n_next;
+      
+      coarse_layer.tens.resize(coarse_count);
+      coarse_layer.coarse_to_fine.resize(coarse_count);
+      
+      auto mod = [n_embed](size_t x) { return (x + n_embed) % n_embed; };
+      auto id_odd = [n_embed](size_t r, size_t c) { return r * (n_embed / 2) + (c / 2); };
+      auto id_even_next = [n_next](size_t r, size_t c) { return r * n_next + c; };
+      
+      for (size_t i = 0; i < n_embed; ++i) {
+        if ((i & 1U) != 0U) continue; // i even
+        for (size_t j = 0; j < n_embed; ++j) {
+           if ((j & 1U) == 0U) continue; // j odd
+           
+           // Diamond center (i, j) -> Coarse (i/2, j/2 approx)
+           size_t I = i / 2;
+           size_t J = (j - 1) / 2;
+           uint32_t coarse_id = static_cast<uint32_t>(id_even_next(I, J));
+           
+           // Neighbors on odd lattice
+           uint32_t N = static_cast<uint32_t>(id_odd(mod(i - 1), j));
+           uint32_t E = static_cast<uint32_t>(id_odd(i, mod(j + 1)));
+           uint32_t S = static_cast<uint32_t>(id_odd(mod(i + 1), j));
+           uint32_t W = static_cast<uint32_t>(id_odd(i, mod(j - 1)));
+           
+           coarse_layer.coarse_to_fine[coarse_id] = {N, E, S, W};
+           
+           auto add_parent = [&](uint32_t f, uint32_t c_id) {
+             if (fine_layer.fine_to_coarse[f][0] == 0xFFFFFFFF) fine_layer.fine_to_coarse[f][0] = c_id;
+             else fine_layer.fine_to_coarse[f][1] = c_id;
+           };
+           
+           add_parent(N, coarse_id);
+           add_parent(E, coarse_id);
+           add_parent(S, coarse_id);
+           add_parent(W, coarse_id);
+        }
+      }
+      
+      n = n / 2; // Reduce n for next iteration
     }
+    
+    scale_idx++;
   }
-#endif
 }
 
 template <typename TenElemT, typename QNT>
@@ -121,68 +213,18 @@ void TRGContractor<TenElemT, QNT>::MarkDirtySeed_(uint32_t node) {
 template <typename TenElemT, typename QNT>
 void TRGContractor<TenElemT, QNT>::InvalidateEnvs(const SiteIdx& site) {
   if (bc_ != BoundaryCondition::Periodic) {
-    // If user calls this before Init(), keep behavior strict and explicit.
     throw std::logic_error("TRGContractor::InvalidateEnvs: call Init(tn) first.");
-  }
-  if (site.row() >= rows_ || site.col() >= cols_) {
-    throw std::out_of_range("TRGContractor::InvalidateEnvs: site out of range.");
   }
   MarkDirtySeed_(NodeId_(site.row(), site.col()));
 }
 
 template <typename TenElemT, typename QNT>
-TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT>& tn) const {
-  if (bc_ != BoundaryCondition::Periodic) {
-    throw std::logic_error("TRGContractor::Trace: call Init(tn) first.");
-  }
-  if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) {
-    throw std::invalid_argument("TRGContractor::Trace: tn must be periodic.");
-  }
-  if (tn.rows() != rows_ || tn.cols() != cols_) {
-    throw std::invalid_argument("TRGContractor::Trace: tn geometry differs from Init(tn).");
-  }
-  if constexpr (Tensor::IsFermionic()) {
-    throw std::runtime_error("TRGContractor::Trace: fermionic TRG is not implemented yet.");
-  }
-  if (!trunc_params_.has_value()) {
-    throw std::logic_error("TRGContractor::Trace: truncation params are not set. Call SetTruncateParams().");
-  }
-  const auto& trunc_params = *trunc_params_;
-  if (trunc_params.compress_scheme != CompressMPSScheme::SVD_COMPRESS) {
-    throw std::invalid_argument("TRGContractor::Trace: TRG currently supports only SVD truncation (no variational).");
-  }
-
-  // ------------------------------------------------------------
-  // Finite-size TRG pipeline (checkerboard plaquette coarse-graining)
-  //
-  // We alternate two kinds of scales:
-  // - Even scales: axis-aligned n x n vertex tensors (count = n^2).
-  // - Odd scales:  diagonal/rotated lattice embedded in n x n but only parity-even sites exist
-  //               (count = n^2/2). We index those nodes by their embedding coordinate (r,c) with (r+c)%2==0.
-  //
-  // The (even -> odd) step maps n^2 -> n^2/2 (64->32) using disjoint 2x2 plaquettes with (r+c)%2==0.
-  // The (odd  -> even) step maps n^2/2 -> (n/2)^2 (32->16) using disjoint "diamond plaquettes" on the
-  // rotated lattice selected by a simple checkerboard rule.
-  // ------------------------------------------------------------
-
-  using qlten::Contract;
-  using qlten::ElementWiseSqrt;
-  using qlten::Eye;
-  using qlten::SVD;
-
-  struct SplitARes {
-    Tensor P;  // "NW" piece: (leg0, leg3, alpha)
-    Tensor Q;  // "SE" piece: (alpha, leg1, leg2)
-  };
-  struct SplitBRes {
-    Tensor Q;  // "SW/N" piece depending on grouping: (leg0, leg1, alpha) for type1
-    Tensor P;  // "NE/S" piece depending on grouping: (alpha, leg2, leg3) for type1
-  };
-
-  const auto split_type0 = [&](const Tensor& T_in) -> SplitARes {
-    if (T_in.IsDefault()) {
-      throw std::runtime_error("TRG split_type0: input tensor is default.");
-    }
+typename TRGContractor<TenElemT, QNT>::SplitARes 
+TRGContractor<TenElemT, QNT>::SplitType0_(const Tensor& T_in) const {
+    using qlten::Contract;
+    using qlten::ElementWiseSqrt;
+    using qlten::SVD;
+    if (T_in.IsDefault()) throw std::runtime_error("TRG split_type0: input tensor is default.");
     // Group legs (0,3) | (1,2) by transposing to {0,3,1,2}.
     //
     // ASCII diagram (type0 split, A-sublattice):
@@ -202,36 +244,26 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
     //   Q(alpha, d, r)    with alpha as IN  (new bond entering Q)
     Tensor T = T_in;
     T.Transpose({0, 3, 1, 2});
-    Tensor u, s, vt;
+    Tensor u, vt;
+    qlten::QLTensor<RealT, QNT> s;
     RealT trunc_err_actual = RealT(0);
     size_t bond_dim_actual = 0;
-    SVD(&T,
-        /*left_dims=*/2,
-        T.Div(),
-        trunc_params.trunc_err,
-        trunc_params.D_min,
-        trunc_params.D_max,
-        &u,
-        &s,
-        &vt,
-        &trunc_err_actual,
-        &bond_dim_actual);
+    const auto& tp = *trunc_params_;
+    SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
     auto s_sqrt = ElementWiseSqrt(s);
     SplitARes out;
-    // P: u * sqrt(s)  (legs: 0,1,alpha) == (orig 0,3,alpha)
     Contract(&u, &s_sqrt, {{2}, {0}}, &out.P);
-    // Q: sqrt(s) * vt (legs: alpha,2,3) == (alpha, orig 1,2)
     Contract(&s_sqrt, &vt, {{1}, {0}}, &out.Q);
-    if (out.P.IsDefault() || out.Q.IsDefault()) {
-      throw std::runtime_error("TRG split_type0 produced default tensor (likely index-direction/QN mismatch).");
-    }
     return out;
-  };
+}
 
-  const auto split_type1 = [&](const Tensor& T_in) -> SplitBRes {
-    if (T_in.IsDefault()) {
-      throw std::runtime_error("TRG split_type1: input tensor is default.");
-    }
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::SplitBRes 
+TRGContractor<TenElemT, QNT>::SplitType1_(const Tensor& T_in) const {
+    using qlten::Contract;
+    using qlten::ElementWiseSqrt;
+    using qlten::SVD;
+    if (T_in.IsDefault()) throw std::runtime_error("TRG split_type1: input tensor is default.");
     // Group legs (0,1) | (2,3) in the default order.
     //
     // ASCII diagram (type1 split, B-sublattice):
@@ -249,277 +281,312 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
     // Output tensors:
     //   Q(l, d, alpha)    with alpha as OUT
     //   P(alpha, r, up)   with alpha as IN
-    Tensor T = T_in;
-    Tensor u, s, vt;
+    Tensor T = T_in; 
+    // Default order 0,1,2,3 is already 0,1 | 2,3
+    Tensor u, vt;
+    qlten::QLTensor<RealT, QNT> s;
     RealT trunc_err_actual = RealT(0);
     size_t bond_dim_actual = 0;
-    SVD(&T,
-        /*left_dims=*/2,
-        T.Div(),
-        trunc_params.trunc_err,
-        trunc_params.D_min,
-        trunc_params.D_max,
-        &u,
-        &s,
-        &vt,
-        &trunc_err_actual,
-        &bond_dim_actual);
+    const auto& tp = *trunc_params_;
+    SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
     auto s_sqrt = ElementWiseSqrt(s);
     SplitBRes out;
-    // Q: u * sqrt(s)  (legs: 0,1,alpha) == (orig 0,1,alpha)
     Contract(&u, &s_sqrt, {{2}, {0}}, &out.Q);
-    // P: sqrt(s) * vt (legs: alpha,2,3) == (alpha, orig 2,3)
     Contract(&s_sqrt, &vt, {{1}, {0}}, &out.P);
-    if (out.P.IsDefault() || out.Q.IsDefault()) {
-      throw std::runtime_error("TRG split_type1 produced default tensor (likely index-direction/QN mismatch).");
-    }
     return out;
-  };
+}
 
-  auto even_to_odd = [&](const std::vector<Tensor>& even_tens, size_t n) -> std::vector<Tensor> {
-    // even_tens indexed by (r,c) -> r*n + c, legs are [L(0),D(1),R(2),U(3)]
-    // output odd_tens indexed by (r,c) with (r+c)%2==0, stored as id = r*(n/2) + (c/2).
-    //
-    // ASCII diagram (even -> odd, 2x2 plaquette coarse-graining)
-    //
-    // We pick plaquettes with (r+c)%2==0 (checkerboard). For each 2x2 plaquette:
-    //
-    //   TL = (r, c)      TR = (r, c+1)
-    //   BL = (r+1, c)    BR = (r+1, c+1)
-    //
-    // After splitting (TL,BR use type0; TR,BL use type1), we contract:
-    //
-    //          (external alphas become legs of the odd tensor)
-    //
-    //              alpha_NW (from TL.Q0)   alpha_NE (from TR.Q1)
-    //                        \             /
-    //                         \           /
-    //                         [   odd tensor   ]   (stored with leg order [NW, NE, SE, SW])
-    //                         /           \
-    //                        /             \
-    //              alpha_SE (from BR.P0)   alpha_SW (from BL.P1)
-    //
-    // Internal bonds (contracted):
-    // - TL.down  <-> BL.up
-    // - TR.down  <-> BR.up
-    // - TR.left  <-> TL.right
-    // - BL.right <-> BR.left
-    std::vector<Tensor> odd_tens;
-    odd_tens.resize(n * (n / 2));
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::Tensor 
+TRGContractor<TenElemT, QNT>::ContractPlaquette_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine) {
+    throw std::logic_error("Helper ContractPlaquette_ requires refactoring to be scale-aware.");
+}
 
-    auto id_even = [n](size_t r, size_t c) { return r * n + c; };
-    auto mod = [n](size_t x) { return (x + n) % n; };
-    auto id_odd = [n](size_t r, size_t c) {
-      // Requires (r+c)%2==0; r and c have the same parity so (c/2) is well-defined in [0, n/2).
-      return r * (n / 2) + (c / 2);
-    };
+template <typename TenElemT, typename QNT>
+TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT>& tn) {
+  if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::Trace: call Init(tn) first.");
+  if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) throw std::invalid_argument("TRGContractor::Trace: tn must be periodic.");
+  if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::Trace: truncation params are not set.");
+  
+  // 1. Update Scale 0 Dirty Tensors
+  if (!tensors_initialized_) {
+     // First run: treat all as dirty
+     const size_t N = rows_ * cols_;
+     for (uint32_t i = 0; i < N; ++i) dirty_scale0_.insert(i);
+     tensors_initialized_ = true;
+  }
+  
+  if (dirty_scale0_.empty()) {
+      if (scales_.empty()) return TenElemT(0); 
+      return ContractFinal1x1_(scales_.back().tens[0]);
+  }
 
-    for (size_t r = 0; r < n; ++r) {
-      for (size_t c = 0; c < n; ++c) {
-        if (((r + c) & 1U) != 0U) continue;  // only black plaquettes
+  // Reload dirty tensors from TN
+  for (uint32_t id : dirty_scale0_) {
+     auto coords = Coord_(id);
+     scales_[0].tens[id] = tn({coords.first, coords.second});
+  }
 
-        // 2x2 plaquette corners (with PBC)
-        const size_t r0 = r;
-        const size_t c0 = c;
-        const size_t r1 = mod(r + 1);
-        const size_t c1 = mod(c + 1);
+  // 2. Propagate Up
+  std::set<uint32_t> dirty_current(dirty_scale0_.begin(), dirty_scale0_.end());
+  dirty_scale0_.clear();
 
-        const Tensor& T_tl = even_tens[id_even(r0, c0)];
-        const Tensor& T_tr = even_tens[id_even(r0, c1)];
-        const Tensor& T_bl = even_tens[id_even(r1, c0)];
-        const Tensor& T_br = even_tens[id_even(r1, c1)];
+  // Iterate scales
+  for (size_t s = 0; s < scales_.size() - 1; ++s) {
+      if (dirty_current.empty()) break; // Should not happen if dirty_scale0_ was not empty
 
-        // A/B assignment on vertex lattice: A at (r+c) even.
-        // For this plaquette: TL and BR are A; TR and BL are B.
-        const auto tl = split_type0(T_tl);  // A: P0/Q0
-        const auto br = split_type0(T_br);  // A: P0/Q0
-        const auto tr = split_type1(T_tr);  // B: Q1/P1
-        const auto bl = split_type1(T_bl);  // B: Q1/P1
+      std::set<uint32_t> dirty_next;
+      const auto& fine_layer = scales_[s];
+      auto& coarse_layer = scales_[s + 1];
+      const bool even_to_odd = (s % 2 == 0);
 
-        // Select the four half-tensors that sit on the plaquette edges:
-        // TL(A): use Q0(alpha, D, R) -> internal legs D,R
-        // TR(B): use Q1(L, D, alpha) -> internal legs L,D
-        // BL(B): use P1(alpha, R, U) -> internal legs R,U
-        // BR(A): use P0(L, U, alpha) -> internal legs L,U
+      // Identify affected coarse nodes
+      for (uint32_t f_id : dirty_current) {
+          const auto& parents = fine_layer.fine_to_coarse[f_id];
+          if (parents[0] != 0xFFFFFFFF) dirty_next.insert(parents[0]);
+          if (parents[1] != 0xFFFFFFFF) dirty_next.insert(parents[1]);
+      }
+
+      // Recompute affected coarse nodes
+      for (uint32_t c_id : dirty_next) {
+          const auto& children = coarse_layer.coarse_to_fine[c_id];
+          const Tensor& T0 = fine_layer.tens[children[0]];
+          const Tensor& T1 = fine_layer.tens[children[1]];
+          const Tensor& T2 = fine_layer.tens[children[2]];
+          const Tensor& T3 = fine_layer.tens[children[3]];
+
+          using qlten::Contract;
+
+          if (even_to_odd) {
+              // Plaquette Contraction (TL, TR, BL, BR)
+              //
+              // ASCII diagram (even -> odd, 2x2 plaquette coarse-graining)
+              //
+              // We pick plaquettes with (r+c)%2==0 (checkerboard). For each 2x2 plaquette:
+              //
+              //   TL = (r, c)      TR = (r, c+1)
+              //   BL = (r+1, c)    BR = (r+1, c+1)
+              //
+              // After splitting (TL,BR use type0; TR,BL use type1), we contract:
+              //
+              //          (external alphas become legs of the odd tensor)
+              //
+              //              alpha_NW (from TL.Q0)   alpha_NE (from TR.Q1)
+              //                        \             /
+              //                         \           /
+              //                         [   odd tensor   ]   (stored with leg order [NW, NE, SE, SW])
+              //                         /           \
+              //                        /             \
+              //              alpha_SE (from BR.P0)   alpha_SW (from BL.P1)
+              //
+              // Internal bonds (contracted):
+              // - TL.down  <-> BL.up
+              // - TR.down  <-> BR.up
+              // - TR.left  <-> TL.right
+              // - BL.right <-> BR.left
+              //
+              // T0=TL, T1=TR, T2=BL, T3=BR
+              // TL, BR are A (Type0); TR, BL are B (Type1)
+              auto tl = SplitType0_(T0); 
+              auto tr = SplitType1_(T1);
+              auto bl = SplitType1_(T2);
+              auto br = SplitType0_(T3);
+              
+              const Tensor& Q0 = tl.Q; // TL.Q
+              const Tensor& Q1 = tr.Q; // TR.Q
+              const Tensor& P1 = bl.P; // BL.P
+              const Tensor& P0 = br.P; // BR.P
+
+              Tensor tmp0, tmp1, tmp2;
+              Contract(&P1, {1}, &P0, {0}, &tmp0);
+              Contract(&Q1, {0}, &Q0, {2}, &tmp1);
+              Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
+              tmp2.Transpose({3, 2, 1, 0});
+              
+              coarse_layer.tens[c_id] = tmp2;
+
+          } else {
+              // Diamond Contraction (N, E, S, W)
+              //
+              // ASCII diagram (odd -> even, diamond coarse-graining on rotated lattice)
+              //
+              // Odd-scale tensors live on parity-even embedding sites (r+c)%2==0 and have leg order:
+              //   [0=NW, 1=NE, 2=SE, 3=SW].
+              //
+              // For each diamond center (i even, j odd), take four odd tensors:
+              //
+              //              N = (i-1, j)
+              //                  /\
+              //                 /  \
+              //     W = (i, j-1)    E = (i, j+1)
+              //                 \  /
+              //                  \/
+              //              S = (i+1, j)
+              //
+              // After splitting (E,W use type0; N,S use type1) we contract the diamond internal bonds,
+              // producing one *even-scale* coarse tensor.
+              //
+              // IMPORTANT: all even-scale tensors must use a single global leg order:
+              //   [L(0), D(1), R(2), U(3)].
+              //
+              // T0=N, T1=E, T2=S, T3=W
+              // N, S are B (Type1); E, W are A (Type0)
+              auto nB = SplitType1_(T0);
+              auto eA = SplitType0_(T1);
+              auto sB = SplitType1_(T2);
+              auto wA = SplitType0_(T3);
+
+              const Tensor& Np = nB.P;
+              const Tensor& Ep = eA.P;
+              const Tensor& Sq = sB.Q;
+              const Tensor& Wq = wA.Q;
+
+              Tensor SW, NE, out;
+              Contract(&Sq, {0}, &Wq, {2}, &SW);
+              Contract(&Np, {1}, &Ep, {0}, &NE);
+              Contract(&SW, {0, 3}, &NE, {2, 1}, &out);
+              out.Transpose({1, 0, 3, 2});
+              
+              coarse_layer.tens[c_id] = out;
+          }
+      }
+      
+      dirty_current = std::move(dirty_next);
+  }
+
+  // Final 1x1 Trace
+  return ContractFinal1x1_(scales_.back().tens[0]);
+}
+
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::Trial
+TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
+    const std::vector<std::pair<SiteIdx, Tensor>>& replacements) const {
+  if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: call Init(tn) first.");
+  if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: truncation params are not set.");
+  if (!tensors_initialized_) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: Trace(tn) must be called at least once to initialize cache.");
+  if (!dirty_scale0_.empty()) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: cache is dirty. Please call Trace(tn) to commit changes before calling this.");
+
+  Trial trial;
+  trial.layer_updates.resize(scales_.size());
+
+  // Scale-0 updates.
+  for (const auto& kv : replacements) {
+    const uint32_t id = NodeId_(kv.first.row(), kv.first.col());
+    trial.layer_updates[0][id] = kv.second;
+  }
+
+  if (trial.layer_updates[0].empty()) {
+    trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
+    return trial;
+  }
+
+  // Shadow RG propagation: for each scale, compute the affected coarse tensors and stash them.
+  for (size_t s = 0; s < scales_.size() - 1; ++s) {
+    if (trial.layer_updates[s].empty()) break;
+
+    const auto& fine_layer = scales_[s];
+    const auto& coarse_layer = scales_[s + 1];
+    const bool even_to_odd = (s % 2 == 0);
+
+    // Identify affected coarse nodes.
+    std::set<uint32_t> dirty_coarse_nodes;
+    for (const auto& kv : trial.layer_updates[s]) {
+      const uint32_t f_id = kv.first;
+      const auto& parents = fine_layer.fine_to_coarse[f_id];
+      if (parents[0] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[0]);
+      if (parents[1] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[1]);
+    }
+
+    // Recompute affected coarse nodes using mix of trial updates and cached fine tensors.
+    for (uint32_t c_id : dirty_coarse_nodes) {
+      const auto& children = coarse_layer.coarse_to_fine[c_id];
+
+      auto get_fine_tensor = [&](uint32_t id) -> const Tensor& {
+        auto it = trial.layer_updates[s].find(id);
+        if (it != trial.layer_updates[s].end()) return it->second;
+        return fine_layer.tens[id];
+      };
+
+      const Tensor& T0 = get_fine_tensor(children[0]);
+      const Tensor& T1 = get_fine_tensor(children[1]);
+      const Tensor& T2 = get_fine_tensor(children[2]);
+      const Tensor& T3 = get_fine_tensor(children[3]);
+
+      using qlten::Contract;
+
+      if (even_to_odd) {
+        auto tl = SplitType0_(T0);
+        auto tr = SplitType1_(T1);
+        auto bl = SplitType1_(T2);
+        auto br = SplitType0_(T3);
+
         const Tensor& Q0 = tl.Q;
         const Tensor& Q1 = tr.Q;
         const Tensor& P1 = bl.P;
         const Tensor& P0 = br.P;
 
-        // Contract internal bonds.
-        // 1) BL.R (P1 idx=1) with BR.L (P0 idx=0)
-        Tensor tmp0;
+        Tensor tmp0, tmp1, tmp2;
         Contract(&P1, {1}, &P0, {0}, &tmp0);
-        // tmp0 indices order: [P1(alpha), P1(U), P0(U), P0(alpha)]
-
-        // 2) TR.L (Q1 idx=0) with TL.R (Q0 idx=2)
-        Tensor tmp1;
         Contract(&Q1, {0}, &Q0, {2}, &tmp1);
-        // tmp1 indices order: [Q1(D), Q1(alpha), Q0(alpha), Q0(D)]
-
-        // 3) connect TL.D with BL.U and TR.D with BR.U
-        // TL.D is in tmp1 last index (from Q0(D) at idx=3),
-        // BL.U is in tmp0 index 1 (from P1(U)).
-        // TR.D is in tmp1 index 0 (from Q1(D)),
-        // BR.U is in tmp0 index 2 (from P0(U)).
-        Tensor tmp2;
         Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
-        // Remaining indices in tmp2 correspond to:
-        // - tmp0: P1(alpha) [0], P0(alpha) [3]
-        // - tmp1: Q1(alpha) [1], Q0(alpha) [2]
-        // So tmp2 is rank-4 in some order; reorder to [TL, TR, BR, BL] = [Q0a, Q1a, P0a, P1a].
-        // Current order is [P1a, P0a, Q1a, Q0a] (by construction above).
         tmp2.Transpose({3, 2, 1, 0});
-        if (tmp2.IsDefault()) {
-          throw std::runtime_error("TRG even_to_odd produced default coarse tensor.");
-        }
 
-        odd_tens[id_odd(r0, c0)] = tmp2;
-      }
-    }
-    return odd_tens;
-  };
+        trial.layer_updates[s + 1][c_id] = tmp2;
+      } else {
+        auto nB = SplitType1_(T0);
+        auto eA = SplitType0_(T1);
+        auto sB = SplitType1_(T2);
+        auto wA = SplitType0_(T3);
 
-  auto odd_to_even = [&](const std::vector<Tensor>& odd_tens, size_t n_embed) -> std::vector<Tensor> {
-    // odd_tens live on parity-even coordinates (r,c) in Z_n^2, stored by id = r*(n/2) + (c/2)
-    // leg order on each odd tensor: [0=NW, 1=NE, 2=SE, 3=SW] in embedding coordinates.
-    //
-    // We coarse-grain using disjoint "diamond plaquettes" centered at (i,j) with:
-    // - i even, j odd
-    // This gives exactly n^2/4 plaquettes, mapping n^2/2 -> (n/2)^2.
-    //
-    // ASCII diagram (odd -> even, diamond coarse-graining on rotated lattice)
-    //
-    // Odd-scale tensors live on parity-even embedding sites (r+c)%2==0 and have leg order:
-    //   [0=NW, 1=NE, 2=SE, 3=SW].
-    //
-    // For each diamond center (i even, j odd), take four odd tensors:
-    //
-    //              N = (i-1, j)
-    //                  /\
-    //                 /  \
-    //     W = (i, j-1)    E = (i, j+1)
-    //                 \  /
-    //                  \/
-    //              S = (i+1, j)
-    //
-    // After splitting (E,W use type0; N,S use type1) we contract the diamond internal bonds,
-    // producing one *even-scale* coarse tensor.
-    //
-    // IMPORTANT: all even-scale tensors must use a single global leg order:
-    //   [L(0), D(1), R(2), U(3)].
-    const size_t n = n_embed;
-    if ((n % 2) != 0) {
-      throw std::logic_error("TRG odd_to_even: embedding n must be even.");
-    }
-    const size_t n2 = n / 2;
-    std::vector<Tensor> even_tens;
-    even_tens.resize(n2 * n2);
+        const Tensor& Np = nB.P;
+        const Tensor& Ep = eA.P;
+        const Tensor& Sq = sB.Q;
+        const Tensor& Wq = wA.Q;
 
-    auto mod = [n](size_t x) { return (x + n) % n; };
-    auto id_odd = [n](size_t r, size_t c) { return r * (n / 2) + (c / 2); };
-    auto id_even = [n2](size_t r, size_t c) { return r * n2 + c; };
-
-    auto is_A = [](size_t r, size_t c) {
-      // On parity-even subset, (r,c) are either both even or both odd.
-      // We use that to define A/B consistently across odd scales.
-      return ((r & 1U) == 0U) && ((c & 1U) == 0U);
-    };
-
-    for (size_t i = 0; i < n; ++i) {
-      if ((i & 1U) != 0U) continue;  // i even
-      for (size_t j = 0; j < n; ++j) {
-        if ((j & 1U) == 0U) continue;  // j odd
-        const size_t I = i / 2;
-        const size_t J = (j - 1) / 2;
-        // Diamond nodes around center (i,j):
-        // N=(i-1,j), E=(i,j+1), S=(i+1,j), W=(i,j-1)
-        const size_t rn = mod(i - 1);
-        const size_t cn = j;
-        const size_t re = i;
-        const size_t ce = mod(j + 1);
-        const size_t rs = mod(i + 1);
-        const size_t cs = j;
-        const size_t rw = i;
-        const size_t cw = mod(j - 1);
-
-        const Tensor& Tn = odd_tens[id_odd(rn, cn)];
-        const Tensor& Te = odd_tens[id_odd(re, ce)];
-        const Tensor& Ts = odd_tens[id_odd(rs, cs)];
-        const Tensor& Tw = odd_tens[id_odd(rw, cw)];
-
-        // A/B around the diamond:
-        // N and S are (odd,odd) -> B, E and W are (even,even) -> A (under our is_A).
-        (void)is_A;  // keep in case we add asserts later.
-
-        // Split convention on odd lattice:
-        // - A nodes: use type0 split (group 0&3 | 1&2) i.e. west/east
-        // - B nodes: use type1 split (group 0&1 | 2&3) i.e. north/south
-        const auto splitA = [&](const Tensor& T_in) -> SplitARes { return split_type0(T_in); };
-        const auto splitB = [&](const Tensor& T_in) -> SplitBRes { return split_type1(T_in); };
-
-        const auto nB = splitB(Tn);
-        const auto eA = splitA(Te);
-        const auto sB = splitB(Ts);
-        const auto wA = splitA(Tw);
-
-        // Choose half-tensors containing the internal edges:
-        // Internal bonds:
-        // - N.leg2 <-> E.leg0
-        // - N.leg3 <-> W.leg1
-        // - S.leg1 <-> E.leg3
-        // - S.leg0 <-> W.leg2
-        //
-        // Selected pieces:
-        // - N (B): need legs2&3 -> use P (alpha,2,3)
-        // - E (A): need legs0&3 -> use P (0,1,alpha) but note after split_type0 P corresponds to legs0&3.
-        // - S (B): need legs0&1 -> use Q (0,1,alpha)
-        // - W (A): need legs1&2 -> use Q (alpha,1,2) (east piece)
-        const Tensor& Np = nB.P;  // (alpha,2,3)
-        const Tensor& Ep = eA.P;  // (0,3,alpha) in embedded meaning, stored as (leg0,leg3,alpha)
-        const Tensor& Sq = sB.Q;  // (0,1,alpha)
-        const Tensor& Wq = wA.Q;  // (alpha,1,2)
-
-        // Direct contraction path (cleaner):
-        //
-        // Step A: connect S.leg0 <-> W.leg2 using Sq & Wq into SW block.
-        Tensor SW;
+        Tensor SW, NE, out;
         Contract(&Sq, {0}, &Wq, {2}, &SW);
-        // SW indices order: [leg1S, alphaS, alphaW, leg1W]
-        //
-        // Step B: connect N.leg2 <-> E.leg0 using Np & Ep into NE block.
-        Tensor NE;
         Contract(&Np, {1}, &Ep, {0}, &NE);
-        // NE indices order: [alphaN, leg3N, leg3E, alphaE]
-        //
-        // Step C: connect N.leg3 <-> W.leg1 and S.leg1 <-> E.leg3 by contracting SW and NE.
-        //
-        // - N.leg3 is in NE index 1 (leg3N)
-        // - W.leg1 is in SW index 3 (leg1W)
-        // - S.leg1 is in SW index 0 (leg1S)
-        // - E.leg3 is in NE index 2 (leg3E)
-        Tensor out;
         Contract(&SW, {0, 3}, &NE, {2, 1}, &out);
-        // Remaining indices in out correspond to [alphaS, alphaW, alphaN, alphaE] in that order.
-        //
-        // IMPORTANT: We enforce a single global convention for *all even-scale tensors*:
-        //   leg order = [L(0), D(1), R(2), U(3)].
-        //
-        // In this diamond coarse-graining, the new coarse tensor legs correspond to:
-        //   L <- alphaW, D <- alphaS, R <- alphaE, U <- alphaN.
-        // Therefore we reorder [alphaS, alphaW, alphaN, alphaE] -> [alphaW, alphaS, alphaE, alphaN].
         out.Transpose({1, 0, 3, 2});
-        if (out.IsDefault()) {
-          throw std::runtime_error("TRG odd_to_even produced default coarse tensor.");
-        }
 
-        even_tens[id_even(I, J)] = out;
+        trial.layer_updates[s + 1][c_id] = out;
       }
     }
-    return even_tens;
-  };
+  }
 
-  auto contract_even_1x1 = [&](const Tensor& T) -> TenElemT {
+  // Final amplitude: use trial last-layer tensor if present, otherwise cached.
+  if (!trial.layer_updates.empty()) {
+    const size_t last = trial.layer_updates.size() - 1;
+    auto it = trial.layer_updates[last].find(0);
+    if (it != trial.layer_updates[last].end()) {
+      trial.amplitude = ContractFinal1x1_(it->second);
+      return trial;
+    }
+  }
+  trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
+  return trial;
+}
+
+template <typename TenElemT, typename QNT>
+void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
+  if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::CommitTrial: call Init(tn) first.");
+  if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::CommitTrial: truncation params are not set.");
+  if (!tensors_initialized_) throw std::logic_error("TRGContractor::CommitTrial: Trace(tn) must be called at least once to initialize cache.");
+  if (!dirty_scale0_.empty()) throw std::logic_error("TRGContractor::CommitTrial: cache is dirty. Please call Trace(tn) first.");
+  if (trial.layer_updates.size() != scales_.size()) throw std::invalid_argument("TRGContractor::CommitTrial: trial topology mismatch.");
+
+  for (size_t s = 0; s < trial.layer_updates.size(); ++s) {
+    for (auto& kv : trial.layer_updates[s]) {
+      scales_[s].tens[kv.first] = std::move(kv.second);
+    }
+  }
+}
+
+template <typename TenElemT, typename QNT>
+TenElemT TRGContractor<TenElemT, QNT>::ContractFinal1x1_(const Tensor& T) const {
+    using qlten::Contract;
+    using qlten::Eye;
     // PBC 1x1: left<->right, down<->up. Use identity tensors to trace paired legs.
     //
     // ASCII diagram (final 1x1 trace)
@@ -537,48 +604,16 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
     //
     // Implemented via contracting with identity tensors Eye():
     //   trace(L,R) then trace(D,U).
-    const auto& idx_r = T.GetIndex(2);  // right (OUT) is the safe choice to build Eye
-    const auto& idx_d = T.GetIndex(1);  // down (OUT)
-    const auto eye_lr = Eye<TenElemT, QNT>(idx_r);  // (OUT, IN)
-    const auto eye_du = Eye<TenElemT, QNT>(idx_d);  // (OUT, IN)
-    Tensor tmp;
-    Contract(&T, {0, 2}, &eye_lr, {0, 1}, &tmp);  // trace left(IN)-right(OUT)
-    Tensor tmp2;
-    // tmp carries the remaining legs (down, up). To trace down(OUT) with up(IN),
-    // we must connect down to the IN leg of eye_du (axis=1) and up to the OUT leg (axis=0).
+    const auto& idx_r = T.GetIndex(2);
+    const auto& idx_d = T.GetIndex(1);
+    const auto eye_lr = Eye<TenElemT, QNT>(idx_r);
+    const auto eye_du = Eye<TenElemT, QNT>(idx_d);
+    Tensor tmp, tmp2;
+    Contract(&T, {0, 2}, &eye_lr, {0, 1}, &tmp);
     Contract(&tmp, {0, 1}, &eye_du, {1, 0}, &tmp2);
     return tmp2();
-  };
-
-  // Build scale-0 tensor list from tn.
-  const size_t n0 = rows_;
-  std::vector<Tensor> cur_even;
-  cur_even.resize(n0 * n0);
-  for (size_t r = 0; r < n0; ++r) {
-    for (size_t c = 0; c < n0; ++c) {
-      cur_even[r * n0 + c] = tn({r, c});
-      if (cur_even[r * n0 + c].IsDefault()) {
-        throw std::runtime_error("TRGContractor::Trace: scale-0 tensor is default. "
-                                 "This indicates an uninitialized TensorNetwork2D entry.");
-      }
-    }
-  }
-
-  size_t n = n0;
-  while (true) {
-    if (n == 1) {
-      return contract_even_1x1(cur_even[0]);
-    }
-    // even n x n -> odd embedded n (count n^2/2)
-    auto cur_odd = even_to_odd(cur_even, n);
-    // odd embedded n -> even (n/2) x (n/2)
-    cur_even = odd_to_even(cur_odd, n);
-    n = n / 2;
-  }
 }
 
 }  // namespace qlpeps
 
 #endif  // QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_TRG_CONTRACTOR_IMPL_H
-
-

@@ -13,6 +13,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <unordered_set>
@@ -89,16 +90,63 @@ class TRGContractor {
  public:
   using Tensor = qlten::QLTensor<TenElemT, QNT>;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  /**
+   * @brief Truncation control for the SVD splits inside TRG.
+   *
+   * This reuses `BMPSTruncateParams<RealT>` as a plain parameter bundle.
+   *
+   * Only the following fields are used by TRG:
+   * - `trunc_err`: target truncation error passed to `qlten::SVD`
+   * - `D_min`: minimum bond dimension kept after truncation
+   * - `D_max`: maximum bond dimension kept after truncation
+   *
+   * @note Any other fields in `BMPSTruncateParams` are ignored by TRG.
+   */
   using TruncateParams = qlpeps::BMPSTruncateParams<RealT>;
 
+  /**
+   * @brief Construct an empty contractor with no geometry.
+   *
+   * Call `Init(tn)` before `Trace(tn)` / trial APIs.
+   */
   TRGContractor() = default;
+
+  /**
+   * @brief Construct with geometry only.
+   *
+   * @param rows Number of rows of the scale-0 network.
+   * @param cols Number of columns of the scale-0 network.
+   *
+   * @note This only stores the geometry; you still need to call `Init(tn)`.
+   */
   TRGContractor(size_t rows, size_t cols) { ResetGeometry_(rows, cols); }
+
+  /**
+   * @brief Construct with geometry and truncation parameters.
+   *
+   * @param rows Number of rows of the scale-0 network.
+   * @param cols Number of columns of the scale-0 network.
+   * @param trunc_params Truncation parameters used in all SVD splits.
+   *
+   * @note This only stores the geometry/params; you still need to call `Init(tn)`.
+   */
   TRGContractor(size_t rows, size_t cols, const TruncateParams& trunc_params)
       : trunc_params_(trunc_params) {
     ResetGeometry_(rows, cols);
   }
 
+  /**
+   * @brief Set the SVD truncation parameters used by TRG.
+   *
+   * This does not rebuild topology nor clear caches.
+   */
   void SetTruncateParams(const TruncateParams& trunc_params) { trunc_params_ = trunc_params; }
+
+  /**
+   * @brief Get the current truncation parameters.
+   *
+   * @throws std::logic_error if truncation params were never set.
+   */
   const TruncateParams& GetTruncateParams() const {
     if (!trunc_params_.has_value()) {
       throw std::logic_error("TRGContractor::GetTruncateParams: truncation params are not set.");
@@ -109,16 +157,42 @@ class TRGContractor {
   /**
    * @brief Initialize internal scale-0 graph and clear caches.
    *
-   * @param tn Tensor network data container (must be PBC square with size 2^m)
+   * This builds the multi-scale topology (connectivity + fine/coarse mapping) and clears all
+   * cached tensors.
+   *
+   * @param tn Tensor network container. Requirements:
+   * - `tn` must have `BoundaryCondition::Periodic`
+   * - the lattice must be square (`rows == cols`)
+   * - the linear size must be \(2^m\) (power-of-two), so the RG flow reaches 1x1 exactly
+   *
+   * @note `Init()` does **not** copy any tensors from `tn`. The actual tensors are loaded lazily
+   * on the first `Trace(tn)` call.
+   *
+   * @throws std::invalid_argument if geometry/boundary condition requirements are violated.
    */
   void Init(const TensorNetwork2D<TenElemT, QNT>& tn);
 
   /**
    * @brief Contract the whole 2D tensor network and return the amplitude Z.
    *
-   * For TRG this is a "fixed pipeline" operation: it depends only on `tn`.
+   * For TRG this is a fixed pipeline: coarse-grain repeatedly (even->odd->even->...) until the
+   * final 1x1 tensor, then trace it with PBC identifications.
+   *
+   * Caching behavior:
+   * - First call after `Init(tn)` treats all scale-0 tensors as dirty and caches all scales.
+   * - After calling `InvalidateEnvs(site)` (possibly multiple times), the next `Trace(tn)` will
+   *   reload those scale-0 tensors from `tn` and recompute only the affected coarse tensors.
+   * - If nothing is dirty, this returns the cached final 1x1 contraction.
+   *
+   * @param tn Tensor network to contract. Must match the geometry passed to `Init(tn)`.
+   * @return The scalar contraction result (partition function / amplitude).
+   *
+   * @warning Not `const`: TRG stores and updates multi-scale caches.
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called or truncation params are not set.
+   * @throws std::invalid_argument if `tn` is not periodic.
    */
-  TenElemT Trace(const TensorNetwork2D<TenElemT, QNT>& tn) const;
+  TenElemT Trace(const TensorNetwork2D<TenElemT, QNT>& tn);
 
   /**
    * @brief Compatibility adapter for existing call sites that pass a bond location/orientation.
@@ -127,20 +201,85 @@ class TRGContractor {
    */
   TenElemT Trace(const TensorNetwork2D<TenElemT, QNT>& tn,
                  const SiteIdx& /*site_a*/,
-                 const BondOrientation /*bond_dir*/) const {
+                 const BondOrientation /*bond_dir*/) {
     return Trace(tn);
   }
 
   /**
+   * @brief Trial object produced by a "shadow" update.
+   *
+   * This captures the *minimal* set of coarse tensors that would change under the replacements
+   * along the TRG flow. The trial can later be committed (swap-in) or discarded.
+   *
+   * Design note:
+   * - This is intentionally a value type so VMC code can keep it short-term between
+   *   TrialAmplitude and Accept/Reject.
+   * - Only affected nodes are stored for each scale, so this is much smaller than cloning
+   *   the whole multi-scale cache.
+   */
+  struct Trial {
+    TenElemT amplitude{};
+    // layer_updates[s] stores the tensors that would change at scale s (node_id -> tensor).
+    std::vector<std::map<uint32_t, Tensor>> layer_updates;
+  };
+
+  /**
+   * @brief Create a trial contraction result under @p replacements without modifying caches.
+   *
+   * This performs a "shadow" RG propagation starting from scale-0 `replacements`, and stores
+   * only the affected tensors at each scale into the returned `Trial`.
+   *
+   * @param replacements Scale-0 site tensor replacements, identified by `SiteIdx`.
+   * @return A `Trial` containing the would-be updated coarse tensors and the corresponding
+   * scalar amplitude in `Trial::amplitude`.
+   *
+   * @note This method requires an already initialized and clean cache. In other words, call
+   * `Trace(tn)` at least once and make sure there are no pending dirtiness seeds.
+   *
+   * @warning This does not mutate the `TensorNetwork2D`. It is the caller's responsibility to
+   * keep the external `tn` consistent with `CommitTrial()` if they later commit.
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called, truncation params are not set,
+   * cache has not been initialized by `Trace(tn)`, or the cache is currently dirty.
+   */
+  Trial BeginTrialWithReplacement(const std::vector<std::pair<SiteIdx, Tensor>>& replacements) const;
+
+  /**
+   * @brief Commit a previously created trial into the internal cache.
+   *
+   * Preconditions:
+   * - Cache must be clean (no pending dirtiness from `InvalidateEnvs()`).
+   * - `trial` must have been created from the current clean cache (`Trial` topology matches).
+   *
+   * @param trial Trial object returned by `BeginTrialWithReplacement()`.
+   *
+   * @warning This only swaps tensors into this contractor's internal cache. It does not update
+   * the external `TensorNetwork2D`. Passing an inconsistent `tn` to subsequent `Trace(tn)` calls
+   * is a user error (it will typically show up once you invalidate/reload scale-0 tensors).
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called, truncation params are not set,
+   * cache has not been initialized by `Trace(tn)`, or the cache is currently dirty.
+   * @throws std::invalid_argument if `trial` was created under a different topology.
+   */
+  void CommitTrial(Trial&& trial);
+
+  /**
    * @brief Mark caches affected by a local tensor update at @p site.
    *
-   * For TRG, the "influence cone" expands across scales. This method only records the dirty
-   * seed(s); the propagation is performed lazily on the next Trace/Replace call.
+   * This only records a "dirty seed" on scale 0. The influence propagation across scales is
+   * handled lazily on the next `Trace(tn)` call.
+   *
+   * @param site Scale-0 lattice site whose tensor has changed in the external `tn`.
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called.
    */
   void InvalidateEnvs(const SiteIdx& site);
 
   /**
    * @brief Clear all cached scales and dirty state.
+   *
+   * This drops all cached tensors and dirtiness seeds, and resets the "cache initialized" flag.
+   * It does not change geometry/boundary-condition/truncation parameters.
    */
   void ClearCache();
 
@@ -172,6 +311,15 @@ class TRGContractor {
     std::vector<std::array<uint32_t, 4>> coarse_to_fine;
   };
 
+  struct SplitARes {
+    Tensor P;  // "NW" piece: (leg0, leg3, alpha)
+    Tensor Q;  // "SE" piece: (alpha, leg1, leg2)
+  };
+  struct SplitBRes {
+    Tensor Q;  // "SW/N" piece: (leg0, leg1, alpha)
+    Tensor P;  // "NE/S" piece: (alpha, leg2, leg3)
+  };
+
   static bool IsPowerOfTwo_(size_t n) { return n != 0 && ((n & (n - 1)) == 0); }
 
   void ResetGeometry_(size_t rows, size_t cols);
@@ -183,11 +331,24 @@ class TRGContractor {
   }
 
   void BuildScale0GraphPBCSquare_();
+  void BuildTopology_();
+  
+  // Helpers for incremental updates
   void MarkDirtySeed_(uint32_t node);
+  
+  // SVD Splitters
+  SplitARes SplitType0_(const Tensor& T_in) const;
+  SplitBRes SplitType1_(const Tensor& T_in) const;
+
+  // Contractions
+  Tensor ContractPlaquette_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine);
+  Tensor ContractDiamond_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine_embed);
+  TenElemT ContractFinal1x1_(const Tensor& T) const;
 
   size_t rows_ = 0;
   size_t cols_ = 0;
   BoundaryCondition bc_ = BoundaryCondition::Open;
+  bool tensors_initialized_ = false;
 
   // Multi-scale cache: scales_[0] corresponds to the original network (scale 0).
   std::vector<ScaleCache> scales_;

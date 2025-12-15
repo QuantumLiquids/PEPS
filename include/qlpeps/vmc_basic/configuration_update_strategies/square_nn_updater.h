@@ -17,9 +17,9 @@
 
 namespace qlpeps {
 
-///< base class for CRTP
+///< base class for CRTP (Open Boundary Condition)
 template<typename MCUpdater, typename WaveFunctionDress = qlpeps::NoDress>
-class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctionDress> {
+class MCUpdateSquareNNUpdateBaseOBC : public MonteCarloSweepUpdaterBase<WaveFunctionDress> {
   using MonteCarloSweepUpdaterBase<WaveFunctionDress>::MonteCarloSweepUpdaterBase;
  public:
   template<typename TenElemT, typename QNT>
@@ -77,6 +77,52 @@ class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctio
 
 }; //
 
+template<typename MCUpdater, typename WaveFunctionDress = qlpeps::NoDress>
+using MCUpdateSquareNNUpdateBase = MCUpdateSquareNNUpdateBaseOBC<MCUpdater, WaveFunctionDress>;
+
+///< base class for CRTP (Periodic Boundary Condition)
+template<typename MCUpdater, typename WaveFunctionDress = qlpeps::NoDress>
+class MCUpdateSquareNNUpdateBasePBC : public MonteCarloSweepUpdaterBase<WaveFunctionDress> {
+  using MonteCarloSweepUpdaterBase<WaveFunctionDress>::MonteCarloSweepUpdaterBase;
+ public:
+  template<typename TenElemT, typename QNT, template<typename, typename> class ContractorT>
+  void operator()(const SplitIndexTPS<TenElemT, QNT> &sitps,
+                  TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress, ContractorT> &tps_component,
+                  std::vector<double> &accept_rates) {
+    size_t flip_accept_num = 0;
+    auto &tn = tps_component.tn;
+    
+    // Total bonds in PBC = rows * cols * 2 (Horizontal + Vertical)
+    // We update roughly the same number of bonds as a full sweep.
+    size_t rows = tn.rows();
+    size_t cols = tn.cols();
+    size_t bond_num = rows * cols * 2; 
+
+    // Random bond selection
+    std::uniform_int_distribution<size_t> dist_row(0, rows - 1);
+    std::uniform_int_distribution<size_t> dist_col(0, cols - 1);
+    std::uniform_int_distribution<size_t> dist_dir(0, 1); // 0: Horizontal, 1: Vertical
+
+    for (size_t i = 0; i < bond_num; ++i) {
+        size_t r = dist_row(this->random_engine_);
+        size_t c = dist_col(this->random_engine_);
+        BondOrientation dir = (dist_dir(this->random_engine_) == 0) ? HORIZONTAL : VERTICAL;
+        
+        SiteIdx s1{r, c};
+        SiteIdx s2;
+        if (dir == HORIZONTAL) {
+            s2 = SiteIdx{r, (c + 1) % cols};
+        } else {
+            s2 = SiteIdx{(r + 1) % rows, c};
+        }
+
+        flip_accept_num += static_cast<MCUpdater *>(this)->TwoSiteNNUpdateLocalImpl(s1, s2, dir, sitps, tps_component);
+    }
+    
+    accept_rates = {double(flip_accept_num) / double(bond_num)};
+  }
+};
+
 
 /**
  * Explicit class define the Monte-Carlo update strategy.
@@ -88,9 +134,9 @@ class MCUpdateSquareNNUpdateBase : public MonteCarloSweepUpdaterBase<WaveFunctio
  *    - spin-1/2 Heisenberg model with U1 symmetry constrain;
  *    - t-J model.
  */
-class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange> {
+class MCUpdateSquareNNExchangeOBC : public MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNExchangeOBC> {
  public:
-  using MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange>::MCUpdateSquareNNUpdateBase;
+  using MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNExchangeOBC>::MCUpdateSquareNNUpdateBaseOBC;
   template<typename TenElemT, typename QNT>
   bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
                                 const SplitIndexTPS<TenElemT, QNT> &sitps,
@@ -138,13 +184,67 @@ class MCUpdateSquareNNExchange : public MCUpdateSquareNNUpdateBase<MCUpdateSquar
 };
 
 /**
+ * Explicit class define the Monte-Carlo update strategy (PBC version).
+ */
+using MCUpdateSquareNNExchange = MCUpdateSquareNNExchangeOBC;
+
+class MCUpdateSquareNNExchangePBC : public MCUpdateSquareNNUpdateBasePBC<MCUpdateSquareNNExchangePBC> {
+ public:
+  using MCUpdateSquareNNUpdateBasePBC<MCUpdateSquareNNExchangePBC>::MCUpdateSquareNNUpdateBasePBC;
+  template<typename TenElemT, typename QNT, typename WaveFunctionDress, template<typename, typename> class ContractorT>
+  bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
+                                const SplitIndexTPS<TenElemT, QNT> &sitps,
+                                TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress, ContractorT> &tps_component) {
+    if (tps_component.config(site1) == tps_component.config(site2)) {
+      return false;
+    }
+    
+    size_t c1 = tps_component.config(site1);
+    size_t c2 = tps_component.config(site2);
+    
+    TenElemT psi_a = tps_component.amplitude;
+
+    // Trial: keep the contractor "shadow cache" alive until accept/reject.
+    using TensorType = typename TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress, ContractorT>::Tensor;
+    std::vector<std::pair<SiteIdx, TensorType>> replacements{
+        {site1, sitps(site1)[c2]},
+        {site2, sitps(site2)[c1]},
+    };
+    std::vector<std::pair<SiteIdx, size_t>> new_cfgs{
+        {site1, c2},
+        {site2, c1},
+    };
+    TenElemT psi_b = tps_component.BeginTrial(replacements, new_cfgs);
+    
+    bool exchange = false;
+    if (std::abs(psi_b) >= std::abs(psi_a)) {
+      exchange = true;
+    } else {
+      double div = std::abs(psi_b) / std::abs(psi_a);
+      double P = div * div;
+      if (this->u_double_(this->random_engine_) < P) {
+        exchange = true;
+      }
+    }
+    
+    if (exchange) {
+        tps_component.AcceptTrial(sitps);
+    } else {
+        tps_component.RejectTrial();
+    }
+    
+    return exchange;
+  }
+};
+
+/**
  * Explicit class define the Monte-Carlo update strategy.
  *
  * Monte Carlo sweep defined by NN bond update on square lattice, update upon
  * all the possible configurations without limitation on any symmetry constrain.
  * work for both fermion and boson since the MC weight is defined by abs square of the wave function amplitude.
  */
-class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpdateSquareNNFullSpaceUpdate> {
+class MCUpdateSquareNNFullSpaceUpdateOBC : public MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNFullSpaceUpdateOBC> {
  public:
   template<typename TenElemT, typename QNT>
   bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
@@ -185,14 +285,17 @@ class MCUpdateSquareNNFullSpaceUpdate : public MCUpdateSquareNNUpdateBase<MCUpda
   }
 };
 
+// Backward-compatible alias: never break userspace.
+using MCUpdateSquareNNFullSpaceUpdate = MCUpdateSquareNNFullSpaceUpdateOBC;
+
 /**
  * Monte Carlo update strategy for t-J model with Jastrow factor dressed wave function.
  * Local configuration: 0 = spin up, 1 = spin down, 2 = empty (hole).
  */
-class MCUpdateSquareNNExchangeJastrowDressedTJ : public MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange,
+class MCUpdateSquareNNExchangeJastrowDressedTJ : public MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNExchangeJastrowDressedTJ,
                                                                                    JastrowDress> {
  public:
-  using MCUpdateSquareNNUpdateBase<MCUpdateSquareNNExchange, JastrowDress>::MCUpdateSquareNNUpdateBase;
+  using MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNExchangeJastrowDressedTJ, JastrowDress>::MCUpdateSquareNNUpdateBaseOBC;
 
   template<typename TenElemT, typename QNT>
   bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
@@ -235,7 +338,7 @@ class MCUpdateSquareNNExchangeJastrowDressedTJ : public MCUpdateSquareNNUpdateBa
     double abs_ratio = std::abs(psi_b * jastrow_ratio) / std::abs(psi_a);
     double P = abs_ratio * abs_ratio;
     bool exchange = false;
-    if (abs_ratio >= 1.0 || this->u_double_(random_engine_) < P) {
+    if (abs_ratio >= 1.0 || this->u_double_(this->random_engine_) < P) {
       exchange = true;
       size_t temp_config1 = tps_component.config(site2);
       size_t temp_config2 = tps_component.config(site1);

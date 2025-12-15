@@ -98,6 +98,22 @@ BuildZ2IsingTorusTN(size_t n, const KxFn& Kx, const KyFn& Ky) {
   return tn;
 }
 
+template <class KxFn, class KyFn>
+Z2IsingTNBuilder::TensorT MakeZ2IsingSiteTensorAt(size_t n,
+                                                  size_t r,
+                                                  size_t c,
+                                                  const KxFn& Kx,
+                                                  const KyFn& Ky) {
+  const Z2IsingTNBuilder b;
+  const size_t cm1 = (c + n - 1) % n;
+  const size_t rm1 = (r + n - 1) % n;
+  const auto sl_l = Z2IsingTNBuilder::SqrtLambda(Kx(r, cm1));
+  const auto sl_r = Z2IsingTNBuilder::SqrtLambda(Kx(r, c));
+  const auto sl_d = Z2IsingTNBuilder::SqrtLambda(Ky(r, c));
+  const auto sl_u = Z2IsingTNBuilder::SqrtLambda(Ky(rm1, c));
+  return b.MakeSiteTensorFromSqrtLambda(sl_l, sl_d, sl_r, sl_u);
+}
+
 template <typename TenElemT, typename QNT>
 double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT>& tn, size_t dmax) {
   qlpeps::TRGContractor<TenElemT, QNT> trg(tn.rows(), tn.cols());
@@ -187,6 +203,57 @@ TEST(TRGContractorPBC, NonUniform8x8) {
   // For larger systems TRG may introduce approximation once bond dimension saturates.
   // We compare logZ, which is numerically stable and is the quantity used in many checks.
   EXPECT_NEAR(logZ_trg, logZ_tm_ref, 1e-10 * std::max(1.0, std::abs(logZ_tm_ref)));
+}
+
+TEST(TRGContractorPBC, TrialReplacementSingleBond4x4) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+  using Contractor = qlpeps::TRGContractor<TenElemT, QNT>;
+  using TensorT = typename Contractor::Tensor;
+
+  const size_t n = 4;
+  const double K0 = 0.3;
+  const size_t r0 = 1;
+  const size_t c0 = 2;
+  const double K1 = 0.37;  // modify one horizontal bond Kx(r0,c0)
+
+  // Pure-Python transfer-matrix reference (4x4 torus, Ky=K0 uniform, Kx has one modified bond).
+  constexpr double Z_tm_ref = 3.68441965476735204e+05;
+  constexpr double Z0_tm_ref = 3.57011518773655815e+05;  // uniform K=0.3 (same as Uniform4x4)
+
+  auto Kx0 = [&](size_t /*r*/, size_t /*c*/) { return K0; };
+  auto Ky0 = [&](size_t /*r*/, size_t /*c*/) { return K0; };
+  const auto tn0 = BuildZ2IsingTorusTN(n, Kx0, Ky0);
+
+  auto Kx1 = [&](size_t r, size_t c) -> double { return (r == r0 && c == c0) ? K1 : K0; };
+  auto Ky1 = [&](size_t /*r*/, size_t /*c*/) -> double { return K0; };
+
+  Contractor trg(n, n);
+  trg.SetTruncateParams(Contractor::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/16, /*trunc_error=*/0.0));
+  trg.Init(tn0);
+
+  // Initialize cache.
+  const double Z0 = trg.Trace(tn0);
+  EXPECT_NEAR(Z0, Z0_tm_ref, 1e-10 * std::max(1.0, std::abs(Z0_tm_ref)));
+
+  // Only two site tensors change when one horizontal bond Kx(r0,c0) is modified:
+  // - site (r0, c0)     (right leg uses Kx(r0,c0))
+  // - site (r0, c0+1)   (left  leg uses Kx(r0,c0))
+  const SiteIdx sL{r0, c0};
+  const SiteIdx sR{r0, (c0 + 1) % n};
+  const TensorT tL = MakeZ2IsingSiteTensorAt(n, sL.row(), sL.col(), Kx1, Ky1);
+  const TensorT tR = MakeZ2IsingSiteTensorAt(n, sR.row(), sR.col(), Kx1, Ky1);
+
+  const std::vector<std::pair<SiteIdx, TensorT>> repl{{sL, tL}, {sR, tR}};
+  auto trial = trg.BeginTrialWithReplacement(repl);
+  const double Z_trial = trial.amplitude;
+  EXPECT_NEAR(Z_trial, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
+
+  // Commit trial into cache, then `Trace()` should return the modified Z without needing to reload tn.
+  trg.CommitTrial(std::move(trial));
+  const auto tn1 = BuildZ2IsingTorusTN(n, Kx1, Ky1);
+  const double Z_after = trg.Trace(tn1);
+  EXPECT_NEAR(Z_after, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
 }
 
 

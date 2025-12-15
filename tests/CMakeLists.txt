@@ -327,6 +327,20 @@ add_two_type_unittest(test_mc_energy_grad_evaluator_smoke
         " "
 )
 
+# Smoke: PBC TRG contractor + MC updater (trial/accept/reject)
+add_two_type_unittest(test_mc_updater_trg_smoke
+        "test_algorithm/test_mc_updater_trg_smoke.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+# Deterministic MonteCarlo regression (classical Ising via TRG amplitude)
+add_two_type_unittest(test_mc_ising_trg_pbc
+        "test_algorithm/test_mc_ising_trg_pbc.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
 # 2x2 classical Ising (h=0) smoke test using MonteCarloMeasure
 add_two_type_unittest(test_api_smoke
         "test_algorithm/test_api_smoke.cpp"
