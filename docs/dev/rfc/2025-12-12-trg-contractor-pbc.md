@@ -1,7 +1,7 @@
 ---
 title: Finite-size TRG Contractor for PBC TensorNetwork2D
 status: draft
-last_updated: 2025-12-12
+last_updated: 2025-12-15
 applies_to: [module/two_dim_tn, module/tensor_network_2d, module/vmc_update]
 tags: [design, rfc, pbc, trg, caching, incremental-update]
 ---
@@ -26,19 +26,25 @@ tags: [design, rfc, pbc, trg, caching, incremental-update]
 ## 0.1 实施进度更新（2025-12）
 已落地的内容（代码已合入工作区并通过单测）：
 - `TRGContractor` 已创建：`include/qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h/.cpp (header-only impl)`
-- **Finite-size bosonic `Trace()` 已实现**：checkerboard plaquette TRG（even→odd→even…直到 1×1），并且保证 even-scale leg order 始终为 `[L,D,R,U]`，避免奇偶步的腿约定漂移。
+- **Finite-size bosonic `Trace()` 已实现**：checkerboard plaquette TRG（even→odd→even…直到最后的 even 2×2），并且保证 even-scale leg order 始终为 `[L,D,R,U]`，避免奇偶步的腿约定漂移。
+- **终结收缩改为 2×2 精确收缩**：不再做最后一次 2×2→1×1 的 TRG coarse-graining（避免多一次 SVD/截断；也避免额外特殊情况）。
 - **显式截断参数**：`TRGContractor` 不再持有“隐藏默认截断参数”，调用方必须 `SetTruncateParams()`（否则 `Trace()` 抛异常）。
-- **可读性**：在 TRG 的关键业务步骤（SVD split、plaquette contraction、diamond contraction、final 1×1 trace）旁边添加了 ASCII 张量网络图注释。
+- **可读性**：在 TRG 的关键业务步骤（SVD split、plaquette contraction、diamond contraction、final 2×2 contraction / 1×1 trace helper）旁边添加了 ASCII 张量网络图注释。
 - **对照测试**：
   - `tests/test_2d_tn/test_trg_contractor.cpp`：使用 Python transfer-matrix 生成的严格参考值，对比 TRG 输出。
   - 覆盖：
     - 4×4 torus、Z2 对称、均匀耦合（对比 \(Z\)）
     - 4×4 torus、Z2 对称、non-uniform 耦合（对比 \(Z\)）
     - 8×8 torus、Z2 对称、non-uniform 耦合（对比 \(\log Z\)，避免数值爆炸）
+- **2×2 PunchHole 终结器（base case）已实现**：
+  - `TRGContractor::PunchHole(tn, site)` 当前支持 **2×2 PBC torus**，通过精确收缩 3 个 tensor 得到 rank-4 hole 张量。
+  - 单测 `PunchHole2x2U1Random` 覆盖了 U1 block-sparse 且 bond 维度不一致的情形，并验证
+    \(\langle \mathrm{hole}_i, T_i\rangle = Z\)（对四个 site 全部成立）。
 
 未完成/明确推迟的内容：
 - TRG 的 **增量更新**（`InvalidateEnvs(site)` 目前仅记录 dirty seed，没有影响域传播与局部重算）。
-- `Replace*Trace`（局域替换比值）与 `PunchHole`（hole tensor）接口尚未实现。
+- `Replace*Trace`（局域替换比值）尚未实现。
+- general `PunchHole`（任意尺寸/递归向下的 hole environment）尚未实现（当前只有 2×2 terminator）。
 - 与 `TPSWaveFunctionComponent` 的 contractor 选择/适配尚未进行（当前测试直接构造 `TensorNetwork2D`）。
 
 ## 1. Linus 的三个问题（先问再做）
@@ -67,9 +73,11 @@ TRG 的麻烦点（非平移不变、45° 旋转、影响域扩散）本质上�
 - 缓存多尺度网络，并实现“局域替换→影响域传播→局部重算 coarse tensors”的增量更新机制。
 
 ### 不做（明确排除）
-- 暂不实现 `PunchHole`/general hole environment（仅预留扩展点）。
+- 暂不实现 general `PunchHole`/hole environment（仅预留扩展点；目前只支持 2×2 terminator）。
 - 暂不支持任意尺寸；初期限定 \(n\times n, n=2^m\)。
 - 暂不追求无限系统（iTRG）；本 RFC 针对 finite-size。
+
+> 更新：2×2 的 PunchHole 终结器已落地（见 §0.1），但 general PunchHole 仍未实现。
 
 ## 5. 约束与数学定义（finite-size Navy–Levin TRG）
 ### 5.1 尺寸约束
@@ -241,6 +249,13 @@ TRG 下的 hole 更复杂，因为你需要同时 coarse-grain “带 impurity �
 - `TRGContractor` 中预留接口（可以先 `throw` 或 `assert(false)`）：
   - `Tensor PunchHole(...) const;`
 - 缓存结构里保留未来可扩展字段：`local_isometry_s`（每点分解得到的等距张量）。
+
+### 10.1 近期折中计划：2×2 terminator + 递归向上
+我们现在采用的路线是把 PunchHole 拆成两层：
+- **终结器（已实现）**：当规模到达 even 2×2 时，用精确收缩得到 4 个 hole（或按 site 逐个算 hole）。
+- **递归/迭代层（待实现）**：对更大系统，通过保存每层 coarse-graining 的等距映射（isometry）把 hole 从 coarse 层“往下推回去”，直到 scale-0。
+
+这能把“深水区”风险隔离开：先用 2×2 把 leg-order / index-direction / 共轭等约定钉死，再逐层推广。
 
 ## 11. 数值稳定性（可选项：先保持 amplitude 语义）
 你们当前 VMC 需要的是 **amplitude（也就是收缩得到的复/实标量 \(Z\)）**，而不是经典统计那套 `log_norm_` 叙事。

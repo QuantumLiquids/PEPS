@@ -76,7 +76,8 @@ class TensorNetwork2D;
  *
  * @note Implementation status (as of 2025-12):
  * - **Finite-size bosonic `Trace()` is implemented** using the checkerboard plaquette TRG pipeline
- *   (even->odd->even until 1x1), with SVD truncation.
+ *   (even->odd->even until the final 2x2 even lattice), with SVD truncation.
+ * - Final contraction uses an exact 2x2 PBC contraction (no additional truncation step).
  * - Truncation parameters must be explicitly provided via `SetTruncateParams()` (no hidden defaults).
  * - Fermionic TRG is not implemented.
  * - Incremental updates (`InvalidateEnvs` influence-cone propagation), `Replace*Trace`, and `PunchHole`
@@ -176,7 +177,7 @@ class TRGContractor {
    * @brief Contract the whole 2D tensor network and return the amplitude Z.
    *
    * For TRG this is a fixed pipeline: coarse-grain repeatedly (even->odd->even->...) until the
-   * final 1x1 tensor, then trace it with PBC identifications.
+   * final 2x2 even lattice, then contract the 2x2 PBC torus exactly (no further truncation).
    *
    * Caching behavior:
    * - First call after `Init(tn)` treats all scale-0 tensors as dirty and caches all scales.
@@ -264,6 +265,36 @@ class TRGContractor {
   void CommitTrial(Trial&& trial);
 
   /**
+   * @brief Compute the "hole" environment tensor at @p site.
+   *
+   * The returned tensor has rank 4 and represents the contraction of the whole network
+   * with the site tensor at @p site removed, leaving the four bond legs open.
+   *
+   * Current implementation status:
+   * - Only supports the 2x2 periodic torus by exact contraction (a terminator for future
+   *   recursive/iterative PunchHole on larger systems).
+   * - For larger sizes this is not implemented yet and will throw.
+   *
+   * Leg convention of the returned hole tensor matches the removed site tensor:
+   * \code
+   *        3 (up)
+   *        |
+   * 0(left)-H-2(right)
+   *        |
+   *        1 (down)
+   * \endcode
+   *
+   * @param tn Tensor network container (must be periodic).
+   * @param site Scale-0 site to remove.
+   * @return Rank-4 hole environment tensor.
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called.
+   * @throws std::invalid_argument if `tn` is not periodic.
+   * @throws std::logic_error if called for sizes other than 2x2 (for now).
+   */
+  Tensor PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn, const SiteIdx& site) const;
+
+  /**
    * @brief Mark caches affected by a local tensor update at @p site.
    *
    * This only records a "dirty seed" on scale 0. The influence propagation across scales is
@@ -344,6 +375,8 @@ class TRGContractor {
   Tensor ContractPlaquette_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine);
   Tensor ContractDiamond_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine_embed);
   TenElemT ContractFinal1x1_(const Tensor& T) const;
+  TenElemT ContractFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
+  Tensor PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2, uint32_t removed_id) const;
 
   size_t rows_ = 0;
   size_t cols_ = 0;

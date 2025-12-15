@@ -256,4 +256,75 @@ TEST(TRGContractorPBC, TrialReplacementSingleBond4x4) {
   EXPECT_NEAR(Z_after, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
 }
 
+TEST(TRGContractorPBC, PunchHole2x2U1Random) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::U1QN;
+  using IndexT = qlten::Index<QNT>;
+  using QNSctT = qlten::QNSector<QNT>;
+  using TensorT = qlten::QLTensor<TenElemT, QNT>;
+
+  auto q = [](int sz) { return QNT({QNCard("Sz", U1QNVal(sz))}); };
+
+  // Build 8 distinct bond indices (each has at least charge-0 sector, so divergence-0 blocks exist).
+  const IndexT x01_out({QNSctT(q(0), 1), QNSctT(q(+1), 2)}, TenIndexDirType::OUT);   // (0,0).R -> (0,1).L
+  const IndexT x10_out({QNSctT(q(0), 2), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);  // (0,1).R -> (0,0).L
+  const IndexT x23_out({QNSctT(q(0), 1), QNSctT(q(+2), 1)}, TenIndexDirType::OUT);  // (1,0).R -> (1,1).L
+  const IndexT x32_out({QNSctT(q(0), 3)}, TenIndexDirType::OUT);                   // (1,1).R -> (1,0).L
+
+  const IndexT y02_out({QNSctT(q(0), 1), QNSctT(q(+1), 1), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);  // (0,0).D -> (1,0).U
+  const IndexT y20_out({QNSctT(q(0), 2), QNSctT(q(+1), 1)}, TenIndexDirType::OUT);                     // (1,0).D -> (0,0).U
+  const IndexT y13_out({QNSctT(q(0), 1), QNSctT(q(-2), 1)}, TenIndexDirType::OUT);                     // (0,1).D -> (1,1).U
+  const IndexT y31_out({QNSctT(q(0), 2), QNSctT(q(-1), 2)}, TenIndexDirType::OUT);                     // (1,1).D -> (0,1).U
+
+  // Site tensors follow TRGContractor convention: (l IN, d OUT, r OUT, u IN).
+  auto make_site = [&](const IndexT& l_in, const IndexT& d_out, const IndexT& r_out, const IndexT& u_in) {
+    TensorT T({l_in, d_out, r_out, u_in});
+    T.Random(QNT(0));  // divergence 0
+    return T;
+  };
+
+  qlpeps::TensorNetwork2D<TenElemT, QNT> tn(2, 2, qlpeps::BoundaryCondition::Periodic);
+
+  // Layout:
+  //   0:(0,0)  1:(0,1)
+  //   2:(1,0)  3:(1,1)
+  //
+  // Horizontal bonds (two per row):
+  //   0.R <-> 1.L uses x01_out
+  //   1.R <-> 0.L uses x10_out
+  //   2.R <-> 3.L uses x23_out
+  //   3.R <-> 2.L uses x32_out
+  //
+  // Vertical bonds (two per column):
+  //   0.D <-> 2.U uses y02_out
+  //   2.D <-> 0.U uses y20_out
+  //   1.D <-> 3.U uses y13_out
+  //   3.D <-> 1.U uses y31_out
+  tn({0, 0}) = make_site(InverseIndex(x10_out), y02_out, x01_out, InverseIndex(y20_out));
+  tn({0, 1}) = make_site(InverseIndex(x01_out), y13_out, x10_out, InverseIndex(y31_out));
+  tn({1, 0}) = make_site(InverseIndex(x32_out), y20_out, x23_out, InverseIndex(y02_out));
+  tn({1, 1}) = make_site(InverseIndex(x23_out), y31_out, x32_out, InverseIndex(y13_out));
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(2, 2);
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  const TenElemT Z = trg.Trace(tn);
+  ASSERT_TRUE(std::isfinite(Z));
+
+  using qlten::Contract;
+  for (size_t r = 0; r < 2; ++r) {
+    for (size_t c = 0; c < 2; ++c) {
+      const SiteIdx site{r, c};
+      const TensorT hole = trg.PunchHole(tn, site);
+
+      TensorT out;
+      const TensorT& Ts = tn({r, c});
+      Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out);
+      const TenElemT z_reconstructed = out();
+      EXPECT_NEAR(z_reconstructed, Z, 1e-10 * std::max(1.0, std::abs(Z)));
+    }
+  }
+}
+
 

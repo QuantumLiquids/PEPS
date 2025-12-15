@@ -100,7 +100,10 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
   size_t n = rows_;
   size_t scale_idx = 0;
   
-  while (n > 1) {
+  // Terminate at a 2x2 even lattice and contract it exactly.
+  // The last 1x1 step would require an additional SVD split/coarse-graining, which is unnecessary
+  // and numerically undesirable (extra truncation).
+  while (n > 2) {
     // Current scale is `scale_idx` (size n x n)
     // Next scale is `scale_idx + 1` (size n x n/2 roughly, but stored as flat vector)
     
@@ -317,8 +320,14 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
   }
   
   if (dirty_scale0_.empty()) {
-      if (scales_.empty()) return TenElemT(0); 
-      return ContractFinal1x1_(scales_.back().tens[0]);
+      if (scales_.empty()) return TenElemT(0);
+      if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
+      if (scales_.back().tens.size() == 4) {
+        const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                            scales_.back().tens[2], scales_.back().tens[3]};
+        return ContractFinal2x2_(t2x2);
+      }
+      throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
   }
 
   // Reload dirty tensors from TN
@@ -455,7 +464,13 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
   }
 
   // Final 1x1 Trace
-  return ContractFinal1x1_(scales_.back().tens[0]);
+  if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
+  if (scales_.back().tens.size() == 4) {
+    const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                        scales_.back().tens[2], scales_.back().tens[3]};
+    return ContractFinal2x2_(t2x2);
+  }
+  throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
 }
 
 template <typename TenElemT, typename QNT>
@@ -477,7 +492,15 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
   }
 
   if (trial.layer_updates[0].empty()) {
-    trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
+    if (scales_.back().tens.size() == 1) {
+      trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
+    } else if (scales_.back().tens.size() == 4) {
+      const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                          scales_.back().tens[2], scales_.back().tens[3]};
+      trial.amplitude = ContractFinal2x2_(t2x2);
+    } else {
+      throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
+    }
     return trial;
   }
 
@@ -558,13 +581,34 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
   // Final amplitude: use trial last-layer tensor if present, otherwise cached.
   if (!trial.layer_updates.empty()) {
     const size_t last = trial.layer_updates.size() - 1;
-    auto it = trial.layer_updates[last].find(0);
-    if (it != trial.layer_updates[last].end()) {
-      trial.amplitude = ContractFinal1x1_(it->second);
+    if (scales_.back().tens.size() == 1) {
+      auto it = trial.layer_updates[last].find(0);
+      if (it != trial.layer_updates[last].end()) {
+        trial.amplitude = ContractFinal1x1_(it->second);
+        return trial;
+      }
+    } else if (scales_.back().tens.size() == 4) {
+      std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                    scales_.back().tens[2], scales_.back().tens[3]};
+      for (uint32_t id = 0; id < 4; ++id) {
+        auto it = trial.layer_updates[last].find(id);
+        if (it != trial.layer_updates[last].end()) t2x2[id] = it->second;
+      }
+      trial.amplitude = ContractFinal2x2_(t2x2);
       return trial;
+    } else {
+      throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
     }
   }
-  trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
+  if (scales_.back().tens.size() == 1) {
+    trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
+  } else if (scales_.back().tens.size() == 4) {
+    const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                        scales_.back().tens[2], scales_.back().tens[3]};
+    trial.amplitude = ContractFinal2x2_(t2x2);
+  } else {
+    throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
+  }
   return trial;
 }
 
@@ -612,6 +656,102 @@ TenElemT TRGContractor<TenElemT, QNT>::ContractFinal1x1_(const Tensor& T) const 
     Contract(&T, {0, 2}, &eye_lr, {0, 1}, &tmp);
     Contract(&tmp, {0, 1}, &eye_du, {1, 0}, &tmp2);
     return tmp2();
+}
+
+template <typename TenElemT, typename QNT>
+TenElemT TRGContractor<TenElemT, QNT>::ContractFinal2x2_(const std::array<Tensor, 4>& T2x2) const {
+  using qlten::Contract;
+  // 2x2 PBC torus on the final even lattice.
+  //
+  // Tensor ids (row-major):
+  //   0:(0,0)  1:(0,1)
+  //   2:(1,0)  3:(1,1)
+  //
+  // For size 2 with PBC, each nearest-neighbor pair is connected by TWO bonds (left/right, up/down).
+  //
+  // Contract horizontally: (0,0) with (0,1), and (1,0) with (1,1), each along both {L,R}.
+  Tensor top, bot;
+  Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &top);
+  Contract(&T2x2[2], {0, 2}, &T2x2[3], {2, 0}, &bot);
+  // Then contract vertically: connect (row0) with (row1) along both {D,U} for each column.
+  Tensor out;
+  Contract(&top, {0, 1, 2, 3}, &bot, {1, 0, 3, 2}, &out);
+  return out();
+}
+
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::Tensor
+TRGContractor<TenElemT, QNT>::PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2,
+                                                const uint32_t removed_id) const {
+  using qlten::Contract;
+  // Exact 2x2 PBC hole by contracting the other 3 tensors.
+  //
+  // The output tensor legs are ordered to match the removed site's [L,D,R,U] convention.
+  // See PunchHole() documentation in trg_contractor.h.
+  if (removed_id >= 4) throw std::invalid_argument("TRGContractor::PunchHoleFinal2x2_: removed_id out of range.");
+
+  // Hard-code the 4 cases for clarity (avoid clever but fragile graph logic).
+  // Id layout (row-major):
+  //   0 1
+  //   2 3
+  //
+  // Note: For a 2x2 torus, each nearest-neighbor pair is connected by TWO bonds.
+  // We always contract the two bonds between a pair simultaneously.
+  if (removed_id == 0) {
+    // Remove 0. Remaining: 1,2,3.
+    // Contract (1)-(3) vertically: 1.{D,U} <-> 3.{U,D}
+    Tensor bd;
+    Contract(&T2x2[1], {1, 3}, &T2x2[3], {3, 1}, &bd);  // axes: [1.L, 1.R, 3.L, 3.R]
+    // Contract (3)-(2) horizontally: 3.{L,R} <-> 2.{R,L}
+    Tensor hole;
+    Contract(&bd, {2, 3}, &T2x2[2], {2, 0}, &hole);  // axes: [1.L, 1.R, 2.D, 2.U]
+    // Desired [L,D,R,U] of removed 0 is [1.R, 2.U, 1.L, 2.D].
+    hole.Transpose({1, 3, 0, 2});
+    return hole;
+  }
+  if (removed_id == 1) {
+    // Remove 1. Remaining: 0,2,3.
+    Tensor ac;
+    Contract(&T2x2[0], {1, 3}, &T2x2[2], {3, 1}, &ac);  // axes: [0.L, 0.R, 2.L, 2.R]
+    Tensor hole;
+    Contract(&ac, {2, 3}, &T2x2[3], {2, 0}, &hole);      // axes: [0.L, 0.R, 3.D, 3.U]
+    // Desired [L,D,R,U] of removed 1 is [0.R, 3.U, 0.L, 3.D].
+    hole.Transpose({1, 3, 0, 2});
+    return hole;
+  }
+  if (removed_id == 2) {
+    // Remove 2. Remaining: 0,1,3.
+    Tensor ab;
+    Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);  // axes: [0.D, 0.U, 1.D, 1.U]
+    Tensor hole;
+    Contract(&ab, {2, 3}, &T2x2[3], {3, 1}, &hole);      // axes: [0.D, 0.U, 3.L, 3.R]
+    // Desired [L,D,R,U] of removed 2 is [3.R, 0.U, 3.L, 0.D].
+    hole.Transpose({3, 1, 2, 0});
+    return hole;
+  }
+  // removed_id == 3
+  Tensor ab;
+  Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);    // axes: [0.D, 0.U, 1.D, 1.U]
+  Tensor hole;
+  Contract(&ab, {0, 1}, &T2x2[2], {3, 1}, &hole);        // axes: [1.D, 1.U, 2.L, 2.R]
+  // Desired [L,D,R,U] of removed 3 is [2.R, 1.U, 2.L, 1.D].
+  hole.Transpose({3, 1, 2, 0});
+  return hole;
+}
+
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::Tensor
+TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn,
+                                       const SiteIdx& site) const {
+  if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::PunchHole: call Init(tn) first.");
+  if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) throw std::invalid_argument("TRGContractor::PunchHole: tn must be periodic.");
+  if (tn.rows() != 2 || tn.cols() != 2) {
+    throw std::logic_error("TRGContractor::PunchHole: only 2x2 periodic torus is supported currently.");
+  }
+  // Load 2x2 tensors directly from tn (scale 0), and compute exact hole.
+  std::array<Tensor, 4> t2x2 = {tn({0, 0}), tn({0, 1}), tn({1, 0}), tn({1, 1})};
+  const uint32_t removed_id = NodeId_(site.row(), site.col());
+  return PunchHoleFinal2x2_(t2x2, removed_id);
 }
 
 }  // namespace qlpeps
