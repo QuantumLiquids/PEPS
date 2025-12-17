@@ -257,6 +257,24 @@ TRG 下的 hole 更复杂，因为你需要同时 coarse-grain “带 impurity �
 
 这能把“深水区”风险隔离开：先用 2×2 把 leg-order / index-direction / 共轭等约定钉死，再逐层推广。
 
+### 10.2 参考实现（仅作对照，不是依赖）
+为了实现 general `PunchHole`（impurity TRG / defect contraction），我们参考一份已有实现来对齐算法语义与数据流。
+
+重要声明：
+- 这只是 **reference implementation**（用于理解“应该缓存什么、hole 如何迭代/反传”），不是本项目依赖；PEPS 不会链接/调用该 Fortran 工程。
+- 我们当前只需要 `bond_index = k = 0` 的情况（也就是不保留 \(\lambda^k\) 的额外权重；但仍需要缓存“吸收了 \(\sqrt{s}\)”的分裂块）。
+
+参考材料（绝对路径，可能随个人环境变化）：
+- Fortran 工程：`/Users/wanghaoxin/GitHub/grad4.0-main`
+  - 核心 hole 迭代：`grad_op_mc.f90` 中的 `contract_with_defect`（递归 + 终结器 + 反向 contraction）
+  - impurity/dirty 相关语义：`impurity_op.f90`（impurity 传播/合并）
+  - 数据结构：`datas.f90`（`tn/node/impurity` 的字段含义）
+- 理论/流程参考：Yubin Li, PhD Thesis（PDF：`/Users/wanghaoxin/Desktop/thesis_Yubin.pdf`，第 38–40 页）
+
+与本项目的术语映射（最低限度）：
+- Fortran 的 `svdA/svdB` 把 rank-4 张量分裂成两块 rank-3（并吸收 \(\sqrt{s}\)），对应我们需要缓存的 **P/Q**（不是原始 U/V）。
+- general hole 的实现要求在每个 scale、每个 coarse site 缓存其对应的 P/Q（以及 coarse-graining 的局部连接关系），才能把 2×2 terminator 的 hole 沿光锥“推回”到 scale-0。
+
 ## 11. 数值稳定性（可选项：先保持 amplitude 语义）
 你们当前 VMC 需要的是 **amplitude（也就是收缩得到的复/实标量 \(Z\)）**，而不是经典统计那套 `log_norm_` 叙事。
 

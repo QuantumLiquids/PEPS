@@ -327,4 +327,27 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
   }
 }
 
+TEST(TRGContractorPBC, PunchHole4x4NotImplementedYet) {
+  // This test is intentionally minimal: it must compile today and provide a clear
+  // failure mode until general PunchHole (impurity TRG) is implemented.
+  //
+  // Once general PunchHole is implemented, replace this with a correctness test:
+  // for each site i, Contract(PunchHole(tn,i), tn(i)) == Trace(tn).
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+
+  const size_t n = 4;
+  const double K = 0.3;
+  auto Kx = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  auto Ky = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/16, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  // Current behavior: only 2x2 is supported.
+  EXPECT_THROW((void)trg.PunchHole(tn, SiteIdx{0, 0}), std::logic_error);
+}
+
 
