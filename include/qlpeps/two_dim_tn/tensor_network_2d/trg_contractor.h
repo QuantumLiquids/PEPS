@@ -518,6 +518,7 @@ public:
   Tensor ContractDiamond_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine_embed);
   TenElemT ContractFinal1x1_(const Tensor& T) const;
   TenElemT ContractFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
+  TenElemT ContractFinal3x3_(const std::array<Tensor, 9>& T3x3) const;
   Tensor PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2, uint32_t removed_id) const;
 
   size_t rows_ = 0;

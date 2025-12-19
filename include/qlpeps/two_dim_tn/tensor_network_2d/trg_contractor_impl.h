@@ -134,8 +134,14 @@ void TRGContractor<TenElemT, QNT>::Init(const TensorNetwork2D<TenElemT, QNT>& tn
   if (rows_ != cols_) {
     throw std::invalid_argument("TRGContractor::Init: requires square lattice (rows == cols).");
   }
-  if (!IsPowerOfTwo_(rows_)) {
-    throw std::invalid_argument("TRGContractor::Init: requires n = 2^m (power-of-two linear size).");
+  // Supported sizes:
+  // - n = 2^m (terminates at 2x2 exact contraction)
+  // - n = 3 * 2^k (terminates at 3x3 exact contraction)
+  const bool pow2 = IsPowerOfTwo_(rows_);
+  const bool three_times_pow2 = (rows_ % 3 == 0) && IsPowerOfTwo_(rows_ / 3);
+  if (!pow2 && !three_times_pow2) {
+    throw std::invalid_argument(
+        "TRGContractor::Init: requires n = 2^m or n = 3*2^k (square PBC lattice).");
   }
 
   ClearCache();
@@ -196,10 +202,12 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
   size_t n = rows_;
   size_t scale_idx = 0;
   
-  // Terminate at a 2x2 even lattice and contract it exactly.
+  // Terminate at a small even lattice and contract it exactly:
+  // - 2x2 for n = 2^m
+  // - 3x3 for n = 3*2^k
   // The last 1x1 step would require an additional SVD split/coarse-graining, which is unnecessary
   // and numerically undesirable (extra truncation).
-  while (n > 2) {
+  while (n > 3) {
     // Current scale is `scale_idx` (size n x n)
     // Next scale is `scale_idx + 1` (size n x n/2 roughly, but stored as flat vector)
     
@@ -215,6 +223,9 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
     if (scale_idx % 2 == 0) {
       // Even -> Odd (Plaquette RG)
       // n x n -> n x n/2 (embedded)
+      if ((n & 1U) != 0U) {
+        throw std::logic_error("TRGContractor::BuildTopology_: even->odd step requires even n.");
+      }
       size_t coarse_count = (n * n) / 2;
       coarse_layer.tens.resize(coarse_count);
       coarse_layer.coarse_to_fine.resize(coarse_count);
@@ -297,10 +308,19 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
         }
       }
       
-      n = n / 2; // Reduce n for next iteration
+      n = n / 2; // Reduce n for next iteration (6->3, 12->6, ...)
     }
     
     scale_idx++;
+  }
+
+  // NOTE: The final scale tensor storage is resized during topology construction steps above.
+  // For n==3, the last coarse layer is 3x3 and has 9 tensors; for n==2 it has 4 tensors.
+  //
+  // For base cases (rows_ == 2 or 3), the loop above does not run. We still need a defined
+  // fine_to_coarse mapping at scale 0 for consistency (all invalid = no parents).
+  if (scales_.size() == 1) {
+    scales_[0].fine_to_coarse.assign(rows_ * cols_, {0xFFFFFFFF, 0xFFFFFFFF});
   }
 }
 
@@ -541,6 +561,25 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
      scales_[0].tens[id] = tn({coords.first, coords.second});
   }
 
+  // If there is no RG step (n == 2 or 3), we can contract the terminal lattice directly
+  // without building split caches.
+  if (scales_.size() == 1) {
+    dirty_scale0_.clear();
+    if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
+    if (scales_.back().tens.size() == 4) {
+      const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                          scales_.back().tens[2], scales_.back().tens[3]};
+      return ContractFinal2x2_(t2x2);
+    }
+    if (scales_.back().tens.size() == 9) {
+      const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                          scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                          scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      return ContractFinal3x3_(t3x3);
+    }
+    throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
+  }
+
   // Maintain split cache on scale 0 for the reloaded nodes.
   {
     std::set<uint32_t> dirty0(dirty_scale0_.begin(), dirty_scale0_.end());
@@ -712,6 +751,12 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
                                         scales_.back().tens[2], scales_.back().tens[3]};
     return ContractFinal2x2_(t2x2);
   }
+  if (scales_.back().tens.size() == 9) {
+    const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                        scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                        scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+    return ContractFinal3x3_(t3x3);
+  }
   throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
 }
 
@@ -743,6 +788,11 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
       const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
                                           scales_.back().tens[2], scales_.back().tens[3]};
       trial.amplitude = ContractFinal2x2_(t2x2);
+    } else if (scales_.back().tens.size() == 9) {
+      const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                          scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                          scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      trial.amplitude = ContractFinal3x3_(t3x3);
     } else {
       throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
     }
@@ -844,6 +894,16 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
       }
       trial.amplitude = ContractFinal2x2_(t2x2);
       return trial;
+    } else if (scales_.back().tens.size() == 9) {
+      std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                    scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                    scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      for (uint32_t id = 0; id < 9; ++id) {
+        auto it = trial.layer_updates[last].find(id);
+        if (it != trial.layer_updates[last].end()) t3x3[id] = it->second;
+      }
+      trial.amplitude = ContractFinal3x3_(t3x3);
+      return trial;
     } else {
       throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
     }
@@ -854,6 +914,11 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
     const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
                                         scales_.back().tens[2], scales_.back().tens[3]};
     trial.amplitude = ContractFinal2x2_(t2x2);
+  } else if (scales_.back().tens.size() == 9) {
+    const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                        scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                        scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+    trial.amplitude = ContractFinal3x3_(t3x3);
   } else {
     throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
   }
@@ -925,6 +990,65 @@ TenElemT TRGContractor<TenElemT, QNT>::ContractFinal2x2_(const std::array<Tensor
   Tensor out;
   Contract(&top, {0, 1, 2, 3}, &bot, {1, 0, 3, 2}, &out);
   return out();
+}
+
+template <typename TenElemT, typename QNT>
+TenElemT TRGContractor<TenElemT, QNT>::ContractFinal3x3_(const std::array<Tensor, 9>& T3x3) const {
+  using qlten::Contract;
+  using qlten::Eye;
+
+  // 3x3 PBC torus on the terminal even lattice.
+  //
+  // Tensor ids (row-major):
+  //   0 1 2
+  //   3 4 5
+  //   6 7 8
+  //
+  // Each tensor uses leg order [L(0), D(1), R(2), U(3)].
+
+  auto row_ring = [&](const Tensor& A0, const Tensor& A1, const Tensor& A2) -> Tensor {
+    Tensor t01;
+    Contract(&A0, {2}, &A1, {0}, &t01);
+
+    Tensor t012;
+    Contract(&t01, {4}, &A2, {0}, &t012);
+
+    // Close horizontal ring: trace A0.L with A2.R.
+    const auto& idx_r = A2.GetIndex(2);
+    const auto eye_lr = Eye<TenElemT, QNT>(idx_r);
+
+    // t012 axes: [A0.L,A0.D,A0.U, A1.D,A1.U, A2.D,A2.R,A2.U]
+    Tensor closed;
+    Contract(&t012, {0, 6}, &eye_lr, {0, 1}, &closed);
+    // closed axes: [A0.D,A0.U, A1.D,A1.U, A2.D,A2.U]
+    return closed;
+  };
+
+  Tensor R0 = row_ring(T3x3[0], T3x3[1], T3x3[2]);
+  Tensor R1 = row_ring(T3x3[3], T3x3[4], T3x3[5]);
+  Tensor R2 = row_ring(T3x3[6], T3x3[7], T3x3[8]);
+
+  // Contract vertically between rows: connect D (OUT) with U (IN).
+  Tensor M01;
+  Contract(&R0, {0, 2, 4}, &R1, {1, 3, 5}, &M01);
+
+  Tensor M012;
+  Contract(&M01, {3, 4, 5}, &R2, {1, 3, 5}, &M012);
+
+  // Close vertical PBC: trace (R0.Uc) with (R2.Dc) for c=0,1,2.
+  Tensor tmp = M012;
+  for (int iter = 0; iter < 3; ++iter) {
+    const size_t rank = tmp.Rank();
+    const size_t u_ax = rank / 2 - 1;  // last U
+    const size_t d_ax = rank - 1;      // last D
+    const auto& idx_d = tmp.GetIndex(d_ax);
+    const auto eye_du = Eye<TenElemT, QNT>(idx_d);
+    Tensor out;
+    Contract(&tmp, {d_ax, u_ax}, &eye_du, {1, 0}, &out);
+    tmp = std::move(out);
+  }
+
+  return tmp();
 }
 
 template <typename TenElemT, typename QNT>

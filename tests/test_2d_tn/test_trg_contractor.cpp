@@ -10,7 +10,6 @@
 
 #include <cmath>
 #include <array>
-
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h"
@@ -129,6 +128,11 @@ double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT> &tn, size_t dmax) 
   }
   return Z;
 }
+
+// Exact Ising torus references (computed externally via Python transfer-matrix).
+// Keep tests self-contained and fast; do NOT re-run transfer matrix in C++.
+constexpr double kZ2IsingPbcZ_3x3_K0p3 = 1551.4044599910355;
+constexpr double kZ2IsingPbcZ_6x6_K0p3 = 2394192514840.829;
 } // namespace
 
 TEST(TRGContractorPBC, Uniform4x4) {
@@ -145,6 +149,45 @@ TEST(TRGContractorPBC, Uniform4x4) {
 
   const double Z_trg = TraceTRGZ<TenElemT, QNT>(tn, /*dmax=*/16);
   EXPECT_NEAR(Z_trg, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
+}
+
+TEST(TRGContractorPBC, Uniform3x3Z2Ising) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+
+  const size_t n = 3;
+  const double K = 0.3;
+
+  auto Kx = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  auto Ky = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/16, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  const double Z_trg = trg.Trace(tn);
+  EXPECT_NEAR(Z_trg, kZ2IsingPbcZ_3x3_K0p3, 1e-12 * std::max(1.0, std::abs(kZ2IsingPbcZ_3x3_K0p3)));
+}
+
+TEST(TRGContractorPBC, Uniform6x6Z2Ising) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+
+  const size_t n = 6;
+  const double K = 0.3;
+
+  auto Kx = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  auto Ky = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  // Use a generous Dmax; for 6x6 this should be enough to match the exact transfer-matrix result.
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  const double Z_trg = trg.Trace(tn);
+  EXPECT_NEAR(Z_trg, kZ2IsingPbcZ_6x6_K0p3, 1e-10 * std::max(1.0, std::abs(kZ2IsingPbcZ_6x6_K0p3)));
 }
 
 TEST(TRGContractorPBC, NonUniform4x4) {
@@ -177,7 +220,7 @@ TEST(TRGContractorPBC, NonUniform8x8) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
 
-  const size_t n = 8; // power-of-two required by TRGContractor
+  const size_t n = 8; // supported by TRGContractor (n = 2^m or 3*2^k)
   const double K0 = 0.5;
 
   // Deterministic, strictly-positive, non-uniform couplings (no pinning field, Z2 symmetric).
@@ -388,7 +431,7 @@ TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
 
   qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
   // Use large enough Dmax to avoid truncation being the dominant error source in this wiring test.
-  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/32, /*trunc_error=*/0.0));
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
   trg.Init(tn);
 
   const TenElemT Z = trg.Trace(tn);
