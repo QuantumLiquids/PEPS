@@ -19,7 +19,6 @@ using namespace qlten;
 using namespace qlpeps;
 
 namespace {
-
 // ---- Shared helpers for Z2-symmetric classical Ising TN on a torus ----
 
 struct Z2IsingTNBuilder {
@@ -50,10 +49,10 @@ struct Z2IsingTNBuilder {
     return {std::sqrt(l0), std::sqrt(std::max(0.0, l1))};
   }
 
-  TensorT MakeSiteTensorFromSqrtLambda(const std::array<double, 2>& sl_l,
-                                      const std::array<double, 2>& sl_d,
-                                      const std::array<double, 2>& sl_r,
-                                      const std::array<double, 2>& sl_u) const {
+  TensorT MakeSiteTensorFromSqrtLambda(const std::array<double, 2> &sl_l,
+                                       const std::array<double, 2> &sl_d,
+                                       const std::array<double, 2> &sl_r,
+                                       const std::array<double, 2> &sl_u) const {
     // Z2-symmetric local vertex tensor:
     // T(l,d,r,u) = 2 * sl_l[l] * sl_d[d] * sl_r[r] * sl_u[u] if total parity is even, else 0.
     TensorT T({idx_l, idx_d, idx_r, idx_u});
@@ -74,9 +73,9 @@ struct Z2IsingTNBuilder {
   }
 };
 
-template <class KxFn, class KyFn>
+template<class KxFn, class KyFn>
 qlpeps::TensorNetwork2D<QLTEN_Double, qlten::special_qn::Z2QN>
-BuildZ2IsingTorusTN(size_t n, const KxFn& Kx, const KyFn& Ky) {
+BuildZ2IsingTorusTN(size_t n, const KxFn &Kx, const KyFn &Ky) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
 
@@ -98,12 +97,12 @@ BuildZ2IsingTorusTN(size_t n, const KxFn& Kx, const KyFn& Ky) {
   return tn;
 }
 
-template <class KxFn, class KyFn>
+template<class KxFn, class KyFn>
 Z2IsingTNBuilder::TensorT MakeZ2IsingSiteTensorAt(size_t n,
                                                   size_t r,
                                                   size_t c,
-                                                  const KxFn& Kx,
-                                                  const KyFn& Ky) {
+                                                  const KxFn &Kx,
+                                                  const KyFn &Ky) {
   const Z2IsingTNBuilder b;
   const size_t cm1 = (c + n - 1) % n;
   const size_t rm1 = (r + n - 1) % n;
@@ -114,11 +113,15 @@ Z2IsingTNBuilder::TensorT MakeZ2IsingSiteTensorAt(size_t n,
   return b.MakeSiteTensorFromSqrtLambda(sl_l, sl_d, sl_r, sl_u);
 }
 
-template <typename TenElemT, typename QNT>
-double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT>& tn, size_t dmax) {
+template<typename TenElemT, typename QNT>
+double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT> &tn, size_t dmax) {
   qlpeps::TRGContractor<TenElemT, QNT> trg(tn.rows(), tn.cols());
   trg.SetTruncateParams(qlpeps::TRGContractor<TenElemT, QNT>::TruncateParams::SVD(
-      /*d_min=*/2, /*d_max=*/dmax, /*trunc_error=*/0.0));
+    /*d_min=*/2,
+              /*d_max=*/
+              dmax,
+              /*trunc_error=*/
+              0.0));
   trg.Init(tn);
   const double Z = trg.Trace(tn);
   if (!std::isfinite(Z) || !(Z > 0.0)) {
@@ -126,8 +129,7 @@ double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT>& tn, size_t dmax) 
   }
   return Z;
 }
-
-}  // namespace
+} // namespace
 
 TEST(TRGContractorPBC, Uniform4x4) {
   using TenElemT = QLTEN_Double;
@@ -135,7 +137,7 @@ TEST(TRGContractorPBC, Uniform4x4) {
 
   const size_t n = 4;
   const double K = 0.3;
-  constexpr double Z_tm_ref = 3.57011518773655815e+05;  // Python transfer-matrix (M=N=4, K=0.3)
+  constexpr double Z_tm_ref = 3.57011518773655815e+05; // Python transfer-matrix (M=N=4, K=0.3)
 
   auto Kx = [&](size_t /*r*/, size_t /*c*/) { return K; };
   auto Ky = [&](size_t /*r*/, size_t /*c*/) { return K; };
@@ -175,7 +177,7 @@ TEST(TRGContractorPBC, NonUniform8x8) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
 
-  const size_t n = 8;  // power-of-two required by TRGContractor
+  const size_t n = 8; // power-of-two required by TRGContractor
   const double K0 = 0.5;
 
   // Deterministic, strictly-positive, non-uniform couplings (no pinning field, Z2 symmetric).
@@ -215,11 +217,11 @@ TEST(TRGContractorPBC, TrialReplacementSingleBond4x4) {
   const double K0 = 0.3;
   const size_t r0 = 1;
   const size_t c0 = 2;
-  const double K1 = 0.37;  // modify one horizontal bond Kx(r0,c0)
+  const double K1 = 0.37; // modify one horizontal bond Kx(r0,c0)
 
   // Pure-Python transfer-matrix reference (4x4 torus, Ky=K0 uniform, Kx has one modified bond).
   constexpr double Z_tm_ref = 3.68441965476735204e+05;
-  constexpr double Z0_tm_ref = 3.57011518773655815e+05;  // uniform K=0.3 (same as Uniform4x4)
+  constexpr double Z0_tm_ref = 3.57011518773655815e+05; // uniform K=0.3 (same as Uniform4x4)
 
   auto Kx0 = [&](size_t /*r*/, size_t /*c*/) { return K0; };
   auto Ky0 = [&](size_t /*r*/, size_t /*c*/) { return K0; };
@@ -244,7 +246,7 @@ TEST(TRGContractorPBC, TrialReplacementSingleBond4x4) {
   const TensorT tL = MakeZ2IsingSiteTensorAt(n, sL.row(), sL.col(), Kx1, Ky1);
   const TensorT tR = MakeZ2IsingSiteTensorAt(n, sR.row(), sR.col(), Kx1, Ky1);
 
-  const std::vector<std::pair<SiteIdx, TensorT>> repl{{sL, tL}, {sR, tR}};
+  const std::vector<std::pair<SiteIdx, TensorT> > repl{{sL, tL}, {sR, tR}};
   auto trial = trg.BeginTrialWithReplacement(repl);
   const double Z_trial = trial.amplitude;
   EXPECT_NEAR(Z_trial, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
@@ -266,20 +268,21 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
   auto q = [](int sz) { return QNT({QNCard("Sz", U1QNVal(sz))}); };
 
   // Build 8 distinct bond indices (each has at least charge-0 sector, so divergence-0 blocks exist).
-  const IndexT x01_out({QNSctT(q(0), 1), QNSctT(q(+1), 2)}, TenIndexDirType::OUT);   // (0,0).R -> (0,1).L
-  const IndexT x10_out({QNSctT(q(0), 2), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);  // (0,1).R -> (0,0).L
-  const IndexT x23_out({QNSctT(q(0), 1), QNSctT(q(+2), 1)}, TenIndexDirType::OUT);  // (1,0).R -> (1,1).L
-  const IndexT x32_out({QNSctT(q(0), 3)}, TenIndexDirType::OUT);                   // (1,1).R -> (1,0).L
+  const IndexT x01_out({QNSctT(q(0), 1), QNSctT(q(+1), 2)}, TenIndexDirType::OUT); // (0,0).R -> (0,1).L
+  const IndexT x10_out({QNSctT(q(0), 2), QNSctT(q(-1), 1)}, TenIndexDirType::OUT); // (0,1).R -> (0,0).L
+  const IndexT x23_out({QNSctT(q(0), 1), QNSctT(q(+2), 1)}, TenIndexDirType::OUT); // (1,0).R -> (1,1).L
+  const IndexT x32_out({QNSctT(q(0), 3)}, TenIndexDirType::OUT); // (1,1).R -> (1,0).L
 
-  const IndexT y02_out({QNSctT(q(0), 1), QNSctT(q(+1), 1), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);  // (0,0).D -> (1,0).U
-  const IndexT y20_out({QNSctT(q(0), 2), QNSctT(q(+1), 1)}, TenIndexDirType::OUT);                     // (1,0).D -> (0,0).U
-  const IndexT y13_out({QNSctT(q(0), 1), QNSctT(q(-2), 1)}, TenIndexDirType::OUT);                     // (0,1).D -> (1,1).U
-  const IndexT y31_out({QNSctT(q(0), 2), QNSctT(q(-1), 2)}, TenIndexDirType::OUT);                     // (1,1).D -> (0,1).U
+  const IndexT y02_out({QNSctT(q(0), 1), QNSctT(q(+1), 1), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);
+  // (0,0).D -> (1,0).U
+  const IndexT y20_out({QNSctT(q(0), 2), QNSctT(q(+1), 1)}, TenIndexDirType::OUT); // (1,0).D -> (0,0).U
+  const IndexT y13_out({QNSctT(q(0), 1), QNSctT(q(-2), 1)}, TenIndexDirType::OUT); // (0,1).D -> (1,1).U
+  const IndexT y31_out({QNSctT(q(0), 2), QNSctT(q(-1), 2)}, TenIndexDirType::OUT); // (1,1).D -> (0,1).U
 
   // Site tensors follow TRGContractor convention: (l IN, d OUT, r OUT, u IN).
-  auto make_site = [&](const IndexT& l_in, const IndexT& d_out, const IndexT& r_out, const IndexT& u_in) {
+  auto make_site = [&](const IndexT &l_in, const IndexT &d_out, const IndexT &r_out, const IndexT &u_in) {
     TensorT T({l_in, d_out, r_out, u_in});
-    T.Random(QNT(0));  // divergence 0
+    T.Random(QNT(0)); // divergence 0
     return T;
   };
 
@@ -319,7 +322,7 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
       const TensorT hole = trg.PunchHole(tn, site);
 
       TensorT out;
-      const TensorT& Ts = tn({r, c});
+      const TensorT &Ts = tn({r, c});
       Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out);
       const TenElemT z_reconstructed = out();
       EXPECT_NEAR(z_reconstructed, Z, 1e-10 * std::max(1.0, std::abs(Z)));
@@ -327,12 +330,100 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
   }
 }
 
-TEST(TRGContractorPBC, PunchHole4x4NotImplementedYet) {
-  // This test is intentionally minimal: it must compile today and provide a clear
-  // failure mode until general PunchHole (impurity TRG) is implemented.
+TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::U1QN;
+  using IndexT = qlten::Index<QNT>;
+  using QNSctT = qlten::QNSector<QNT>;
+  using TensorT = qlten::QLTensor<TenElemT, QNT>;
+
+  auto q = [](int sz) { return QNT({QNCard("Sz", U1QNVal(sz))}); };
+
+  constexpr size_t n = 4;
+
+  // Build per-directed-bond indices:
+  // - x_out[r,c] is (r,c).R -> (r,c+1).L
+  // - y_out[r,c] is (r,c).D -> (r+1,c).U
   //
-  // Once general PunchHole is implemented, replace this with a correctness test:
-  // for each site i, Contract(PunchHole(tn,i), tn(i)) == Trace(tn).
+  // Each index includes at least charge-0 sector so divergence-0 blocks exist.
+  std::array<IndexT, n * n> x_out;
+  std::array<IndexT, n * n> y_out;
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const size_t id = r * n + c;
+      const int d0 = 1 + int(id % 3); // 1..3
+      const int d1 = 1 + int((id / 3) % 2); // 1..2
+      const int d2 = 1 + int((id / 5) % 2); // 1..2
+      x_out[id] = IndexT({QNSctT(q(0), d0), QNSctT(q(+1), d1), QNSctT(q(-1), d2)}, TenIndexDirType::OUT);
+
+      const int e0 = 1 + int((id + 1) % 3); // 1..3
+      const int e2 = 1 + int(((id + 2) / 4) % 2); // 1..2
+      y_out[id] = IndexT({QNSctT(q(0), e0), QNSctT(q(+2), e2)}, TenIndexDirType::OUT);
+    }
+  }
+
+  // Site tensors follow TRGContractor convention: (l IN, d OUT, r OUT, u IN).
+  auto make_site = [&](const IndexT &l_in, const IndexT &d_out, const IndexT &r_out, const IndexT &u_in) {
+    TensorT T({l_in, d_out, r_out, u_in});
+    T.Random(QNT(0)); // divergence 0
+    return T;
+  };
+
+  qlpeps::TensorNetwork2D<TenElemT, QNT> tn(n, n, qlpeps::BoundaryCondition::Periodic);
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const size_t id = r * n + c;
+      const size_t cm1 = (c + n - 1) % n;
+      const size_t rm1 = (r + n - 1) % n;
+      const size_t id_l = r * n + cm1; // left neighbor contributes x_out[r,cm1] to our l_in
+      const size_t id_u = rm1 * n + c; // up   neighbor contributes y_out[rm1,c] to our u_in
+
+      const IndexT l_in = InverseIndex(x_out[id_l]);
+      const IndexT d_out = y_out[id];
+      const IndexT r_out = x_out[id];
+      const IndexT u_in = InverseIndex(y_out[id_u]);
+      tn({r, c}) = make_site(l_in, d_out, r_out, u_in);
+    }
+  }
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  // Use large enough Dmax to avoid truncation being the dominant error source in this wiring test.
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/32, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  const TenElemT Z = trg.Trace(tn);
+  ASSERT_TRUE(std::isfinite(Z));
+
+  using qlten::Contract;
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const SiteIdx site{r, c};
+      TensorT hole;
+      ASSERT_NO_THROW(hole = trg.PunchHole(tn, site));
+
+// Optional (expensive) probe baseline comparisons for local debugging.
+// This should stay OFF in normal CI runs.
+#if defined(QLPEPS_TRG_PUNCHHOLE_COMPARE_BASELINE)
+      if (r == 0 && c == 0) {
+        const TensorT hole_ref = trg.PunchHoleBaselineByProbingForTest(tn, site);
+        TensorT out_ref;
+        const TensorT& Ts0 = tn({r, c});
+        ASSERT_NO_THROW(Contract(&hole_ref, {0, 1, 2, 3}, &Ts0, {0, 1, 2, 3}, &out_ref));
+        const TenElemT z_ref = out_ref();
+        EXPECT_NEAR(z_ref, Z, 1e-10 * std::max(1.0, std::abs(Z)));
+      }
+#endif
+
+      TensorT out;
+      const TensorT &Ts = tn({r, c});
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      const TenElemT z_reconstructed = out();
+      EXPECT_NEAR(z_reconstructed, Z, 1e-10 * std::max(1.0, std::abs(Z)));
+    }
+  }
+}
+
+TEST(TRGContractorPBC, PunchHole4x4Z2Ising) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
 
@@ -343,11 +434,57 @@ TEST(TRGContractorPBC, PunchHole4x4NotImplementedYet) {
   const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
 
   qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  // Use a small Dmax first to make topology/indexing bugs easier to spot (less room to hide behind large subspaces).
   trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/16, /*trunc_error=*/0.0));
   trg.Init(tn);
 
-  // Current behavior: only 2x2 is supported.
-  EXPECT_THROW((void)trg.PunchHole(tn, SiteIdx{0, 0}), std::logic_error);
+  // Initialize cache so the baseline probing uses a clean, initialized TRG cache.
+  double Z = 0.0;
+  ASSERT_NO_THROW(Z = trg.Trace(tn));
+
+  // Correctness check (option-1 semantics):
+  // For each site i, contract hole_i with the original site tensor and recover the global trace.
+  using qlten::Contract;
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const SiteIdx site{r, c};
+      decltype(trg)::Tensor hole;
+      // Now use the production PunchHole which supports 4x4
+      ASSERT_NO_THROW(hole = trg.PunchHole(tn, site));
+
+      const auto &Ts = tn({site.row(), site.col()});
+
+      // Optional: Compare with baseline for one site to ensure exact match of the hole tensor itself
+      if (r == 0 && c == 0) {
+#if defined(QLPEPS_TRG_PUNCHHOLE_COMPARE_BASELINE)
+        decltype(trg)::Tensor hole_ref = trg.PunchHoleBaselineByProbingForTest(tn, site);
+        // Expect very close match (same TRG environment logic)
+        decltype(trg)::Tensor diff;
+        diff = hole + (-hole_ref);
+        EXPECT_NEAR(diff.GetQuasi2Norm(), 0.0, 2e-4);
+        // Debug code: we sometimes observe maybe hole = 4 * hole_ref
+        // auto diff2 = hole + (-4.0 * hole_ref);
+        // if (diff2.Get2Norm() < 1e-6) {
+        //   std::cout << "[diff2]" << diff2 <<", Yes, hole = 4 * hole_ref"<< std::endl;
+        // }
+
+        // Baseline sanity: contracting the baseline hole with the original site tensor
+        // should reconstruct the same global trace (approximately under truncation).
+        {
+          decltype(trg)::Tensor out_ref;
+          ASSERT_NO_THROW(Contract(&hole_ref, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out_ref));
+          const double z_ref = out_ref();
+          EXPECT_NEAR(z_ref, Z, 1e-6 * std::max(1.0, std::abs(Z)));
+        }
+#endif
+      }
+
+      typename decltype(trg)::Tensor out;
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      const double z_reconstructed = out();
+
+      // With truncation this is approximate; allow a looser relative tolerance for small Dmax.
+      EXPECT_NEAR(z_reconstructed, Z, 1e-6 * std::max(1.0, std::abs(Z)));
+    }
+  }
 }
-
-

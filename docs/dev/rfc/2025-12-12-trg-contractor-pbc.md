@@ -275,6 +275,27 @@ TRG 下的 hole 更复杂，因为你需要同时 coarse-grain “带 impurity �
 - Fortran 的 `svdA/svdB` 把 rank-4 张量分裂成两块 rank-3（并吸收 \(\sqrt{s}\)），对应我们需要缓存的 **P/Q**（不是原始 U/V）。
 - general hole 的实现要求在每个 scale、每个 coarse site 缓存其对应的 P/Q（以及 coarse-graining 的局部连接关系），才能把 2×2 terminator 的 hole 沿光锥“推回”到 scale-0。
 
+更具体的字段对应（k=0；忽略 \(\lambda^k\) 相关对角权重）：
+- 我们的 `SplitType0_`（A 子格 / even parity）：
+  - `P(l,u,a)` 对应 Fortran `svdA` 产生的 **A3**（up+left side）
+  - `Q(a,d,r)` 对应 Fortran `svdA` 产生的 **A1**（down+right side）
+- 我们的 `SplitType1_`（B 子格 / odd parity）：
+  - `Q(l,d,a)` 对应 Fortran `svdB` 产生的 **A2**（left+down side）
+  - `P(a,r,u)` 对应 Fortran `svdB` 产生的 **A4**（right+up side）
+
+因此，在 C++ 侧为了迁移 `contract_with_defect` 的思路，我们可以用缓存的 `split_P/split_Q + split_type`
+直接重建出 Fortran 风格的 \(\{A1,A2,A3,A4\}\) 视图（不需要真的存四份，只要按 split_type 做别名/访问器）。
+
+> 实战教训（Z2）：不要用 `Index` 相等来“识别几何腿”
+>
+> `qlten::Index` 的 `operator==` 本质上按 hash（QN sectors + direction）比较。
+> 在 Z2 / 小 QN 的模型里，多条外腿经常完全同构，导致 NW/NE 或 L/D 等腿在 `Index` 层面不可区分。
+>
+> 这意味着：
+> - 依赖 `Index==` 来“动态推断 perm/轴映射”是错误路线；
+> - `PunchHole`/impurity-TRG 必须镜像 `Trace()` 的固定 wiring，并以 role/topology 驱动轴集合；
+> - Fortran 代码用 `setName` 给腿打标签能避免这种“隐式错连线”。
+
 ## 11. 数值稳定性（可选项：先保持 amplitude 语义）
 你们当前 VMC 需要的是 **amplitude（也就是收缩得到的复/实标量 \(Z\)）**，而不是经典统计那套 `log_norm_` 叙事。
 

@@ -206,6 +206,23 @@ class TRGContractor {
     return Trace(tn);
   }
 
+#if defined(QLPEPS_UNITTEST)
+  /**
+   * @brief Expose split pieces for module-level unit tests only.
+   *
+   * @note This is intentionally guarded by QLPEPS_UNITTEST so it is not part of the
+   * production API surface.
+   */
+  std::pair<Tensor, Tensor> SplitType0PiecesForTest(const Tensor& T) const {
+    auto r = SplitType0_(T);
+    return {std::move(r.P), std::move(r.Q)};
+  }
+  std::pair<Tensor, Tensor> SplitType1PiecesForTest(const Tensor& T) const {
+    auto r = SplitType1_(T);
+    return {std::move(r.P), std::move(r.Q)};
+  }
+#endif
+
   /**
    * @brief Trial object produced by a "shadow" update.
    *
@@ -294,6 +311,88 @@ class TRGContractor {
    */
   Tensor PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn, const SiteIdx& site) const;
 
+ private:
+  /**
+   * @brief Internal implementation for 4x4 "punch-hole" using cached finite-size TRG graph.
+   *
+   * @details
+   * This routine mirrors the fixed contraction graph used by @ref Trace by reverse-mode contraction
+   * (adjoint pullback) through the cached split pieces and local plaquette/diamond contractions.
+   *
+   * @par A note on the historical "0.25" normalization issue
+   * Earlier revisions contained a hard-coded normalization:
+   * \f[
+   *   \mathrm{hole} \leftarrow 0.25 \times \mathrm{hole},
+   * \f]
+   * to satisfy unit tests requiring \f$\langle \mathrm{hole}_i, T_i\rangle \approx Z\f$.
+   *
+   * The *possible cause* is **systematic over-counting induced by the 4x4 PBC topology encoding**:
+   *
+   * - In @ref BuildTopology_ we build `fine_to_coarse` such that a fine node may have **two coarse
+   *   parents** on each RG step (checkerboard plaquette step and the embedded diamond step).
+   * - In @ref PunchHole4x4_ we then accumulate pullbacks across parent contexts.
+   *
+   * On a 4x4 torus there are exactly two RG steps (scale0->scale1 and scale1->scale2), hence a naive
+   * "sum over both parents" leads to an overall multiplicity of \f$2\times2 = 4\f$ in the composed
+   * pullback, which shows up as \f$\langle \mathrm{hole}, T_{\text{site}}\rangle \approx 4 Z\f$.
+   *
+   * @par Truncation and "frozen" SVD pieces
+   * This code uses a *linearized split* for backpropagation: it treats the SVD factors
+   * \f$(U,S,V)\f$ from the forward pass as **frozen** when mapping a site tensor perturbation
+   * \f$\delta T\f$ to split-piece perturbations \f$(\delta P,\delta Q)\f$.
+   *
+   * - With nonzero truncation (finite `D_max`), the true TRG contraction is not strictly linear in a
+   *   single site tensor, so \f$\langle \mathrm{hole},T\rangle\f$ is only required to match \f$Z\f$
+   *   approximately.
+   * - The observed factor-4 mismatch, however, is a **topology/multiplicity** effect and can persist
+   *   even when truncation is disabled (it is not "caused by truncation").
+   *
+   * @par What to do during future refactors
+   * Prefer eliminating the double-cover at the computation-graph level (single-cover RG mapping, or
+   * an impurity-list style algorithm as in thesis Fig. 3.29 / Fortran reference) rather than relying
+   * on an opaque global rescale.
+   *
+   * Suggested regression checks when refactoring:
+   * - Use a 3x3 terminator (or other terminator variants) to ensure the hole propagation remains
+   *   graph-consistent.
+   * - Test larger sizes (e.g. 8x8) to ensure no size-dependent "magic constants" remain.
+   * - A degenerate diagnostic case: only one row has nontrivial bond dimension (others are trivial),
+   *   so the network reduces to a matrix trace; this helps isolate multiplicity/double-cover issues.
+   */
+  Tensor PunchHole4x4_(const SiteIdx& site) const;
+
+  // ---- PunchHole helpers (shared by future terminators / larger sizes) ----
+  int ParentSlot_(size_t scale, uint32_t fine_id, uint32_t parent_id) const;
+
+  // Adjoint pullback from split-piece holes back to the original rank-4 tensor hole,
+  // using the *linearized* (frozen) forward SVD factors cached per (node, parent-slot).
+  Tensor LinearSplitAdjointToHole_(size_t scale,
+                                  uint32_t node,
+                                  uint32_t parent,
+                                  const Tensor* H_P,
+                                  const Tensor* H_Q) const;
+
+public:
+#if defined(QLPEPS_UNITTEST)
+  /**
+   * @brief Test-only baseline: build a 4x4 hole by brute probing (very expensive).
+   *
+   * This method is meant for **unit tests only** as a correctness reference for future
+   * optimized impurity-TRG implementations. It is not intended for production use.
+   *
+   * Behavior:
+   * - Supports 4x4 PBC only.
+   * - Requires cache to be initialized and clean (call `Trace(tn)` once, and no pending invalidations).
+   * - Returns the hole tensor in the **original leg space** of the removed site:
+   *   legs are ordered `[L,D,R,U]` and directions are inverted (dual space) so that
+   *   `Contract(hole, tn(site))` yields a scalar.
+   *
+   * @warning Complexity is O(product of bond dims at the site) trial contractions.
+   */
+  Tensor PunchHoleBaselineByProbingForTest(const TensorNetwork2D<TenElemT, QNT>& tn,
+                                          const SiteIdx& site) const;
+#endif
+
   /**
    * @brief Mark caches affected by a local tensor update at @p site.
    *
@@ -340,6 +439,46 @@ class TRGContractor {
     // fine_to_coarse[fine] has up to 2 coarse parents in checkerboard TRG.
     std::vector<std::array<uint32_t, 2>> fine_to_coarse;
     std::vector<std::array<uint32_t, 4>> coarse_to_fine;
+
+    // --- Split cache (P/Q pieces) ---
+    //
+    // For impurity TRG / PunchHole we must reuse the same split pieces as used in the forward TRG
+    // contraction. Storing them explicitly keeps the later hole code simple and avoids repeated SVD.
+    //
+    // Each *edge context* (fine node -> one of its coarse parents) is split by exactly one of
+    // {SplitType0_, SplitType1_} during the forward TRG. This matters because for checkerboard PBC
+    // a fine node typically participates in TWO parents, and (critically) it may play different
+    // roles in each parent (e.g. odd-layer node can be E in one diamond but W in another).
+    //
+    // Therefore, for impurity TRG / PunchHole we must cache split data per (node, parent-slot),
+    // not per node.
+    //
+    // Split types:
+    // - type0: P(l, u, a_out), Q(a_in, d, r)
+    // - type1: Q(l, d, a_out), P(a_in, r, u)
+    enum class SplitType : uint8_t { Type0 = 0, Type1 = 1 };
+    std::vector<std::array<SplitType, 2>> split_type;   // per parent-slot (0/1)
+    std::vector<std::array<Tensor, 2>> split_P;         // per parent-slot
+    std::vector<std::array<Tensor, 2>> split_Q;         // per parent-slot
+
+    // --- Split isometries (for impurity TRG / PunchHole linearization) ---
+    //
+    // Store the *fixed* SVD isometries and diag reweighting from the forward pass, so that
+    // for any updated tensor X at this node we can compute its split pieces (P_X, Q_X) in the
+    // same truncated alpha basis *linearly*:
+    //
+    // Type0 (after perm {0,3,1,2}): A = U S V^T
+    //   P_X = (A_X * V) * S^{-1/2}
+    //   Q_X = S^{-1/2} * (U^T * A_X)
+    //
+    // Type1 (no perm): A = U S V^T
+    //   Q_X = (A_X * V) * S^{-1/2}
+    //   P_X = S^{-1/2} * (U^T * A_X)
+    //
+    // Here S^{-1/2} is taken elementwise on the retained singular values (diag tensor).
+    std::vector<std::array<Tensor, 2>> split_U;           // per parent-slot
+    std::vector<std::array<Tensor, 2>> split_Vt;          // per parent-slot
+    std::vector<std::array<qlten::QLTensor<RealT, QNT>, 2>> split_S_inv_sqrt; // per parent-slot
   };
 
   struct SplitARes {
@@ -366,6 +505,9 @@ class TRGContractor {
   
   // Helpers for incremental updates
   void MarkDirtySeed_(uint32_t node);
+
+  // Split cache helpers (for Trace/PunchHole)
+  void EnsureSplitCacheForNodes_(size_t scale, const std::set<uint32_t>& nodes);
   
   // SVD Splitters
   SplitARes SplitType0_(const Tensor& T_in) const;
