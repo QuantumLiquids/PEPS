@@ -520,6 +520,7 @@ public:
   TenElemT ContractFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
   TenElemT ContractFinal3x3_(const std::array<Tensor, 9>& T3x3) const;
   Tensor PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2, uint32_t removed_id) const;
+  Tensor PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3x3, uint32_t removed_id) const;
 
   size_t rows_ = 0;
   size_t cols_ = 0;

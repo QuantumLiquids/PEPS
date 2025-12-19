@@ -373,6 +373,40 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
   }
 }
 
+TEST(TRGContractorPBC, PunchHole3x3Z2Ising) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+  using TensorT = qlten::QLTensor<TenElemT, QNT>;
+
+  const size_t n = 3;
+  const double K = 0.3;
+  auto Kx = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  auto Ky = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  const TenElemT Z = trg.Trace(tn);
+  ASSERT_TRUE(std::isfinite(Z));
+
+  using qlten::Contract;
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const SiteIdx site{r, c};
+      TensorT hole;
+      ASSERT_NO_THROW(hole = trg.PunchHole(tn, site));
+
+      TensorT out;
+      const TensorT& Ts = tn({r, c});
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      const TenElemT z_reconstructed = out();
+      EXPECT_NEAR(z_reconstructed, Z, 1e-12 * std::max(1.0, std::abs(Z)));
+    }
+  }
+}
+
 TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::U1QN;

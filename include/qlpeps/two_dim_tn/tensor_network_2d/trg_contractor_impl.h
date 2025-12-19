@@ -1113,6 +1113,203 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2
 
 template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Tensor
+TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3x3,
+                                                const uint32_t removed_id) const {
+  using qlten::Contract;
+  using qlten::Eye;
+
+  if (removed_id >= 9) throw std::invalid_argument("TRGContractor::PunchHoleFinal3x3_: removed_id out of range.");
+
+  struct BondKey {
+    char kind;      // 'x' horizontal, 'y' vertical
+    uint8_t r, c;   // directed bond origin (r,c)
+    bool operator<(const BondKey& o) const {
+      if (kind != o.kind) return kind < o.kind;
+      if (r != o.r) return r < o.r;
+      return c < o.c;
+    }
+    bool operator==(const BondKey& o) const { return kind == o.kind && r == o.r && c == o.c; }
+  };
+
+  struct LabeledTensor {
+    Tensor ten;
+    std::vector<BondKey> labels; // per-axis bond label
+  };
+
+  auto mod3 = [](int x) -> uint8_t { return static_cast<uint8_t>((x % 3 + 3) % 3); };
+  auto id = [](uint8_t r, uint8_t c) -> uint32_t { return uint32_t(r) * 3u + uint32_t(c); };
+  auto rc = [&](uint32_t i) -> std::pair<uint8_t, uint8_t> { return {uint8_t(i / 3u), uint8_t(i % 3u)}; };
+
+  // Directed bonds:
+  // - x(r,c): (r,c).R <-> (r,c+1).L
+  // - y(r,c): (r,c).D <-> (r+1,c).U
+  auto x = [&](uint8_t r, uint8_t c) -> BondKey { return BondKey{'x', r, c}; };
+  auto y = [&](uint8_t r, uint8_t c) -> BondKey { return BondKey{'y', r, c}; };
+
+  const auto [rr, cc] = rc(removed_id);
+
+  // Build initial components: 8 tensors with labeled legs [L,D,R,U].
+  std::vector<LabeledTensor> comps;
+  comps.reserve(8);
+  for (uint8_t r = 0; r < 3; ++r) {
+    for (uint8_t c = 0; c < 3; ++c) {
+      const uint32_t sid = id(r, c);
+      if (sid == removed_id) continue;
+      const Tensor& T = T3x3[sid];
+      if (T.GetShape().size() != 4)
+        throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor must be rank-4.");
+
+      LabeledTensor lt;
+      lt.ten = T;
+      lt.labels = {
+          x(r, mod3(int(c) - 1)), // L
+          y(r, c),                // D
+          x(r, c),                // R
+          y(mod3(int(r) - 1), c)  // U
+      };
+      comps.push_back(std::move(lt));
+    }
+  }
+
+  auto find_pair = [&](const std::vector<LabeledTensor>& v,
+                       BondKey* out_key,
+                       size_t* out_i, size_t* out_ai,
+                       size_t* out_j, size_t* out_aj,
+                       bool* same_component) -> bool {
+    // Find any label that appears twice.
+    std::map<BondKey, std::pair<std::pair<size_t, size_t>, std::pair<size_t, size_t>>> occ;
+    std::set<BondKey> seen_once;
+    for (size_t i = 0; i < v.size(); ++i) {
+      for (size_t a = 0; a < v[i].labels.size(); ++a) {
+        const auto& k = v[i].labels[a];
+        if (!seen_once.count(k)) {
+          seen_once.insert(k);
+          occ[k].first = {i, a};
+          occ[k].second = {size_t(-1), size_t(-1)};
+        } else if (occ[k].second.first == size_t(-1)) {
+          occ[k].second = {i, a};
+          *out_key = k;
+          *out_i = occ[k].first.first;
+          *out_ai = occ[k].first.second;
+          *out_j = occ[k].second.first;
+          *out_aj = occ[k].second.second;
+          *same_component = (*out_i == *out_j);
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  auto trace_pair_inplace = [&](LabeledTensor& lt, size_t ax_a, size_t ax_b) {
+    // Trace the two legs connected by the same bond label.
+    if (ax_a == ax_b) throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: tracing identical axes.");
+    const auto& idx_a = lt.ten.GetIndex(ax_a);
+    const auto& idx_b = lt.ten.GetIndex(ax_b);
+
+    // Choose the OUT-directed index as the one to build Eye from, and order (IN, OUT) for contraction.
+    const bool a_is_out = (idx_a.GetDir() == qlten::TenIndexDirType::OUT);
+    const bool b_is_out = (idx_b.GetDir() == qlten::TenIndexDirType::OUT);
+    if (a_is_out == b_is_out)
+      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: bond axes must be opposite directions.");
+
+    const size_t ax_in = a_is_out ? ax_b : ax_a;
+    const size_t ax_out = a_is_out ? ax_a : ax_b;
+    const auto& idx_out = lt.ten.GetIndex(ax_out);
+    const auto eye = Eye<TenElemT, QNT>(idx_out);
+
+    Tensor out;
+    Contract(&lt.ten, {ax_in, ax_out}, &eye, {0, 1}, &out);
+    lt.ten = std::move(out);
+
+    // Remove labels at ax_in and ax_out (remove larger index first).
+    const size_t hi = std::max(ax_in, ax_out);
+    const size_t lo = std::min(ax_in, ax_out);
+    lt.labels.erase(lt.labels.begin() + hi);
+    lt.labels.erase(lt.labels.begin() + lo);
+  };
+
+  // Contract all internal bonds until only the 4 open legs around the removed site remain.
+  // This may require both inter-component contractions and intra-component traces (for cycles on the torus).
+  for (int safety = 0; safety < 200; ++safety) {
+    BondKey k;
+    size_t i, ai, j, aj;
+    bool same = false;
+    if (!find_pair(comps, &k, &i, &ai, &j, &aj, &same)) break;
+
+    if (!same) {
+      // Merge two components along this bond.
+      LabeledTensor a = std::move(comps[i]);
+      LabeledTensor b = std::move(comps[j]);
+
+      Tensor out;
+      Contract(&a.ten, {ai}, &b.ten, {aj}, &out);
+
+      std::vector<BondKey> labels;
+      labels.reserve(a.labels.size() + b.labels.size() - 2);
+      for (size_t t = 0; t < a.labels.size(); ++t) if (t != ai) labels.push_back(a.labels[t]);
+      for (size_t t = 0; t < b.labels.size(); ++t) if (t != aj) labels.push_back(b.labels[t]);
+
+      LabeledTensor merged{std::move(out), std::move(labels)};
+
+      // Remove higher index first.
+      if (i > j) std::swap(i, j);
+      comps.erase(comps.begin() + j);
+      comps.erase(comps.begin() + i);
+      comps.push_back(std::move(merged));
+    } else {
+      // Same component: trace the cycle bond.
+      trace_pair_inplace(comps[i], ai, aj);
+    }
+  }
+
+  if (comps.size() != 1)
+    throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: failed to fully contract components.");
+
+  Tensor hole = std::move(comps[0].ten);
+  auto labels = std::move(comps[0].labels);
+  if (labels.size() != 4)
+    throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: final open legs are not rank-4.");
+
+  // Expected open legs (dual of removed site's [L,D,R,U]) are the four bonds incident to (rr,cc).
+  const std::array<BondKey, 4> want = {
+      x(rr, mod3(int(cc) - 1)), // L*
+      y(rr, cc),                // D*
+      x(rr, cc),                // R*
+      y(mod3(int(rr) - 1), cc)  // U*
+  };
+
+  std::array<int, 4> perm = {-1, -1, -1, -1};
+  for (int w = 0; w < 4; ++w) {
+    for (int a = 0; a < 4; ++a) {
+      if (labels[static_cast<size_t>(a)] == want[static_cast<size_t>(w)]) {
+        perm[static_cast<size_t>(w)] = a;
+        break;
+      }
+    }
+    if (perm[static_cast<size_t>(w)] < 0)
+      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: missing expected open leg.");
+  }
+
+  hole.Transpose({static_cast<size_t>(perm[0]),
+                  static_cast<size_t>(perm[1]),
+                  static_cast<size_t>(perm[2]),
+                  static_cast<size_t>(perm[3])});
+
+  // Sanity: ensure indices match the dual space of the removed tensor so Contract(hole, Ts) is valid.
+  const Tensor& Ts = T3x3[removed_id];
+  if (!(hole.GetIndex(0) == InverseIndex(Ts.GetIndex(0)) &&
+        hole.GetIndex(1) == InverseIndex(Ts.GetIndex(1)) &&
+        hole.GetIndex(2) == InverseIndex(Ts.GetIndex(2)) &&
+        hole.GetIndex(3) == InverseIndex(Ts.GetIndex(3)))) {
+    throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: hole indices do not match dual of site tensor.");
+  }
+
+  return hole;
+}
+
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::Tensor
 TRGContractor<TenElemT, QNT>::PunchHole4x4_(const SiteIdx& site) const {
   using qlten::Contract;
 
@@ -1377,6 +1574,15 @@ TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn
     return PunchHoleFinal2x2_(t2x2, removed_id);
   }
 
+  if (rows_ == 3 && cols_ == 3) {
+    // Load 3x3 tensors directly from tn (scale 0), and compute exact hole.
+    std::array<Tensor, 9> t3x3 = {tn({0, 0}), tn({0, 1}), tn({0, 2}),
+                                  tn({1, 0}), tn({1, 1}), tn({1, 2}),
+                                  tn({2, 0}), tn({2, 1}), tn({2, 2})};
+    const uint32_t removed_id = NodeId_(site.row(), site.col());
+    return PunchHoleFinal3x3_(t3x3, removed_id);
+  }
+
   if (rows_ == 4 && cols_ == 4) {
     if (!tensors_initialized_)
       throw std::logic_error(
@@ -1388,7 +1594,7 @@ TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn
   }
 
   throw std::logic_error(
-      "TRGContractor::PunchHole: only 2x2 and 4x4 periodic torus is supported currently.");
+      "TRGContractor::PunchHole: only 2x2, 3x3 and 4x4 periodic torus is supported currently.");
 }
 
 #if defined(QLPEPS_UNITTEST)
