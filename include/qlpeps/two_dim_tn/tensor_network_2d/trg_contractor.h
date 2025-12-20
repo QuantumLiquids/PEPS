@@ -359,7 +359,10 @@ class TRGContractor {
    * - A degenerate diagnostic case: only one row has nontrivial bond dimension (others are trivial),
    *   so the network reduces to a matrix trace; this helps isolate multiplicity/double-cover issues.
    */
-  Tensor PunchHole4x4_(const SiteIdx& site) const;
+  // Generic backprop hole from a small terminator (2x2 or 3x3) down to scale-0.
+  // Handles N=2^k (terminating at 2x2) and N=3*2^k (terminating at 3x3).
+  // Includes automatic averaging of parent contributions to correct for checkerboard multiplicity.
+  Tensor PunchHoleBackpropGeneric_(const SiteIdx& site) const;
 
   // ---- PunchHole helpers (shared by future terminators / larger sizes) ----
   int ParentSlot_(size_t scale, uint32_t fine_id, uint32_t parent_id) const;

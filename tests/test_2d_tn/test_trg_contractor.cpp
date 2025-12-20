@@ -129,6 +129,65 @@ double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT> &tn, size_t dmax) 
   return Z;
 }
 
+// Helper for testing PunchHole correctness on Z2 Ising torus
+void RunZ2IsingPunchHoleTest(size_t n, bool sample_diagonal_only) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+  using TensorT = qlten::QLTensor<TenElemT, QNT>;
+
+  const double K = 0.3;
+  auto Kx = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  auto Ky = [&](size_t /*r*/, size_t /*c*/) { return K; };
+  const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
+
+  qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
+  // Dmax=8 is sufficient for topology validation.
+  trg.SetTruncateParams(qlpeps::TRGContractor<TenElemT, QNT>::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
+  trg.Init(tn);
+
+  std::cerr << "[PunchHole" << n << "x" << n << "Z2Ising] begin Trace()" << std::endl;
+  const TenElemT Z = trg.Trace(tn);
+  std::cerr << "[PunchHole" << n << "x" << n << "Z2Ising] Trace() done, Z=" << Z << std::endl;
+  ASSERT_TRUE(std::isfinite(Z));
+
+  using qlten::Contract;
+  double ratio_sum = 0.0;
+  size_t ratio_cnt = 0;
+
+  auto check_site = [&](size_t r, size_t c) {
+      const SiteIdx site{r, c};
+      TensorT hole;
+      ASSERT_NO_THROW(hole = trg.PunchHole(tn, site));
+
+      TensorT out;
+      const TensorT& Ts = tn({r, c});
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      const TenElemT z_rec = out();
+
+      const double ratio = z_rec / Z;
+      ratio_sum += ratio;
+      ++ratio_cnt;
+
+      // Loose per-site check
+      EXPECT_NEAR(ratio, 1.0, 5e-2) << "site=(" << r << "," << c << ") ratio=" << ratio;
+  };
+
+  if (sample_diagonal_only) {
+      for (size_t i = 0; i < n; ++i) {
+          check_site(i, i);
+      }
+  } else {
+      for (size_t r = 0; r < n; ++r) {
+          for (size_t c = 0; c < n; ++c) {
+              check_site(r, c);
+          }
+      }
+  }
+
+  const double ratio_mean = ratio_sum / double(ratio_cnt);
+  EXPECT_NEAR(ratio_mean, 1.0, 3e-3) << "mean ratio=" << ratio_mean;
+}
+
 // Exact Ising torus references (computed externally via Python transfer-matrix).
 // Keep tests self-contained and fast; do NOT re-run transfer matrix in C++.
 constexpr double kZ2IsingPbcZ_3x3_K0p3 = 1551.4044599910355;
@@ -564,4 +623,18 @@ TEST(TRGContractorPBC, PunchHole4x4Z2Ising) {
       EXPECT_NEAR(z_reconstructed, Z, 1e-6 * std::max(1.0, std::abs(Z)));
     }
   }
+}
+
+TEST(TRGContractorPBC, PunchHole6x6Z2Ising) {
+  RunZ2IsingPunchHoleTest(6, /*sample_diagonal_only=*/false);
+}
+
+TEST(TRGContractorPBC, PunchHole8x8Z2Ising) {
+  // Use diagonal sampling to speed up large system check
+  RunZ2IsingPunchHoleTest(8, /*sample_diagonal_only=*/true);
+}
+
+TEST(TRGContractorPBC, PunchHole12x12Z2Ising) {
+  // Use diagonal sampling to speed up large system check
+  RunZ2IsingPunchHoleTest(12, /*sample_diagonal_only=*/true);
 }

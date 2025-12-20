@@ -54,7 +54,17 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
   const auto& Vt = scales_.at(scale).split_Vt.at(node)[slot];
   const auto& Sinv = scales_.at(scale).split_S_inv_sqrt.at(node)[slot];
 
-  Tensor Sinv_dag = qlten::Dag(Sinv);
+  // `Sinv` is stored as a *real* tensor for memory/efficiency, but this contractor can be instantiated
+  // with complex `TenElemT`. Convert on demand so Contract() always sees consistent element types.
+  Tensor Sinv_dag;
+  {
+    const auto Sinv_dag_r = qlten::Dag(Sinv);  // QLTensor<RealT,QNT>
+    if constexpr (std::is_same<TenElemT, RealT>::value) {
+      Sinv_dag = Sinv_dag_r;
+    } else {
+      Sinv_dag = ToComplex(Sinv_dag_r);  // ADL: qlten::ToComplex
+    }
+  }
 
   if (st == ScaleCache::SplitType::Type0) {
     Tensor V_adj = qlten::Dag(Vt);  // (alpha, d*, r*)
@@ -1120,6 +1130,15 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
 
   if (removed_id >= 9) throw std::invalid_argument("TRGContractor::PunchHoleFinal3x3_: removed_id out of range.");
 
+  auto require_inv = [&](const Tensor& A, size_t axA, const Tensor& B, size_t axB, const char* where) {
+    if (A.IsDefault() || B.IsDefault())
+      throw std::logic_error(std::string("TRGContractor::PunchHoleFinal3x3_: default tensor at ") + where);
+    const auto& ia = A.GetIndex(axA);
+    const auto& ib = B.GetIndex(axB);
+    if (!(ia == InverseIndex(ib)))
+      throw std::logic_error(std::string("TRGContractor::PunchHoleFinal3x3_: index mismatch at ") + where);
+  };
+
   struct BondKey {
     char kind;      // 'x' horizontal, 'y' vertical
     uint8_t r, c;   // directed bond origin (r,c)
@@ -1151,13 +1170,17 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
   // Build initial components: 8 tensors with labeled legs [L,D,R,U].
   std::vector<LabeledTensor> comps;
   comps.reserve(8);
+
   for (uint8_t r = 0; r < 3; ++r) {
     for (uint8_t c = 0; c < 3; ++c) {
       const uint32_t sid = id(r, c);
       if (sid == removed_id) continue;
       const Tensor& T = T3x3[sid];
-      if (T.GetShape().size() != 4)
+      if (T.IsDefault())
+        throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor is default.");
+      if (T.Rank() != 4) {
         throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor must be rank-4.");
+      }
 
       LabeledTensor lt;
       lt.ten = T;
@@ -1216,6 +1239,11 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
     const size_t ax_in = a_is_out ? ax_b : ax_a;
     const size_t ax_out = a_is_out ? ax_a : ax_b;
     const auto& idx_out = lt.ten.GetIndex(ax_out);
+
+    // Sanity: the two legs must be dual to each other, otherwise qlten::Contract can crash inside GEMM.
+    if (!(lt.ten.GetIndex(ax_in) == InverseIndex(idx_out))) {
+      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: trace legs are not inverse indices.");
+    }
     const auto eye = Eye<TenElemT, QNT>(idx_out);
 
     Tensor out;
@@ -1229,37 +1257,143 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
     lt.labels.erase(lt.labels.begin() + lo);
   };
 
-  // Contract all internal bonds until only the 4 open legs around the removed site remain.
-  // This may require both inter-component contractions and intra-component traces (for cycles on the torus).
+  // Contract all internal bonds using a greedy heuristic (min-rank) to avoid intermediate rank explosion.
   for (int safety = 0; safety < 200; ++safety) {
-    BondKey k;
-    size_t i, ai, j, aj;
-    bool same = false;
-    if (!find_pair(comps, &k, &i, &ai, &j, &aj, &same)) break;
+    if (comps.size() == 1) {
+      // Check for remaining self-loops on the final tensor
+      std::map<BondKey, size_t> kmap;
+      std::vector<std::pair<size_t, size_t>> self_pairs;
+      for (size_t a = 0; a < comps[0].labels.size(); ++a) {
+        const auto& k = comps[0].labels[a];
+        if (kmap.count(k)) {
+          self_pairs.push_back({kmap[k], a});
+          kmap.erase(k); // match consumed
+        } else {
+          kmap[k] = a;
+        }
+      }
+      if (self_pairs.empty()) break; // Done!
+      
+      // Perform one self-trace
+      trace_pair_inplace(comps[0], self_pairs[0].first, self_pairs[0].second);
+      continue;
+    }
 
-    if (!same) {
-      // Merge two components along this bond.
-      LabeledTensor a = std::move(comps[i]);
-      LabeledTensor b = std::move(comps[j]);
+    // 1. Build connectivity graph
+    // Map: BondKey -> (comp_idx, axis_idx)
+    std::map<BondKey, std::pair<size_t, size_t>> open_bonds;
+    // Adj: pair(u,v) -> list of (axis_on_u, axis_on_v)
+    // u <= v. If u==v, it's a self-loop.
+    std::map<std::pair<size_t, size_t>, std::vector<std::pair<size_t, size_t>>> adj;
+
+    for (size_t i = 0; i < comps.size(); ++i) {
+      for (size_t a = 0; a < comps[i].labels.size(); ++a) {
+        const auto& k = comps[i].labels[a];
+        auto it = open_bonds.find(k);
+        if (it != open_bonds.end()) {
+          // Found a shared bond
+          size_t j = it->second.first;
+          size_t b = it->second.second;
+          // Canonical order for map key
+          size_t u = std::min(i, j);
+          size_t v = std::max(i, j);
+          size_t ax_u = (i == u) ? a : b;
+          size_t ax_v = (i == u) ? b : a;
+          adj[{u, v}].push_back({ax_u, ax_v});
+        } else {
+          open_bonds[k] = {i, a};
+        }
+      }
+    }
+
+    if (adj.empty()) {
+       // Should not happen for connected graph unless done
+       // But we checked comps.size() == 1 above.
+       // If comps.size() > 1 and no bonds, graph is disconnected?
+       throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: components disconnected.");
+    }
+
+    // 2. Select best move
+    // Priority: Self-loops (cost negative), then min resulting rank.
+    struct Move {
+      size_t u, v;
+      long cost; // resulting rank change (or roughly result rank)
+    };
+    Move best_move = {0, 0, 999999};
+    bool found_move = false;
+
+    for (const auto& kv : adj) {
+      size_t u = kv.first.first;
+      size_t v = kv.first.second;
+      size_t n_bonds = kv.second.size();
+      
+      long rank_u = static_cast<long>(comps[u].ten.Rank());
+      long rank_v = static_cast<long>(comps[v].ten.Rank());
+      
+      long cost = 0;
+      if (u == v) {
+        // Self-loop: reduces rank by 2 * n_bonds
+        cost = rank_u - 2 * static_cast<long>(n_bonds);
+        // Prioritize self-loops immensely
+        cost -= 100000; 
+      } else {
+        // Merge: rank_u + rank_v - 2 * n_bonds
+        cost = rank_u + rank_v - 2 * static_cast<long>(n_bonds);
+      }
+
+      if (!found_move || cost < best_move.cost) {
+        best_move = {u, v, cost};
+        found_move = true;
+      }
+    }
+
+    // 3. Execute move
+    size_t u = best_move.u;
+    size_t v = best_move.v;
+    const auto& bonds = adj[{u, v}];
+
+    if (u == v) {
+      // Self-trace. Do one pair at a time (simpler safe implementation).
+      // Trace indices might shift after each trace, so just do one and let loop repeat.
+      trace_pair_inplace(comps[u], bonds[0].first, bonds[0].second);
+    } else {
+      // Merge u and v.
+      // Contract along ALL shared bonds to minimize intermediate rank.
+      LabeledTensor A = std::move(comps[u]);
+      LabeledTensor B = std::move(comps[v]);
+      
+      std::vector<size_t> idx_A, idx_B;
+      std::set<size_t> set_A, set_B; // to identify kept indices
+      for (const auto& p : bonds) {
+        idx_A.push_back(p.first);
+        idx_B.push_back(p.second);
+        set_A.insert(p.first);
+        set_B.insert(p.second);
+        
+        require_inv(A.ten, p.first, B.ten, p.second, "multi-bond merge");
+      }
 
       Tensor out;
-      Contract(&a.ten, {ai}, &b.ten, {aj}, &out);
-
-      std::vector<BondKey> labels;
-      labels.reserve(a.labels.size() + b.labels.size() - 2);
-      for (size_t t = 0; t < a.labels.size(); ++t) if (t != ai) labels.push_back(a.labels[t]);
-      for (size_t t = 0; t < b.labels.size(); ++t) if (t != aj) labels.push_back(b.labels[t]);
-
-      LabeledTensor merged{std::move(out), std::move(labels)};
-
-      // Remove higher index first.
-      if (i > j) std::swap(i, j);
-      comps.erase(comps.begin() + j);
-      comps.erase(comps.begin() + i);
+      Contract(&A.ten, idx_A, &B.ten, idx_B, &out);
+      
+      // Construct merged labels.
+      // Order: A's remaining labels then B's remaining labels.
+      // (This matches qlten::Contract default output order for untraced indices: A then B)
+      std::vector<BondKey> new_labels;
+      new_labels.reserve(A.labels.size() + B.labels.size() - 2 * bonds.size());
+      for (size_t k = 0; k < A.labels.size(); ++k) {
+        if (set_A.find(k) == set_A.end()) new_labels.push_back(A.labels[k]);
+      }
+      for (size_t k = 0; k < B.labels.size(); ++k) {
+        if (set_B.find(k) == set_B.end()) new_labels.push_back(B.labels[k]);
+      }
+      
+      LabeledTensor merged{std::move(out), std::move(new_labels)};
+      
+      // Remove u and v (v is larger since u<=v and u!=v)
+      comps.erase(comps.begin() + v);
+      comps.erase(comps.begin() + u);
       comps.push_back(std::move(merged));
-    } else {
-      // Same component: trace the cycle bond.
-      trace_pair_inplace(comps[i], ai, aj);
     }
   }
 
@@ -1308,136 +1442,146 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
   return hole;
 }
 
+// [PunchHole4x4_ removed in favor of PunchHoleBackpropGeneric_]
+
 template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::PunchHole4x4_(const SiteIdx& site) const {
+TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) const {
   using qlten::Contract;
 
-  // NOTE ABOUT "0.25" (FACTOR-4) NORMALIZATION IN HISTORICAL REVISIONS:
-  //
-  // The 4x4 PBC topology built by BuildTopology_ allows each fine node to have up to two coarse
-  // parents per RG step (scale0->scale1 plaquette, scale1->scale2 diamond). If we naively sum
-  // pullbacks over all parent contexts at both steps, the composed pullback can acquire an overall
-  // multiplicity of ~2×2=4, leading to:
-  //   Contract(hole(site), T_site) ≈ 4 * Trace(tn).
-  //
-  // Current behavior: we apply the corresponding 1/2 factor per RG step when combining parent
-  // pullbacks, instead of using an opaque hard-coded "0.25" at the end.
-  //
-  // Also note that this hole backprop uses a linearized split (freezing forward SVD factors U,S,V).
-  // With truncation, exact equality is not expected, but the factor-4 mismatch is a graph/topology
-  // multiplicity effect and can persist even without truncation.
+  auto require_inv = [&](const Tensor& A, size_t axA, const Tensor& B, size_t axB, const char* where) {
+    if (A.IsDefault() || B.IsDefault()) {
+      throw std::logic_error(
+          std::string("TRGContractor::PunchHoleBackpropGeneric_: default tensor in ") + where);
+    }
+    const auto& ia = A.GetIndex(axA);
+    const auto& ib = B.GetIndex(axB);
+    if (!(ia == InverseIndex(ib))) {
+      throw std::logic_error(std::string("TRGContractor::PunchHoleBackpropGeneric_: index mismatch at ") + where);
+    }
+  };
 
   const uint32_t site_id = NodeId_(site.row(), site.col());
-  const auto& parents_of_site = scales_[0].fine_to_coarse.at(site_id);
+  const size_t last = scales_.size() - 1;
+  const size_t top_size = scales_.at(last).tens.size();
+  
+  if (top_size != 9 && top_size != 4)
+    throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: last scale must be 3x3 (size 9) or 2x2 (size 4).");
 
-  // Scale-2 (2x2) holes: dZ/dT_scale2.
-  std::vector<Tensor> holes_scale2(4);
-  {
-    const auto& s2 = scales_.at(2).tens;
-    const std::array<Tensor, 4> t2x2 = {s2[0], s2[1], s2[2], s2[3]};
-    for (uint32_t i = 0; i < 4; ++i) holes_scale2[i] = PunchHoleFinal2x2_(t2x2, i);
+  // 1) Collect ancestor sets (nodes on each scale that influence this site).
+  std::vector<std::set<uint32_t>> anc(scales_.size());
+  anc[0].insert(site_id);
+  for (size_t s = 0; s < last; ++s) {
+    for (uint32_t id : anc[s]) {
+      const auto& parents = scales_.at(s).fine_to_coarse.at(id);
+      if (parents[0] != 0xFFFFFFFF) anc[s + 1].insert(parents[0]);
+      if (parents[1] != 0xFFFFFFFF) anc[s + 1].insert(parents[1]);
+    }
   }
 
+  // 2) Top holes on terminator: dZ/dT_last.
+  std::map<uint32_t, Tensor> holes_next;
+  {
+    const auto& top = scales_.at(last).tens;
+    if (top_size == 9) {
+    const std::array<Tensor, 9> t3x3 = {top[0], top[1], top[2],
+                                        top[3], top[4], top[5],
+                                        top[6], top[7], top[8]};
+    for (uint32_t id = 0; id < 9; ++id) {
+      if (anc[last].count(id) == 0) continue;
+      holes_next.emplace(id, PunchHoleFinal3x3_(t3x3, id));
+        }
+    } else {
+        const std::array<Tensor, 4> t2x2 = {top[0], top[1], top[2], top[3]};
+        for (uint32_t id = 0; id < 4; ++id) {
+            if (anc[last].count(id) == 0) continue;
+            holes_next.emplace(id, PunchHoleFinal2x2_(t2x2, id));
+        }
+    }
+  }
 
-  // Scale-1 holes: diamond backprop from holes_scale2.
-  std::map<uint32_t, Tensor> holes_scale1;
-  auto compute_h1 = [&](uint32_t id1) -> Tensor {
-    const auto& parents = scales_[1].fine_to_coarse.at(id1);
-    Tensor h_total;
+  // 3) Backprop down to scale 0. For each node, average contributions from its valid parent contexts.
+  auto backprop_diamond_parent = [&](size_t s, uint32_t child_id, uint32_t pid, const Tensor& H_parent) -> Tensor {
+    const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);  // {N,E,S,W}
+    int role = -1;
+    for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
+    if (role < 0) throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: invalid diamond topology.");
 
-    for (uint32_t pid : parents) {
-      if (pid == 0xFFFFFFFF) continue;
-      const auto& children = scales_[2].coarse_to_fine.at(pid);  // {N,E,S,W}
-      int role = -1;
-      for (int k = 0; k < 4; ++k)
-        if (children[k] == id1) role = k;
-      if (role < 0) throw std::logic_error("TRGContractor::PunchHole4x4_: invalid diamond topology (role == -1).");
+    const int sn = ParentSlot_(s, children[0], pid);
+    const int se = ParentSlot_(s, children[1], pid);
+    const int ss = ParentSlot_(s, children[2], pid);
+    const int sw = ParentSlot_(s, children[3], pid);
+    if (sn < 0 || se < 0 || ss < 0 || sw < 0)
+      throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: missing parent-slot in diamond split cache.");
 
-      const Tensor& H_parent = holes_scale2.at(pid);  // rank-4 hole tensor from the 2x2 terminator
+    const Tensor& Np = scales_.at(s).split_P.at(children[0])[sn];
+    const Tensor& Ep = scales_.at(s).split_P.at(children[1])[se];
+    const Tensor& Sq = scales_.at(s).split_Q.at(children[2])[ss];
+    const Tensor& Wq = scales_.at(s).split_Q.at(children[3])[sw];
+    if (Np.IsDefault() || Ep.IsDefault() || Sq.IsDefault() || Wq.IsDefault())
+      throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: default split piece in diamond.");
 
-      // Use split cache to keep alpha indices consistent with Trace(). We MUST backprop the
-      // exact same fixed wiring as the forward diamond contraction (see Trace()).
-      //
-      // Forward (odd -> even diamond) recap:
-      //   SW = Contract(Sq{0}, Wq{2})              // rank-4
-      //   NE = Contract(Np{1}, Ep{0})              // rank-4
-      //   out_pre = Contract(SW{0,3}, NE{2,1})     // rank-4, axes [SW1,SW2,NE0,NE3]
-      //   out = out_pre.Transpose({1,0,3,2})       // final even tensor leg order [L,D,R,U]
-      //
-      // Here H_parent is dZ/d(out). We compute dZ/d(Np/Ep/Sq/Wq) by reversing the above.
-      const int sn = ParentSlot_(/*scale=*/1, children[0], pid);
-      const int se = ParentSlot_(/*scale=*/1, children[1], pid);
-      const int ss = ParentSlot_(/*scale=*/1, children[2], pid);
-      const int sw = ParentSlot_(/*scale=*/1, children[3], pid);
-      if (sn < 0 || se < 0 || ss < 0 || sw < 0)
-        throw std::logic_error("TRGContractor::PunchHole4x4_: missing parent-slot in diamond split cache.");
-      const Tensor& Np = scales_[1].split_P.at(children[0])[sn];  // fixed split piece in this diamond
-      const Tensor& Ep = scales_[1].split_P.at(children[1])[se];
-      const Tensor& Sq = scales_[1].split_Q.at(children[2])[ss];
-      const Tensor& Wq = scales_[1].split_Q.at(children[3])[sw];
+    Tensor SW, NE;
+    require_inv(Sq, 0, Wq, 2, "diamond: Sq{0} vs Wq{2}");
+    Contract(&Sq, {0}, &Wq, {2}, &SW);
+    require_inv(Np, 1, Ep, 0, "diamond: Np{1} vs Ep{0}");
+    Contract(&Np, {1}, &Ep, {0}, &NE);
 
-      Tensor SW, NE;
-      Contract(&Sq, {0}, &Wq, {2}, &SW);
-      Contract(&Np, {1}, &Ep, {0}, &NE);
+    // Undo the forward transpose out = out_pre.Transpose({1,0,3,2}).
+    Tensor H_out_pre = H_parent;
+    H_out_pre.Transpose({1, 0, 3, 2});  // axes: [SW1,SW2,NE0,NE3]
 
-      // Undo the final transpose: dZ/d(out_pre) = transpose(dZ/d(out), inv_perm).
-      // perm = {1,0,3,2} is self-inverse.
-      Tensor H_out_pre = H_parent;
-      H_out_pre.Transpose({1, 0, 3, 2});  // axes: [SW1,SW2,NE0,NE3]
+    // Backprop through out_pre = Contract(SW{0,3}, NE{2,1}).
+    Tensor H_SW, H_NE;
+    {
+      Tensor tmp;
+      require_inv(H_out_pre, 2, NE, 0, "diamond backprop: H_out_pre{2} vs NE{0}");
+      require_inv(H_out_pre, 3, NE, 3, "diamond backprop: H_out_pre{3} vs NE{3}");
+      Contract(&H_out_pre, {2, 3}, &NE, {0, 3}, &tmp);
+      tmp.Transpose({3, 0, 1, 2});
+      H_SW = std::move(tmp);
 
-      // Backprop through out_pre = Contract(SW{0,3}, NE{2,1}).
-      Tensor H_SW, H_NE;
-      {
-        // H_SW axes order (same as SW): [SW0,SW1,SW2,SW3].
-        Tensor tmp;
-        // Contract H_out_pre(ne0,ne3) with NE(ne0,ne3) -> [SW1,SW2,NE1,NE2] = [SW1,SW2,SW3,SW0]
-        Contract(&H_out_pre, {2, 3}, &NE, {0, 3}, &tmp);
-        tmp.Transpose({3, 0, 1, 2});
-        H_SW = std::move(tmp);
+      Tensor tmp2;
+      require_inv(H_out_pre, 0, SW, 1, "diamond backprop: H_out_pre{0} vs SW{1}");
+      require_inv(H_out_pre, 1, SW, 2, "diamond backprop: H_out_pre{1} vs SW{2}");
+      Contract(&H_out_pre, {0, 1}, &SW, {1, 2}, &tmp2);
+      tmp2.Transpose({0, 3, 2, 1});
+      H_NE = std::move(tmp2);
+    }
 
-        // H_NE axes order (same as NE): [NE0,NE1,NE2,NE3].
-        Tensor tmp2;
-        // Contract H_out_pre(SW1,SW2) with SW(SW1,SW2) -> [NE0,NE3,SW0,SW3] = [NE0,NE3,NE2,NE1]
-        Contract(&H_out_pre, {0, 1}, &SW, {1, 2}, &tmp2);
-        tmp2.Transpose({0, 3, 2, 1});
-        H_NE = std::move(tmp2);
-      }
+    // Backprop SW = Contract(Sq{0}, Wq{2}).
+    Tensor H_Sq, H_Wq;
+    {
+      Tensor tmp;
+      require_inv(H_SW, 2, Wq, 0, "diamond backprop SW->Sq: H_SW{2} vs Wq{0}");
+      require_inv(H_SW, 3, Wq, 1, "diamond backprop SW->Sq: H_SW{3} vs Wq{1}");
+      Contract(&H_SW, {2, 3}, &Wq, {0, 1}, &tmp);
+      tmp.Transpose({2, 0, 1});
+      H_Sq = std::move(tmp);
 
-      // Backprop SW = Contract(Sq{0}, Wq{2}).
-      Tensor H_Sq, H_Wq;
-      {
-        // H_Sq axes order (same as Sq): [Sq0,Sq1,Sq2].
-        Tensor tmp;
-        // Contract over Wq's remaining axes (0,1): output [SW0,SW1,Wq2] = [Sq1,Sq2,Sq0]
-        Contract(&H_SW, {2, 3}, &Wq, {0, 1}, &tmp);
-        tmp.Transpose({2, 0, 1});
-        H_Sq = std::move(tmp);
+      require_inv(H_SW, 0, Sq, 1, "diamond backprop SW->Wq: H_SW{0} vs Sq{1}");
+      require_inv(H_SW, 1, Sq, 2, "diamond backprop SW->Wq: H_SW{1} vs Sq{2}");
+      Contract(&H_SW, {0, 1}, &Sq, {1, 2}, &H_Wq);
+    }
 
-        // H_Wq axes order (same as Wq): [Wq0,Wq1,Wq2].
-        Contract(&H_SW, {0, 1}, &Sq, {1, 2}, &H_Wq);
-      }
+    // Backprop NE = Contract(Np{1}, Ep{0}).
+    Tensor H_Np, H_Ep;
+    {
+      Tensor tmp;
+      require_inv(H_NE, 2, Ep, 1, "diamond backprop NE->Np: H_NE{2} vs Ep{1}");
+      require_inv(H_NE, 3, Ep, 2, "diamond backprop NE->Np: H_NE{3} vs Ep{2}");
+      Contract(&H_NE, {2, 3}, &Ep, {1, 2}, &tmp);
+      tmp.Transpose({0, 2, 1});
+      H_Np = std::move(tmp);
 
-      // Backprop NE = Contract(Np{1}, Ep{0}).
-      Tensor H_Np, H_Ep;
-      {
-        // H_Np axes order (same as Np): [Np0,Np1,Np2].
-        Tensor tmp;
-        // Contract over Ep's remaining axes (1,2): output [NE0,NE1,Ep0] = [Np0,Np2,Np1]
-        Contract(&H_NE, {2, 3}, &Ep, {1, 2}, &tmp);
-        tmp.Transpose({0, 2, 1});
-        H_Np = std::move(tmp);
+      Tensor tmp2;
+      require_inv(H_NE, 0, Np, 0, "diamond backprop NE->Ep: H_NE{0} vs Np{0}");
+      require_inv(H_NE, 1, Np, 2, "diamond backprop NE->Ep: H_NE{1} vs Np{2}");
+      Contract(&H_NE, {0, 1}, &Np, {0, 2}, &tmp2);
+      tmp2.Transpose({2, 0, 1});
+      H_Ep = std::move(tmp2);
+    }
 
-        // H_Ep axes order (same as Ep): [Ep0,Ep1,Ep2].
-        Tensor tmp2;
-        // Contract over Np's remaining axes (0,2): output [NE2,NE3,Np1] = [Ep1,Ep2,Ep0]
-        Contract(&H_NE, {0, 1}, &Np, {0, 2}, &tmp2);
-        tmp2.Transpose({2, 0, 1});
-        H_Ep = std::move(tmp2);
-      }
-
-
-    // Convert piece-hole to tensor-hole contribution *in this parent-context* and accumulate.
     const bool is_P = (role == 0 || role == 1);  // N/E -> P piece
     const Tensor* Hp_ptr = nullptr;
     const Tensor* Hq_ptr = nullptr;
@@ -1449,115 +1593,146 @@ TRGContractor<TenElemT, QNT>::PunchHole4x4_(const SiteIdx& site) const {
       Hq_local = (role == 2) ? std::move(H_Sq) : std::move(H_Wq);
       Hq_ptr = &Hq_local;
     }
-    const Tensor h_contrib = LinearSplitAdjointToHole_(/*scale=*/1, /*node=*/id1, /*parent=*/pid, Hp_ptr, Hq_ptr);
-    if (h_total.IsDefault()) h_total = h_contrib;
-    else h_total = h_total + h_contrib;
-  }
-
-  if (h_total.IsDefault())
-    throw std::logic_error("TRGContractor::PunchHole4x4_: failed to compute scale-1 hole tensor.");
-  return h_total;
+    return LinearSplitAdjointToHole_(s, /*node=*/child_id, /*parent=*/pid, Hp_ptr, Hq_ptr);
   };
 
-  for (uint32_t pid : parents_of_site) {
-    if (pid == 0xFFFFFFFF) continue;
-    if (holes_scale1.find(pid) == holes_scale1.end()) holes_scale1.emplace(pid, compute_h1(pid));
-  }
-
-  // Scale-0 hole tensor is the sum of pullbacks from its two parent plaquettes.
-  Tensor hole_total;
-
-  for (uint32_t pid : parents_of_site) {
-    if (pid == 0xFFFFFFFF) continue;
-    const auto& children = scales_[1].coarse_to_fine.at(pid);  // {TL,TR,BL,BR} on scale-0
+  auto backprop_plaquette_parent = [&](size_t s, uint32_t child_id, uint32_t pid, const Tensor& H_parent) -> Tensor {
+    const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);  // {TL,TR,BL,BR}
     int role = -1;
-    for (int k = 0; k < 4; ++k)
-      if (children[k] == site_id) role = k;
-    if (role < 0) throw std::logic_error("TRGContractor::PunchHole4x4_: invalid plaquette topology (role == -1).");
+    for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
+    if (role < 0) throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: invalid plaquette topology.");
 
-    const Tensor& H_parent = holes_scale1.at(pid);  // (NW*,NE*,SE*,SW*)
-
-    // Use split cache in the correct parent-context to keep alpha indices consistent with Trace().
-    const int s0 = ParentSlot_(/*scale=*/0, children[0], pid);
-    const int s1 = ParentSlot_(/*scale=*/0, children[1], pid);
-    const int s2 = ParentSlot_(/*scale=*/0, children[2], pid);
-    const int s3 = ParentSlot_(/*scale=*/0, children[3], pid);
+    const int s0 = ParentSlot_(s, children[0], pid);
+    const int s1 = ParentSlot_(s, children[1], pid);
+    const int s2 = ParentSlot_(s, children[2], pid);
+    const int s3 = ParentSlot_(s, children[3], pid);
     if (s0 < 0 || s1 < 0 || s2 < 0 || s3 < 0)
-      throw std::logic_error("TRGContractor::PunchHole4x4_: missing parent-slot in plaquette split cache.");
-    const Tensor& Q_TL = scales_[0].split_Q.at(children[0])[s0];
-    const Tensor& Q_TR = scales_[0].split_Q.at(children[1])[s1];
-    const Tensor& P_BL = scales_[0].split_P.at(children[2])[s2];
-    const Tensor& P_BR = scales_[0].split_P.at(children[3])[s3];
+      throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: missing parent-slot in plaquette split cache.");
 
+    const Tensor& Q_TL = scales_.at(s).split_Q.at(children[0])[s0];
+    const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1])[s1];
+    const Tensor& P_BL = scales_.at(s).split_P.at(children[2])[s2];
+    const Tensor& P_BR = scales_.at(s).split_P.at(children[3])[s3];
+    if (Q_TL.IsDefault() || Q_TR.IsDefault() || P_BL.IsDefault() || P_BR.IsDefault())
+      throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: default split piece in plaquette.");
 
-    // Mirror Trace() even->odd plaquette contraction exactly (no index matching).
-    //
     // Forward (Trace) recap:
     //   tmp0 = Contract(P_BL{1}, P_BR{0})
     //   tmp1 = Contract(Q_TR{0}, Q_TL{2})
     //   tmp2 = Contract(tmp0{1,2}, tmp1{3,0})
     //   odd  = tmp2.Transpose({3,2,1,0})   // leg order [NW,NE,SE,SW]
-    //
-    // Here H_parent is the hole for `odd`. Backprop must undo the transpose first, then reverse
-    // the three contractions to obtain environments for P_BL/P_BR/Q_TL/Q_TR. Finally pick the
-    // piece belonging to the removed site (TL/TR -> Q, BL/BR -> P).
     Tensor tmp0, tmp1, tmp2;
+    require_inv(P_BL, 1, P_BR, 0, "plaquette: P_BL{1} vs P_BR{0}");
     Contract(&P_BL, {1}, &P_BR, {0}, &tmp0);
+    require_inv(Q_TR, 0, Q_TL, 2, "plaquette: Q_TR{0} vs Q_TL{2}");
     Contract(&Q_TR, {0}, &Q_TL, {2}, &tmp1);
+    require_inv(tmp0, 1, tmp1, 3, "plaquette: tmp0{1} vs tmp1{3}");
+    require_inv(tmp0, 2, tmp1, 0, "plaquette: tmp0{2} vs tmp1{0}");
     Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
 
+    // Undo transpose: odd = tmp2.Transpose({3,2,1,0}) => dZ/d(tmp2) = transpose(H_parent, inv_perm).
     Tensor H_tmp2 = H_parent;
-    H_tmp2.Transpose({3, 2, 1, 0});  // dL/dtmp2
+    H_tmp2.Transpose({3, 2, 1, 0});  // axes order matches tmp2
 
-    // Backprop through tmp2 = Contract(tmp0{1,2}, tmp1{3,0})
+    // Backprop tmp2 = Contract(tmp0{1,2}, tmp1{3,0}).
     Tensor H_tmp0, H_tmp1;
-    Contract(&H_tmp2, {2, 3}, &tmp1, {1, 2}, &H_tmp0);  // [tmp0.0,tmp0.3,tmp0.2,tmp0.1]
-    H_tmp0.Transpose({0, 3, 2, 1});                      // -> [tmp0.0,tmp0.1,tmp0.2,tmp0.3]
-    Contract(&H_tmp2, {0, 1}, &tmp0, {0, 3}, &H_tmp1);  // [tmp1.1,tmp1.2,tmp1.3,tmp1.0]
-    H_tmp1.Transpose({3, 0, 1, 2});                      // -> [tmp1.0,tmp1.1,tmp1.2,tmp1.3]
+    {
+      // H_tmp0 axes: [tmp0.0,tmp0.1,tmp0.2,tmp0.3]
+      Tensor t;
+      require_inv(H_tmp2, 2, tmp1, 1, "plaquette backprop tmp2->tmp0: H_tmp2{2} vs tmp1{1}");
+      require_inv(H_tmp2, 3, tmp1, 2, "plaquette backprop tmp2->tmp0: H_tmp2{3} vs tmp1{2}");
+      Contract(&H_tmp2, {2, 3}, &tmp1, {1, 2}, &t);
+      t.Transpose({0, 3, 2, 1});
+      H_tmp0 = std::move(t);
 
-    // Backprop through tmp0 = Contract(P_BL{1}, P_BR{0})
-    Tensor H_PBL, H_PBR;
-    Contract(&H_tmp0, {2, 3}, &P_BR, {1, 2}, &H_PBL);  // [P_BL0,P_BL2,P_BL1]
-    H_PBL.Transpose({0, 2, 1});                        // -> [P_BL0,P_BL1,P_BL2]
-    Contract(&H_tmp0, {0, 1}, &P_BL, {0, 2}, &H_PBR);  // [P_BR1,P_BR2,P_BR0]
-    H_PBR.Transpose({2, 0, 1});                        // -> [P_BR0,P_BR1,P_BR2]
+      // H_tmp1 axes: [tmp1.0,tmp1.1,tmp1.2,tmp1.3]
+      Tensor t2;
+      require_inv(H_tmp2, 0, tmp0, 0, "plaquette backprop tmp2->tmp1: H_tmp2{0} vs tmp0{0}");
+      require_inv(H_tmp2, 1, tmp0, 3, "plaquette backprop tmp2->tmp1: H_tmp2{1} vs tmp0{3}");
+      Contract(&H_tmp2, {0, 1}, &tmp0, {0, 3}, &t2);
+      t2.Transpose({3, 0, 1, 2});
+      H_tmp1 = std::move(t2);
+    }
 
-    // Backprop through tmp1 = Contract(Q_TR{0}, Q_TL{2})
+    // Backprop tmp1 = Contract(Q_TR{0}, Q_TL{2}).
     Tensor H_QTR, H_QTL;
-    Contract(&H_tmp1, {2, 3}, &Q_TL, {0, 1}, &H_QTR);  // [Q_TR1,Q_TR2,Q_TR0]
-    H_QTR.Transpose({2, 0, 1});                        // -> [Q_TR0,Q_TR1,Q_TR2]
-    Contract(&H_tmp1, {0, 1}, &Q_TR, {1, 2}, &H_QTL);  // [Q_TL0,Q_TL1,Q_TL2]
+    {
+      // H_QTR axes: [Q_TR.0,Q_TR.1,Q_TR.2]
+      Tensor t;
+      require_inv(H_tmp1, 2, Q_TL, 0, "plaquette backprop tmp1->Q_TR: H_tmp1{2} vs Q_TL{0}");
+      require_inv(H_tmp1, 3, Q_TL, 1, "plaquette backprop tmp1->Q_TR: H_tmp1{3} vs Q_TL{1}");
+      Contract(&H_tmp1, {2, 3}, &Q_TL, {0, 1}, &t);
+      t.Transpose({2, 0, 1});
+      H_QTR = std::move(t);
 
+      // H_QTL axes: [Q_TL.0,Q_TL.1,Q_TL.2]
+      require_inv(H_tmp1, 0, Q_TR, 1, "plaquette backprop tmp1->Q_TL: H_tmp1{0} vs Q_TR{1}");
+      require_inv(H_tmp1, 1, Q_TR, 2, "plaquette backprop tmp1->Q_TL: H_tmp1{1} vs Q_TR{2}");
+      Contract(&H_tmp1, {0, 1}, &Q_TR, {1, 2}, &H_QTL);
+    }
+
+    // Backprop tmp0 = Contract(P_BL{1}, P_BR{0}).
+    Tensor H_PBL, H_PBR;
+    {
+      // H_PBL axes: [P_BL.0,P_BL.1,P_BL.2]
+      Tensor t;
+      require_inv(H_tmp0, 2, P_BR, 1, "plaquette backprop tmp0->P_BL: H_tmp0{2} vs P_BR{1}");
+      require_inv(H_tmp0, 3, P_BR, 2, "plaquette backprop tmp0->P_BL: H_tmp0{3} vs P_BR{2}");
+      Contract(&H_tmp0, {2, 3}, &P_BR, {1, 2}, &t);
+      t.Transpose({0, 2, 1});
+      H_PBL = std::move(t);
+
+      // H_PBR axes: [P_BR.0,P_BR.1,P_BR.2]
+      Tensor t2;
+      require_inv(H_tmp0, 0, P_BL, 0, "plaquette backprop tmp0->P_BR: H_tmp0{0} vs P_BL{0}");
+      require_inv(H_tmp0, 1, P_BL, 2, "plaquette backprop tmp0->P_BR: H_tmp0{1} vs P_BL{2}");
+      Contract(&H_tmp0, {0, 1}, &P_BL, {0, 2}, &t2);
+      t2.Transpose({2, 0, 1});
+      H_PBR = std::move(t2);
+    }
 
     const Tensor* Hp_ptr = nullptr;
     const Tensor* Hq_ptr = nullptr;
     Tensor Hp_local, Hq_local;
-    if (role == 0) { Hq_local = H_QTL; Hq_ptr = &Hq_local; }
-    else if (role == 1) { Hq_local = H_QTR; Hq_ptr = &Hq_local; }
-    else if (role == 2) { Hp_local = H_PBL; Hp_ptr = &Hp_local; }
-    else { Hp_local = H_PBR; Hp_ptr = &Hp_local; }
+    if (role == 0) { Hq_local = std::move(H_QTL); Hq_ptr = &Hq_local; }
+    else if (role == 1) { Hq_local = std::move(H_QTR); Hq_ptr = &Hq_local; }
+    else if (role == 2) { Hp_local = std::move(H_PBL); Hp_ptr = &Hp_local; }
+    else { Hp_local = std::move(H_PBR); Hp_ptr = &Hp_local; }
 
-    const Tensor contrib = LinearSplitAdjointToHole_(/*scale=*/0, /*node=*/site_id, /*parent=*/pid, Hp_ptr, Hq_ptr);
-    if (hole_total.IsDefault()) hole_total = contrib;
-    else hole_total = hole_total + contrib;
+    return LinearSplitAdjointToHole_(s, /*node=*/child_id, /*parent=*/pid, Hp_ptr, Hq_ptr);
+  };
+
+  for (size_t s = last; s-- > 0;) {
+    std::map<uint32_t, Tensor> holes_cur;
+    for (uint32_t id : anc[s]) {
+      const auto& parents = scales_.at(s).fine_to_coarse.at(id);
+      Tensor sum;
+      int cnt = 0;
+      for (uint32_t pid : parents) {
+        if (pid == 0xFFFFFFFF) continue;
+        auto it = holes_next.find(pid);
+        if (it == holes_next.end()) continue;
+        const Tensor& H_parent = it->second;
+        const Tensor contrib = (s % 2 == 0)
+                                   ? backprop_plaquette_parent(s, id, pid, H_parent)
+                                   : backprop_diamond_parent(s, id, pid, H_parent);
+        if (sum.IsDefault()) sum = contrib;
+        else sum = sum + contrib;
+        ++cnt;
+      }
+      if (cnt == 0)
+        throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: failed to compute hole (no valid parent contributions).");
+
+      if (cnt > 1) sum = sum * TenElemT(RealT(1.0 / double(cnt)));
+      holes_cur.emplace(id, std::move(sum));
+    }
+    holes_next = std::move(holes_cur);
   }
 
-  if (hole_total.IsDefault())
-    throw std::logic_error("TRGContractor::PunchHole4x4_: failed to compute scale-0 hole tensor.");
-
-  // Empirical normalization (4x4 only):
-  //
-  // The current 4x4 impurity backprop implementation accumulates contributions along two layers,
-  // and due to the duplicated parent structure on a 4x4 torus this ends up overcounting the hole
-  // by a factor ~4. The unit-test contract requires:
-  //   Contract(hole, T_site) ≈ Trace(tn)
-  // so we rescale here to restore the correct normalization.
-  //
-  // TODO: Remove this once the 4x4 impurity propagation is rederived with an explicit computation
-  // graph that avoids duplicated pullbacks.
-  hole_total = hole_total * TenElemT(RealT(0.25));
-  return hole_total;
+  auto it0 = holes_next.find(site_id);
+  if (it0 == holes_next.end())
+    throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: missing final site hole.");
+  return it0->second;
 }
 
 template <typename TenElemT, typename QNT>
@@ -1583,18 +1758,23 @@ TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn
     return PunchHoleFinal3x3_(t3x3, removed_id);
   }
 
-  if (rows_ == 4 && cols_ == 4) {
+  // Generic case for larger sizes (N=2^k or N=3*2^k)
     if (!tensors_initialized_)
       throw std::logic_error(
           "TRGContractor::PunchHole: Trace(tn) must be called at least once to initialize cache.");
     if (!dirty_scale0_.empty())
       throw std::logic_error(
           "TRGContractor::PunchHole: cache is dirty. Please call Trace(tn) first.");
-    return PunchHole4x4_(site);
+
+  const bool is_pow2 = IsPowerOfTwo_(rows_);
+  const bool is_3pow2 = (rows_ % 3 == 0) && IsPowerOfTwo_(rows_ / 3);
+
+  if ((rows_ == cols_) && (is_pow2 || is_3pow2)) {
+    return PunchHoleBackpropGeneric_(site);
   }
 
   throw std::logic_error(
-      "TRGContractor::PunchHole: only 2x2, 3x3 and 4x4 periodic torus is supported currently.");
+      "TRGContractor::PunchHole: only 2x2, 3x3 and N=2^k or 3*2^k periodic torus is supported currently.");
 }
 
 #if defined(QLPEPS_UNITTEST)
