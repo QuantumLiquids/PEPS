@@ -317,6 +317,7 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBMPS(const TensorNetwork2D<TenElemT,
         const TransferMPO &mpo = tn.get_col(col);
         GrowBMPSStep_(position, mpo, trunc_para);
       }
+      break;
     }
     case RIGHT: {
       for (size_t col = cols - existed_bmps_size; col > 0; col--) {

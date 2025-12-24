@@ -9,6 +9,7 @@
 #define QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 
 #include <optional>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -129,8 +130,12 @@ struct TPSWaveFunctionComponent {
   ///< No initialized construct. considering to be removed in future.
   TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncateParams<RealT> &truncate_para) :
       config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para), contractor(rows, cols) {
-        contractor.Init(tn);
-      }
+    // IMPORTANT:
+    // This constructor does NOT initialize `tn` with projected site tensors.
+    // Calling contractor.Init(tn) here would dereference default tensors and crash.
+    // Proper initialization must be done by
+    // using the constructor taking (sitps, config, truncate_para).
+  }
 
   TPSWaveFunctionComponent(const SplitIndexTPS<TenElemT, QNT> &sitps,
                            const Configuration &config,
@@ -167,6 +172,9 @@ struct TPSWaveFunctionComponent {
   TenElemT EvaluateAmplitude() {
     // Keep component and contractor in sync: no pending trial should exist here.
     pending_trial_.reset();
+    if (tn.rows() == 0 || tn.cols() == 0 || tn({0, 0}).IsDefault()) {
+      throw std::logic_error("TPSWaveFunctionComponent::EvaluateAmplitude: TensorNetwork2D is not initialized.");
+    }
 
     if constexpr (detail::HasSetTruncateParams<Contractor>) {
       contractor.SetTruncateParams(this->trun_para);

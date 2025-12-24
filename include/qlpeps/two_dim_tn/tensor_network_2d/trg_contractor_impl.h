@@ -54,8 +54,7 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
   const auto& Vt = scales_.at(scale).split_Vt.at(node)[slot];
   const auto& Sinv = scales_.at(scale).split_S_inv_sqrt.at(node)[slot];
 
-  // `Sinv` is stored as a *real* tensor for memory/efficiency, but this contractor can be instantiated
-  // with complex `TenElemT`. Convert on demand so Contract() always sees consistent element types.
+  // `Sinv` is stored as a *real* tensor. Convert on demand.
   Tensor Sinv_dag;
   {
     const auto Sinv_dag_r = qlten::Dag(Sinv);  // QLTensor<RealT,QNT>
@@ -129,7 +128,6 @@ void TRGContractor<TenElemT, QNT>::ResetGeometry_(size_t rows, size_t cols) {
 template <typename TenElemT, typename QNT>
 void TRGContractor<TenElemT, QNT>::ClearCache() {
   scales_.clear();
-  dirty_scale0_.clear();
   tensors_initialized_ = false;
 }
 
@@ -199,40 +197,29 @@ void TRGContractor<TenElemT, QNT>::BuildScale0GraphPBCSquare_() {
 
 template <typename TenElemT, typename QNT>
 void TRGContractor<TenElemT, QNT>::BuildTopology_() {
-  // Pre-calculate fine_to_coarse and coarse_to_fine maps for all scales.
-  // We simulate the RG flow purely with indices.
+  // Build the fine<->coarse mapping for all scales.
   //
-  // IMPORTANT (4x4 PBC / PunchHole):
-  // This topology builder encodes a checkerboard TRG on a torus by allowing each fine node to appear
-  // in up to two coarse "parents" per RG step. This is convenient for incremental updates and local
-  // recomputation, but it is a *double-cover style* representation: in a 4x4 system there are two RG
-  // steps, and a naive "sum over all parent contexts" in hole backprop can introduce an overall
-  // multiplicity ~ 2 x 2 = 4. See Doxygen note on TRGContractor::PunchHole4x4_.
-  
+  // IMPORTANT (PBC checkerboard / PunchHole):
+  // This topology encodes a checkerboard TRG on a torus by allowing a fine node to have up to
+  // two coarse parents per RG step. This is convenient for (future) local updates and for
+  // backpropagating holes, but it is a double-cover style representation.
+  //
+  // On a 4x4 torus there are exactly two RG steps (scale0->scale1 and scale1->scale2).
+  // If a hole backprop naively "sums over both parent contexts" at each step, it can introduce
+  // an overall multiplicity ~ 2 x 2 = 4. (See the long Doxygen note in trg_contractor.h.)
   size_t n = rows_;
   size_t scale_idx = 0;
   
-  // Terminate at a small even lattice and contract it exactly:
-  // - 2x2 for n = 2^m
-  // - 3x3 for n = 3*2^k
-  // The last 1x1 step would require an additional SVD split/coarse-graining, which is unnecessary
-  // and numerically undesirable (extra truncation).
   while (n > 3) {
-    // Current scale is `scale_idx` (size n x n)
-    // Next scale is `scale_idx + 1` (size n x n/2 roughly, but stored as flat vector)
-    
     scales_.resize(scale_idx + 2);
     auto& fine_layer = scales_[scale_idx];
     auto& coarse_layer = scales_[scale_idx + 1];
     
-    // Resize topology maps
     size_t fine_size = (scale_idx == 0) ? (rows_ * cols_) : scales_[scale_idx].tens.size();
-    
     fine_layer.fine_to_coarse.assign(fine_size, {0xFFFFFFFF, 0xFFFFFFFF});
     
     if (scale_idx % 2 == 0) {
-      // Even -> Odd (Plaquette RG)
-      // n x n -> n x n/2 (embedded)
+      // Even -> Odd (Plaquette RG): n x n -> (n*n)/2 coarse nodes (embedded).
       if ((n & 1U) != 0U) {
         throw std::logic_error("TRGContractor::BuildTopology_: even->odd step requires even n.");
       }
@@ -246,27 +233,22 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
       
       for (size_t r = 0; r < n; ++r) {
         for (size_t c = 0; c < n; ++c) {
-          if (((r + c) & 1U) != 0U) continue; // Only process 'even' top-left corners
+          // Only process "even" plaquette anchors.
+          if (((r + c) & 1U) != 0U) continue;
           
           uint32_t coarse_id = static_cast<uint32_t>(id_odd(r, c));
-          
-          // Inputs
           uint32_t tl = static_cast<uint32_t>(id_even(r, c));
           uint32_t tr = static_cast<uint32_t>(id_even(r, mod(c + 1)));
           uint32_t bl = static_cast<uint32_t>(id_even(mod(r + 1), c));
           uint32_t br = static_cast<uint32_t>(id_even(mod(r + 1), mod(c + 1)));
           
-          // Map Coarse -> Fine
           coarse_layer.coarse_to_fine[coarse_id] = {tl, tr, bl, br};
-          
-          // Map Fine -> Coarse
-          // Each fine tensor is used in exactly 2 plaquettes.
-          // We assume sequential filling: first slot 0, then slot 1.
+          // Each fine tensor participates in exactly 2 plaquettes on the PBC checkerboard.
+          // Fill parent slots sequentially: first slot 0, then slot 1.
           auto add_parent = [&](uint32_t f, uint32_t c_id) {
             if (fine_layer.fine_to_coarse[f][0] == 0xFFFFFFFF) fine_layer.fine_to_coarse[f][0] = c_id;
             else fine_layer.fine_to_coarse[f][1] = c_id;
           };
-          
           add_parent(tl, coarse_id);
           add_parent(tr, coarse_id);
           add_parent(bl, coarse_id);
@@ -274,10 +256,9 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
         }
       }
     } else {
-      // Odd -> Even (Diamond RG)
-      // Embedded size n -> n/2
-      // Odd tensors: n*n/2 count. Even tensors (next): (n/2)*(n/2).
-      size_t n_embed = n; // The 'n' from previous loop
+      // Odd -> Even (Diamond RG): embedded size n -> n/2.
+      // Odd tensors count = (n*n)/2; even (next) count = (n/2)*(n/2).
+      size_t n_embed = n;
       size_t n_next = n / 2;
       size_t coarse_count = n_next * n_next;
       
@@ -293,58 +274,37 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
         for (size_t j = 0; j < n_embed; ++j) {
            if ((j & 1U) == 0U) continue; // j odd
            
-           // Diamond center (i, j) -> Coarse (i/2, j/2 approx)
+           // Diamond center (i, j) -> coarse (i/2, (j-1)/2).
            size_t I = i / 2;
            size_t J = (j - 1) / 2;
            uint32_t coarse_id = static_cast<uint32_t>(id_even_next(I, J));
            
-           // Neighbors on odd lattice
+           // Neighbors on odd lattice: N/E/S/W around the diamond center.
            uint32_t N = static_cast<uint32_t>(id_odd(mod(i - 1), j));
            uint32_t E = static_cast<uint32_t>(id_odd(i, mod(j + 1)));
            uint32_t S = static_cast<uint32_t>(id_odd(mod(i + 1), j));
            uint32_t W = static_cast<uint32_t>(id_odd(i, mod(j - 1)));
            
            coarse_layer.coarse_to_fine[coarse_id] = {N, E, S, W};
-           
            auto add_parent = [&](uint32_t f, uint32_t c_id) {
              if (fine_layer.fine_to_coarse[f][0] == 0xFFFFFFFF) fine_layer.fine_to_coarse[f][0] = c_id;
              else fine_layer.fine_to_coarse[f][1] = c_id;
            };
-           
            add_parent(N, coarse_id);
            add_parent(E, coarse_id);
            add_parent(S, coarse_id);
            add_parent(W, coarse_id);
         }
       }
-      
+
       n = n / 2; // Reduce n for next iteration (6->3, 12->6, ...)
     }
-    
     scale_idx++;
   }
 
-  // NOTE: The final scale tensor storage is resized during topology construction steps above.
-  // For n==3, the last coarse layer is 3x3 and has 9 tensors; for n==2 it has 4 tensors.
-  //
-  // For base cases (rows_ == 2 or 3), the loop above does not run. We still need a defined
-  // fine_to_coarse mapping at scale 0 for consistency (all invalid = no parents).
   if (scales_.size() == 1) {
     scales_[0].fine_to_coarse.assign(rows_ * cols_, {0xFFFFFFFF, 0xFFFFFFFF});
   }
-}
-
-template <typename TenElemT, typename QNT>
-void TRGContractor<TenElemT, QNT>::MarkDirtySeed_(uint32_t node) {
-  dirty_scale0_.insert(node);
-}
-
-template <typename TenElemT, typename QNT>
-void TRGContractor<TenElemT, QNT>::InvalidateEnvs(const SiteIdx& site) {
-  if (bc_ != BoundaryCondition::Periodic) {
-    throw std::logic_error("TRGContractor::InvalidateEnvs: call Init(tn) first.");
-  }
-  MarkDirtySeed_(NodeId_(site.row(), site.col()));
 }
 
 template <typename TenElemT, typename QNT>
@@ -426,15 +386,32 @@ TRGContractor<TenElemT, QNT>::SplitType1_(const Tensor& T_in) const {
 }
 
 template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor 
-TRGContractor<TenElemT, QNT>::ContractPlaquette_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine) {
-    throw std::logic_error("Helper ContractPlaquette_ requires refactoring to be scale-aware.");
+typename TRGContractor<TenElemT, QNT>::Tensor
+TRGContractor<TenElemT, QNT>::ContractPlaquetteCore_(const Tensor& Q0, const Tensor& Q1, const Tensor& P1, const Tensor& P0) {
+    using qlten::Contract;
+    Tensor tmp0, tmp1, tmp2;
+    Contract(&P1, {1}, &P0, {0}, &tmp0);
+    Contract(&Q1, {0}, &Q0, {2}, &tmp1);
+    Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
+    tmp2.Transpose({3, 2, 1, 0});
+    return tmp2;
+}
+
+template <typename TenElemT, typename QNT>
+typename TRGContractor<TenElemT, QNT>::Tensor
+TRGContractor<TenElemT, QNT>::ContractDiamondCore_(const Tensor& Np, const Tensor& Ep, const Tensor& Sq, const Tensor& Wq) {
+    using qlten::Contract;
+    Tensor SW, NE, out;
+    Contract(&Sq, {0}, &Wq, {2}, &SW);
+    Contract(&Np, {1}, &Ep, {0}, &NE);
+    Contract(&SW, {0, 3}, &NE, {2, 1}, &out);
+    out.Transpose({1, 0, 3, 2});
+    return out;
 }
 
 template <typename TenElemT, typename QNT>
 void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const std::set<uint32_t>& nodes) {
   if (scale >= scales_.size()) throw std::out_of_range("TRGContractor::EnsureSplitCacheForNodes_: invalid scale.");
-  // Final scale has no coarse parents; split cache is meaningless there.
   if (scale + 1 >= scales_.size()) return;
 
   auto& layer = scales_[scale];
@@ -447,13 +424,6 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
   if (layer.split_U.size() != n) layer.split_U.resize(n);
   if (layer.split_Vt.size() != n) layer.split_Vt.resize(n);
   if (layer.split_S_inv_sqrt.size() != n) layer.split_S_inv_sqrt.resize(n);
-
-  auto parent_slot = [&](uint32_t fid, uint32_t pid) -> int {
-    const auto& ps = layer.fine_to_coarse.at(fid);
-    if (ps[0] == pid) return 0;
-    if (ps[1] == pid) return 1;
-    return -1;
-  };
 
   for (uint32_t id : nodes) {
     if (id >= n) throw std::out_of_range("TRGContractor::EnsureSplitCacheForNodes_: node id out of range.");
@@ -468,21 +438,17 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
     const auto& parents = layer.fine_to_coarse.at(id);
     const auto& c2f = scales_[scale + 1].coarse_to_fine;
 
-    // Per header contract: split cache is per (node, parent-slot), because a node can appear
-    // with different roles in its two parents.
     for (int slot = 0; slot < 2; ++slot) {
       const uint32_t pid = parents[slot];
       if (pid == 0xFFFFFFFF) continue;
-      if (pid >= c2f.size())
-        throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: coarse parent id out of range.");
+      if (pid >= c2f.size()) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: coarse parent id out of range.");
 
       const auto& children = c2f.at(pid);
       int role = -1;
       for (int k = 0; k < 4; ++k) {
         if (children[k] == id) role = k;
       }
-      if (role < 0)
-        throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: invalid topology (child not found in parent).");
+      if (role < 0) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: invalid topology (child not found in parent).");
 
       typename ScaleCache::SplitType st = ScaleCache::SplitType::Type0;
       if (scale == 0) {
@@ -541,40 +507,43 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
 }
 
 template <typename TenElemT, typename QNT>
+TenElemT TRGContractor<TenElemT, QNT>::GetCachedAmplitude_() const {
+    if (scales_.empty()) return TenElemT(0);
+    if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
+    if (scales_.back().tens.size() == 4) {
+      const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                          scales_.back().tens[2], scales_.back().tens[3]};
+      return ContractFinal2x2_(t2x2);
+    }
+    if (scales_.back().tens.size() == 9) {
+      const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                          scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                          scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      return ContractFinal3x3_(t3x3);
+    }
+    throw std::logic_error("TRGContractor::GetCachedAmplitude_: invalid final scale size.");
+}
+
+template <typename TenElemT, typename QNT>
 TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT>& tn) {
   if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::Trace: call Init(tn) first.");
   if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) throw std::invalid_argument("TRGContractor::Trace: tn must be periodic.");
   if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::Trace: truncation params are not set.");
   
-  // 1. Update Scale 0 Dirty Tensors
-  if (!tensors_initialized_) {
-     // First run: treat all as dirty
-     const size_t N = rows_ * cols_;
-     for (uint32_t i = 0; i < N; ++i) dirty_scale0_.insert(i);
-     tensors_initialized_ = true;
-  }
-  
-  if (dirty_scale0_.empty()) {
-      if (scales_.empty()) return TenElemT(0);
-      if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
-      if (scales_.back().tens.size() == 4) {
-        const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                            scales_.back().tens[2], scales_.back().tens[3]};
-        return ContractFinal2x2_(t2x2);
-      }
-      throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
+  if (tensors_initialized_) {
+    return GetCachedAmplitude_();
   }
 
-  // Reload dirty tensors from TN
-  for (uint32_t id : dirty_scale0_) {
-     auto coords = Coord_(id);
-     scales_[0].tens[id] = tn({coords.first, coords.second});
+  // Full initialization
+  const size_t N = rows_ * cols_;
+  for (uint32_t i = 0; i < N; ++i) {
+     auto coords = Coord_(i);
+     scales_[0].tens[i] = tn({coords.first, coords.second});
   }
 
-  // If there is no RG step (n == 2 or 3), we can contract the terminal lattice directly
-  // without building split caches.
+  // Handle small systems with no RG steps
   if (scales_.size() == 1) {
-    dirty_scale0_.clear();
+    tensors_initialized_ = true;
     if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
     if (scales_.back().tens.size() == 4) {
       const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
@@ -590,188 +559,83 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
     throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
   }
 
-  // Maintain split cache on scale 0 for the reloaded nodes.
-  {
-    std::set<uint32_t> dirty0(dirty_scale0_.begin(), dirty_scale0_.end());
-    try {
-      EnsureSplitCacheForNodes_(/*scale=*/0, dirty0);
-    } catch (const std::out_of_range& e) {
-      throw std::out_of_range(std::string("TRGContractor::Trace: EnsureSplitCacheForNodes_(scale=0) failed: ") + e.what());
-    }
-  }
+  // Split scale 0 (all nodes)
+  std::set<uint32_t> all_nodes_0;
+  for(uint32_t i=0; i<N; ++i) all_nodes_0.insert(i);
+  EnsureSplitCacheForNodes_(0, all_nodes_0);
 
-  // 2. Propagate Up
-  std::set<uint32_t> dirty_current(dirty_scale0_.begin(), dirty_scale0_.end());
-  dirty_scale0_.clear();
-
-  // Iterate scales
+  // Propagate Up
   for (size_t s = 0; s < scales_.size() - 1; ++s) {
-      if (dirty_current.empty()) break; // Should not happen if dirty_scale0_ was not empty
-
-      std::set<uint32_t> dirty_next;
       const auto& fine_layer = scales_[s];
       auto& coarse_layer = scales_[s + 1];
       const bool even_to_odd = (s % 2 == 0);
-
-      // Identify affected coarse nodes
-      for (uint32_t f_id : dirty_current) {
-          const auto& parents = fine_layer.fine_to_coarse[f_id];
-          if (parents[0] != 0xFFFFFFFF) dirty_next.insert(parents[0]);
-          if (parents[1] != 0xFFFFFFFF) dirty_next.insert(parents[1]);
-      }
-
-      // Recompute affected coarse nodes
-      for (uint32_t c_id : dirty_next) {
+      
+      const size_t n_coarse = coarse_layer.tens.size();
+      for (uint32_t c_id = 0; c_id < n_coarse; ++c_id) {
           const auto& children = coarse_layer.coarse_to_fine[c_id];
-          const Tensor& T0 = fine_layer.tens[children[0]];
-          const Tensor& T1 = fine_layer.tens[children[1]];
-          const Tensor& T2 = fine_layer.tens[children[2]];
-          const Tensor& T3 = fine_layer.tens[children[3]];
-
-          using qlten::Contract;
+          
+          auto slot_of = [&](uint32_t fid, uint32_t pid) -> int {
+            const auto& ps = fine_layer.fine_to_coarse.at(fid);
+            if (ps[0] == pid) return 0;
+            if (ps[1] == pid) return 1;
+            return -1;
+          };
+          const int s0 = slot_of(children[0], c_id);
+          const int s1 = slot_of(children[1], c_id);
+          const int s2 = slot_of(children[2], c_id);
+          const int s3 = slot_of(children[3], c_id);
+          if (s0 < 0 || s1 < 0 || s2 < 0 || s3 < 0)
+             throw std::logic_error("TRGContractor::Trace: missing parent-slot.");
 
           if (even_to_odd) {
-              // Plaquette Contraction (TL, TR, BL, BR)
-              //
-              // ASCII diagram (even -> odd, 2x2 plaquette coarse-graining)
+              // Plaquette contraction (even -> odd), children order is {TL, TR, BL, BR}.
               //
               // We pick plaquettes with (r+c)%2==0 (checkerboard). For each 2x2 plaquette:
-              //
               //   TL = (r, c)      TR = (r, c+1)
               //   BL = (r+1, c)    BR = (r+1, c+1)
               //
-              // After splitting (TL,BR use type0; TR,BL use type1), we contract:
+              // Split convention (fixed by sublattice):
+              //   TL, BR are A (Type0); TR, BL are B (Type1).
               //
-              //          (external alphas become legs of the odd tensor)
+              // We must select split pieces in the correct parent-context (fine node -> this plaquette parent)
+              // so that alpha indices are stable and reusable by PunchHole().
               //
-              //              alpha_NW (from TL.Q0)   alpha_NE (from TR.Q1)
-              //                        \             /
-              //                         \           /
-              //                         [   odd tensor   ]   (stored with leg order [NW, NE, SE, SW])
-              //                         /           \
-              //                        /             \
-              //              alpha_SE (from BR.P0)   alpha_SW (from BL.P1)
+              // External alphas become legs of the coarse tensor; internal bonds are contracted:
               //
-              // Internal bonds (contracted):
-              // - TL.down  <-> BL.up
-              // - TR.down  <-> BR.up
-              // - TR.left  <-> TL.right
-              // - BL.right <-> BR.left
+              //   alpha_NW (from TL.Q)    alpha_NE (from TR.Q)
+              //            \\             /
+              //             \\           /
+              //             [  odd tensor  ]   (returned with leg order [NW, NE, SE, SW])
+              //             /           \\
+              //            /             \\
+              //   alpha_SW (from BL.P)    alpha_SE (from BR.P)
               //
-              // T0=TL, T1=TR, T2=BL, T3=BR
-              // TL, BR are A (Type0); TR, BL are B (Type1)
-              // Use split cache so alpha indices are stable and reusable by PunchHole().
-              // Select split pieces in the correct parent-context (fine node -> this plaquette parent).
-              auto slot_of = [&](uint32_t fid, uint32_t pid) -> int {
-                const auto& ps = fine_layer.fine_to_coarse.at(fid);
-                if (ps[0] == pid) return 0;
-                if (ps[1] == pid) return 1;
-                return -1;
-              };
-              const int s0 = slot_of(children[0], c_id);
-              const int s1 = slot_of(children[1], c_id);
-              const int s2 = slot_of(children[2], c_id);
-              const int s3 = slot_of(children[3], c_id);
-              if (s0 < 0 || s1 < 0 || s2 < 0 || s3 < 0)
-                throw std::logic_error("TRGContractor::Trace: missing parent-slot in plaquette.");
-
-              const Tensor& Q0 = fine_layer.split_Q[children[0]][s0]; // TL.Q
-              const Tensor& Q1 = fine_layer.split_Q[children[1]][s1]; // TR.Q
-              const Tensor& P1 = fine_layer.split_P[children[2]][s2]; // BL.P
-              const Tensor& P0 = fine_layer.split_P[children[3]][s3]; // BR.P
-
-              Tensor tmp0, tmp1, tmp2;
-              Contract(&P1, {1}, &P0, {0}, &tmp0);
-              Contract(&Q1, {0}, &Q0, {2}, &tmp1);
-              Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
-              tmp2.Transpose({3, 2, 1, 0});
-              
-              coarse_layer.tens[c_id] = tmp2;
-
+              const Tensor& Q0 = fine_layer.split_Q[children[0]][s0];
+              const Tensor& Q1 = fine_layer.split_Q[children[1]][s1];
+              const Tensor& P1 = fine_layer.split_P[children[2]][s2];
+              const Tensor& P0 = fine_layer.split_P[children[3]][s3];
+              coarse_layer.tens[c_id] = ContractPlaquetteCore_(Q0, Q1, P1, P0);
           } else {
-              // Diamond Contraction (N, E, S, W)
-              //
-              // ASCII diagram (odd -> even, diamond coarse-graining on rotated lattice)
-              //
-              // Odd-scale tensors live on parity-even embedding sites (r+c)%2==0 and have leg order:
-              //   [0=NW, 1=NE, 2=SE, 3=SW].
-              //
-              // For each diamond center (i even, j odd), take four odd tensors:
-              //
-              //              N = (i-1, j)
-              //                  /\
-              //                 /  \
-              //     W = (i, j-1)    E = (i, j+1)
-              //                 \  /
-              //                  \/
-              //              S = (i+1, j)
-              //
-              // After splitting (E,W use type0; N,S use type1) we contract the diamond internal bonds,
-              // producing one *even-scale* coarse tensor.
-              //
-              // IMPORTANT: all even-scale tensors must use a single global leg order:
-              //   [L(0), D(1), R(2), U(3)].
-              //
-              // T0=N, T1=E, T2=S, T3=W
-              // N, S are B (Type1); E, W are A (Type0)
-              // Use split cache so alpha indices are stable and reusable by PunchHole().
-              auto slot_of = [&](uint32_t fid, uint32_t pid) -> int {
-                const auto& ps = fine_layer.fine_to_coarse.at(fid);
-                if (ps[0] == pid) return 0;
-                if (ps[1] == pid) return 1;
-                return -1;
-              };
-              const int s0 = slot_of(children[0], c_id);
-              const int s1 = slot_of(children[1], c_id);
-              const int s2 = slot_of(children[2], c_id);
-              const int s3 = slot_of(children[3], c_id);
-              if (s0 < 0 || s1 < 0 || s2 < 0 || s3 < 0)
-                throw std::logic_error("TRGContractor::Trace: missing parent-slot in diamond.");
-
-              const Tensor& Np = fine_layer.split_P[children[0]][s0]; // N.P
-              const Tensor& Ep = fine_layer.split_P[children[1]][s1]; // E.P
-              const Tensor& Sq = fine_layer.split_Q[children[2]][s2]; // S.Q
-              const Tensor& Wq = fine_layer.split_Q[children[3]][s3]; // W.Q
-
-              Tensor SW, NE, out;
-              Contract(&Sq, {0}, &Wq, {2}, &SW);
-              Contract(&Np, {1}, &Ep, {0}, &NE);
-              Contract(&SW, {0, 3}, &NE, {2, 1}, &out);
-              out.Transpose({1, 0, 3, 2});
-              
-              coarse_layer.tens[c_id] = out;
+              // Diamond contraction (odd -> even), children order is {N, E, S, W}.
+              const Tensor& Np = fine_layer.split_P[children[0]][s0];
+              const Tensor& Ep = fine_layer.split_P[children[1]][s1];
+              const Tensor& Sq = fine_layer.split_Q[children[2]][s2];
+              const Tensor& Wq = fine_layer.split_Q[children[3]][s3];
+              coarse_layer.tens[c_id] = ContractDiamondCore_(Np, Ep, Sq, Wq);
           }
       }
 
-      // Keep split cache for the updated coarse nodes, so later PunchHole can reuse them.
-      try {
-        EnsureSplitCacheForNodes_(/*scale=*/s + 1, dirty_next);
-      } catch (const std::out_of_range& e) {
-        throw std::out_of_range(std::string("TRGContractor::Trace: EnsureSplitCacheForNodes_(scale=") +
-                                std::to_string(s + 1) + ") failed: " + e.what());
-      }
-      
-      dirty_current = std::move(dirty_next);
+      // Populate split cache for next scale
+      std::set<uint32_t> all_coarse_nodes;
+      for(uint32_t i=0; i<n_coarse; ++i) all_coarse_nodes.insert(i);
+      EnsureSplitCacheForNodes_(s + 1, all_coarse_nodes);
   }
 
-  // Final 1x1 Trace
-  if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
-  if (scales_.back().tens.size() == 4) {
-    const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                        scales_.back().tens[2], scales_.back().tens[3]};
-    return ContractFinal2x2_(t2x2);
-  }
-  if (scales_.back().tens.size() == 9) {
-    const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                        scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                        scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
-    return ContractFinal3x3_(t3x3);
-  }
-  throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
+  tensors_initialized_ = true;
+  
+  // Return result
+  return GetCachedAmplitude_();
 }
-
-// NOTE: The actual PunchHole4x4_ implementation is defined below. We keep helper lambdas local
-// to that implementation to avoid adding new public surface area.
 
 template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Trial
@@ -780,7 +644,6 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
   if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: call Init(tn) first.");
   if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: truncation params are not set.");
   if (!tensors_initialized_) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: Trace(tn) must be called at least once to initialize cache.");
-  if (!dirty_scale0_.empty()) throw std::logic_error("TRGContractor::BeginTrialWithReplacement: cache is dirty. Please call Trace(tn) to commit changes before calling this.");
 
   Trial trial;
   trial.layer_updates.resize(scales_.size());
@@ -792,24 +655,12 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
   }
 
   if (trial.layer_updates[0].empty()) {
-    if (scales_.back().tens.size() == 1) {
-      trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
-    } else if (scales_.back().tens.size() == 4) {
-      const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                          scales_.back().tens[2], scales_.back().tens[3]};
-      trial.amplitude = ContractFinal2x2_(t2x2);
-    } else if (scales_.back().tens.size() == 9) {
-      const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                          scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                          scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
-      trial.amplitude = ContractFinal3x3_(t3x3);
-    } else {
-      throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
-    }
-    return trial;
+     // No changes
+     trial.amplitude = GetCachedAmplitude_();
+     return trial; 
   }
 
-  // Shadow RG propagation: for each scale, compute the affected coarse tensors and stash them.
+  // Shadow RG propagation
   for (size_t s = 0; s < scales_.size() - 1; ++s) {
     if (trial.layer_updates[s].empty()) break;
 
@@ -826,7 +677,7 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
       if (parents[1] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[1]);
     }
 
-    // Recompute affected coarse nodes using mix of trial updates and cached fine tensors.
+    // Recompute affected coarse nodes
     for (uint32_t c_id : dirty_coarse_nodes) {
       const auto& children = coarse_layer.coarse_to_fine[c_id];
 
@@ -841,60 +692,28 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
       const Tensor& T2 = get_fine_tensor(children[2]);
       const Tensor& T3 = get_fine_tensor(children[3]);
 
-      using qlten::Contract;
-
       if (even_to_odd) {
-        // IMPORTANT: Trial must match the *true* TRG semantics (including SVD/truncation) for the
-        // modified tensors. Therefore we re-run the splitters here (as in the original implementation),
-        // rather than using any cached linearized split projection.
         auto tl = SplitType0_(T0);
         auto tr = SplitType1_(T1);
         auto bl = SplitType1_(T2);
         auto br = SplitType0_(T3);
-
-        const Tensor& Q0 = tl.Q;
-        const Tensor& Q1 = tr.Q;
-        const Tensor& P1 = bl.P;
-        const Tensor& P0 = br.P;
-
-        Tensor tmp0, tmp1, tmp2;
-        Contract(&P1, {1}, &P0, {0}, &tmp0);
-        Contract(&Q1, {0}, &Q0, {2}, &tmp1);
-        Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
-        tmp2.Transpose({3, 2, 1, 0});
-
-        trial.layer_updates[s + 1][c_id] = tmp2;
+        trial.layer_updates[s + 1][c_id] = ContractPlaquetteCore_(tl.Q, tr.Q, bl.P, br.P);
       } else {
         auto nB = SplitType1_(T0);
         auto eA = SplitType0_(T1);
         auto sB = SplitType1_(T2);
         auto wA = SplitType0_(T3);
-
-        const Tensor& Np = nB.P;
-        const Tensor& Ep = eA.P;
-        const Tensor& Sq = sB.Q;
-        const Tensor& Wq = wA.Q;
-
-        Tensor SW, NE, out;
-        Contract(&Sq, {0}, &Wq, {2}, &SW);
-        Contract(&Np, {1}, &Ep, {0}, &NE);
-        Contract(&SW, {0, 3}, &NE, {2, 1}, &out);
-        out.Transpose({1, 0, 3, 2});
-
-        trial.layer_updates[s + 1][c_id] = out;
+        trial.layer_updates[s + 1][c_id] = ContractDiamondCore_(nB.P, eA.P, sB.Q, wA.Q);
       }
     }
   }
 
-  // Final amplitude: use trial last-layer tensor if present, otherwise cached.
+  // Final amplitude
   if (!trial.layer_updates.empty()) {
     const size_t last = trial.layer_updates.size() - 1;
     if (scales_.back().tens.size() == 1) {
       auto it = trial.layer_updates[last].find(0);
-      if (it != trial.layer_updates[last].end()) {
-        trial.amplitude = ContractFinal1x1_(it->second);
-        return trial;
-      }
+      trial.amplitude = ContractFinal1x1_(it != trial.layer_updates[last].end() ? it->second : scales_.back().tens[0]);
     } else if (scales_.back().tens.size() == 4) {
       std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
                                     scales_.back().tens[2], scales_.back().tens[3]};
@@ -903,7 +722,6 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
         if (it != trial.layer_updates[last].end()) t2x2[id] = it->second;
       }
       trial.amplitude = ContractFinal2x2_(t2x2);
-      return trial;
     } else if (scales_.back().tens.size() == 9) {
       std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
                                     scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
@@ -913,24 +731,9 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
         if (it != trial.layer_updates[last].end()) t3x3[id] = it->second;
       }
       trial.amplitude = ContractFinal3x3_(t3x3);
-      return trial;
     } else {
       throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
     }
-  }
-  if (scales_.back().tens.size() == 1) {
-    trial.amplitude = ContractFinal1x1_(scales_.back().tens[0]);
-  } else if (scales_.back().tens.size() == 4) {
-    const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                        scales_.back().tens[2], scales_.back().tens[3]};
-    trial.amplitude = ContractFinal2x2_(t2x2);
-  } else if (scales_.back().tens.size() == 9) {
-    const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                        scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                        scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
-    trial.amplitude = ContractFinal3x3_(t3x3);
-  } else {
-    throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
   }
   return trial;
 }
@@ -940,13 +743,29 @@ void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
   if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::CommitTrial: call Init(tn) first.");
   if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::CommitTrial: truncation params are not set.");
   if (!tensors_initialized_) throw std::logic_error("TRGContractor::CommitTrial: Trace(tn) must be called at least once to initialize cache.");
-  if (!dirty_scale0_.empty()) throw std::logic_error("TRGContractor::CommitTrial: cache is dirty. Please call Trace(tn) first.");
   if (trial.layer_updates.size() != scales_.size()) throw std::invalid_argument("TRGContractor::CommitTrial: trial topology mismatch.");
 
   for (size_t s = 0; s < trial.layer_updates.size(); ++s) {
+    if (trial.layer_updates[s].empty()) continue;
+    
+    // Update tensors
     for (auto& kv : trial.layer_updates[s]) {
       scales_[s].tens[kv.first] = std::move(kv.second);
     }
+    
+    // Update split cache for the modified tensors (needed for future PunchHole)
+    std::set<uint32_t> modified_nodes;
+    for (auto& kv : trial.layer_updates[s]) {
+        // kv.second is now moved-from (invalid), but the key is the node ID.
+        // wait, we moved it in the loop above. We need the keys.
+        // Actually, since we iterate `kv` in `trial.layer_updates[s]`, and map iteration gives valid keys:
+        modified_nodes.insert(kv.first);
+    }
+    // Re-iterate is safer or copy keys first. Map node order is sorted, so:
+    // We iterate trial.layer_updates[s] twice is fine, but we moved the value.
+    // The key is const.
+    // However, EnsureSplitCacheForNodes_ uses scales_[s].tens[id], which is now valid (updated).
+    EnsureSplitCacheForNodes_(s, modified_nodes);
   }
 }
 
@@ -1083,40 +902,33 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2
     // Remove 0. Remaining: 1,2,3.
     // Contract (1)-(3) vertically: 1.{D,U} <-> 3.{U,D}
     Tensor bd;
-    Contract(&T2x2[1], {1, 3}, &T2x2[3], {3, 1}, &bd);  // axes: [1.L, 1.R, 3.L, 3.R]
-    // Contract (3)-(2) horizontally: 3.{L,R} <-> 2.{R,L}
+    Contract(&T2x2[1], {1, 3}, &T2x2[3], {3, 1}, &bd);  
     Tensor hole;
-    Contract(&bd, {2, 3}, &T2x2[2], {2, 0}, &hole);  // axes: [1.L, 1.R, 2.D, 2.U]
-    // Desired [L,D,R,U] of removed 0 is [1.R, 2.U, 1.L, 2.D].
+    Contract(&bd, {2, 3}, &T2x2[2], {2, 0}, &hole);  
     hole.Transpose({1, 3, 0, 2});
     return hole;
   }
   if (removed_id == 1) {
-    // Remove 1. Remaining: 0,2,3.
     Tensor ac;
-    Contract(&T2x2[0], {1, 3}, &T2x2[2], {3, 1}, &ac);  // axes: [0.L, 0.R, 2.L, 2.R]
+    Contract(&T2x2[0], {1, 3}, &T2x2[2], {3, 1}, &ac);  
     Tensor hole;
-    Contract(&ac, {2, 3}, &T2x2[3], {2, 0}, &hole);      // axes: [0.L, 0.R, 3.D, 3.U]
-    // Desired [L,D,R,U] of removed 1 is [0.R, 3.U, 0.L, 3.D].
+    Contract(&ac, {2, 3}, &T2x2[3], {2, 0}, &hole);      
     hole.Transpose({1, 3, 0, 2});
     return hole;
   }
   if (removed_id == 2) {
-    // Remove 2. Remaining: 0,1,3.
     Tensor ab;
-    Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);  // axes: [0.D, 0.U, 1.D, 1.U]
+    Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);  
     Tensor hole;
-    Contract(&ab, {2, 3}, &T2x2[3], {3, 1}, &hole);      // axes: [0.D, 0.U, 3.L, 3.R]
-    // Desired [L,D,R,U] of removed 2 is [3.R, 0.U, 3.L, 0.D].
+    Contract(&ab, {2, 3}, &T2x2[3], {3, 1}, &hole);      
     hole.Transpose({3, 1, 2, 0});
     return hole;
   }
   // removed_id == 3
   Tensor ab;
-  Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);    // axes: [0.D, 0.U, 1.D, 1.U]
+  Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);    
   Tensor hole;
-  Contract(&ab, {0, 1}, &T2x2[2], {3, 1}, &hole);        // axes: [1.D, 1.U, 2.L, 2.R]
-  // Desired [L,D,R,U] of removed 3 is [2.R, 1.U, 2.L, 1.D].
+  Contract(&ab, {0, 1}, &T2x2[2], {3, 1}, &hole);        
   hole.Transpose({3, 1, 2, 0});
   return hole;
 }
@@ -1125,7 +937,7 @@ template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Tensor
 TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3x3,
                                                 const uint32_t removed_id) const {
-  using qlten::Contract;
+    using qlten::Contract;
   using qlten::Eye;
 
   if (removed_id >= 9) throw std::invalid_argument("TRGContractor::PunchHoleFinal3x3_: removed_id out of range.");
@@ -1167,7 +979,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
 
   const auto [rr, cc] = rc(removed_id);
 
-  // Build initial components: 8 tensors with labeled legs [L,D,R,U].
   std::vector<LabeledTensor> comps;
   comps.reserve(8);
 
@@ -1178,10 +989,7 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
       const Tensor& T = T3x3[sid];
       if (T.IsDefault())
         throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor is default.");
-      if (T.Rank() != 4) {
-        throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor must be rank-4.");
-      }
-
+      
       LabeledTensor lt;
       lt.ten = T;
       lt.labels = {
@@ -1194,43 +1002,11 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
     }
   }
 
-  auto find_pair = [&](const std::vector<LabeledTensor>& v,
-                       BondKey* out_key,
-                       size_t* out_i, size_t* out_ai,
-                       size_t* out_j, size_t* out_aj,
-                       bool* same_component) -> bool {
-    // Find any label that appears twice.
-    std::map<BondKey, std::pair<std::pair<size_t, size_t>, std::pair<size_t, size_t>>> occ;
-    std::set<BondKey> seen_once;
-    for (size_t i = 0; i < v.size(); ++i) {
-      for (size_t a = 0; a < v[i].labels.size(); ++a) {
-        const auto& k = v[i].labels[a];
-        if (!seen_once.count(k)) {
-          seen_once.insert(k);
-          occ[k].first = {i, a};
-          occ[k].second = {size_t(-1), size_t(-1)};
-        } else if (occ[k].second.first == size_t(-1)) {
-          occ[k].second = {i, a};
-          *out_key = k;
-          *out_i = occ[k].first.first;
-          *out_ai = occ[k].first.second;
-          *out_j = occ[k].second.first;
-          *out_aj = occ[k].second.second;
-          *same_component = (*out_i == *out_j);
-          return true;
-        }
-      }
-    }
-    return false;
-  };
-
   auto trace_pair_inplace = [&](LabeledTensor& lt, size_t ax_a, size_t ax_b) {
-    // Trace the two legs connected by the same bond label.
     if (ax_a == ax_b) throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: tracing identical axes.");
     const auto& idx_a = lt.ten.GetIndex(ax_a);
     const auto& idx_b = lt.ten.GetIndex(ax_b);
 
-    // Choose the OUT-directed index as the one to build Eye from, and order (IN, OUT) for contraction.
     const bool a_is_out = (idx_a.GetDir() == qlten::TenIndexDirType::OUT);
     const bool b_is_out = (idx_b.GetDir() == qlten::TenIndexDirType::OUT);
     if (a_is_out == b_is_out)
@@ -1240,7 +1016,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
     const size_t ax_out = a_is_out ? ax_a : ax_b;
     const auto& idx_out = lt.ten.GetIndex(ax_out);
 
-    // Sanity: the two legs must be dual to each other, otherwise qlten::Contract can crash inside GEMM.
     if (!(lt.ten.GetIndex(ax_in) == InverseIndex(idx_out))) {
       throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: trace legs are not inverse indices.");
     }
@@ -1250,40 +1025,31 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
     Contract(&lt.ten, {ax_in, ax_out}, &eye, {0, 1}, &out);
     lt.ten = std::move(out);
 
-    // Remove labels at ax_in and ax_out (remove larger index first).
     const size_t hi = std::max(ax_in, ax_out);
     const size_t lo = std::min(ax_in, ax_out);
     lt.labels.erase(lt.labels.begin() + hi);
     lt.labels.erase(lt.labels.begin() + lo);
   };
 
-  // Contract all internal bonds using a greedy heuristic (min-rank) to avoid intermediate rank explosion.
   for (int safety = 0; safety < 200; ++safety) {
     if (comps.size() == 1) {
-      // Check for remaining self-loops on the final tensor
       std::map<BondKey, size_t> kmap;
       std::vector<std::pair<size_t, size_t>> self_pairs;
       for (size_t a = 0; a < comps[0].labels.size(); ++a) {
         const auto& k = comps[0].labels[a];
         if (kmap.count(k)) {
           self_pairs.push_back({kmap[k], a});
-          kmap.erase(k); // match consumed
+          kmap.erase(k); 
         } else {
           kmap[k] = a;
         }
       }
-      if (self_pairs.empty()) break; // Done!
-      
-      // Perform one self-trace
+      if (self_pairs.empty()) break; 
       trace_pair_inplace(comps[0], self_pairs[0].first, self_pairs[0].second);
       continue;
     }
 
-    // 1. Build connectivity graph
-    // Map: BondKey -> (comp_idx, axis_idx)
     std::map<BondKey, std::pair<size_t, size_t>> open_bonds;
-    // Adj: pair(u,v) -> list of (axis_on_u, axis_on_v)
-    // u <= v. If u==v, it's a self-loop.
     std::map<std::pair<size_t, size_t>, std::vector<std::pair<size_t, size_t>>> adj;
 
     for (size_t i = 0; i < comps.size(); ++i) {
@@ -1291,10 +1057,8 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
         const auto& k = comps[i].labels[a];
         auto it = open_bonds.find(k);
         if (it != open_bonds.end()) {
-          // Found a shared bond
           size_t j = it->second.first;
           size_t b = it->second.second;
-          // Canonical order for map key
           size_t u = std::min(i, j);
           size_t v = std::max(i, j);
           size_t ax_u = (i == u) ? a : b;
@@ -1306,18 +1070,11 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
       }
     }
 
-    if (adj.empty()) {
-       // Should not happen for connected graph unless done
-       // But we checked comps.size() == 1 above.
-       // If comps.size() > 1 and no bonds, graph is disconnected?
-       throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: components disconnected.");
-    }
+    if (adj.empty()) throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: components disconnected.");
 
-    // 2. Select best move
-    // Priority: Self-loops (cost negative), then min resulting rank.
     struct Move {
       size_t u, v;
-      long cost; // resulting rank change (or roughly result rank)
+      long cost; 
     };
     Move best_move = {0, 0, 999999};
     bool found_move = false;
@@ -1332,12 +1089,9 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
       
       long cost = 0;
       if (u == v) {
-        // Self-loop: reduces rank by 2 * n_bonds
         cost = rank_u - 2 * static_cast<long>(n_bonds);
-        // Prioritize self-loops immensely
         cost -= 100000; 
       } else {
-        // Merge: rank_u + rank_v - 2 * n_bonds
         cost = rank_u + rank_v - 2 * static_cast<long>(n_bonds);
       }
 
@@ -1347,38 +1101,29 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
       }
     }
 
-    // 3. Execute move
     size_t u = best_move.u;
     size_t v = best_move.v;
     const auto& bonds = adj[{u, v}];
 
     if (u == v) {
-      // Self-trace. Do one pair at a time (simpler safe implementation).
-      // Trace indices might shift after each trace, so just do one and let loop repeat.
       trace_pair_inplace(comps[u], bonds[0].first, bonds[0].second);
     } else {
-      // Merge u and v.
-      // Contract along ALL shared bonds to minimize intermediate rank.
       LabeledTensor A = std::move(comps[u]);
       LabeledTensor B = std::move(comps[v]);
       
       std::vector<size_t> idx_A, idx_B;
-      std::set<size_t> set_A, set_B; // to identify kept indices
+      std::set<size_t> set_A, set_B; 
       for (const auto& p : bonds) {
         idx_A.push_back(p.first);
         idx_B.push_back(p.second);
         set_A.insert(p.first);
         set_B.insert(p.second);
-        
         require_inv(A.ten, p.first, B.ten, p.second, "multi-bond merge");
       }
 
       Tensor out;
       Contract(&A.ten, idx_A, &B.ten, idx_B, &out);
       
-      // Construct merged labels.
-      // Order: A's remaining labels then B's remaining labels.
-      // (This matches qlten::Contract default output order for untraced indices: A then B)
       std::vector<BondKey> new_labels;
       new_labels.reserve(A.labels.size() + B.labels.size() - 2 * bonds.size());
       for (size_t k = 0; k < A.labels.size(); ++k) {
@@ -1390,7 +1135,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
       
       LabeledTensor merged{std::move(out), std::move(new_labels)};
       
-      // Remove u and v (v is larger since u<=v and u!=v)
       comps.erase(comps.begin() + v);
       comps.erase(comps.begin() + u);
       comps.push_back(std::move(merged));
@@ -1405,12 +1149,11 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
   if (labels.size() != 4)
     throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: final open legs are not rank-4.");
 
-  // Expected open legs (dual of removed site's [L,D,R,U]) are the four bonds incident to (rr,cc).
   const std::array<BondKey, 4> want = {
-      x(rr, mod3(int(cc) - 1)), // L*
-      y(rr, cc),                // D*
-      x(rr, cc),                // R*
-      y(mod3(int(rr) - 1), cc)  // U*
+      x(rr, mod3(int(cc) - 1)), 
+      y(rr, cc),                
+      x(rr, cc),                
+      y(mod3(int(rr) - 1), cc)  
   };
 
   std::array<int, 4> perm = {-1, -1, -1, -1};
@@ -1429,20 +1172,8 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
                   static_cast<size_t>(perm[1]),
                   static_cast<size_t>(perm[2]),
                   static_cast<size_t>(perm[3])});
-
-  // Sanity: ensure indices match the dual space of the removed tensor so Contract(hole, Ts) is valid.
-  const Tensor& Ts = T3x3[removed_id];
-  if (!(hole.GetIndex(0) == InverseIndex(Ts.GetIndex(0)) &&
-        hole.GetIndex(1) == InverseIndex(Ts.GetIndex(1)) &&
-        hole.GetIndex(2) == InverseIndex(Ts.GetIndex(2)) &&
-        hole.GetIndex(3) == InverseIndex(Ts.GetIndex(3)))) {
-    throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: hole indices do not match dual of site tensor.");
-  }
-
   return hole;
 }
-
-// [PunchHole4x4_ removed in favor of PunchHoleBackpropGeneric_]
 
 template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Tensor
@@ -1468,7 +1199,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
   if (top_size != 9 && top_size != 4)
     throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: last scale must be 3x3 (size 9) or 2x2 (size 4).");
 
-  // 1) Collect ancestor sets (nodes on each scale that influence this site).
   std::vector<std::set<uint32_t>> anc(scales_.size());
   anc[0].insert(site_id);
   for (size_t s = 0; s < last; ++s) {
@@ -1479,7 +1209,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     }
   }
 
-  // 2) Top holes on terminator: dZ/dT_last.
   std::map<uint32_t, Tensor> holes_next;
   {
     const auto& top = scales_.at(last).tens;
@@ -1500,9 +1229,8 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     }
   }
 
-  // 3) Backprop down to scale 0. For each node, average contributions from its valid parent contexts.
   auto backprop_diamond_parent = [&](size_t s, uint32_t child_id, uint32_t pid, const Tensor& H_parent) -> Tensor {
-    const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);  // {N,E,S,W}
+    const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid); 
     int role = -1;
     for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
     if (role < 0) throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: invalid diamond topology.");
@@ -1518,8 +1246,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     const Tensor& Ep = scales_.at(s).split_P.at(children[1])[se];
     const Tensor& Sq = scales_.at(s).split_Q.at(children[2])[ss];
     const Tensor& Wq = scales_.at(s).split_Q.at(children[3])[sw];
-    if (Np.IsDefault() || Ep.IsDefault() || Sq.IsDefault() || Wq.IsDefault())
-      throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: default split piece in diamond.");
 
     Tensor SW, NE;
     require_inv(Sq, 0, Wq, 2, "diamond: Sq{0} vs Wq{2}");
@@ -1527,11 +1253,9 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     require_inv(Np, 1, Ep, 0, "diamond: Np{1} vs Ep{0}");
     Contract(&Np, {1}, &Ep, {0}, &NE);
 
-    // Undo the forward transpose out = out_pre.Transpose({1,0,3,2}).
     Tensor H_out_pre = H_parent;
-    H_out_pre.Transpose({1, 0, 3, 2});  // axes: [SW1,SW2,NE0,NE3]
+    H_out_pre.Transpose({1, 0, 3, 2}); 
 
-    // Backprop through out_pre = Contract(SW{0,3}, NE{2,1}).
     Tensor H_SW, H_NE;
     {
       Tensor tmp;
@@ -1549,7 +1273,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       H_NE = std::move(tmp2);
     }
 
-    // Backprop SW = Contract(Sq{0}, Wq{2}).
     Tensor H_Sq, H_Wq;
     {
       Tensor tmp;
@@ -1564,7 +1287,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       Contract(&H_SW, {0, 1}, &Sq, {1, 2}, &H_Wq);
     }
 
-    // Backprop NE = Contract(Np{1}, Ep{0}).
     Tensor H_Np, H_Ep;
     {
       Tensor tmp;
@@ -1582,7 +1304,7 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       H_Ep = std::move(tmp2);
     }
 
-    const bool is_P = (role == 0 || role == 1);  // N/E -> P piece
+    const bool is_P = (role == 0 || role == 1);  
     const Tensor* Hp_ptr = nullptr;
     const Tensor* Hq_ptr = nullptr;
     Tensor Hp_local, Hq_local;
@@ -1593,11 +1315,11 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       Hq_local = (role == 2) ? std::move(H_Sq) : std::move(H_Wq);
       Hq_ptr = &Hq_local;
     }
-    return LinearSplitAdjointToHole_(s, /*node=*/child_id, /*parent=*/pid, Hp_ptr, Hq_ptr);
+    return LinearSplitAdjointToHole_(s, child_id, pid, Hp_ptr, Hq_ptr);
   };
 
   auto backprop_plaquette_parent = [&](size_t s, uint32_t child_id, uint32_t pid, const Tensor& H_parent) -> Tensor {
-    const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);  // {TL,TR,BL,BR}
+    const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);  
     int role = -1;
     for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
     if (role < 0) throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: invalid plaquette topology.");
@@ -1613,14 +1335,7 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1])[s1];
     const Tensor& P_BL = scales_.at(s).split_P.at(children[2])[s2];
     const Tensor& P_BR = scales_.at(s).split_P.at(children[3])[s3];
-    if (Q_TL.IsDefault() || Q_TR.IsDefault() || P_BL.IsDefault() || P_BR.IsDefault())
-      throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: default split piece in plaquette.");
 
-    // Forward (Trace) recap:
-    //   tmp0 = Contract(P_BL{1}, P_BR{0})
-    //   tmp1 = Contract(Q_TR{0}, Q_TL{2})
-    //   tmp2 = Contract(tmp0{1,2}, tmp1{3,0})
-    //   odd  = tmp2.Transpose({3,2,1,0})   // leg order [NW,NE,SE,SW]
     Tensor tmp0, tmp1, tmp2;
     require_inv(P_BL, 1, P_BR, 0, "plaquette: P_BL{1} vs P_BR{0}");
     Contract(&P_BL, {1}, &P_BR, {0}, &tmp0);
@@ -1630,14 +1345,11 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     require_inv(tmp0, 2, tmp1, 0, "plaquette: tmp0{2} vs tmp1{0}");
     Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
 
-    // Undo transpose: odd = tmp2.Transpose({3,2,1,0}) => dZ/d(tmp2) = transpose(H_parent, inv_perm).
     Tensor H_tmp2 = H_parent;
-    H_tmp2.Transpose({3, 2, 1, 0});  // axes order matches tmp2
+    H_tmp2.Transpose({3, 2, 1, 0}); 
 
-    // Backprop tmp2 = Contract(tmp0{1,2}, tmp1{3,0}).
     Tensor H_tmp0, H_tmp1;
     {
-      // H_tmp0 axes: [tmp0.0,tmp0.1,tmp0.2,tmp0.3]
       Tensor t;
       require_inv(H_tmp2, 2, tmp1, 1, "plaquette backprop tmp2->tmp0: H_tmp2{2} vs tmp1{1}");
       require_inv(H_tmp2, 3, tmp1, 2, "plaquette backprop tmp2->tmp0: H_tmp2{3} vs tmp1{2}");
@@ -1645,7 +1357,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       t.Transpose({0, 3, 2, 1});
       H_tmp0 = std::move(t);
 
-      // H_tmp1 axes: [tmp1.0,tmp1.1,tmp1.2,tmp1.3]
       Tensor t2;
       require_inv(H_tmp2, 0, tmp0, 0, "plaquette backprop tmp2->tmp1: H_tmp2{0} vs tmp0{0}");
       require_inv(H_tmp2, 1, tmp0, 3, "plaquette backprop tmp2->tmp1: H_tmp2{1} vs tmp0{3}");
@@ -1654,10 +1365,8 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       H_tmp1 = std::move(t2);
     }
 
-    // Backprop tmp1 = Contract(Q_TR{0}, Q_TL{2}).
     Tensor H_QTR, H_QTL;
     {
-      // H_QTR axes: [Q_TR.0,Q_TR.1,Q_TR.2]
       Tensor t;
       require_inv(H_tmp1, 2, Q_TL, 0, "plaquette backprop tmp1->Q_TR: H_tmp1{2} vs Q_TL{0}");
       require_inv(H_tmp1, 3, Q_TL, 1, "plaquette backprop tmp1->Q_TR: H_tmp1{3} vs Q_TL{1}");
@@ -1665,16 +1374,13 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       t.Transpose({2, 0, 1});
       H_QTR = std::move(t);
 
-      // H_QTL axes: [Q_TL.0,Q_TL.1,Q_TL.2]
       require_inv(H_tmp1, 0, Q_TR, 1, "plaquette backprop tmp1->Q_TL: H_tmp1{0} vs Q_TR{1}");
       require_inv(H_tmp1, 1, Q_TR, 2, "plaquette backprop tmp1->Q_TL: H_tmp1{1} vs Q_TR{2}");
       Contract(&H_tmp1, {0, 1}, &Q_TR, {1, 2}, &H_QTL);
     }
 
-    // Backprop tmp0 = Contract(P_BL{1}, P_BR{0}).
     Tensor H_PBL, H_PBR;
     {
-      // H_PBL axes: [P_BL.0,P_BL.1,P_BL.2]
       Tensor t;
       require_inv(H_tmp0, 2, P_BR, 1, "plaquette backprop tmp0->P_BL: H_tmp0{2} vs P_BR{1}");
       require_inv(H_tmp0, 3, P_BR, 2, "plaquette backprop tmp0->P_BL: H_tmp0{3} vs P_BR{2}");
@@ -1682,7 +1388,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
       t.Transpose({0, 2, 1});
       H_PBL = std::move(t);
 
-      // H_PBR axes: [P_BR.0,P_BR.1,P_BR.2]
       Tensor t2;
       require_inv(H_tmp0, 0, P_BL, 0, "plaquette backprop tmp0->P_BR: H_tmp0{0} vs P_BL{0}");
       require_inv(H_tmp0, 1, P_BL, 2, "plaquette backprop tmp0->P_BR: H_tmp0{1} vs P_BL{2}");
@@ -1699,7 +1404,7 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
     else if (role == 2) { Hp_local = std::move(H_PBL); Hp_ptr = &Hp_local; }
     else { Hp_local = std::move(H_PBR); Hp_ptr = &Hp_local; }
 
-    return LinearSplitAdjointToHole_(s, /*node=*/child_id, /*parent=*/pid, Hp_ptr, Hq_ptr);
+    return LinearSplitAdjointToHole_(s, child_id, pid, Hp_ptr, Hq_ptr);
   };
 
   for (size_t s = last; s-- > 0;) {
@@ -1743,14 +1448,12 @@ TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn
   if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) throw std::invalid_argument("TRGContractor::PunchHole: tn must be periodic.");
 
   if (rows_ == 2 && cols_ == 2) {
-    // Load 2x2 tensors directly from tn (scale 0), and compute exact hole.
     std::array<Tensor, 4> t2x2 = {tn({0, 0}), tn({0, 1}), tn({1, 0}), tn({1, 1})};
     const uint32_t removed_id = NodeId_(site.row(), site.col());
     return PunchHoleFinal2x2_(t2x2, removed_id);
   }
 
   if (rows_ == 3 && cols_ == 3) {
-    // Load 3x3 tensors directly from tn (scale 0), and compute exact hole.
     std::array<Tensor, 9> t3x3 = {tn({0, 0}), tn({0, 1}), tn({0, 2}),
                                   tn({1, 0}), tn({1, 1}), tn({1, 2}),
                                   tn({2, 0}), tn({2, 1}), tn({2, 2})};
@@ -1758,13 +1461,9 @@ TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn
     return PunchHoleFinal3x3_(t3x3, removed_id);
   }
 
-  // Generic case for larger sizes (N=2^k or N=3*2^k)
     if (!tensors_initialized_)
       throw std::logic_error(
           "TRGContractor::PunchHole: Trace(tn) must be called at least once to initialize cache.");
-    if (!dirty_scale0_.empty())
-      throw std::logic_error(
-          "TRGContractor::PunchHole: cache is dirty. Please call Trace(tn) first.");
 
   const bool is_pow2 = IsPowerOfTwo_(rows_);
   const bool is_3pow2 = (rows_ % 3 == 0) && IsPowerOfTwo_(rows_ / 3);
@@ -1792,15 +1491,12 @@ TRGContractor<TenElemT, QNT>::PunchHoleBaselineByProbingForTest(const TensorNetw
     throw std::logic_error("TRGContractor::PunchHoleBaselineByProbingForTest: truncation params are not set.");
   if (!tensors_initialized_)
     throw std::logic_error("TRGContractor::PunchHoleBaselineByProbingForTest: Trace(tn) must be called at least once to initialize cache.");
-  if (!dirty_scale0_.empty())
-    throw std::logic_error("TRGContractor::PunchHoleBaselineByProbingForTest: cache is dirty. Please call Trace(tn) first.");
 
   const Tensor& Ts = tn({site.row(), site.col()});
   const auto shape = Ts.GetShape();
   if (shape.size() != 4)
     throw std::logic_error("TRGContractor::PunchHoleBaselineByProbingForTest: site tensor must be rank-4.");
 
-  // Hole tensor lives in the dual space of Ts.
   Tensor hole({InverseIndex(Ts.GetIndex(0)),
                InverseIndex(Ts.GetIndex(1)),
                InverseIndex(Ts.GetIndex(2)),
@@ -1814,18 +1510,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBaselineByProbingForTest(const TensorNetw
   const auto& idx3 = Ts.GetIndex(3);
   const auto& idxes = Ts.GetIndexes();
 
-  // Probing tensors must be in the ORIGINAL site tensor space (same indices as Ts),
-  // because BeginTrialWithReplacement plugs them into the cached TRG forward contractions.
-  //
-  // Baseline definition (brute-force, test-only):
-  //
-  // For each basis entry e_{i0,i1,i2,i3} in the original leg space of Ts, we build a new TN
-  // where ONLY this site tensor is replaced by that basis tensor, and recompute TRG Trace
-  // from scratch. This avoids relying on cached linearized splits and is robust against
-  // subtle cache/indexing issues.
-  //
-  // Note: Under TRG truncation this does not define an exact linear functional, but it
-  // remains a practical correctness reference at small system sizes.
   const auto tp = *trunc_params_;
 
   Tensor basis = Ts;
@@ -1835,8 +1519,6 @@ TRGContractor<TenElemT, QNT>::PunchHoleBaselineByProbingForTest(const TensorNetw
     for (size_t i1 = 0; i1 < shape[1]; ++i1) {
       for (size_t i2 = 0; i2 < shape[2]; ++i2) {
         for (size_t i3 = 0; i3 < shape[3]; ++i3) {
-          // Always skip illegal blocks: writing to an invalid-divergence block can corrupt internal bookkeeping.
-          // (Z2 parity is a special case of this general check.)
           const qlten::CoorsT blk_coors = {
               idx0.CoorToBlkCoorDataCoor(i0).first,
               idx1.CoorToBlkCoorDataCoor(i1).first,

@@ -16,8 +16,6 @@
 #include <map>
 #include <optional>
 #include <stdexcept>
-#include <unordered_set>
-#include <utility>
 #include <vector>
 
 #include "qlten/qlten.h"
@@ -180,10 +178,10 @@ class TRGContractor {
    * final 2x2 even lattice, then contract the 2x2 PBC torus exactly (no further truncation).
    *
    * Caching behavior:
-   * - First call after `Init(tn)` treats all scale-0 tensors as dirty and caches all scales.
-   * - After calling `InvalidateEnvs(site)` (possibly multiple times), the next `Trace(tn)` will
-   *   reload those scale-0 tensors from `tn` and recompute only the affected coarse tensors.
-   * - If nothing is dirty, this returns the cached final 1x1 contraction.
+   * - If the cache is uninitialized, this loads all tensors from `tn` and performs a full TRG contraction.
+   * - If the cache is initialized, this returns the **cached** result. It ignores `tn` unless
+   *   `ClearCache()` was called.
+   * - To update the state after modifying tensors, use `CommitTrial()` or `ClearCache()`.
    *
    * @param tn Tensor network to contract. Must match the geometry passed to `Init(tn)`.
    * @return The scalar contraction result (partition function / amplitude).
@@ -251,14 +249,13 @@ class TRGContractor {
    * @return A `Trial` containing the would-be updated coarse tensors and the corresponding
    * scalar amplitude in `Trial::amplitude`.
    *
-   * @note This method requires an already initialized and clean cache. In other words, call
-   * `Trace(tn)` at least once and make sure there are no pending dirtiness seeds.
+   * @note Requires initialized cache.
    *
    * @warning This does not mutate the `TensorNetwork2D`. It is the caller's responsibility to
    * keep the external `tn` consistent with `CommitTrial()` if they later commit.
    *
    * @throws std::logic_error if `Init(tn)` has not been called, truncation params are not set,
-   * cache has not been initialized by `Trace(tn)`, or the cache is currently dirty.
+   * or cache has not been initialized by `Trace(tn)`.
    */
   Trial BeginTrialWithReplacement(const std::vector<std::pair<SiteIdx, Tensor>>& replacements) const;
 
@@ -266,7 +263,6 @@ class TRGContractor {
    * @brief Commit a previously created trial into the internal cache.
    *
    * Preconditions:
-   * - Cache must be clean (no pending dirtiness from `InvalidateEnvs()`).
    * - `trial` must have been created from the current clean cache (`Trial` topology matches).
    *
    * @param trial Trial object returned by `BeginTrialWithReplacement()`.
@@ -276,7 +272,7 @@ class TRGContractor {
    * is a user error (it will typically show up once you invalidate/reload scale-0 tensors).
    *
    * @throws std::logic_error if `Init(tn)` has not been called, truncation params are not set,
-   * cache has not been initialized by `Trace(tn)`, or the cache is currently dirty.
+   * or cache has not been initialized by `Trace(tn)`.
    * @throws std::invalid_argument if `trial` was created under a different topology.
    */
   void CommitTrial(Trial&& trial);
@@ -310,6 +306,34 @@ class TRGContractor {
    * @throws std::logic_error if called for sizes other than 2x2 (for now).
    */
   Tensor PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn, const SiteIdx& site) const;
+
+  /**
+   * @brief Clear all cached scales and dirty state.
+   *
+   * This drops all cached tensors, and resets the "cache initialized" flag.
+   * It does not change geometry/boundary-condition/truncation parameters.
+   */
+  void ClearCache();
+
+#if defined(QLPEPS_UNITTEST)
+  /**
+   * @brief Test-only baseline: build a 4x4 hole by brute probing (very expensive).
+   *
+   * This method is meant for **unit tests only** as a correctness reference for future
+   * optimized impurity-TRG implementations. It is not intended for production use.
+   *
+   * Behavior:
+   * - Supports 4x4 PBC only.
+   * - Requires cache to be initialized and clean (call `Trace(tn)` once, and no pending invalidations).
+   * - Returns the hole tensor in the **original leg space** of the removed site:
+   *   legs are ordered `[L,D,R,U]` and directions are inverted (dual space) so that
+   *   `Contract(hole, tn(site))` yields a scalar.
+   *
+   * @warning Complexity is O(product of bond dims at the site) trial contractions.
+   */
+  Tensor PunchHoleBaselineByProbingForTest(const TensorNetwork2D<TenElemT, QNT>& tn,
+                                          const SiteIdx& site) const;
+#endif
 
  private:
   /**
@@ -375,48 +399,6 @@ class TRGContractor {
                                   const Tensor* H_P,
                                   const Tensor* H_Q) const;
 
-public:
-#if defined(QLPEPS_UNITTEST)
-  /**
-   * @brief Test-only baseline: build a 4x4 hole by brute probing (very expensive).
-   *
-   * This method is meant for **unit tests only** as a correctness reference for future
-   * optimized impurity-TRG implementations. It is not intended for production use.
-   *
-   * Behavior:
-   * - Supports 4x4 PBC only.
-   * - Requires cache to be initialized and clean (call `Trace(tn)` once, and no pending invalidations).
-   * - Returns the hole tensor in the **original leg space** of the removed site:
-   *   legs are ordered `[L,D,R,U]` and directions are inverted (dual space) so that
-   *   `Contract(hole, tn(site))` yields a scalar.
-   *
-   * @warning Complexity is O(product of bond dims at the site) trial contractions.
-   */
-  Tensor PunchHoleBaselineByProbingForTest(const TensorNetwork2D<TenElemT, QNT>& tn,
-                                          const SiteIdx& site) const;
-#endif
-
-  /**
-   * @brief Mark caches affected by a local tensor update at @p site.
-   *
-   * This only records a "dirty seed" on scale 0. The influence propagation across scales is
-   * handled lazily on the next `Trace(tn)` call.
-   *
-   * @param site Scale-0 lattice site whose tensor has changed in the external `tn`.
-   *
-   * @throws std::logic_error if `Init(tn)` has not been called.
-   */
-  void InvalidateEnvs(const SiteIdx& site);
-
-  /**
-   * @brief Clear all cached scales and dirty state.
-   *
-   * This drops all cached tensors and dirtiness seeds, and resets the "cache initialized" flag.
-   * It does not change geometry/boundary-condition/truncation parameters.
-   */
-  void ClearCache();
-
- private:
   enum class SubLattice : uint8_t { A = 0, B = 1 };
   enum class SplitDir : uint8_t { Horizontal = 0, Vertical = 1 };
 
@@ -507,7 +489,7 @@ public:
   void BuildTopology_();
   
   // Helpers for incremental updates
-  void MarkDirtySeed_(uint32_t node);
+  // void MarkDirtySeed_(uint32_t node);
 
   // Split cache helpers (for Trace/PunchHole)
   void EnsureSplitCacheForNodes_(size_t scale, const std::set<uint32_t>& nodes);
@@ -516,14 +498,20 @@ public:
   SplitARes SplitType0_(const Tensor& T_in) const;
   SplitBRes SplitType1_(const Tensor& T_in) const;
 
-  // Contractions
-  Tensor ContractPlaquette_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine);
-  Tensor ContractDiamond_(const std::vector<Tensor>& fine_tens, uint32_t coarse_idx, size_t n_fine_embed);
+  // Core contraction logic
+  // Returns: tmp2.Transpose({3, 2, 1, 0})
+  static Tensor ContractPlaquetteCore_(const Tensor& Q0, const Tensor& Q1, const Tensor& P1, const Tensor& P0);
+  
+  // Returns: out.Transpose({1, 0, 3, 2})
+  static Tensor ContractDiamondCore_(const Tensor& Np, const Tensor& Ep, const Tensor& Sq, const Tensor& Wq);
+
   TenElemT ContractFinal1x1_(const Tensor& T) const;
   TenElemT ContractFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
   TenElemT ContractFinal3x3_(const std::array<Tensor, 9>& T3x3) const;
   Tensor PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2, uint32_t removed_id) const;
   Tensor PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3x3, uint32_t removed_id) const;
+
+  TenElemT GetCachedAmplitude_() const;
 
   size_t rows_ = 0;
   size_t cols_ = 0;
@@ -534,7 +522,7 @@ public:
   std::vector<ScaleCache> scales_;
 
   // Dirty seeds on scale 0; influence propagation across scales is handled lazily.
-  std::unordered_set<uint32_t> dirty_scale0_;
+  // std::unordered_set<uint32_t> dirty_scale0_;
 
   // Must be set by caller (via SetTruncateParams or the ctor taking trunc_params).
   std::optional<TruncateParams> trunc_params_;
@@ -545,5 +533,3 @@ public:
 #include "trg_contractor_impl.h"
 
 #endif  // QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_TRG_CONTRACTOR_H
-
-
