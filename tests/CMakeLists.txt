@@ -180,6 +180,14 @@ add_unittest(test_tn2d
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "/Users/wanghaoxin/GitHub/PEPS/tests/test_data/"
 )
+add_unittest(test_bmps_contractor
+        "test_2d_tn/test_bmps_contractor.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+add_unittest(test_trg_contractor
+        "test_2d_tn/test_trg_contractor.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
@@ -204,6 +212,17 @@ add_unittest(test_tJ_model_solver
         "test_model_solvers/test_tJ_model_solver.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
+)
+
+# PBC/TRG exact-sum smoke tests (single-rank, no MPI required)
+add_unittest(test_tfim_pbc_trg_exact_sum
+        "test_optimizer/test_tfim_pbc_trg_exact_sum.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+
+add_two_type_unittest(test_optimizer_adagrad_exact_sum_tfim_pbc_trg
+        "test_optimizer/test_optimizer_adagrad_exact_sum_tfim_pbc_trg.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
 
 ## Test algorithms
@@ -315,6 +334,20 @@ add_two_type_unittest(test_mc_peps_measure
 # Independent MC energy+gradient evaluator smoke test
 add_two_type_unittest(test_mc_energy_grad_evaluator_smoke
         "test_algorithm/test_mc_energy_grad_evaluator_smoke.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+# Smoke: PBC TRG contractor + MC updater (trial/accept/reject)
+add_two_type_unittest(test_mc_updater_trg_smoke
+        "test_algorithm/test_mc_updater_trg_smoke.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+# Deterministic MonteCarlo regression (classical Ising via TRG amplitude)
+add_two_type_unittest(test_mc_ising_trg_pbc
+        "test_algorithm/test_mc_ising_trg_pbc.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
@@ -485,3 +518,25 @@ if(BUILD_SLOW_TESTS)
     set_tests_properties(test_square_tj_model_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
     set_tests_properties(test_square_tj_model_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
 endif()
+
+# =============================================================================
+# Developer tools (not registered as ctests)
+# =============================================================================
+add_executable(gen_tfim_2x2_pbc_simple_update_data
+        "tools/gen_tfim_2x2_pbc_simple_update_data.cpp"
+)
+target_include_directories(gen_tfim_2x2_pbc_simple_update_data
+        PRIVATE ${BLAS_INCLUDE_DIRS}
+        PRIVATE ${QLPEPS_HEADER_PATH}
+        PRIVATE ${hptt_INCLUDE_DIR}
+        PRIVATE ${QLTENSOR_HEADER_PATH}
+        PRIVATE ${QLMPS_HEADER_PATH}
+        PRIVATE MPI::MPI_CXX
+)
+target_link_libraries(gen_tfim_2x2_pbc_simple_update_data
+        ${hptt_LIBRARY}
+        OpenMP::OpenMP_CXX
+        MPI::MPI_CXX
+        "${MATH_LIB_LINK_FLAGS}"
+)
+set_target_properties(gen_tfim_2x2_pbc_simple_update_data PROPERTIES FOLDER tools)

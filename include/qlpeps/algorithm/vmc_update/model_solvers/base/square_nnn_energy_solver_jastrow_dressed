@@ -69,7 +69,7 @@ class SquareNNNModelEnergySolverJastrowDressed
   ) {
     TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
     const BMPSTruncatePara &trunc_para = tps_sample->trun_para;
-    tn.GenerateBMPSApproach(UP, trunc_para);
+    tps_sample->contractor.GenerateBMPSApproach(tn, UP, trunc_para);
     psi_list.reserve(tn.rows() + tn.cols());
     for (size_t row = 0; row < tn.rows(); row++) {
       this->template CalHorizontalBondEnergyAndHolesSweepRowImpl<TenElemT, QNT, calchols>(row,
@@ -79,7 +79,7 @@ class SquareNNNModelEnergySolverJastrowDressed
                                                                                           bond_energy_set,
                                                                                           psi_list);
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN, trunc_para);
+        tps_sample->contractor.BMPSMoveStep(tn, DOWN, trunc_para);
       }
     }
   }
@@ -94,12 +94,13 @@ class SquareNNNModelEnergySolverJastrowDressed
       std::vector<TenElemT> &psi_list
   ) {
     auto &tn = tps_sample->tn;
-    tn.InitBTen(LEFT, row);
-    tn.GrowFullBTen(RIGHT, row, 1, true);
+    auto &contractor = tps_sample->contractor;
+    contractor.InitBTen(tn, LEFT, row);
+    contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
     bool psi_added = false;
     TenElemT inv_psi;
     if constexpr (!Index<QNT>::IsFermionic()) {
-      auto psi = tn.Trace({row, 0}, HORIZONTAL);
+      auto psi = contractor.Trace(tn, {row, 0}, HORIZONTAL);
       if (psi == TenElemT(0)) [[unlikely]] {
         throw std::runtime_error("Wavefunction amplitude is near zero, causing division by zero.");
       }
@@ -109,7 +110,7 @@ class SquareNNNModelEnergySolverJastrowDressed
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       if constexpr (calchols) {
-        hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL));
+        hole_res(site1) = Dag(contractor.PunchHole(tn, site1, HORIZONTAL));
       }
       if (col < tn.cols() - 1) {
         const SiteIdx site2 = {row, col + 1};
@@ -119,7 +120,7 @@ class SquareNNNModelEnergySolverJastrowDressed
           bond_energy = static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
               site1, site2,
               tps_sample->config(site1), tps_sample->config(site2),
-              HORIZONTAL, tn,
+              HORIZONTAL, tn, contractor,
               (*split_index_tps)(site1), (*split_index_tps)(site2),
               psi,
               tps_sample->dress // Pass JastrowDress to parser
@@ -132,20 +133,20 @@ class SquareNNNModelEnergySolverJastrowDressed
           bond_energy = static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
               site1, site2,
               tps_sample->config(site1), tps_sample->config(site2),
-              HORIZONTAL, tn,
+              HORIZONTAL, tn, contractor,
               (*split_index_tps)(site1), (*split_index_tps)(site2),
               inv_psi,
               tps_sample->dress // Pass JastrowDress to parser
           );
         }
         bond_energy_set.push_back(bond_energy);
-        tn.BTenMoveStep(RIGHT);
+        contractor.BTenMoveStep(tn, RIGHT);
       }
     }
     if constexpr (has_nnn_interaction) {
       if (row < tn.rows() - 1) {
-        tn.InitBTen2(LEFT, row);
-        tn.GrowFullBTen2(RIGHT, row, 2, true);
+        contractor.InitBTen2(tn, LEFT, row);
+        contractor.GrowFullBTen2(tn, RIGHT, row, 2, true);
         for (size_t col = 0; col < tn.cols() - 1; col++) {
           SiteIdx site1 = {row, col};
           SiteIdx site2 = {row + 1, col + 1};
@@ -155,7 +156,7 @@ class SquareNNNModelEnergySolverJastrowDressed
             nnn_energy = static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
                 site1, site2,
                 tps_sample->config(site1), tps_sample->config(site2),
-                LEFTUP_TO_RIGHTDOWN, tn,
+                LEFTUP_TO_RIGHTDOWN, tn, contractor,
                 (*split_index_tps)(site1), (*split_index_tps)(site2),
                 inv_psi,
                 tps_sample->dress
@@ -164,7 +165,7 @@ class SquareNNNModelEnergySolverJastrowDressed
             nnn_energy = static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
                 site1, site2,
                 tps_sample->config(site1), tps_sample->config(site2),
-                LEFTUP_TO_RIGHTDOWN, tn,
+                LEFTUP_TO_RIGHTDOWN, tn, contractor,
                 (*split_index_tps)(site1), (*split_index_tps)(site2),
                 psi,
                 tps_sample->dress
@@ -176,7 +177,7 @@ class SquareNNNModelEnergySolverJastrowDressed
             nnn_energy += static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
                 site1, site2,
                 tps_sample->config(site1), tps_sample->config(site2),
-                LEFTDOWN_TO_RIGHTUP, tn,
+                LEFTDOWN_TO_RIGHTUP, tn, contractor,
                 (*split_index_tps)(site1), (*split_index_tps)(site2),
                 inv_psi,
                 tps_sample->dress
@@ -185,14 +186,14 @@ class SquareNNNModelEnergySolverJastrowDressed
             nnn_energy += static_cast<ExplicitlyModel *>(this)->EvaluateNNNEnergy(
                 site1, site2,
                 tps_sample->config(site1), tps_sample->config(site2),
-                LEFTDOWN_TO_RIGHTUP, tn,
+                LEFTDOWN_TO_RIGHTUP, tn, contractor,
                 (*split_index_tps)(site1), (*split_index_tps)(site2),
                 psi,
                 tps_sample->dress
             );
           }
           bond_energy_set.push_back(nnn_energy);
-          tn.BTen2MoveStep(RIGHT, row);
+          contractor.BTen2MoveStep(tn, RIGHT, row);
         }
       }
     }
@@ -208,6 +209,7 @@ class SquareNNNModelEnergySolverJastrowDressed
     const Configuration &config = tps_sample->config;
     BondTraversalMixin::TraverseVerticalBonds(
         tps_sample->tn,
+        tps_sample->contractor,
         tps_sample->trun_para,
         [&, split_index_tps](const SiteIdx &site1,
                              const SiteIdx &site2,
@@ -220,7 +222,7 @@ class SquareNNNModelEnergySolverJastrowDressed
                 static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
                     site1, site2,
                     config(site1), config(site2),
-                    bond_orient, tps_sample->tn,
+                    bond_orient, tps_sample->tn, tps_sample->contractor,
                     (*split_index_tps)(site1), (*split_index_tps)(site2),
                     fermion_psi,
                     tps_sample->dress
@@ -230,7 +232,7 @@ class SquareNNNModelEnergySolverJastrowDressed
                 static_cast<ExplicitlyModel *>(this)->EvaluateBondEnergy(
                     site1, site2,
                     config(site1), config(site2),
-                    bond_orient, tps_sample->tn,
+                    bond_orient, tps_sample->tn, tps_sample->contractor,
                     (*split_index_tps)(site1), (*split_index_tps)(site2),
                     inv_psi,
                     tps_sample->dress

@@ -21,6 +21,7 @@ using namespace qlten;
 template<typename TenElemT, typename QNT>
 void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                          TensorNetwork2D<TenElemT, QNT> &tn,
+                                         BMPSContractor<TenElemT, QNT> &contractor,
                                          std::vector<TenElemT> &two_point_functions_loc,
                                          double inv_psi,
                                          const Configuration &config,
@@ -28,22 +29,24 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
   const size_t lx = tn.cols();
   SiteIdx site1 = {row, lx / 4};
   std::vector<TenElemT> off_diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
-  tn.UpdateSiteTensor(site1, 1 - config(site1), *split_index_tps, true);
+  tn.UpdateSiteTensor(site1, 1 - config(site1), *split_index_tps);
+  contractor.EraseEnvsAfterUpdate(site1);
   //temporally change, and also trucated the left boundary tensor
-  tn.GrowBTenStep(LEFT); // left boundary tensor just across Lx/4
-  tn.GrowFullBTen(RIGHT, row, lx / 4 + 2, false); //environment for Lx/4 + 1 site
+  contractor.GrowBTenStep(tn, LEFT); // left boundary tensor just across Lx/4
+  contractor.GrowFullBTen(tn, RIGHT, row, lx / 4 + 2, false); //environment for Lx/4 + 1 site
   for (size_t i = 1; i <= lx / 2; i++) {
     SiteIdx site2 = {row, lx / 4 + i};
     //sm(i) * sp(j) + sp(j) * sm(i)
     if (config(site2) == config(site1)) {
       off_diag_corr[i - 1] = 0.0;
     } else {
-      TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
+      TenElemT psi_ex = contractor.ReplaceOneSiteTrace(tn, site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
       off_diag_corr[i - 1] = (ComplexConjugate(psi_ex * inv_psi));
     }
-    tn.BTenMoveStep(RIGHT);
+    contractor.BTenMoveStep(tn, RIGHT);
   }
-  tn.UpdateSiteTensor(site1, config(site1), *split_index_tps, true);
+  tn.UpdateSiteTensor(site1, config(site1), *split_index_tps);
+  contractor.EraseEnvsAfterUpdate(site1);
   // change back
 
   two_point_functions_loc.insert(two_point_functions_loc.end(),
@@ -68,6 +71,7 @@ class SquareSpinOneHalfXXZModelMixIn {
       const size_t config1, const size_t config2,
       const BondOrientation orient,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       const TenElemT inv_psi
@@ -79,7 +83,7 @@ class SquareSpinOneHalfXXZModelMixIn {
     } else {
       // Off-diagonal term: compute <config'|H|config> where config' has sites 1&2 swapped
       // psi_ex = <config'|ψ> (wavefunction amplitude for swapped configuration)
-      TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+      TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                               split_index_tps_on_site1[config2],
                                               split_index_tps_on_site2[config1]);
       
@@ -101,6 +105,7 @@ class SquareSpinOneHalfXXZModelMixIn {
       const size_t config1, const size_t config2,
       const DIAGONAL_DIR diagonal_dir,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       const TenElemT inv_psi
@@ -114,7 +119,7 @@ class SquareSpinOneHalfXXZModelMixIn {
       } else {
         left_up_site = {site2.row(), site1.col()};
       }
-      TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+      TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                                diagonal_dir,
                                                HORIZONTAL,
                                                split_index_tps_on_site1[config2],
@@ -133,11 +138,12 @@ class SquareSpinOneHalfXXZModelMixIn {
   template<typename TenElemT, typename QNT>
   inline void EvaluateOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                         TensorNetwork2D<TenElemT, QNT> &tn,
+                                        BMPSContractor<TenElemT, QNT> &contractor,
                                         std::vector<TenElemT> &two_point_function_loc,
                                         double inv_psi,
                                         const Configuration &config,
                                         size_t &row) const {
-    MeasureSpinOneHalfOffDiagOrderInRow(split_index_tps, tn, two_point_function_loc, inv_psi, config, row);
+    MeasureSpinOneHalfOffDiagOrderInRow(split_index_tps, tn, contractor, two_point_function_loc, inv_psi, config, row);
   }
 
  private:

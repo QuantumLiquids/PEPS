@@ -871,6 +871,10 @@ bool Optimizer<TenElemT, QNT>::ShouldStop(double current_energy, double previous
     }
   }
 
+  // Single-rank fast path: avoid calling MPI collectives when mpi_size_ == 1.
+  // This keeps Optimizer usable in non-MPI test binaries and simplifies debugging.
+  if (mpi_size_ == 1) return should_stop;
+
   // Broadcast the stopping decision to all ranks
   int stop_flag = should_stop ? 1 : 0;
   HANDLE_MPI_ERROR(::MPI_Bcast(&stop_flag, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_));

@@ -8,7 +8,8 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BUILD_IN_MODEL_SOLVERS_ALL_H
 
 //boson & spin models
-#include "transverse_field_ising_square.h"
+#include "transverse_field_ising_square_obc.h"
+#include "transverse_field_ising_square_pbc.h"
 #include "square_spin_onehalf_xxz_model.h"
 #include "square_spin_onehalf_j1j2_xxz_model.h"
 #include "spin_onehalf_triangle_heisenberg_sqrpeps.h"

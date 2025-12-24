@@ -11,6 +11,7 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"    //ModelEnergySolver
 #include "qlpeps/utility/helpers.h"                             //ComplexConjugate
 #include "qlpeps/utility/observable_matrix.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" // BMPSContractor
 namespace qlpeps {
 using namespace qlten;
 
@@ -72,6 +73,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     std::vector<TenElemT> psi_list;
 
     auto &tn = tps_sample->tn;
+    auto &contractor = tps_sample->contractor;
     const Configuration &config = tps_sample->config;
     const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t ly = tn.rows();
@@ -95,11 +97,11 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     TenElemT energy_j2_total(0); // accumulate J2 only, added with factor j2_
 
     // Horizontal scan (J1) + middle row correlations
-    tn.GenerateBMPSApproach(UP, trunc_para);
+    contractor.GenerateBMPSApproach(tn, UP, trunc_para);
     for (size_t row = 0; row < ly; ++row) {
-      tn.InitBTen(LEFT, row);
-      tn.GrowFullBTen(RIGHT, row, 1, true);
-      auto psi = tn.Trace({row, 0}, HORIZONTAL);
+      contractor.InitBTen(tn, LEFT, row);
+      contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
+      auto psi = contractor.Trace(tn, {row, 0}, HORIZONTAL);
       auto inv_psi = TenElemT(1.0) / psi;
       psi_list.push_back(psi);
       for (size_t col = 0; col < lx; ++col) {
@@ -110,7 +112,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
           if (config(s1) == config(s2)) {
             eb = TenElemT(0.25);
           } else {
-            TenElemT psi_ex = tn.ReplaceNNSiteTrace(s1, s2, HORIZONTAL,
+            TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, s1, s2, HORIZONTAL,
                                                     (*split_index_tps)(s1)[config(s2)],
                                                     (*split_index_tps)(s2)[config(s1)]);
             eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
@@ -119,7 +121,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             e_h(row, col) = eb;
           }
           energy_total += eb;
-          tn.BTenMoveStep(RIGHT);
+          contractor.BTenMoveStep(tn, RIGHT);
         }
       }
 
@@ -138,18 +140,18 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
         // XY channels (SmSp_row, SpSm_row)
         std::vector<TenElemT> diag_corr(lx / 2, TenElemT(0));
         tn(site1) = (*split_index_tps)(site1)[1 - config(site1)];
-        tn.TruncateBTen(LEFT, lx / 4 + 1);
-        tn.GrowBTenStep(LEFT);
-        tn.GrowFullBTen(RIGHT, row, lx / 4 + 2, false);
+        contractor.TruncateBTen(LEFT, lx / 4 + 1);
+        contractor.GrowBTenStep(tn, LEFT);
+        contractor.GrowFullBTen(tn, RIGHT, row, lx / 4 + 2, false);
         for (size_t i = 1; i <= lx / 2; ++i) {
           SiteIdx site2{row, lx / 4 + i};
           if (config(site2) == config(site1)) {
             diag_corr[i - 1] = TenElemT(0);
           } else {
-            TenElemT psi_ex = tn.ReplaceOneSiteTrace(site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
+            TenElemT psi_ex = contractor.ReplaceOneSiteTrace(tn, site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
             diag_corr[i - 1] = ComplexConjugate(psi_ex * inv_psi);
           }
-          tn.BTenMoveStep(RIGHT);
+          contractor.BTenMoveStep(tn, RIGHT);
         }
         tn(site1) = (*split_index_tps)(site1)[config(site1)];
         std::vector<TenElemT> SmSp_row = diag_corr;
@@ -164,9 +166,9 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
 
       if (row + 1 < ly) {
         // Triangular J1 diagonal (↘)
-        tn.InitBTen2(LEFT, row);
-        tn.GrowFullBTen2(RIGHT, row, 2, true);
-        auto psi2 = tn.Trace({row, 0}, HORIZONTAL);
+        contractor.InitBTen2(tn, LEFT, row);
+        contractor.GrowFullBTen2(tn, RIGHT, row, 2, true);
+        auto psi2 = contractor.Trace(tn, {row, 0}, HORIZONTAL);
         auto inv_psi2 = TenElemT(1.0) / psi2;
         for (size_t col = 0; col + 1 < lx; ++col) {
           const SiteIdx ld{row + 1, col};
@@ -175,7 +177,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
           if (config(ld) == config(ru)) {
             eb = TenElemT(0.25);
           } else {
-            TenElemT psi_ex = tn.ReplaceNNNSiteTrace({row, col}, LEFTDOWN_TO_RIGHTUP, HORIZONTAL,
+            TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, {row, col}, LEFTDOWN_TO_RIGHTUP, HORIZONTAL,
                                                      (*split_index_tps)(ld)[config(ru)],
                                                      (*split_index_tps)(ru)[config(ld)]);
             eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
@@ -184,7 +186,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             e_ur(row, col) = eb;
           }
           energy_total += eb;
-          if (col + 2 < lx) tn.BTen2MoveStep(RIGHT, row);
+          if (col + 2 < lx) contractor.BTen2MoveStep(tn, RIGHT, row);
         }
 
         // J2 contribution on the same row window (left-up to right-down)
@@ -194,22 +196,22 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
           if (config(s1) == config(s2)) {
             energy_j2_total += TenElemT(0.25);
           } else {
-            TenElemT psi_ex = tn.ReplaceNNNSiteTrace({row, col}, LEFTUP_TO_RIGHTDOWN, HORIZONTAL,
+            TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, {row, col}, LEFTUP_TO_RIGHTDOWN, HORIZONTAL,
                                                      (*split_index_tps)(s1)[config(s2)],
                                                      (*split_index_tps)(s2)[config(s1)]);
             energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
           }
         }
-        tn.BMPSMoveStep(DOWN, trunc_para);
+        contractor.BMPSMoveStep(tn, DOWN, trunc_para);
       }
     }
 
     // Vertical scan (J1)
-    tn.GenerateBMPSApproach(LEFT, trunc_para);
+    contractor.GenerateBMPSApproach(tn, LEFT, trunc_para);
     for (size_t col = 0; col < lx; ++col) {
-      tn.InitBTen(UP, col);
-      tn.GrowFullBTen(DOWN, col, 2, true);
-      auto psi = tn.Trace({0, col}, VERTICAL);
+      contractor.InitBTen(tn, UP, col);
+      contractor.GrowFullBTen(tn, DOWN, col, 2, true);
+      auto psi = contractor.Trace(tn, {0, col}, VERTICAL);
       auto inv_psi = TenElemT(1.0) / psi;
       psi_list.push_back(psi);
       for (size_t row = 0; row + 1 < ly; ++row) {
@@ -219,7 +221,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
         if (config(s1) == config(s2)) {
           eb = TenElemT(0.25);
         } else {
-          TenElemT psi_ex = tn.ReplaceNNSiteTrace(s1, s2, VERTICAL,
+          TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, s1, s2, VERTICAL,
                                                   (*split_index_tps)(s1)[config(s2)],
                                                   (*split_index_tps)(s2)[config(s1)]);
           eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
@@ -228,28 +230,28 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
           e_v(row, col) = eb;
         }
         energy_total += eb;
-        if (row + 2 < ly) tn.BTenMoveStep(DOWN);
+        if (row + 2 < ly) contractor.BTenMoveStep(tn, DOWN);
       }
 
       // J2 vertical window (sqrt(5) separation)
       if (col + 1 < lx) {
-        tn.InitBTen2(UP, col);
-        tn.GrowFullBTen2(DOWN, col, 3, true);
+        contractor.InitBTen2(tn, UP, col);
+        contractor.GrowFullBTen2(tn, DOWN, col, 3, true);
         for (size_t row = 0; row + 2 < ly; ++row) {
           const SiteIdx s1{row + 2, col};
           const SiteIdx s2{row, col + 1};
           if (config(s1) == config(s2)) {
             energy_j2_total += TenElemT(0.25);
           } else {
-            TenElemT psi_ex = tn.ReplaceSqrt5DistTwoSiteTrace({row, col}, LEFTDOWN_TO_RIGHTUP, VERTICAL,
+            TenElemT psi_ex = contractor.ReplaceSqrt5DistTwoSiteTrace(tn, {row, col}, LEFTDOWN_TO_RIGHTUP, VERTICAL,
                                                               (*split_index_tps)(s1)[config(s2)],
                                                               (*split_index_tps)(s2)[config(s1)]);
             energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
-          if (row + 3 < ly) tn.BTen2MoveStep(DOWN, col);
+          if (row + 3 < ly) contractor.BTen2MoveStep(tn, DOWN, col);
         }
       }
-      if (col + 1 < lx) tn.BMPSMoveStep(RIGHT, trunc_para);
+      if (col + 1 < lx) contractor.BMPSMoveStep(tn, RIGHT, trunc_para);
     }
 
     out["energy"] = {energy_total + j2_ * energy_j2_total};
@@ -309,22 +311,23 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   TenElemT e1(0), e2(0); // energy in J1 and J2 bond respectively
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
+  auto &contractor = tps_sample->contractor;
   const Configuration &config = tps_sample->config;
   const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
-  tn.GenerateBMPSApproach(UP, trunc_para);
+  contractor.GenerateBMPSApproach(tn, UP, trunc_para);
   psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
-    tn.InitBTen(LEFT, row);
-    tn.GrowFullBTen(RIGHT, row, 1, true);
-    tps_sample->amplitude = tn.Trace({row, 0}, HORIZONTAL);
+    contractor.InitBTen(tn, LEFT, row);
+    contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
+    tps_sample->amplitude = contractor.Trace(tn, {row, 0}, HORIZONTAL);
     inv_psi = 1.0 / tps_sample->amplitude;
     psi_list.push_back(tps_sample->amplitude);
     for (size_t col = 0; col < tn.cols(); col++) {
       const SiteIdx site1 = {row, col};
       //Calculate the holes
       if constexpr (calchols) {
-        hole_res(site1) = Dag(tn.PunchHole(site1, HORIZONTAL));
+        hole_res(site1) = Dag(contractor.PunchHole(tn, site1, HORIZONTAL));
       }
       if (col < tn.cols() - 1) {
         //Calculate horizontal bond energy contribution
@@ -332,17 +335,17 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         if (config(site1) == config(site2)) {
           e1 += 0.25;
         } else {
-          TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, HORIZONTAL,
+          TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, HORIZONTAL,
                                                   (*split_index_tps)(site1)[config(site2)],
                                                   (*split_index_tps)(site2)[config(site1)]);
           e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
-        tn.BTenMoveStep(RIGHT);
+        contractor.BTenMoveStep(tn, RIGHT);
       }
     }
     if (row < tn.rows() - 1) {
-      tn.InitBTen2(LEFT, row);
-      tn.GrowFullBTen2(RIGHT, row, 2, true);
+      contractor.InitBTen2(tn, LEFT, row);
+      contractor.GrowFullBTen2(tn, RIGHT, row, 2, true);
 
       for (size_t col = 0; col < tn.cols() - 1; col++) {
         //Calculate diagonal J1 energy contribution
@@ -351,7 +354,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         if (config(site1) == config(site2)) {
           e1 += 0.25;
         } else {
-          TenElemT psi_ex = tn.ReplaceNNNSiteTrace({row, col},
+          TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, {row, col},
                                                    LEFTDOWN_TO_RIGHTUP,
                                                    HORIZONTAL,
                                                    (*split_index_tps)(site1)[config(site2)],  //the tensor at left
@@ -364,7 +367,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         if (config(site1) == config(site2)) {
           e2 += 0.25;
         } else {
-          TenElemT psi_ex = tn.ReplaceNNNSiteTrace({row, col},
+          TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, {row, col},
                                                    LEFTUP_TO_RIGHTDOWN,
                                                    HORIZONTAL,
                                                    (*split_index_tps)(site1)[config(site2)],  //the tensor at left
@@ -378,7 +381,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
           if (config(site1) == config(site2)) {
             e2 += 0.25;
           } else {
-            TenElemT psi_ex = tn.ReplaceSqrt5DistTwoSiteTrace({row, col},
+            TenElemT psi_ex = contractor.ReplaceSqrt5DistTwoSiteTrace(tn, {row, col},
                                                               LEFTDOWN_TO_RIGHTUP,
                                                               HORIZONTAL,
                                                               (*split_index_tps)(site1)[config(site2)],  //the tensor at left
@@ -386,17 +389,17 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
             e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
         }
-        tn.BTen2MoveStep(RIGHT, row);
+        contractor.BTen2MoveStep(tn, RIGHT, row);
       }
-      tn.BMPSMoveStep(DOWN, trunc_para);
+      contractor.BMPSMoveStep(tn, DOWN, trunc_para);
     }
   }
 
-  tn.GenerateBMPSApproach(LEFT, trunc_para);
+  contractor.GenerateBMPSApproach(tn, LEFT, trunc_para);
   for (size_t col = 0; col < tn.cols(); col++) {
-    tn.InitBTen(UP, col);
-    tn.GrowFullBTen(DOWN, col, 2, true);
-    tps_sample->amplitude = tn.Trace({0, col}, VERTICAL);
+    contractor.InitBTen(tn, UP, col);
+    contractor.GrowFullBTen(tn, DOWN, col, 2, true);
+    tps_sample->amplitude = contractor.Trace(tn, {0, col}, VERTICAL);
     inv_psi = 1.0 / tps_sample->amplitude;
     psi_list.push_back(tps_sample->amplitude);
     //Calculate vertical bond energy contribution
@@ -406,18 +409,18 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       if (config(site1) == config(site2)) {
         e1 += 0.25;
       } else {
-        TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, VERTICAL,
+        TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, VERTICAL,
                                                 (*split_index_tps)(site1)[config(site2)],
                                                 (*split_index_tps)(site2)[config(site1)]);
         e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
       }
       if (row < tn.rows() - 2) {
-        tn.BTenMoveStep(DOWN);
+        contractor.BTenMoveStep(tn, DOWN);
       }
     }
     if (col < tn.cols() - 1) {
-      tn.InitBTen2(UP, col);
-      tn.GrowFullBTen2(DOWN, col, 3, true);
+      contractor.InitBTen2(tn, UP, col);
+      contractor.GrowFullBTen2(tn, DOWN, col, 3, true);
       //Calculate J2 energy contribution
       for (size_t row = 0; row < tn.rows() - 2; row++) {
         const SiteIdx site1 = {row + 2, col};
@@ -425,7 +428,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         if (config(site1) == config(site2)) {
           e2 += 0.25;
         } else {
-          TenElemT psi_ex = tn.ReplaceSqrt5DistTwoSiteTrace({row, col},
+          TenElemT psi_ex = contractor.ReplaceSqrt5DistTwoSiteTrace(tn, {row, col},
                                                             LEFTDOWN_TO_RIGHTUP,
                                                             VERTICAL,
                                                             (*split_index_tps)(site1)[config(site2)],  //the tensor at left
@@ -433,10 +436,10 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
           e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         if ((int) row < (int) tn.rows() - 3) {
-          tn.BTen2MoveStep(DOWN, col);
+          contractor.BTen2MoveStep(tn, DOWN, col);
         }
       }
-      tn.BMPSMoveStep(RIGHT, trunc_para);
+      contractor.BMPSMoveStep(tn, RIGHT, trunc_para);
     }
   }
   WaveFunctionAmplitudeConsistencyCheck(psi_list, 0.03);

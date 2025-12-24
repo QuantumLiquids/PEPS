@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 #include "qlten/qlten.h"
 
+#include "qlpeps/api/conversions.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
@@ -87,8 +88,8 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasureNNUpdate) {
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load(simple_update_peps_path);
-  auto tps = TPS<TenElemT, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
+  auto tps = ToTPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>::FromTPS(tps);
   auto measure_executor =
       new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquareSpinlessFermion>(
           sitps,
@@ -107,8 +108,8 @@ TEST_F(Z2SpinlessFreeFermionTools, MonteCarloMeasure3SiteUpdate) {
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load(simple_update_peps_path);
-  auto tps = TPS<TenElemT, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
+  auto tps = ToTPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>::FromTPS(tps);
   auto measure_executor =
       new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
                                                                                                 mc_measurement_para,
@@ -170,8 +171,8 @@ TEST_F(Z2tJModelTools, MonteCarloMeasureNNUpdate) {
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
-  auto tps = TPS<TenElemT, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
+  auto tps = ToTPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>::FromTPS(tps);
   auto measure_executor =
       new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareNNExchange, SquaretJNNModel>(sitps,
                                                                                                     mc_measurement_para,
@@ -189,8 +190,8 @@ TEST_F(Z2tJModelTools, MonteCarloMeasure3SiteUpdate) {
 
   SquareLatticePEPS<TenElemT, fZ2QN> peps(loc_phy_ket, Ly, Lx);
   peps.Load("peps_tj_doping0.125");
-  auto tps = TPS<TenElemT, fZ2QN>(peps);
-  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>(tps);
+  auto tps = ToTPS<TenElemT, fZ2QN>(peps);
+  auto sitps = SplitIndexTPS<TenElemT, fZ2QN>::FromTPS(tps);
   auto measure_executor =
       new MCPEPSMeasurer<TenElemT, fZ2QN, MCUpdateSquareTNN3SiteExchange, Model>(sitps,
                                                                                                 mc_measurement_para,

@@ -29,11 +29,12 @@ class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase<WaveF
                   std::vector<double> &accept_rates) {
     size_t flip_accept_num = 0;
     auto &tn = tps_component.tn;
-    tn.GenerateBMPSApproach(UP, tps_component.trun_para);
+    auto &contractor = tps_component.contractor;
+    contractor.GenerateBMPSApproach(tn, UP, tps_component.trun_para);
     for (size_t row = 0; row < tn.rows(); row++) {
-      tn.InitBTen(LEFT, row);
-      tn.GrowFullBTen(RIGHT, row, 3, true);
-      tps_component.amplitude = tn.ReplaceTNNSiteTrace({row, 0}, HORIZONTAL,
+      contractor.InitBTen(tn, LEFT, row);
+      contractor.GrowFullBTen(tn, RIGHT, row, 3, true);
+      tps_component.amplitude = contractor.ReplaceTNNSiteTrace(tn, {row, 0}, HORIZONTAL,
                                                        sitps({row, 0})[tps_component.config({row, 0})],
                                                        sitps({row, 1})[tps_component.config({row, 1})],
                                                        sitps({row, 2})[tps_component.config({row, 2})]);
@@ -46,22 +47,22 @@ class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase<WaveF
                                                                sitps,
                                                                tps_component);
         if (col < tn.cols() - 3) {
-          tn.BTenMoveStep(RIGHT);
+          contractor.BTenMoveStep(tn, RIGHT);
         }
       }
       if (row < tn.rows() - 1) {
-        tn.BMPSMoveStep(DOWN, tps_component.trun_para);
+        contractor.BMPSMoveStep(tn, DOWN, tps_component.trun_para);
       }
     }
 
-    tn.DeleteInnerBMPS(LEFT);
-    tn.DeleteInnerBMPS(RIGHT);
+    contractor.DeleteInnerBMPS(LEFT);
+    contractor.DeleteInnerBMPS(RIGHT);
 
-    tn.GenerateBMPSApproach(LEFT, tps_component.trun_para);
+    contractor.GenerateBMPSApproach(tn, LEFT, tps_component.trun_para);
     for (size_t col = 0; col < tn.cols(); col++) {
-      tn.InitBTen(UP, col);
-      tn.GrowFullBTen(DOWN, col, 3, true);
-      tps_component.amplitude = tn.ReplaceTNNSiteTrace({0, col}, VERTICAL,
+      contractor.InitBTen(tn, UP, col);
+      contractor.GrowFullBTen(tn, DOWN, col, 3, true);
+      tps_component.amplitude = contractor.ReplaceTNNSiteTrace(tn, {0, col}, VERTICAL,
                                                        sitps({0, col})[tps_component.config({0, col})],
                                                        sitps({1, col})[tps_component.config({1, col})],
                                                        sitps({2, col})[tps_component.config({2, col})]);
@@ -74,15 +75,15 @@ class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase<WaveF
                                                                sitps,
                                                                tps_component);
         if (row < tn.rows() - 3) {
-          tn.BTenMoveStep(DOWN);
+          contractor.BTenMoveStep(tn, DOWN);
         }
       }
       if (col < tn.cols() - 1) {
-        tn.BMPSMoveStep(RIGHT, tps_component.trun_para);
+        contractor.BMPSMoveStep(tn, RIGHT, tps_component.trun_para);
       }
     }
 
-    tn.DeleteInnerBMPS(UP);
+    contractor.DeleteInnerBMPS(UP);
     double total_flip_num = tn.cols() * (tn.rows() - 2) + tn.rows() * (tn.cols() - 2);
     accept_rates = {double(flip_accept_num) / total_flip_num};
   }
@@ -108,6 +109,7 @@ class MCUpdateSquareTNN3SiteExchange :
                           const SplitIndexTPS<TenElemT, QNT> &sitps,
                           TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress> &tps_component) {
     auto &tn = tps_component.tn;
+    auto &contractor = tps_component.contractor;
     size_t spin1 = tps_component.config(site1);
     size_t spin2 = tps_component.config(site2);
     size_t spin3 = tps_component.config(site3);
@@ -128,7 +130,7 @@ class MCUpdateSquareTNN3SiteExchange :
     double psi_abs_max = 0;
     for (size_t i = 0; i < permutations.size(); ++i) {
       if (i != init_state) {
-        psis[i] = tn.ReplaceTNNSiteTrace(site1, bond_dir,
+        psis[i] = contractor.ReplaceTNNSiteTrace(tn, site1, bond_dir,
                                          sitps(site1)[permutations[i][0]],
                                          sitps(site2)[permutations[i][1]],
                                          sitps(site3)[permutations[i][2]]);

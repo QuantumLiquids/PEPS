@@ -556,9 +556,9 @@ TEST_F(TrivialTransverseIsingTest, LowestState) {
   auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   
   auto energy_gs_exact = Calculate2x2OBCTransverseIsingEnergy(J, h);  // Exact analytical calculation
-  TransverseFieldIsingSquare model(h);
+  TransverseFieldIsingSquareOBC model(h);
   
-  bool success = RunExactSummationTest<TransverseFieldIsingSquare, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
+  bool success = RunExactSummationTest<TransverseFieldIsingSquareOBC, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
       model,
       split_index_tps_lowest,
       all_configs,
@@ -580,9 +580,9 @@ TEST_F(TrivialTransverseIsingTest, SimpleUpdateState) {
   
   // Actual computed value from single process run using Simple Update TPS data
   double energy_simple_update_expect = -5.19991995228;  // computed from simple_update TPS
-  TransverseFieldIsingSquare model(h);
+  TransverseFieldIsingSquareOBC model(h);
   
-  bool success = RunExactSummationTest<TransverseFieldIsingSquare, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
+  bool success = RunExactSummationTest<TransverseFieldIsingSquareOBC, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
       model,
       split_index_tps_simple_update,
       all_configs,

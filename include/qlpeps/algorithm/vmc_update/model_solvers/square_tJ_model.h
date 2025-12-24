@@ -75,6 +75,7 @@ class SquaretJModelMixIn {
       const size_t config1, const size_t config2,
       const BondOrientation orient,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -87,6 +88,7 @@ class SquaretJModelMixIn {
       const size_t config1, const size_t config2,
       const BondOrientation orient,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi, // return value, used for check the accuracy，
@@ -100,6 +102,7 @@ class SquaretJModelMixIn {
       const size_t config1, const size_t config2,
       const DIAGONAL_DIR diagonal_dir,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -112,6 +115,7 @@ class SquaretJModelMixIn {
       const size_t config1, const size_t config2,
       const DIAGONAL_DIR diagonal_dir,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi, // return value, used for check the accuracy
@@ -125,6 +129,7 @@ class SquaretJModelMixIn {
       const size_t config1, const size_t config2,
       const BondOrientation orient,
       const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi
@@ -132,7 +137,7 @@ class SquaretJModelMixIn {
     return EvaluateBondSingletPairFortJModel(site1, site2,
                                              tJSingleSiteState(config1),
                                              tJSingleSiteState(config2),
-                                             orient, tn, split_index_tps_on_site1, split_index_tps_on_site2);
+                                             orient, tn, contractor, split_index_tps_on_site1, split_index_tps_on_site2);
   }
 
   ///< requirement from SquareNNNModelEnergySolver
@@ -177,6 +182,7 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     const size_t config1, const size_t config2,
     const BondOrientation orient,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -189,13 +195,13 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
       return V_; // sz * sz - 1/4 * n * n = 0 , n*n = 1
     }
   } else {
-    psi = tn.Trace(site1, site2, orient);
+    psi = contractor.Trace(tn, site1, site2, orient);
     if (psi == TenElemT(0)) [[unlikely]] {
       std::cerr << "Error: psi is 0. Division by 0 is not allowed." << std::endl;
       exit(EXIT_FAILURE);
     }
 
-    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[size_t(config2)],
                                             split_index_tps_on_site2[size_t(config1)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
@@ -222,6 +228,7 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     const size_t config1, const size_t config2,
     const BondOrientation orient,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi, // return value, used for check the accuracy
@@ -235,13 +242,13 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
       return V_; // sz * sz - 1/4 * n * n = 0 , n*n = 1
     }
   } else {
-    psi = tn.Trace(site1, site2, orient);
+    psi = contractor.Trace(tn, site1, site2, orient);
     if (psi == TenElemT(0)) [[unlikely]] {
       std::cerr << "Error: psi is 0. Division by 0 is not allowed." << std::endl;
       exit(EXIT_FAILURE);
     }
 
-    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[size_t(config2)],
                                             split_index_tps_on_site2[size_t(config1)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
@@ -287,6 +294,7 @@ TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
     const size_t config1, const size_t config2,
     const DIAGONAL_DIR diagonal_dir,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi // return value, used for check the accuracy
@@ -307,13 +315,13 @@ TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
     left_up_site = {site2.row(), site1.col()};
   }
   if (!psi.has_value()) {
-    psi = tn.ReplaceNNNSiteTrace(left_up_site,
+    psi = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                  diagonal_dir,
                                  HORIZONTAL,
                                  split_index_tps_on_site1[size_t(config1)],
                                  split_index_tps_on_site2[size_t(config2)]);
   }
-  TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+  TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                            diagonal_dir,
                                            HORIZONTAL,
                                            split_index_tps_on_site1[size_t(config2)],
@@ -328,6 +336,7 @@ TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
     const size_t config1, const size_t config2,
     const DIAGONAL_DIR diagonal_dir,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi, // return value, used for check the accuracy
@@ -349,13 +358,13 @@ TenElemT SquaretJModelMixIn::EvaluateNNNEnergy(
     left_up_site = {site2.row(), site1.col()};
   }
   if (!psi.has_value()) {
-    psi = tn.ReplaceNNNSiteTrace(left_up_site,
+    psi = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                  diagonal_dir,
                                  HORIZONTAL,
                                  split_index_tps_on_site1[size_t(config1)],
                                  split_index_tps_on_site2[size_t(config2)]);
   }
-  TenElemT psi_ex = tn.ReplaceNNNSiteTrace(left_up_site,
+  TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, left_up_site,
                                            diagonal_dir,
                                            HORIZONTAL,
                                            split_index_tps_on_site1[size_t(config2)],
@@ -389,6 +398,7 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
                                                                 const tJSingleSiteState config2,
                                                                 const BondOrientation orient,
                                                                 const TensorNetwork2D<TenElemT, QNT> &tn,
+                                                                BMPSContractor<TenElemT, QNT> &contractor,
                                                                 const std::vector<QLTensor<TenElemT,
                                                                                            QNT>> &split_index_tps_on_site1,
                                                                 const std::vector<QLTensor<TenElemT,
@@ -396,11 +406,11 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
 ) {
   TenElemT delta_dag, delta;
   if (config1 == tJSingleSiteState::Empty && config2 == tJSingleSiteState::Empty) {
-    TenElemT psi = tn.Trace(site1, site2, orient);
-    TenElemT psi_ex1 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    TenElemT psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_ex1 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                              split_index_tps_on_site1[size_t(tJSingleSiteState::SpinUp)],
                                              split_index_tps_on_site2[size_t(tJSingleSiteState::SpinDown)]);
-    TenElemT psi_ex2 = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    TenElemT psi_ex2 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                              split_index_tps_on_site1[size_t(tJSingleSiteState::SpinDown)],
                                              split_index_tps_on_site2[size_t(tJSingleSiteState::SpinUp)]);
     TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi);
@@ -410,8 +420,8 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
     return std::make_pair(delta_dag, delta);
   } else if (config1 == tJSingleSiteState::SpinUp && config2 == tJSingleSiteState::SpinDown) {
     delta_dag = 0;
-    TenElemT psi = tn.Trace(site1, site2, orient);
-    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    TenElemT psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
                                             split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);
@@ -419,8 +429,8 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
     return std::make_pair(delta_dag, delta);
   } else if (config1 == tJSingleSiteState::SpinDown && config2 == tJSingleSiteState::SpinUp) {
     delta_dag = 0;
-    TenElemT psi = tn.Trace(site1, site2, orient);
-    TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
+    TenElemT psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
                                             split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
     TenElemT ratio = ComplexConjugate(psi_ex / psi);

@@ -7,8 +7,8 @@
 * Description: QuantumLiquids/PEPS project. Exact vs MC evaluator test for
 *              2x2 spinless free fermion (t=1, t2=0) — compares energy and gradient.
 
-two issues: 1. mpirun -n 4 ./complex can not pass 
-2. The results will change, random seeds is not fixed. 
+two issues: 1. mpirun -n 4 ./complex can pass. But potential trouble is the phase difference when benchmark grad.
+2. The results will change, random seeds is not fixed. MonteCarloSweepUpdaterBase, Configuration::Random(...).
 We will fix them after fixed some other issues.
 */
 
@@ -98,7 +98,10 @@ class CachedSpinlessFermionSolver {
 template<typename TenElemT, typename QNT>
 class CachedMCUpdateSquareNNExchange : public MonteCarloSweepUpdaterBase<> {
  public:
-  // Deterministically seed RNG per MPI rank to ensure reproducibility across runs
+  // Deterministically seed RNG per MPI rank (multi-chain sampling).
+  //
+  // Each rank runs an independent Markov chain. We aggregate estimates across ranks via MPI.
+  // Reproducibility across runs is achieved by a fixed base seed + a deterministic rank mix.
   CachedMCUpdateSquareNNExchange() : MonteCarloSweepUpdaterBase<>() {
     int rank_tmp = 0;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank_tmp);
@@ -115,14 +118,6 @@ class CachedMCUpdateSquareNNExchange : public MonteCarloSweepUpdaterBase<> {
       PrecomputeAllPermutations_(sitps, tps_component);
       precomputed_ = true;
     }
-    // Align current amplitude with table to eliminate path-dependent truncation drift
-    {
-      const std::string cur_key = KeyFromConfig_(tps_component.config);
-      auto it_idx2 = key_to_index_.find(cur_key);
-      if (it_idx2 != key_to_index_.end()) {
-        tps_component.amplitude = amps_[it_idx2->second];
-      }
-    }
     // Global update among all cached configurations using Non-detailed-balance MCMC
     const std::string cur_key = KeyFromConfig_(tps_component.config);
     auto it_idx = key_to_index_.find(cur_key);
@@ -133,12 +128,14 @@ class CachedMCUpdateSquareNNExchange : public MonteCarloSweepUpdaterBase<> {
     size_t final_idx = SuwaTodoStateUpdate(init_idx, weights_, this->random_engine_);
     bool changed = (final_idx != init_idx);
     if (changed) {
-      // Rebuild the wavefunction component at the chosen configuration (deep rebuild of TN/env)
+      // Rebuild the wavefunction component at the chosen configuration (deep rebuild of TN/env).
+      //
+      // IMPORTANT:
+      // TPSWaveFunctionComponent now owns a Contractor with internal caches. Directly overwriting
+      // `tn`/`config` without reinitializing the contractor will leave caches stale and can cause
+      // inconsistent amplitudes / biased energies. Always use the component API to keep them in sync.
       const Configuration &new_cfg = all_configs_[final_idx];
-      tps_component.tn = TensorNetwork2D<TenElemT, QNT>(sitps, new_cfg); //projection
-      // Sync amplitude to precomputed value to avoid truncation path drift
-      tps_component.amplitude = amps_[final_idx];
-      tps_component.config = new_cfg;
+      tps_component.ReplaceGlobalConfig(sitps, new_cfg);
     }
     accept_rates = {changed ? 1.0 : 0.0};
   }
@@ -267,12 +264,7 @@ TEST_F(SpinlessFermionExactVsMCTest, EnergyAndGradientMatch) {
   SquareSpinlessFermion model(t, t2, 0);
 
   // 2) Exact enumeration over all half-filling configurations (two occupied, two empty)
-  auto trun_para = BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps,
-                                    3 * Dpeps,
-                                    1e-15,
-                                    CompressMPSScheme::SVD_COMPRESS,
-                                    std::make_optional<double>(1e-14),
-                                    std::make_optional<size_t>(10));
+  auto trun_para = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, Dpeps * Dpeps, 0.0);
   std::vector<Configuration> all_configs = GenerateAllPermutationConfigs({2, 2}, Lx, Ly);
   auto [energy_exact, grad_exact, err_exact] = ExactSumEnergyEvaluatorMPI<SquareSpinlessFermion, TenElemT, QNT>(
     sitps,

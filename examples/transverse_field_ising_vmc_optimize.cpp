@@ -15,7 +15,7 @@
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h" // MonteCarloParams, PEPSParams
 #include "qlpeps/vmc_basic/configuration_update_strategies/square_nn_updater.h" // MCUpdateSquareNNExchange
-#include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square.h" // TransverseFieldIsingSquare
+#include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square_obc.h" // TransverseFieldIsingSquare
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"  // SquareLatticePEPS
 
 using namespace qlten;
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
     VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");
 
     // 4) Energy solver (model): transverse-field Ising on square lattice
-    TransverseFieldIsingSquare model(h);
+    TransverseFieldIsingSquareOBC model(h);
 
     if (rank == 0) {
       std::cout << "[TFI-VMC] Start VMC optimize: 4x4, SR, h=" << h

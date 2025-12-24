@@ -125,7 +125,7 @@ struct Z2tJModelTools : public testing::Test {
         tps({row, col}) = local_ten;
       }
     }
-    SplitIndexTPS<QLTEN_Double, fZ2QN> split_idx_tps(tps);
+    auto split_idx_tps = SplitIndexTPS<QLTEN_Double, fZ2QN>::FromTPS(tps);
     split_idx_tps.NormalizeAllSite();
     split_idx_tps *= 3.0;
     split_idx_tps.Dump(tps_path);
