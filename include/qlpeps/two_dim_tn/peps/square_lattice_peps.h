@@ -291,10 +291,18 @@ class SquareLatticePEPS {
       const SimpleUpdateTruncatePara &trunc_para
   );
 
+      ProjectionRes<TenElemT> UpperRightTriangleProject(
+      const TenT &gate_ten,
+      const SiteIdx &right_upper_site,
+      const SimpleUpdateTruncatePara &trunc_para,
+      const TenT &ham_ten = TenT()
+  );
+
   ProjectionRes<TenElemT> UpperLeftTriangleProject(
-      const TenT &,
-      const SiteIdx &,
-      const SimpleUpdateTruncatePara &
+      const TenT &gate_ten,
+      const SiteIdx &left_upper_site,
+      const SimpleUpdateTruncatePara &trunc_para,
+      const TenT &ham_ten = TenT()
   );
 
   ProjectionRes<TenElemT> LowerRightTriangleProject(
