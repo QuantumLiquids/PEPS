@@ -95,11 +95,6 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
 
  private:
  void SetEvolveGate_(void) override;
-  // void SetEvolveGate_(void) override {
-  //   evolve_gate_nn_ = TaylorExpMatrix(this->update_para.tau, ham_nn_);
-  //   evolve_gate_nn_half_ = TaylorExpMatrix(this->update_para.tau / 2, ham_nn_);
-  //   evolve_gate_tri_ = TaylorExpMatrix(this->update_para.tau, ham_tri_);
-  // }
 
   enum TriProjPOSITION {
     UpperRight = 0,
@@ -135,20 +130,21 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
     tri_site[1] = site_b;
     switch (triposition) {
       case UpperLeft: {
-        tri_site[0] = {site_b[0], (site_b[1] + 1) % this->lx_};
-        tri_site[2] = {(site_b[0] + 1) % this->ly_, site_b[1]};
+        tri_site[0] = {site_b[0], (site_b[1] + 1) % this->peps_.lambda_horiz.cols()};
+        tri_site[2] = {(site_b[0] + 1) % this->peps_.lambda_vert.rows(), site_b[1]};
       }
       case UpperRight: {
-        tri_site[0] = {site_b[0], (site_b[1] - 1 + this->lx_) % this->lx_};
-        tri_site[2] = {(site_b[0] + 1) % this->ly_, site_b[1]};
+        tri_site[0] = {site_b[0], (site_b[1] - 1 + this->peps_.lambda_horiz.cols()) % this->peps_.lambda_horiz.cols()};
+        tri_site[2] = {(site_b[0] + 1) % this->peps_.lambda_vert.rows(), site_b[1]};
       }
       case LowerLeft: {
-        tri_site[0] = {(site_b[0] - 1 + this->ly_) % this->ly_, site_b[1]};
-        tri_site[2] = {(site_b[0] - 1 + this->ly_) % this->ly_, (site_b[1] + 1) % this->lx_};
+        tri_site[0] = {(site_b[0] - 1 + this->peps_.lambda_vert.rows()) % this->peps_.lambda_vert.rows(), site_b[1]};
+        tri_site[2] = {(site_b[0] - 1 + this->peps_.lambda_vert.rows()) % this->peps_.lambda_vert.rows(), 
+                       (site_b[1] + 1) % this->peps_.lambda_horiz.cols()};
       }
       case LowerRight: {
-        tri_site[0] = {(site_b[0] - 1 + this->ly_) % this->ly_, site_b[1]};
-        tri_site[2] = {site_b[0], (site_b[1] - 1 + this->lx_) % this->lx_};
+        tri_site[0] = {(site_b[0] - 1 + this->peps_.lambda_vert.rows()) % this->peps_.lambda_vert.rows(), site_b[1]};
+        tri_site[2] = {site_b[0], (site_b[1] - 1 + this->peps_.lambda_horiz.cols()) % this->peps_.lambda_horiz.cols()};
       }
     }
 
@@ -273,7 +269,8 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
   TenMatrix<Tensor> ham_lowerright_tri_;
   TenMatrix<Tensor> ham_lowerleft_tri_;
   // A-B-C 3-site, A-B and B-C are NN connect, A-C is NNN connect
-  // A-B or B-C has half of J1 interaction, A-C has a J2 interaction
+  // A-B or B-C has J1 interaction divided by the triangle shared this bond
+  // A-C has half of the J2 interaction
   // A, B and C also have on-site interaction
 
   TenMatrix<Tensor> evolve_gate_upperright_tri_;
@@ -293,12 +290,15 @@ void SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_(void) {
     for (size_t row = 0; row < ver_bond_limit; row++) {
       ham_upperleft_tri_({row, col}) = ConstructTriHamiltonian({row, col}, UpperLeft);
       evolve_gate_upperleft_tri_({row, col}) = ConstructEvolveOperator({row, col}, UpperLeft);
-      ham_upperright_tri_({row, col}) = ConstructTriHamiltonian({row, (col + 1) % this->lx_}, UpperRight);
-      evolve_gate_upperright_tri_({row, col}) = ConstructEvolveOperator({row, (col + 1) % this->lx_}, UpperRight);
-      ham_lowerleft_tri_({row, col}) = ConstructTriHamiltonian({(row + 1) % this->ly_, col}, LowerLeft);
-      evolve_gate_lowerleft_tri_({row, col}) = ConstructEvolveOperator({(row + 1) % this->ly_, col}, LowerLeft);
-      ham_lowerright_tri_({row, col}) = ConstructTriHamiltonian({(row + 1) % this->ly_, (col + 1) % this->lx_}, LowerRight);
-      evolve_gate_lowerright_tri_({row, col}) = ConstructEvolveOperator({(row + 1) % this->ly_, (col + 1) % this->lx_}, LowerRight);
+
+      ham_upperright_tri_({row, col}) = ConstructTriHamiltonian({row, (col + 1) % this->peps_.lambda_horiz.cols()}, UpperRight);
+      evolve_gate_upperright_tri_({row, col}) = ConstructEvolveOperator({row, (col + 1) % this->peps_.lambda_horiz.cols()}, UpperRight);
+
+      ham_lowerleft_tri_({row, col}) = ConstructTriHamiltonian({(row + 1) % this->peps_.lambda_vert.rows(), col}, LowerLeft);
+      evolve_gate_lowerleft_tri_({row, col}) = ConstructEvolveOperator({(row + 1) % this->peps_.lambda_vert.rows(), col}, LowerLeft);
+      
+      ham_lowerright_tri_({row, col}) = ConstructTriHamiltonian({(row + 1) % this->peps_.lambda_vert.rows(), (col + 1) % this->peps_.lambda_horiz.cols()}, LowerRight);
+      evolve_gate_lowerright_tri_({row, col}) = ConstructEvolveOperator({(row + 1) % this->peps_.lambda_vert.rows(), (col + 1) % this->peps_.lambda_horiz.cols()}, LowerRight);
     }
   }
   
@@ -316,28 +316,11 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   const size_t hor_bond_limit = is_pbc ? this->lx_ : this->lx_ - 1;
   const size_t ver_bond_limit = is_pbc ? this->ly_ : this->ly_ - 1;
 
-  // for (size_t col = 0; col < this->lx_ - 1; col++) {  //first row
-  //   ProjectionRes<TenElemT>
-  //       proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_, {0, col}, HORIZONTAL, para, ham_nn_);
-  //   e0 += proj_res.e_loc.value();
-  //   norm *= proj_res.norm;
-  //   max_trunc_err = std::max(max_trunc_err, proj_res.trunc_err);
-  //   //e0 += -std::log(proj_res.norm) / this->update_para.tau;
-  // }
-
-  // for (size_t row = 0; row < this->ly_ - 1; row++) {  // first and last column
-  //   ProjectionRes<TenElemT>
-  //       proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_half_, {row, 0}, VERTICAL, para);
-  //   e0 += -std::log(proj_res.norm) / this->update_para.tau;
-  //   proj_res = this->peps_.NearestNeighborSiteProject(evolve_gate_nn_half_, {row, this->lx_ - 1}, VERTICAL, para);
-  //   e0 += -std::log(proj_res.norm) / this->update_para.tau;
-  // }
-
   for (size_t col = 0; col < hor_bond_limit; col++) {
     for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
           proj_res1 = this->peps_.UpperRightTriangleProject(evolve_gate_upperright_tri_({row, col}), 
-                                                           {row, (col + 1) % this->lx_}, 
+                                                           {row, (col + 1) % this->peps_.lambda_horiz.cols()}, 
                                                             para, 
                                                             ham_upperright_tri_({row, col}));
       e0 += proj_res1.e_loc.value();
@@ -355,7 +338,7 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
 
       ProjectionRes<TenElemT>
           proj_res3 = this->peps_.LowerRightTriangleProject(evolve_gate_lowerright_tri_({row, col}), 
-                                                           {row, (col + 1) % this->lx_}, 
+                                                           {row, (col + 1) % this->peps_.lambda_horiz.cols()}, 
                                                             para, 
                                                             ham_lowerright_tri_({row, col}));
       e0 += proj_res3.e_loc.value();
