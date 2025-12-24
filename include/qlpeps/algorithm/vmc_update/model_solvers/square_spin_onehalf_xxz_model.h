@@ -30,7 +30,7 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
   SiteIdx site1 = {row, lx / 4};
   std::vector<TenElemT> off_diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
   tn.UpdateSiteTensor(site1, 1 - config(site1), *split_index_tps);
-  contractor.InvalidateEnvs(site1);
+  contractor.EraseEnvsAfterUpdate(site1);
   //temporally change, and also trucated the left boundary tensor
   contractor.GrowBTenStep(tn, LEFT); // left boundary tensor just across Lx/4
   contractor.GrowFullBTen(tn, RIGHT, row, lx / 4 + 2, false); //environment for Lx/4 + 1 site
@@ -46,7 +46,7 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
     contractor.BTenMoveStep(tn, RIGHT);
   }
   tn.UpdateSiteTensor(site1, config(site1), *split_index_tps);
-  contractor.InvalidateEnvs(site1);
+  contractor.EraseEnvsAfterUpdate(site1);
   // change back
 
   two_point_functions_loc.insert(two_point_functions_loc.end(),

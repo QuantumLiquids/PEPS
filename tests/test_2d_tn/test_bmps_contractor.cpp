@@ -445,7 +445,7 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, TestDynamicUpdateAndPunchHole) {
   auto new_ten = old_ten * 0.5; // Simple scaling
   dtn2d({2, 1}) = new_ten;
   
-  contractor.InvalidateEnvs({2, 1});
+  contractor.EraseEnvsAfterUpdate({2, 1});
   
   // 4. Re-calculate
   // We need to rebuild the environment that was invalidated

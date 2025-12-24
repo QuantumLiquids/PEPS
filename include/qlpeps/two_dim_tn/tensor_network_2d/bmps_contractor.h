@@ -141,7 +141,21 @@ class BMPSContractor {
 
   bool DirectionCheck() const;
 
-  void InvalidateEnvs(const SiteIdx &site);
+  /**
+   * @brief Erase cached environments affected by a local tensor update.
+   *
+   * This is a state-mutating operation: it truncates cached BMPS layers so that
+   * subsequent environment growth recomputes the affected region instead of using stale data.
+   */
+  void EraseEnvsAfterUpdate(const SiteIdx &site);
+
+  /**
+   * @brief Debug-only check that cached environments have been invalidated for the given site.
+   *
+   * This function MUST NOT mutate state. It exists to catch missing invalidation in debug builds.
+   * In release builds it is a no-op.
+   */
+  void CheckInvalidateEnvs(const SiteIdx &site) const;
 
  private:
   void InitBMPS(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION post);

@@ -14,9 +14,17 @@ tags: [design, rfc, contractor, caching, performance, compatibility]
 
 - 上层同时存在两条更新语义：
   - **Trial/Commit**：`BeginTrialWithReplacement()` → `CommitTrial()`
-  - **Direct-Update + Invalidate**：外部直接改 `TensorNetwork2D` 后调用 `InvalidateEnvs(site)`
+  - **Direct-Update + Invalidate**：外部直接改 `TensorNetwork2D` 后调用缓存失效入口
+    - **BMPS**：`EraseEnvsAfterUpdate(site)`（会截断/erase BMPS 缓存；这是 state-mutating 操作）
+    - **TRG**：当前无 `InvalidateEnvs(site)`；局域修改后需要 `CommitTrial()` 或 `ClearCache()` 触发重算/同步
+    - **Debug-only check**：`BMPSContractor::CheckInvalidateEnvs(site)` 仅用于断言检查（不改状态）
 - 现有 BMPS 还存在第三类“专家 API”（手动挡）：`GrowBTenStep/GrowFullBTen/BTenMoveStep/...`
 - TRG 是“全局 coarse-graining + 多尺度 cache”，BMPS 是“边界环境 + 游标式推进”；强行把它们塞成同一套过程名会产生分支地狱。
+
+> 备注（命名必须说人话）：
+> - **BMPS 的失效是“截断/erase 游标缓存”**，因此用 `EraseEnvsAfterUpdate(site)` 明确表达副作用。
+> - **TRG 当前不提供 `InvalidateEnvs(site)`**：局域更新通过 `CommitTrial()`；若绕过 Trial 直接改 TN，则用 `ClearCache()` 退化处理。
+> - `CheckInvalidateEnvs(site)` 只属于 **BMPS debug 检查**，TRG 不应提供同名接口。
 
 本 RFC 的目标是：在**不破坏现有可跑代码**（Never break userspace）的前提下，定义一个清晰的层次化 API，让 BMPS/TRG 既能在上层统一使用，又能保留 BMPS 的手动高性能路径。
 
@@ -271,7 +279,7 @@ for (size_t j = 0; j < lx; j++) {
 // BMPS expert path (optimal)
 // 1. 临时修改 site_i
 tn.UpdateSiteTensor(site_i, flipped_tensor_i, sitps);
-contractor.InvalidateEnvs(site_i);
+contractor.EraseEnvsAfterUpdate(site_i);
 
 // 2. 准备环境到 site_i 右侧
 contractor.GrowBTenStep(tn, LEFT);
@@ -285,7 +293,7 @@ for (size_t j = 0; j < lx; j++) {
 
 // 4. 恢复
 tn.UpdateSiteTensor(site_i, original_tensor_i, sitps);
-contractor.InvalidateEnvs(site_i);
+contractor.EraseEnvsAfterUpdate(site_i);
 // 总复杂度：O(lx * D^6)，比通用路径快 lx 倍
 ```
 
@@ -433,7 +441,7 @@ void PrepareRowEnvironment(BMPSContractor<TenElemT,QNT>& contractor,
 
 template<typename TenElemT, typename QNT>
 void InvalidateEnvs(BMPSContractor<TenElemT,QNT>& contractor, const SiteIdx& site) {
-  contractor.InvalidateEnvs(site);
+  contractor.EraseEnvsAfterUpdate(site);
 }
 
 // ... other forwarding functions
@@ -446,7 +454,7 @@ void InvalidateEnvs(BMPSContractor<TenElemT,QNT>& contractor, const SiteIdx& sit
 ```cpp
 // 方案 A：直接调用（现有代码不需要改）
 contractor.GrowBTenStep(tn, LEFT);
-contractor.InvalidateEnvs(site);
+contractor.EraseEnvsAfterUpdate(site);
 
 // 方案 B：通过命名空间（可选，让调用点更清晰）
 using namespace qlpeps::bmps::expert;
@@ -520,21 +528,21 @@ contractor **不应该拥有** `TensorNetwork2D`（否则又回到 split-tensorn
 这是历史遗留路径，主要用于 BMPS 专家测量（Layer 4）：
 
 1. 调用方直接修改 `TensorNetwork2D`（例如 `tn.UpdateSiteTensor(...)`）
-2. 调用方调用 `InvalidateEnvs(site)`（BMPS 专家层）或 `ClearCache()`（Layer 1）
+2. 调用方调用 `EraseEnvsAfterUpdate(site)`（BMPS 专家层）或 `ClearCache()`（Layer 1）
 3. 后续调用 `EvaluateReplacement()` 时，contractor 必须保证缓存与 TN 一致
 
 **`InvalidateEnvs` 不属于 Layer 1，而是 Layer 3（BMPS 专家 API）**：
 
 - **历史原因**：在 `main`（pre-split）里，`TensorNetwork2D::UpdateSiteTensor(..., check_envs=true)` 
-  会立刻截断 BMPS 环境（`bmps_set_`）。split 后这个逻辑被迁移成 `BMPSContractor::InvalidateEnvs(site)`。
+  会立刻截断 BMPS 环境（`bmps_set_`）。split 后这个逻辑被迁移成 `BMPSContractor::EraseEnvsAfterUpdate(site)`。
 - **现状**：`InvalidateEnvs` 被用于 BMPS 专家测量路径（例如 `MeasureSpinOneHalfOffDiagOrderInRow`），
   这些代码临时修改 TN 来准备环境，然后在循环中复用边界 MPS。
-- **语义**：`InvalidateEnvs(site)` 只"标记 dirty"（截断 BMPS 游标），不做大规模重算。
+- **语义**：`EraseEnvsAfterUpdate(site)` 会截断/erase BMPS 游标缓存，不做大规模重算（后续按需 grow）。
 
 **为什么不强制 TRG 提供 `InvalidateEnvs`？**
 
 - TRG 的"失效"语义是"光锥传播"（fine→coarse 多尺度更新），与 BMPS 的"游标截断"完全不同
-- 强行让 TRG 提供 `InvalidateEnvs(site)` 只会产生两个烂选择：
+- 强行让 TRG 提供 `InvalidateEnvs(site)`（BMPS 风格/或 dirty-seed 风格）只会产生两个烂选择：
   1. 退化为 `ClearCache()`（丢失细粒度优化）
   2. 实现"伪游标"来模拟 BMPS 语义（制造复杂性）
 - **结论**：`InvalidateEnvs` 是 BMPS 专家层（Layer 3），不属于通用契约（Layer 1）
@@ -542,7 +550,8 @@ contractor **不应该拥有** `TensorNetwork2D`（否则又回到 split-tensorn
 **VMC 主路径不应依赖 `InvalidateEnvs`**：
 
 - 在 `refactor/split-tensornetwork2d` 的历史实现里，`WaveFunctionComponent` 无条件调用
-  `contractor.InvalidateEnvs(site)`，这导致它成为模板参数的硬依赖。
+  `contractor.InvalidateEnvs(site)`（旧名；当时 BMPS 的语义是“截断/erase 缓存”，等价于现在的 `EraseEnvsAfterUpdate(site)`），
+  这导致它成为模板参数的硬依赖。
 - **本 RFC 的结论**：VMC 主路径应改为**只用 Trial+Commit**（见 (A)），不再依赖 `InvalidateEnvs`。
 - `InvalidateEnvs` 只保留给 BMPS 专家测量路径（Layer 4）使用。
 
@@ -726,7 +735,8 @@ public:
 
 **兼容性说明**：
 
-- 旧代码中的 `contractor.InvalidateEnvs(site)` 需要改为 `contractor.ClearCache()`（如果是 TRG）
+- 旧代码中的 `contractor.InvalidateEnvs(site)`（如果原意是 BMPS 的“截断/erase”）需要改为 `contractor.EraseEnvsAfterUpdate(site)`；
+  对 TRG：当前没有 `InvalidateEnvs(site)`，因此局域修改后必须 `CommitTrial()` 或调用 `ClearCache()` 退化处理。
 - 或者 VMC 主路径改为只用 Trial+Commit（不再依赖 `InvalidateEnvs`）
 
 ## 7. 上层（VMC/solver）的使用规则
@@ -769,7 +779,7 @@ void TPSWaveFunctionComponent<TenElemT, QNT>::CommitTrial(Trial&& trial) {
 ```cpp
 // ❌ 不要绕过 WaveFunctionComponent 直接操作 contractor
 tps_sample->contractor.GrowBTenStep(...);  // Layer 3, BMPS-only
-tps_sample->contractor.InvalidateEnvs(site);  // Layer 3, BMPS-only
+tps_sample->contractor.EraseEnvsAfterUpdate(site);  // Layer 3, BMPS-only
 
 // ❌ 不要直接修改 TN 而不通过 WaveFunctionComponent
 tps_sample->tn(site) = new_tensor;  // 会导致 config 不同步
@@ -849,7 +859,7 @@ std::vector<TenElemT> MeasureCorrelationInRowBMPSExpert(
   
   // 1. Temporarily flip site_i
   tn.UpdateSiteTensor(site_i, flipped_config, *sitps);
-  contractor.InvalidateEnvs(site_i);  // Layer 3 API
+  contractor.EraseEnvsAfterUpdate(site_i);  // Layer 3 API
   
   // 2. Prepare environment
   contractor.GrowBTenStep(tn, LEFT);  // Layer 3 API
@@ -863,7 +873,7 @@ std::vector<TenElemT> MeasureCorrelationInRowBMPSExpert(
   
   // 4. Restore
   tn.UpdateSiteTensor(site_i, original_config, *sitps);
-  contractor.InvalidateEnvs(site_i);
+  contractor.EraseEnvsAfterUpdate(site_i);
   
   return correlations;
 }
@@ -1022,7 +1032,7 @@ TenElemT baseline = contractor.Trace(tn, site, HORIZONTAL);
 
 // Modify TN and invalidate
 tn(site) = new_tensor;
-contractor.InvalidateEnvs(site);
+contractor.EraseEnvsAfterUpdate(site);
 
 // Subsequent Trace should reflect modification
 TenElemT new_amp = contractor.Trace(tn, site, HORIZONTAL);
@@ -1087,7 +1097,7 @@ EXPECT_NEAR(amp, amp_new, tolerance);
 | **Layer 2** | `PunchHole(tn, site)` | 梯度计算 | BMPS, (TRG future) | 可选 |
 | **Layer 3** | `GenerateBMPSApproach(tn, ...)` | BMPS 环境准备 | BMPS only | 专家 API |
 | | `GrowBTenStep(tn, ...)` | BMPS 游标控制 | BMPS only | 专家 API |
-| | `InvalidateEnvs(site)` | BMPS 游标截断 | BMPS only | 专家 API，不是 Layer 1 |
+| | `EraseEnvsAfterUpdate(site)` | BMPS 游标截断/erase | BMPS only | 专家 API，不是 Layer 1 |
 | | `ReplaceOneSiteTrace(tn, ...)` | 旧测量接口 | BMPS only | **Deprecated**，用 `EvaluateReplacement` |
 | **Layer 4** | 高性能 correlation 测量 | Structure factor 等 | BMPS expert path | 复用 Layer 3，文档标记 |
 

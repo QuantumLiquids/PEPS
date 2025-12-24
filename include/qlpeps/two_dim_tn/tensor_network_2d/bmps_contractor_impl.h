@@ -1479,7 +1479,7 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const Tenso
 }
 
 template<typename TenElemT, typename QNT>
-void BMPSContractor<TenElemT, QNT>::InvalidateEnvs(const SiteIdx &site) {
+void BMPSContractor<TenElemT, QNT>::EraseEnvsAfterUpdate(const SiteIdx &site) {
   const size_t row = site[0];
   const size_t col = site[1];
   if (bmps_set_.at(LEFT).size() > col + 1) {
@@ -1499,6 +1499,26 @@ void BMPSContractor<TenElemT, QNT>::InvalidateEnvs(const SiteIdx &site) {
   if (bmps_set_.at(RIGHT).size() > right_allow_mps_num) {
     bmps_set_[RIGHT].erase(bmps_set_[RIGHT].cbegin() + right_allow_mps_num, bmps_set_[RIGHT].end());
   }
+}
+
+template<typename TenElemT, typename QNT>
+void BMPSContractor<TenElemT, QNT>::CheckInvalidateEnvs(const SiteIdx &site) const {
+#ifndef NDEBUG
+  const size_t row = site[0];
+  const size_t col = site[1];
+
+  // After invalidation for a local update at (row,col), we must not keep BMPS caches
+  // beyond that site in any direction, otherwise stale environments may be reused.
+  assert(bmps_set_.at(LEFT).size() <= col + 1);
+  assert(bmps_set_.at(UP).size() <= row + 1);
+
+  const size_t down_allow_mps_num = rows_ - row;
+  const size_t right_allow_mps_num = cols_ - col;
+  assert(bmps_set_.at(DOWN).size() <= down_allow_mps_num);
+  assert(bmps_set_.at(RIGHT).size() <= right_allow_mps_num);
+#else
+  (void)site;
+#endif
 }
 
 } // namespace qlpeps

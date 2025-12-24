@@ -70,6 +70,22 @@ concept HasCommitTrial =
     requires(Contractor c, typename Contractor::Trial t) {
       c.CommitTrial(std::move(t));
     };
+
+// Only for BMPS contractor now.
+template <class Contractor, class SiteIdxT>
+concept HasInvalidateEnvs = requires(const Contractor c, const SiteIdxT &site) {
+  c.InvalidateEnvs(site);
+};
+
+template <class Contractor, class SiteIdxT>
+concept HasCheckInvalidateEnvs = requires(const Contractor c, const SiteIdxT &site) {
+  c.CheckInvalidateEnvs(site);
+};
+
+template <class Contractor, class SiteIdxT>
+concept HasEraseEnvsAfterUpdate = requires(Contractor c, const SiteIdxT &site) {
+  c.EraseEnvsAfterUpdate(site);
+};
 }  // namespace detail
 
 ///< abstract wave function component, useless up to now.
@@ -251,6 +267,19 @@ struct TPSWaveFunctionComponent {
       const size_t cfg = sc.second;
       config(site) = cfg;
       tn.UpdateSiteTensor(site, cfg, sitps);
+      // If the contractor does NOT support committing a trial cache, we must invalidate
+      // any cached environments to avoid using stale BMPS/BTen data.
+#ifndef NDEBUG
+      static_assert(detail::HasCommitTrial<Contractor> || detail::HasEraseEnvsAfterUpdate<Contractor, SiteIdx>,
+                    "TPSWaveFunctionComponent::AcceptTrial requires the contractor to support either "
+                    "CommitTrial(trial_token) or EraseEnvsAfterUpdate(site) to avoid stale cached environments.");
+#endif
+ 
+#ifndef NDEBUG
+      if constexpr (detail::HasCheckInvalidateEnvs<Contractor, SiteIdx>) {
+        contractor.CheckInvalidateEnvs(site);
+      }
+#endif
     }
 
     // 3) Update amplitude and clear trial.
@@ -324,7 +353,11 @@ struct TPSWaveFunctionComponent {
                          const SplitIndexTPS<TenElemT, QNT> &sitps) {
     config(site) = new_config;
     tn.UpdateSiteTensor(site, new_config, sitps); 
-    contractor.InvalidateEnvs(site);
+#ifndef NDEBUG
+    if constexpr (detail::HasCheckInvalidateEnvs<Contractor, SiteIdx>) {
+      contractor.CheckInvalidateEnvs(site);
+    }
+#endif
   }
 
   std::optional<PendingTrial> pending_trial_;

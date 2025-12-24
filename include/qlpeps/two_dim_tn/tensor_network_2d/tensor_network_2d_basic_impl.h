@@ -74,6 +74,28 @@ TensorNetwork2D<TenElemT, QNT> &TensorNetwork2D<TenElemT, QNT>::operator=(const 
 template<typename TenElemT, typename QNT>
 void TensorNetwork2D<TenElemT, QNT>::UpdateSiteTensor(const qlpeps::SiteIdx &site, const size_t update_config,
                                                       const SplitIndexTPS<TenElemT, QNT> &sitps) {
+#ifndef NDEBUG
+  // Keep the same safety level as the constructor:
+  // detect uninitialized TPS / invalid configs early to avoid silent UB in release builds.
+  const auto &site_tensors = sitps(site);
+  if (site_tensors.empty()) {
+    throw std::invalid_argument(
+        "TensorNetwork2D::UpdateSiteTensor: TPS at site (" + std::to_string(site.row()) + ", " +
+        std::to_string(site.col()) + ") has empty tensor vector. TPS must be initialized.");
+  }
+  if (update_config >= site_tensors.size()) {
+    throw std::out_of_range(
+        "TensorNetwork2D::UpdateSiteTensor: config " + std::to_string(update_config) +
+        " at site (" + std::to_string(site.row()) + ", " + std::to_string(site.col()) +
+        ") exceeds TPS physical dimension " + std::to_string(site_tensors.size()) + ".");
+  }
+  if (site_tensors[update_config].IsDefault()) {
+    throw std::invalid_argument(
+        "TensorNetwork2D::UpdateSiteTensor: TPS tensor at site (" + std::to_string(site.row()) + ", " +
+        std::to_string(site.col()) + ") component " + std::to_string(update_config) +
+        " is default (uninitialized).");
+  }
+#endif
   (*this)(site) = sitps(site)[update_config];
 }
 

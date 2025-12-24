@@ -12,7 +12,10 @@ tags: [design, rfc, pbc, trg, caching, incremental-update]
 
 ## 0. 需求理解确认（先把话说清楚）
 基于现有信息，我理解你的需求是：
-- 我们已经把 `TensorNetwork2D` 的 OBC 收缩逻辑从数据容器里拆出去，形成了 `BMPSContractor`，并且 **VMC 更新路径依赖** `InvalidateEnvs + Replace*Trace (+ PunchHole)` 语义。
+- 我们已经把 `TensorNetwork2D` 的 OBC 收缩逻辑从数据容器里拆出去，形成了 `BMPSContractor`，并且 **VMC 更新路径依赖** “更新后缓存失效 + Replace*Trace (+ PunchHole)” 语义。
+  - **命名说明（已在代码落地）**：
+    - `BMPSContractor::EraseEnvsAfterUpdate(site)`：会截断/erase 缓存（state-mutating）
+    - `BMPSContractor::CheckInvalidateEnvs(site)`：debug-only check（不改状态）
 - 现在要为 **PBC** 实现一个新的 contractor：`TRGContractor`，用 **finite-size** 版本的 **Navy–Levin TRG**（每次 RG：格点数减半，线尺度乘 \(1/\sqrt{2}\)，并伴随 45° 旋转）。
 - TRG 必须支持：
   1) 非平移不变：每个 tensor 都可能不同，但仍要保留 AB 子格（决定分解方向/截断）；
@@ -42,7 +45,7 @@ tags: [design, rfc, pbc, trg, caching, incremental-update]
     \(\langle \mathrm{hole}_i, T_i\rangle = Z\)（对四个 site 全部成立）。
 
 未完成/明确推迟的内容：
-- TRG 的 **增量更新**（`InvalidateEnvs(site)` 目前仅记录 dirty seed，没有影响域传播与局部重算）。
+- TRG 的 **增量更新**：当前代码侧不提供 `InvalidateEnvs(site)`；局域更新通过 `CommitTrial()`，或退化为 `ClearCache()` 全量失效。
 - `Replace*Trace`（局域替换比值）尚未实现。
 - general `PunchHole`（任意尺寸/递归向下的 hole environment）尚未实现（当前只有 2×2 terminator）。
 - 与 `TPSWaveFunctionComponent` 的 contractor 选择/适配尚未进行（当前测试直接构造 `TensorNetwork2D`）。
@@ -69,7 +72,7 @@ TRG 的麻烦点（非平移不变、45° 旋转、影响域扩散）本质上�
   - `Init(tn)`
   - `Trace(...)`（兼容签名）
   - `ReplaceOneSiteTrace / ReplaceNNSiteTrace / ReplaceTNNSiteTrace ...`（先支持常用的 1/2/3-site）
-  - `InvalidateEnvs(site)`（增量更新的入口）
+  - （目前不建议重新引入）`InvalidateEnvs(site)`（dirty seed 入口；当前已移除）
 - 缓存多尺度网络，并实现“局域替换→影响域传播→局部重算 coarse tensors”的增量更新机制。
 
 ### 不做（明确排除）
@@ -98,7 +101,7 @@ TRG 的麻烦点（非平移不变、45° 旋转、影响域扩散）本质上�
 `TPSWaveFunctionComponent` 当前成员固定为：
 - `TensorNetwork2D tn;`
 - `BMPSContractor contractor;`
-并在 `UpdateLocal` 时调用 `contractor.InvalidateEnvs(site)`。
+并在 `UpdateLocal` 时调用缓存失效接口（BMPS：`EraseEnvsAfterUpdate(site)`；TRG：`ClearCache()` 退化）。
 
 这意味着如果我们想支持 PBC(TRG)，不能要求用户改掉所有 solver/updater。否则就是破坏 userspace。
 
@@ -135,7 +138,8 @@ TRG 下的 `Trace` 通常就是“给定整个网络 → 返回标量 amplitude�
 上层应当依赖“语义”而不是 BMPS 的具体过程名。建议把最小接口定义成（仅文档约束，先不强制 concept 编译）：
 - `Init(const TensorNetwork2D&)`
 - `Trace(const TensorNetwork2D&)`
-- `InvalidateEnvs(SiteIdx)`（允许实现为 no-op；TRG 用它驱动 dirty 传播）
+- `ClearCache()`（全量失效；TRG 当前用它作为局域修改后的退化处理）
+- （未来可选）`InvalidateEnvs(SiteIdx)`（dirty seed 入口；TRG 未来用它驱动 dirty 传播）
 - 可选：`ReplaceOneSiteTrace / ReplaceNNSiteTrace / ReplaceTNNSiteTrace ...`
 
 说明：
@@ -195,10 +199,10 @@ struct TrgGraph {
 ## 9. 增量更新与 ReplaceTrace（真正的难点）
 ### 9.1 语义对齐（必须）
 OBC/BMPS 的语义是：
-- 更新某个 site tensor 后调用 `InvalidateEnvs(site)`，环境缓存被截断/失效；
+- 更新某个 site tensor 后调用 `EraseEnvsAfterUpdate(site)`，环境缓存被截断/失效；
 - 后续 `Replace*Trace` 或 `Trace` 会使用“重建后的缓存”。
 
-PBC/TRG 必须提供同样的操作模型，否则上层 VMC/updater 都要重写。
+PBC/TRG 需要提供**等价的增量入口**才能让上层完全不改；但当前实现先以 `ClearCache()` 退化（全量失效），保证正确性。
 
 ### 9.2 TRG 的影响域扩散（你给的“1→2→3”）
 在 checkerboard TRG 中，一个 fine tensor 参与 **两个** coarse plaquette 的构造，因此：
@@ -212,7 +216,7 @@ PBC/TRG 必须提供同样的操作模型，否则上层 VMC/updater 都要重�
 
 有了它，增量更新就变成确定性的图传播：
 1. 用户更新 TN 的 site tensor；
-2. `InvalidateEnvs(site)` 把 scale0 的对应 node 标记为 dirty；
+2. （未来）`InvalidateEnvs(site)` 把 scale0 的对应 node 标记为 dirty；当前实现用 `ClearCache()` 退化（不做影响域传播）；
 3. 对每个 scale s：
    - 把 dirty fine nodes 映射成 dirty coarse nodes（通常 2 倍扩张）；
    - 仅重算这些 coarse nodes 的张量（需要其对应的 4 个 fine nodes；必要时也重算周围分解片段）；
