@@ -132,19 +132,23 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
       case UpperLeft: {
         tri_site[0] = {site_b[0], (site_b[1] + 1) % this->peps_.lambda_horiz.cols()};
         tri_site[2] = {(site_b[0] + 1) % this->peps_.lambda_vert.rows(), site_b[1]};
+        break;
       }
       case UpperRight: {
         tri_site[0] = {site_b[0], (site_b[1] - 1 + this->peps_.lambda_horiz.cols()) % this->peps_.lambda_horiz.cols()};
         tri_site[2] = {(site_b[0] + 1) % this->peps_.lambda_vert.rows(), site_b[1]};
+        break;
       }
       case LowerLeft: {
         tri_site[0] = {(site_b[0] - 1 + this->peps_.lambda_vert.rows()) % this->peps_.lambda_vert.rows(), site_b[1]};
         tri_site[2] = {(site_b[0] - 1 + this->peps_.lambda_vert.rows()) % this->peps_.lambda_vert.rows(), 
                        (site_b[1] + 1) % this->peps_.lambda_horiz.cols()};
+        break;
       }
       case LowerRight: {
         tri_site[0] = {(site_b[0] - 1 + this->peps_.lambda_vert.rows()) % this->peps_.lambda_vert.rows(), site_b[1]};
         tri_site[2] = {site_b[0], (site_b[1] - 1 + this->peps_.lambda_horiz.cols()) % this->peps_.lambda_horiz.cols()};
+        break;
       }
     }
 
@@ -185,24 +189,28 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
           if(site_b[1] == 0) ver_bond_tri_num = 2;
           hor_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(hor_bond_tri_num));
           ver_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(ver_bond_tri_num));
+          break;
         }
         case UpperRight: {
           if(site_b[0] == 0) hor_bond_tri_num = 2;
           if(site_b[1] == this->lx_ - 1) ver_bond_tri_num = 2;
           hor_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(hor_bond_tri_num));
           ver_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(ver_bond_tri_num));
+          break;
         }
         case LowerLeft: {
           if(site_b[0] == this->ly_ - 1) hor_bond_tri_num = 2;
           if(site_b[1] == 0) ver_bond_tri_num = 2;
           hor_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(hor_bond_tri_num));
           ver_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(ver_bond_tri_num));
+          break;
         }
         case LowerRight: {
           if(site_b[0] == this->ly_ - 1) hor_bond_tri_num = 2;
           if(site_b[1] == this->lx_ - 1) ver_bond_tri_num = 2;
           hor_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(hor_bond_tri_num));
           ver_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(ver_bond_tri_num));
+          break;
         }
       }
     }
