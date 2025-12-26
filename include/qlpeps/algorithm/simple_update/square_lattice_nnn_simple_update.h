@@ -182,38 +182,46 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
     Contract(&ham_nn_, {}, &id, {}, &tri_ham_nn_2);
     size_t hor_bond_tri_num = 4; // Number of triangle shared the horizontal NN bond
     size_t ver_bond_tri_num = 4; // Number of triangle shared the vertical NN bond
-    if (!is_pbc) {
-      switch (triposition) {
-        case UpperLeft: {
+    
+    switch (triposition) {
+      case UpperLeft: {
+        if (!is_pbc) {
           if(site_b[0] == 0) hor_bond_tri_num = 2;
           if(site_b[1] == 0) ver_bond_tri_num = 2;
-          hor_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(hor_bond_tri_num));
-          ver_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(ver_bond_tri_num));
-          break;
         }
-        case UpperRight: {
+        hor_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(hor_bond_tri_num));
+        ver_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(ver_bond_tri_num));
+        break;
+      }
+      case UpperRight: {
+        if (!is_pbc) {
           if(site_b[0] == 0) hor_bond_tri_num = 2;
           if(site_b[1] == this->lx_ - 1) ver_bond_tri_num = 2;
-          hor_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(hor_bond_tri_num));
-          ver_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(ver_bond_tri_num));
-          break;
         }
-        case LowerLeft: {
+        hor_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(hor_bond_tri_num));
+        ver_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(ver_bond_tri_num));
+        break;
+      }
+      case LowerLeft: {
+        if (!is_pbc) {
           if(site_b[0] == this->ly_ - 1) hor_bond_tri_num = 2;
           if(site_b[1] == 0) ver_bond_tri_num = 2;
-          hor_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(hor_bond_tri_num));
-          ver_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(ver_bond_tri_num));
-          break;
         }
-        case LowerRight: {
+        hor_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(hor_bond_tri_num));
+        ver_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(ver_bond_tri_num));
+        break;
+      }
+      case LowerRight: {
+        if (!is_pbc) {
           if(site_b[0] == this->ly_ - 1) hor_bond_tri_num = 2;
           if(site_b[1] == this->lx_ - 1) ver_bond_tri_num = 2;
-          hor_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(hor_bond_tri_num));
-          ver_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(ver_bond_tri_num));
-          break;
         }
+        hor_ham_nn = tri_ham_nn_1 * (RealT(1) / RealT(hor_bond_tri_num));
+        ver_ham_nn = tri_ham_nn_2 * (RealT(1) / RealT(ver_bond_tri_num));
+        break;
       }
     }
+    
 
      // on-site term
     if (ham_on_site_terms_(0, 0) == nullptr || ham_on_site_terms_(0, 0)->IsDefault()) {
