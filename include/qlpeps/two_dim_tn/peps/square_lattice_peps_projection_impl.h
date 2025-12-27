@@ -326,7 +326,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
              &u1, &s1, &vt1, &actual_trunc_err1, &actual_D1);
-  //norm *= s1.QuasiNormalize();
+  norm *= s1.QuasiNormalize();
   lambda_horiz({right_upper_site}) = s1;
   lambda_horiz({right_upper_site}).Transpose({1, 0});
   tmp_ten[6] = QTenSplitOutLambdas_(q1, left_site, RIGHT, trunc_para.trunc_err);
@@ -343,7 +343,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
    *       |
    *       4
    */
-  //norm *= s2.QuasiNormalize();
+  norm *= s2.QuasiNormalize();
   lambda_vert({lower_site}) = s2;
   lambda_vert({lower_site}).Transpose({1, 0});
   tmp_ten[8] = QTenSplitOutLambdas_(q0, lower_site, UP, trunc_para.trunc_err);
@@ -351,7 +351,6 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   Contract<TenElemT, QNT, false, false>(tmp_ten[8], u2, 1, 1, 1, Gamma(lower_site));
   Gamma(lower_site).Transpose({2, 1, 0, 3, 4});
   auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
-  //Contract(&vt2, {3}, &inv_lam, {0}, &tmp_ten[9]);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
   inv_lam = DiagMatInv(GetLambdaVertNorth(row, col), trunc_para.trunc_err);
   Contract<TenElemT, QNT, false, false>(tmp_ten[9], inv_lam, 2, 1, 1, tmp_ten[10]);
@@ -434,7 +433,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
              &u1, &s1, &vt1, &actual_trunc_err1, &actual_D1);
-  //norm *= s1.QuasiNormalize();
+  norm *= s1.QuasiNormalize();
   lambda_vert({lower_site}) = s1;
   tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_site, UP, trunc_para.inv_tol);
 
@@ -452,7 +451,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
  *      |
  *      4
  */
-  //norm *= s2.QuasiNormalize();
+  norm *= s2.QuasiNormalize();
   lambda_horiz({right_site}) = s2;
   lambda_horiz({right_site}).Transpose({1, 0});
   tmp_ten[8] = QTenSplitOutLambdas_(q0, right_site, LEFT, trunc_para.inv_tol);
@@ -542,7 +541,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
              &u1, &s1, &vt1, &actual_trunc_err1, &actual_D1);
-  //norm *= s1.QuasiNormalize();
+  norm *= s1.QuasiNormalize();
   lambda_vert({right_down_site}) = s1;
   lambda_vert({right_down_site}).Transpose({1, 0});
   tmp_ten[6] = QTenSplitOutLambdas_(q1, upper_site, DOWN, trunc_para.inv_tol);
@@ -560,7 +559,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
    *       |
    *       1
    */
-  //norm *= s2.QuasiNormalize();
+  norm *= s2.QuasiNormalize();
   lambda_horiz({right_down_site}) = s2;
   tmp_ten[8] = QTenSplitOutLambdas_(q0, left_site, RIGHT, trunc_para.inv_tol);
   Gamma(left_site) = TenT();
@@ -655,6 +654,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProje
   qlten::SVD(tmp_ten + 5, 5, tmp_ten[5].Div(),
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
              &u1, &s1, &vt1, &actual_trunc_err1, &actual_D1);
+  norm *= s1.QuasiNormalize();
   lambda_horiz({lower_right_site}) = s1;
   tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_right_site, LEFT, trunc_para.inv_tol);
   /**
@@ -681,7 +681,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::LowerLeftTriangleProje
 #ifndef NDEBUG
   assert(vt2.GetIndex(1) == index_2.back());
 #endif
-  //norm *= s2.QuasiNormalize();
+  norm *= s2.QuasiNormalize();
   lambda_vert({lower_left_site}) = s2;
   tmp_ten[8] = QTenSplitOutLambdas_(q0, upper_left_site, DOWN, trunc_para.inv_tol);
 /*
