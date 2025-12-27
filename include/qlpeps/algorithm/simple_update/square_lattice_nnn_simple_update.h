@@ -342,16 +342,11 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
       e0 += proj_res1.e_loc.value();
       norm *= proj_res1.norm;
       max_trunc_err = std::max(max_trunc_err, proj_res1.trunc_err);
-      
-      ProjectionRes<TenElemT>
-          proj_res2 = this->peps_.UpperLeftTriangleProject(evolve_gate_upperleft_tri_({row, col}), 
-                                                          {row, col}, 
-                                                           para, 
-                                                           ham_upperleft_tri_({row, col}));
-      e0 += proj_res2.e_loc.value();
-      norm *= proj_res2.norm;
-      max_trunc_err = std::max(max_trunc_err, proj_res2.trunc_err);
+    }
+  }
 
+  for (size_t col = 0; col < hor_bond_limit; col++) {
+    for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
           proj_res3 = this->peps_.LowerRightTriangleProject(evolve_gate_lowerright_tri_({row, col}), 
                                                            {row, (col + 1) % this->peps_.lambda_horiz.cols()}, 
@@ -360,7 +355,11 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
       e0 += proj_res3.e_loc.value();
       norm *= proj_res3.norm;
       max_trunc_err = std::max(max_trunc_err, proj_res3.trunc_err);
+    }
+  }
 
+  for (size_t col = 0; col < hor_bond_limit; col++) {
+    for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
           proj_res4 = this->peps_.LowerLeftTriangleProject(evolve_gate_lowerleft_tri_({row, col}), 
                                                           {row, col}, 
@@ -369,6 +368,19 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
       e0 += proj_res4.e_loc.value();
       norm *= proj_res4.norm;
       max_trunc_err = std::max(max_trunc_err, proj_res4.trunc_err);
+    }
+  }
+
+  for (size_t col = 0; col < hor_bond_limit; col++) {
+    for (size_t row = 0; row < ver_bond_limit; row++) {
+      ProjectionRes<TenElemT>
+          proj_res2 = this->peps_.UpperLeftTriangleProject(evolve_gate_upperleft_tri_({row, col}), 
+                                                          {row, col}, 
+                                                           para, 
+                                                           ham_upperleft_tri_({row, col}));
+      e0 += proj_res2.e_loc.value();
+      norm *= proj_res2.norm;
+      max_trunc_err = std::max(max_trunc_err, proj_res2.trunc_err);
     }
   }
 
