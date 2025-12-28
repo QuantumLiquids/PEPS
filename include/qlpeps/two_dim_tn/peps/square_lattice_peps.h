@@ -33,9 +33,15 @@ struct SimpleUpdateTruncatePara {
   size_t D_min;
   size_t D_max;
   double trunc_err;
+  double inv_tol;  ///< tolerance for diagonal matrix inversion
 
+  /// Backward compatible constructor: inv_tol defaults to trunc_err
   SimpleUpdateTruncatePara(size_t d_min, size_t d_max, double trunc_error)
-      : D_min(d_min), D_max(d_max), trunc_err(trunc_error) {}
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error), inv_tol(trunc_error) {}
+
+  /// Full constructor with explicit inv_tol
+  SimpleUpdateTruncatePara(size_t d_min, size_t d_max, double trunc_error, double inv_tolerance)
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error), inv_tol(inv_tolerance) {}
 };
 
 struct FullEnvironmentTruncateParams {

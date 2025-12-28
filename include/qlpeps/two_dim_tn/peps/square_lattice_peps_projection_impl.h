@@ -108,12 +108,12 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
 
       // hand over lambdas from q0, q1, contract u or vt, setting Gammas
       //left site
-      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, RIGHT, trunc_para.trunc_err);
+      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, RIGHT, trunc_para.inv_tol);
       Gamma(site) = TenT();
       Contract<TenElemT, QNT, false, true>(tmp_ten[5], u, 0, 0, 1, Gamma(site));
       Gamma(site).Transpose({1, 2, 4, 0, 3});
 
-      tmp_ten[6] = QTenSplitOutLambdas_(q1, r_site, LEFT, trunc_para.trunc_err);
+      tmp_ten[6] = QTenSplitOutLambdas_(q1, r_site, LEFT, trunc_para.inv_tol);
       Gamma(r_site) = TenT();
       Contract<TenElemT, QNT, false, false>(tmp_ten[6], vt, 0, 1, 1, Gamma(r_site));
       Gamma(r_site).Transpose({4, 0, 1, 2, 3});
@@ -175,12 +175,12 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT, QNT>::NearestNeighborSitePro
           &actual_trunc_err, &actual_D);
 
       // hand over lambdas from q0, q1, contract u or vt, setting Gammas
-      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, DOWN, trunc_para.trunc_err);
+      tmp_ten[5] = QTenSplitOutLambdas_(q0, site, DOWN, trunc_para.inv_tol);
       Gamma(site) = TenT();
       Contract<TenElemT, QNT, true, true>(tmp_ten[5], u, 3, 0, 1, Gamma(site));
       Gamma(site).Transpose({2, 4, 0, 1, 3});
 
-      tmp_ten[6] = QTenSplitOutLambdas_(q1, {next_row, col}, UP, trunc_para.trunc_err);
+      tmp_ten[6] = QTenSplitOutLambdas_(q1, {next_row, col}, UP, trunc_para.inv_tol);
       Gamma({next_row, col}) = TenT();
       Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt, 1, 1, 1, Gamma({next_row, col}));
       Gamma({next_row, col}).Transpose({2, 1, 0, 4, 3});
@@ -303,7 +303,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
              &u1, &s1, &vt1, &trunc_err1, &D1);
   norm *= s1.QuasiNormalize();
   lambda_vert({lower_site}) = s1;
-  tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_site, UP, trunc_para.trunc_err);
+  tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_site, UP, trunc_para.inv_tol);
 
   Gamma(lower_site) = TenT();
   Contract<TenElemT, QNT, false, false>(vt1, tmp_ten[6], 2, 1, 1, Gamma(lower_site));
@@ -322,16 +322,16 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   norm *= s2.QuasiNormalize();
   lambda_horiz({right_site}) = s2;
   lambda_horiz({right_site}).Transpose({1, 0});
-  tmp_ten[8] = QTenSplitOutLambdas_(q0, right_site, LEFT, trunc_para.trunc_err);
+  tmp_ten[8] = QTenSplitOutLambdas_(q0, right_site, LEFT, trunc_para.inv_tol);
   Gamma(right_site) = TenT();
   Contract<TenElemT, QNT, false, true>(tmp_ten[8], u2, 0, 0, 1, Gamma(right_site));
   Gamma(right_site).Transpose({4, 0, 1, 2, 3});
 
-  auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
+  auto inv_lam = DiagMatInv(s1, trunc_para.inv_tol);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = DiagMatInv(lambda_vert({row, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({row, col}), trunc_para.inv_tol);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 2, 1, 1, tmp_ten[10]);
-  inv_lam = DiagMatInv(lambda_horiz({row, col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({row, col}), trunc_para.inv_tol);
   Gamma({left_upper_site}) = TenT();
   Contract<TenElemT, QNT, false, true>(tmp_ten[10], inv_lam, 0, 1, 1, Gamma({left_upper_site}));
   Gamma({left_upper_site}).Transpose({4, 0, 1, 3, 2});
@@ -403,7 +403,7 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
   norm *= s1.QuasiNormalize();
   lambda_vert({right_down_site}) = s1;
   lambda_vert({right_down_site}).Transpose({1, 0});
-  tmp_ten[6] = QTenSplitOutLambdas_(q1, upper_site, DOWN, trunc_para.trunc_err);
+  tmp_ten[6] = QTenSplitOutLambdas_(q1, upper_site, DOWN, trunc_para.inv_tol);
 
   Gamma(upper_site) = TenT();
   Contract<TenElemT, QNT, true, true>(tmp_ten[6], vt1, 3, 2, 1, Gamma(upper_site));
@@ -420,15 +420,15 @@ ProjectionRes<TenElemT> SquareLatticePEPS<TenElemT,
    */
   norm *= s2.QuasiNormalize();
   lambda_horiz({right_down_site}) = s2;
-  tmp_ten[8] = QTenSplitOutLambdas_(q0, left_site, RIGHT, trunc_para.trunc_err);
+  tmp_ten[8] = QTenSplitOutLambdas_(q0, left_site, RIGHT, trunc_para.inv_tol);
   Gamma(left_site) = TenT();
   Contract<TenElemT, QNT, false, false>(tmp_ten[8], u2, 0, 1, 1, Gamma(left_site));
   Gamma(left_site).Transpose({1, 2, 3, 0, 4});
-  auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
+  auto inv_lam = DiagMatInv(s1, trunc_para.inv_tol);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = DiagMatInv(lambda_vert({(row + 2) % lambda_vert.rows(), col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({(row + 2) % lambda_vert.rows(), col}), trunc_para.inv_tol);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 1, 0, 1, tmp_ten[10]);
-  inv_lam = DiagMatInv(lambda_horiz({(row + 1) % lambda_horiz.rows(), (col + 1) % lambda_horiz.cols()}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({(row + 1) % lambda_horiz.rows(), (col + 1) % lambda_horiz.cols()}), trunc_para.inv_tol);
   Gamma({right_down_site}) = TenT();
   Contract<TenElemT, QNT, false, true>(tmp_ten[10], inv_lam, 0, 0, 1, Gamma({right_down_site}));
   Gamma({right_down_site}).Transpose({2, 3, 4, 1, 0});
@@ -506,7 +506,7 @@ typename SquareLatticePEPS<TenElemT, QNT>::RealT SquareLatticePEPS<TenElemT, QNT
              trunc_para.trunc_err, trunc_para.D_min, trunc_para.D_max,
              &u1, &s1, &vt1, &trunc_err, &D);
   lambda_horiz({lower_right_site}) = s1;
-  tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_right_site, LEFT, trunc_para.trunc_err);
+  tmp_ten[6] = QTenSplitOutLambdas_(q1, lower_right_site, LEFT, trunc_para.inv_tol);
   /**
    *       3
    *       |
@@ -533,7 +533,7 @@ typename SquareLatticePEPS<TenElemT, QNT>::RealT SquareLatticePEPS<TenElemT, QNT
 #endif
   norm *= s2.QuasiNormalize();
   lambda_vert({lower_left_site}) = s2;
-  tmp_ten[8] = QTenSplitOutLambdas_(q0, upper_left_site, DOWN, trunc_para.trunc_err);
+  tmp_ten[8] = QTenSplitOutLambdas_(q0, upper_left_site, DOWN, trunc_para.inv_tol);
 /*
  *        1
  *        |
@@ -545,11 +545,11 @@ typename SquareLatticePEPS<TenElemT, QNT>::RealT SquareLatticePEPS<TenElemT, QNT
   Contract<TenElemT, QNT, true, true>(tmp_ten[8], u2, 3, 0, 1, Gamma(upper_left_site));
   Gamma(upper_left_site).Transpose({2, 4, 0, 1, 3});
 
-  auto inv_lam = DiagMatInv(s1, trunc_para.trunc_err);
+  auto inv_lam = DiagMatInv(s1, trunc_para.inv_tol);
   Contract(&vt2, {4}, &inv_lam, {0}, &tmp_ten[9]);
-  inv_lam = DiagMatInv(lambda_vert({(row + 2) % lambda_vert.rows(), col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_vert({(row + 2) % lambda_vert.rows(), col}), trunc_para.inv_tol);
   Contract<TenElemT, QNT, false, true>(tmp_ten[9], inv_lam, 3, 0, 1, tmp_ten[10]);
-  inv_lam = DiagMatInv(lambda_horiz({(row + 1) % lambda_horiz.rows(), col}), trunc_para.trunc_err);
+  inv_lam = DiagMatInv(lambda_horiz({(row + 1) % lambda_horiz.rows(), col}), trunc_para.inv_tol);
   Gamma({lower_left_site}) = TenT();
   Contract<TenElemT, QNT, false, false>(tmp_ten[10], inv_lam, 3, 1, 1, Gamma({lower_left_site}));
   Gamma({lower_left_site}).Transpose({4, 0, 1, 2, 3});
