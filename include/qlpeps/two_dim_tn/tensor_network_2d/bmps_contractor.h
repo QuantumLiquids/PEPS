@@ -39,6 +39,8 @@ class BMPSContractor {
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   using BMPST = BMPS<TenElemT, QNT>;
   using TransferMPO = std::vector<Tensor *>;
+  /// @brief Truncation parameters type for this contractor (enables generic code in TPSWaveFunctionComponent)
+  using TruncateParams = BMPSTruncateParams<RealT>;
 
   /**
    * @brief Constructor

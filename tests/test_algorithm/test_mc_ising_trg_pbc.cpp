@@ -139,7 +139,7 @@ TEST(MCIsingTRG, PathwiseAgreementWithClassicalMetropolis_4x4_PBC) {
   Configuration cfg_classical(init);
 
   // TRG truncation: keep exact for D=2.
-  const auto trunc = BMPSTruncateParams<RealT>::SVD(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
+  const TRGTruncateParams<RealT> trunc(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
   TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, qlpeps::TRGContractor> comp(sitps, cfg_classical, trunc);
 
   // Fixed proposal set: all PBC NN bonds (each site contributes right + down).

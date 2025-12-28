@@ -140,10 +140,11 @@ struct TPSWaveFunctionComponent {
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   using Contractor = ContractorT<TenElemT, QNT>;
   using Tensor = typename Contractor::Tensor;
-  using TruncateParams = BMPSTruncateParams<RealT>;
+  /// @brief Use the contractor's own TruncateParams type for type-safe parameter passing
+  using TruncateParams = typename Contractor::TruncateParams;
   using TrialToken = detail::TrialTokenT<Contractor>;
   ///< No initialized construct. considering to be removed in future.
-  TPSWaveFunctionComponent(const size_t rows, const size_t cols, const BMPSTruncateParams<RealT> &truncate_para) :
+  TPSWaveFunctionComponent(const size_t rows, const size_t cols, const TruncateParams &truncate_para) :
       config(rows, cols), amplitude(0), tn(rows, cols), trun_para(truncate_para), contractor(rows, cols) {
     // IMPORTANT:
     // This constructor does NOT initialize `tn` with projected site tensors.
@@ -154,7 +155,7 @@ struct TPSWaveFunctionComponent {
 
   TPSWaveFunctionComponent(const SplitIndexTPS<TenElemT, QNT> &sitps,
                            const Configuration &config,
-                           const BMPSTruncateParams<RealT> &truncate_para)
+                           const TruncateParams &truncate_para)
       : config(config), tn(config.rows(), config.cols()), trun_para(truncate_para), contractor(config.rows(), config.cols()) {
     tn = TensorNetwork2D<TenElemT, QNT>(sitps, config); // projection
     contractor.Init(tn);
@@ -353,7 +354,7 @@ struct TPSWaveFunctionComponent {
   TenElemT amplitude;
   TensorNetwork2D<TenElemT, QNT> tn;
   Contractor contractor;
-  BMPSTruncateParams<RealT> trun_para;
+  TruncateParams trun_para;  ///< Uses contractor-specific truncation params type
   Dress dress;
  private:
   struct PendingTrial {

@@ -468,13 +468,24 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
       RealT trunc_err_actual = RealT(0);
       size_t bond_dim_actual = 0;
 
+      // Common SVD and regularization logic for both split types
+      auto compute_regularized_inv_sqrt = [&](const qlten::QLTensor<RealT, QNT>& s_sqrt_in) {
+        qlten::QLTensor<RealT, QNT> s_inv_sqrt = s_sqrt_in;
+        // Use relative eps based on max singular value for numerical stability.
+        // This ensures regularization scales appropriately with the problem's magnitude.
+        // See TRGTruncateParams documentation for details.
+        const RealT max_s = s_sqrt_in.GetMaxAbs();
+        const RealT effective_eps = tp.ComputeEffectiveInvEps(max_s);
+        s_inv_sqrt.ElementWiseInv(/*eps=*/effective_eps);
+        return s_inv_sqrt;
+      };
+
       if (st == ScaleCache::SplitType::Type0) {
         Tensor TT = T;
         TT.Transpose({0, 3, 1, 2});
         SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
         auto s_sqrt = ElementWiseSqrt(s);
-        qlten::QLTensor<RealT, QNT> s_inv_sqrt = s_sqrt;
-        s_inv_sqrt.ElementWiseInv(/*eps=*/RealT(1e-30));
+        auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
         Tensor P, Q;
         Contract(&u, &s_sqrt, {{2}, {0}}, &P);
         Contract(&s_sqrt, &vt, {{1}, {0}}, &Q);
@@ -489,8 +500,7 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
         Tensor TT = T;
         SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
         auto s_sqrt = ElementWiseSqrt(s);
-        qlten::QLTensor<RealT, QNT> s_inv_sqrt = s_sqrt;
-        s_inv_sqrt.ElementWiseInv(/*eps=*/RealT(1e-30));
+        auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
         Tensor Q, P;
         Contract(&u, &s_sqrt, {{2}, {0}}, &Q);
         Contract(&s_sqrt, &vt, {{1}, {0}}, &P);

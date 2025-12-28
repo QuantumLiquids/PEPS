@@ -86,7 +86,7 @@ TEST(TFIMPBC_TRG_ExactSum, AdaGradConverges2x2) {
   const auto all_configs = GenerateAllConfigs2x2Binary();
 
   // TRG truncation params (required by TPSWaveFunctionComponent; 2x2 is exact anyway).
-  const auto trunc_para = BMPSTruncateParams<RealT>::SVD(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
+  const TRGTruncateParams<RealT> trunc_para(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
 
   TransverseFieldIsingSquarePBC model(h);
 

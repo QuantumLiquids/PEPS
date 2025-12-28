@@ -160,7 +160,7 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
  * @tparam QNT Quantum number type (fZ2QN-like for fermions, TrivialRepQN/U1 variants for bosons)
  * @param split_index_tps_master_only The current PEPS state valid only on master
  * @param all_configs All configurations to enumerate. Should be valid on all ranks.
- * @param trun_para BMPS truncation parameters
+ * @param trun_para Truncation parameters (type depends on ContractorT)
  * @param model Physical model
  * @param Ly Lattice rows
  * @param Lx Lattice cols
@@ -173,7 +173,7 @@ template<typename ModelT, typename TenElemT, typename QNT, template<typename, ty
 std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluatorMPI(
     const SplitIndexTPS<TenElemT, QNT> &split_index_tps_master_only,
     const std::vector<Configuration> &all_configs,
-    const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trun_para,
+    const typename ContractorT<TenElemT, QNT>::TruncateParams &trun_para,
     ModelT &model,
     size_t Ly,
     size_t Lx,

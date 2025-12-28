@@ -74,8 +74,8 @@ TEST(MCUpdaterTRGSmoke, SquareNNExchangePBC_2x2) {
   // Random initial configuration (dim=2).
   Configuration config(n, n, /*dim=*/2);
 
-  // Use BMPS params as the generic truncation params carrier; TRGContractor reads SVD params.
-  const auto trunc = BMPSTruncateParams<RealT>::SVD(/*d_min=*/1, /*d_max=*/16, /*trunc_error=*/0.0);
+  // TRG-specific truncation params.
+  const TRGTruncateParams<RealT> trunc(/*d_min=*/1, /*d_max=*/16, /*trunc_error=*/0.0);
 
   // TRG contractor component.
   TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, qlpeps::TRGContractor> comp(sitps, config, trunc);

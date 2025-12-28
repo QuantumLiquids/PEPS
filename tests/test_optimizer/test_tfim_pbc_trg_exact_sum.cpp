@@ -83,7 +83,7 @@ TEST(TFIMPBC_TRG_ExactSum, ProductPlusStateEnergy) {
   const auto all_configs = GenerateAllConfigs2x2Binary();
 
   // TRG truncation params (irrelevant for 2x2 exact contraction, but required by component API).
-  const auto trunc_para = BMPSTruncateParams<RealT>::SVD(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
+  const TRGTruncateParams<RealT> trunc_para(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
 
   auto [energy, gradient, err] =
       ExactSumEnergyEvaluatorMPI<TransverseFieldIsingSquarePBC, TenElemT, QNT, TRGContractor>(

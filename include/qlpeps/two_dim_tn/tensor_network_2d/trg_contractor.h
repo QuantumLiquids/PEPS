@@ -13,18 +13,125 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <optional>
 #include <stdexcept>
 #include <vector>
 
 #include "qlten/qlten.h"
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams (reused for TRG SVD truncation)
 #include "qlpeps/basic.h"
 #include "qlpeps/two_dim_tn/common/boundary_condition.h"
 #include "qlpeps/two_dim_tn/framework/site_idx.h"
 
 namespace qlpeps {
+
+/**
+ * @brief Truncation and numerical stability parameters for TRG.
+ *
+ * This is a dedicated parameter structure for TRG, independent of BMPSTruncateParams.
+ * It includes both SVD truncation parameters and TRG-specific regularization parameters
+ * for numerical stability during hole backpropagation.
+ *
+ * @tparam RealT Floating-point type (typically double or float)
+ *
+ * @section trg_inv_regularization Inverse Regularization Strategy
+ *
+ * During PunchHole backpropagation, we compute \f$S^{-1/2}\f$ from SVD singular values.
+ * Small singular values produce large inverses that can amplify numerical errors,
+ * especially across multiple RG layers.
+ *
+ * We use relative regularization:
+ * \f[
+ *   \text{effective\_eps} = \max(\text{inv\_relative\_eps} \times S_{\max}, \text{numeric\_limits::min})
+ * \f]
+ *
+ * where \f$S_{\max}\f$ is the largest singular value. This ensures:
+ * - The regularization scales appropriately with the problem's numerical magnitude
+ * - `numeric_limits<RealT>::min()` provides a natural safety floor for degenerate cases
+ *
+ * @par Recommended value
+ * - `inv_relative_eps = 1e-12`: Good for double precision, catches numerically insignificant modes
+ *
+ * @par When to adjust
+ * - Increase `inv_relative_eps` if PunchHole accuracy degrades on large systems or different BLAS implementations
+ * - Decrease `inv_relative_eps` if you need higher precision and have well-conditioned tensors
+ */
+template <typename RealT>
+struct TRGTruncateParams {
+  // ---- SVD Truncation Parameters ----
+  /// @brief Minimum bond dimension to keep after truncation
+  size_t D_min = 1;
+
+  /// @brief Maximum bond dimension to keep after truncation
+  size_t D_max = std::numeric_limits<size_t>::max();
+
+  /// @brief Target truncation error for SVD (sum of discarded singular values squared)
+  RealT trunc_err = RealT(0);
+
+  // ---- TRG-Specific Regularization Parameters ----
+  /// @brief Relative epsilon for inverse regularization (relative to max singular value)
+  RealT inv_relative_eps = RealT(1e-12);
+
+  /// @brief Default constructor with recommended default values
+  TRGTruncateParams() = default;
+
+  /// @brief Constructor with SVD parameters and optional regularization
+  TRGTruncateParams(size_t d_min, size_t d_max, RealT trunc_error,
+                    RealT relative_eps = RealT(1e-12))
+      : D_min(d_min), D_max(d_max), trunc_err(trunc_error),
+        inv_relative_eps(relative_eps) {}
+
+  /**
+   * @brief Factory method for SVD-based truncation with default regularization.
+   *
+   * This is the recommended way to create TRGTruncateParams for most use cases.
+   *
+   * @param d_min Minimum bond dimension
+   * @param d_max Maximum bond dimension
+   * @param trunc_error Target truncation error
+   * @return TRGTruncateParams with recommended regularization defaults
+   *
+   * @par Example
+   * @code
+   * auto params = TRGTruncateParams<double>::SVD(2, 16, 0.0);
+   * trg.SetTruncateParams(params);
+   * @endcode
+   */
+  static TRGTruncateParams SVD(size_t d_min, size_t d_max, RealT trunc_error) {
+    return TRGTruncateParams(d_min, d_max, trunc_error);
+  }
+
+  /**
+   * @brief Factory method with custom regularization parameter.
+   *
+   * Use this when you need to tune the inverse regularization, e.g., for
+   * debugging numerical issues or optimizing for specific BLAS implementations.
+   *
+   * @param d_min Minimum bond dimension
+   * @param d_max Maximum bond dimension
+   * @param trunc_error Target truncation error
+   * @param relative_eps Relative regularization epsilon (relative to max singular value)
+   * @return TRGTruncateParams with custom regularization
+   */
+  static TRGTruncateParams SVDWithRegularization(size_t d_min, size_t d_max, RealT trunc_error,
+                                                  RealT relative_eps) {
+    return TRGTruncateParams(d_min, d_max, trunc_error, relative_eps);
+  }
+
+  /**
+   * @brief Compute effective epsilon for inverse regularization.
+   *
+   * Uses `numeric_limits<RealT>::min()` as the absolute floor, which is the smallest
+   * positive normalized floating-point number (~2.2e-308 for double).
+   *
+   * @param max_singular_value The largest singular value in the spectrum
+   * @return Effective epsilon = max(relative_eps * max_sv, numeric_limits::min)
+   */
+  RealT ComputeEffectiveInvEps(RealT max_singular_value) const {
+    return std::max(inv_relative_eps * max_singular_value, std::numeric_limits<RealT>::min());
+  }
+};
 
 // Forward declaration
 template <typename TenElemT, typename QNT>
@@ -90,18 +197,15 @@ class TRGContractor {
   using Tensor = qlten::QLTensor<TenElemT, QNT>;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   /**
-   * @brief Truncation control for the SVD splits inside TRG.
+   * @brief Truncation and regularization parameters for TRG.
    *
-   * This reuses `BMPSTruncateParams<RealT>` as a plain parameter bundle.
+   * This is TRG's dedicated parameter structure that includes:
+   * - SVD truncation parameters (D_min, D_max, trunc_err)
+   * - Inverse regularization parameters for numerical stability during PunchHole
    *
-   * Only the following fields are used by TRG:
-   * - `trunc_err`: target truncation error passed to `qlten::SVD`
-   * - `D_min`: minimum bond dimension kept after truncation
-   * - `D_max`: maximum bond dimension kept after truncation
-   *
-   * @note Any other fields in `BMPSTruncateParams` are ignored by TRG.
+   * @see TRGTruncateParams for detailed documentation on regularization strategy.
    */
-  using TruncateParams = qlpeps::BMPSTruncateParams<RealT>;
+  using TruncateParams = TRGTruncateParams<RealT>;
 
   /**
    * @brief Construct an empty contractor with no geometry.
