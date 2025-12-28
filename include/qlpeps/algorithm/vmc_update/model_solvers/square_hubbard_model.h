@@ -125,7 +125,7 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
   }
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = SquareNNModelMeasurementSolver<SquareHubbardModel>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNModelMeasurementSolver<SquareHubbardModel>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
         meta.shape = {ly, lx};

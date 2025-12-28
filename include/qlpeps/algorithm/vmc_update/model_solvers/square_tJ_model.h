@@ -461,7 +461,7 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
                                                                                mu) {}
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
         meta.shape = {ly, lx};
@@ -502,7 +502,7 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
                                                                                            mu) {}
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
         meta.shape = {ly, lx};

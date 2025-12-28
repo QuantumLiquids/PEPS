@@ -39,6 +39,11 @@ concept HasSetTruncateParams = requires(Contractor c, const typename Contractor:
 template <class Contractor>
 concept HasTrialType = requires { typename Contractor::Trial; };
 
+template <class Contractor>
+concept HasClearCache = requires(Contractor c) {
+  c.ClearCache();
+};
+
 template <class Contractor, bool kHasTrial = HasTrialType<Contractor>>
 struct TrialTokenHelper_ {
   using type = std::monostate;
@@ -70,12 +75,6 @@ concept HasCommitTrial =
     requires(Contractor c, typename Contractor::Trial t) {
       c.CommitTrial(std::move(t));
     };
-
-// Only for BMPS contractor now.
-template <class Contractor, class SiteIdxT>
-concept HasInvalidateEnvs = requires(const Contractor c, const SiteIdxT &site) {
-  c.InvalidateEnvs(site);
-};
 
 template <class Contractor, class SiteIdxT>
 concept HasCheckInvalidateEnvs = requires(const Contractor c, const SiteIdxT &site) {
@@ -267,19 +266,32 @@ struct TPSWaveFunctionComponent {
       const size_t cfg = sc.second;
       config(site) = cfg;
       tn.UpdateSiteTensor(site, cfg, sitps);
-      // If the contractor does NOT support committing a trial cache, we must invalidate
-      // any cached environments to avoid using stale BMPS/BTen data.
 #ifndef NDEBUG
-      static_assert(detail::HasCommitTrial<Contractor> || detail::HasEraseEnvsAfterUpdate<Contractor, SiteIdx>,
+      // If we updated the TN directly, we must ensure contractor caches cannot go stale.
+      // - Preferred: CommitTrial(trial_token) for contractors that support trials.
+      // - Fallback: EraseEnvsAfterUpdate(site) for BMPS.
+      // - Fallback: ClearCache() for TRG (or other contractors with global caches).
+      static_assert(detail::HasCommitTrial<Contractor> ||
+                        detail::HasEraseEnvsAfterUpdate<Contractor, SiteIdx> ||
+                        detail::HasClearCache<Contractor>,
                     "TPSWaveFunctionComponent::AcceptTrial requires the contractor to support either "
-                    "CommitTrial(trial_token) or EraseEnvsAfterUpdate(site) to avoid stale cached environments.");
+                    "CommitTrial(trial_token), EraseEnvsAfterUpdate(site), or ClearCache() to avoid stale cached environments.");
 #endif
- 
+
+      // If CommitTrial is unavailable, we *must* invalidate caches after direct TN updates.
+      if constexpr (!detail::HasCommitTrial<Contractor>) {
+        if constexpr (detail::HasEraseEnvsAfterUpdate<Contractor, SiteIdx>) {
+          contractor.EraseEnvsAfterUpdate(site);
+        } else if constexpr (detail::HasClearCache<Contractor>) {
+          contractor.ClearCache();
+        } 
 #ifndef NDEBUG
-      if constexpr (detail::HasCheckInvalidateEnvs<Contractor, SiteIdx>) {
-        contractor.CheckInvalidateEnvs(site);
-      }
+        // Debug-only: verify that invalidation actually removed stale environments (BMPS only).
+        if constexpr (detail::HasCheckInvalidateEnvs<Contractor, SiteIdx>) {
+          contractor.CheckInvalidateEnvs(site);
+        }
 #endif
+      }
     }
 
     // 3) Update amplitude and clear trial.
@@ -326,10 +338,13 @@ struct TPSWaveFunctionComponent {
    *                        {site3, config3});
    * @endcode
    */
+  // Direct-update API: only supported for BMPS-style contractors that can erase
+  // cached environments incrementally after a local TN update.
   template<typename... Args>
   void UpdateLocal(const SplitIndexTPS<TenElemT, QNT> &sitps,
                    const TenElemT new_amplitude,
-                   const Args... site_configs) {
+                   const Args... site_configs)
+    requires(detail::HasEraseEnvsAfterUpdate<Contractor, SiteIdx>) {
     (UpdateSingleSite_(site_configs.first, site_configs.second, sitps), ...);
     amplitude = new_amplitude;
   }
@@ -353,6 +368,13 @@ struct TPSWaveFunctionComponent {
                          const SplitIndexTPS<TenElemT, QNT> &sitps) {
     config(site) = new_config;
     tn.UpdateSiteTensor(site, new_config, sitps); 
+#ifndef NDEBUG
+    static_assert(detail::HasEraseEnvsAfterUpdate<Contractor, SiteIdx>,
+                  "UpdateSingleSite_ is a direct TensorNetwork2D update API and is only supported "
+                  "for contractors providing EraseEnvsAfterUpdate(site) (e.g. BMPS).");
+#endif
+    // Direct TN update path: BMPS must erase cached environments to avoid stale reuse.
+    contractor.EraseEnvsAfterUpdate(site);
 #ifndef NDEBUG
     if constexpr (detail::HasCheckInvalidateEnvs<Contractor, SiteIdx>) {
       contractor.CheckInvalidateEnvs(site);

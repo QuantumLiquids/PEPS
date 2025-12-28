@@ -10,11 +10,14 @@
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                // SplitIndexTPS
-#include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // WaveFunctionAmplitudeConsistencyCheck
+#include "qlpeps/vmc_basic/wave_function_component.h"             // TPSWaveFunctionComponent
+#include "qlpeps/algorithm/vmc_update/psi_consistency.h"
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <complex>
+#include <limits>
+#include <type_traits>
 
 namespace qlpeps {
 
@@ -133,53 +136,8 @@ class ModelMeasurementSolver {
    */
   template<typename TenElemT>
   PsiSummary<TenElemT> ComputePsiSummary(const std::vector<TenElemT> &psi_list) const {
-    PsiSummary<TenElemT> out{};
-    if (psi_list.empty()) {
-      out.psi_mean = TenElemT(0);
-      out.psi_rel_err = 0.0;
-      return out;
-    }
-    // Choose the largest magnitude as reference to stabilize the phase alignment.
-    constexpr double kReferenceTol = 1e-14;
-    size_t ref_index = 0;
-    double ref_abs = 0.0;
-    for (size_t i = 0; i < psi_list.size(); ++i) {
-      double mag = static_cast<double>(std::abs(psi_list[i]));
-      if (mag > ref_abs) {
-        ref_abs = mag;
-        ref_index = i;
-      }
-    }
-    const bool ref_valid = ref_abs > kReferenceTol;
-    const TenElemT psi_ref = psi_list[ref_index];
-
-    TenElemT mean(0);
-    std::vector<TenElemT> aligned;
-    aligned.reserve(psi_list.size());
-    using std::conj;
-    using std::real;
-    for (const auto &psi_val : psi_list) {
-      TenElemT aligned_val = psi_val;
-      if (ref_valid) {
-        const auto phase = psi_val * conj(psi_ref);
-        if (static_cast<double>(real(phase)) < 0.0) {
-          aligned_val = -psi_val;
-        }
-      }
-      aligned.push_back(aligned_val);
-      mean += aligned_val;
-    }
-
-    mean = mean / static_cast<double>(psi_list.size());
-    auto abs_val = [](const TenElemT &v) -> double { return static_cast<double>(std::abs(v)); };
-    const double denom = std::max(abs_val(mean), std::numeric_limits<double>::epsilon());
-    double max_dev = 0.0;
-    for (const auto &v : aligned) {
-      max_dev = std::max(max_dev, abs_val(v - mean));
-    }
-    out.psi_mean = mean;
-    out.psi_rel_err = max_dev / denom;
-    return out;
+    const auto s = ComputePsiConsistencySummaryAligned(psi_list);
+    return PsiSummary<TenElemT>{s.psi_mean, s.psi_rel_err};
   }
 
   // Cache setter for derived classes to avoid double traversal per sample

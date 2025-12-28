@@ -8,37 +8,15 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_ENERGY_SOLVER_H
 
+#include <complex>
+#include <string>
+#include <type_traits>
+
 #include "qlten/qlten.h"
-#include "qlpeps/vmc_basic/wave_function_component.h"  //TPSWaveFunctionComponent
+#include "qlpeps/vmc_basic/wave_function_component.h"  // TPSWaveFunctionComponent
+#include "qlpeps/algorithm/vmc_update/psi_consistency.h"
 
 namespace qlpeps {
-
-//helper
-template<typename ElemT>
-bool WaveFunctionAmplitudeConsistencyCheck(
-    const std::vector<ElemT> &psi_list,
-    const double critical_bias
-) {
-  if (psi_list.empty()) {
-    return true;
-  }
-  std::vector<double> abs_psi(psi_list.size());
-  std::transform(psi_list.begin(), psi_list.end(), abs_psi.begin(), [](const ElemT &value) {
-    return std::abs(value);
-  });
-  double max_abs = *std::max_element(abs_psi.begin(), abs_psi.end());
-  double min_abs = *std::min_element(abs_psi.begin(), abs_psi.end());
-
-  double estimate_wavefunction_bias = (max_abs - min_abs) / max_abs;
-
-  if (estimate_wavefunction_bias > critical_bias) {
-    std::cout << "inconsistent wave function amplitudes : "
-              << "(" << min_abs << ", " << max_abs << ")"
-              << std::endl;
-    return false;
-  }
-  return true;
-}
 
 /**
  * @brief ModelEnergySolver is a base class used for calculating the energy and gradient hole
@@ -55,8 +33,31 @@ template<typename ConcreteModelSolver>
 class ModelEnergySolver {
  public:
   ModelEnergySolver(void) = default;
-  ModelEnergySolver(const double wave_function_component_accuracy) : wave_function_component_accuracy(
-      wave_function_component_accuracy) {}
+
+  void SetPsiConsistencyWarningParams(const PsiConsistencyWarningParams &p) {
+    // Solver does not print warnings; this only affects how much of psi_list we cache
+    // for executor-level warning messages.
+    psi_list_max_print_elems_ = p.max_print_elems;
+  }
+
+  template<typename TenElemT>
+  PsiConsistencySummary<TenElemT> GetLastPsiConsistencySummary(void) const {
+    PsiConsistencySummary<TenElemT> out{};
+    if (!last_psi_valid_) {
+      out.psi_mean = TenElemT(0);
+      out.psi_rel_err = 0.0;
+      return out;
+    }
+    TenElemT mean = static_cast<TenElemT>(last_psi_mean_re_);
+    if constexpr (!std::is_same_v<TenElemT, double>) {
+      mean = TenElemT(last_psi_mean_re_, last_psi_mean_im_);
+    }
+    out.psi_mean = mean;
+    out.psi_rel_err = last_psi_rel_err_;
+    return out;
+  }
+
+  const std::string &GetLastPsiListTruncated(void) const { return last_psi_list_trunc_; }
   /**
    *
    * @tparam calchols   whether calculate the gradient hole sample data and return in hole_res
@@ -85,7 +86,7 @@ class ModelEnergySolver {
     TenElemT energy = static_cast<ConcreteModelSolver *>(this)
                           ->template CalEnergyAndHolesImpl<TenElemT, QNT, calchols>(sitps, tps_sample, hole_res, psi_list);
 
-    WaveFunctionAmplitudeConsistencyCheck(psi_list, wave_function_component_accuracy);
+    UpdatePsiConsistencyCache_(psi_list);
     return energy;
   }
 
@@ -98,7 +99,30 @@ class ModelEnergySolver {
     return CalEnergyAndHoles<TenElemT, QNT, false>(sitps, tps_sample, hole_res);
   }
 
-  const double wave_function_component_accuracy = 1E-3;
+ private:
+  template<typename TenElemT>
+  void UpdatePsiConsistencyCache_(const std::vector<TenElemT> &psi_list) const {
+    const auto s = ComputePsiConsistencySummaryAligned(psi_list);
+    if constexpr (std::is_same_v<TenElemT, double>) {
+      last_psi_mean_re_ = s.psi_mean;
+      last_psi_mean_im_ = 0.0;
+    } else {
+      last_psi_mean_re_ = static_cast<double>(std::real(s.psi_mean));
+      last_psi_mean_im_ = static_cast<double>(std::imag(s.psi_mean));
+    }
+    last_psi_rel_err_ = s.psi_rel_err;
+    last_psi_list_trunc_ = FormatPsiListTruncated(psi_list, psi_list_max_print_elems_);
+    last_psi_valid_ = true;
+  }
+
+  size_t psi_list_max_print_elems_ = 8;
+
+  // Last-sample cache (type-agnostic)
+  mutable bool last_psi_valid_ = false;
+  mutable double last_psi_mean_re_ = 0.0;
+  mutable double last_psi_mean_im_ = 0.0;
+  mutable double last_psi_rel_err_ = 0.0;
+  mutable std::string last_psi_list_trunc_;
 };
 
 }//qlpeps

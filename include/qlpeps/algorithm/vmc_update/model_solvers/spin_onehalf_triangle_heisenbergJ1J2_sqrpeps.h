@@ -442,7 +442,6 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       contractor.BMPSMoveStep(tn, RIGHT, trunc_para);
     }
   }
-  WaveFunctionAmplitudeConsistencyCheck(psi_list, 0.03);
   return e1 + j2_ * e2;
 }
 

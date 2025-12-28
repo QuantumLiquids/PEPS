@@ -48,7 +48,7 @@ class SquareSpinOneHalfJ1J2XXZModel : public SquareNNNModelEnergySolver<SquareSp
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, jz2, jxy2, pinning_field00) {}
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
         meta.shape = {ly, lx};

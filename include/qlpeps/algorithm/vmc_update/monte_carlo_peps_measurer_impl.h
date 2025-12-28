@@ -180,15 +180,20 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
     auto psi_summary = measurement_solver_.template EvaluatePsiSummary<TenElemT, QNT>(
       &engine_.State(),
       &engine_.WavefuncComp());
-    const bool enabled = mc_measure_params.psi_consistency_warning_enabled;
-    const double th = mc_measure_params.psi_consistency_warn_threshold;
-    const size_t maxw = mc_measure_params.psi_consistency_max_warnings;
-    if (enabled && psi_summary.psi_rel_err > th && warn_count < maxw) {
+
+    const auto &p = mc_measure_params.runtime_warning_params.psi_consistency;
+
+    const bool should_print_rank =
+        (!p.master_only) || (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank);
+    if (p.enabled && should_print_rank && psi_summary.psi_rel_err > p.threshold && warn_count < p.max_warnings) {
       ++warn_count;
       std::cerr << "[psi_consistency] rel_err=" << std::scientific << psi_summary.psi_rel_err
-          << " > threshold=" << th << ". Consider relaxing truncation parameters.\n";
-      if (warn_count == maxw) {
-        std::cerr << "[psi_consistency] reached max warnings (" << maxw <<
+          << " > threshold=" << p.threshold
+          << ". Consider relaxing truncation parameters."
+          << " psi_mean=" << psi_summary.psi_mean
+          << "\n";
+      if (warn_count == p.max_warnings) {
+        std::cerr << "[psi_consistency] reached max warnings (" << p.max_warnings <<
             ") on this rank, suppressing further messages.\n";
       }
     }

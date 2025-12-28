@@ -89,7 +89,7 @@ class SquareSpinlessFermion : public SquareNNNModelEnergySolver<SquareSpinlessFe
   }
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = SquareNNNModelMeasurementSolver<SquareSpinlessFermion>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNNModelMeasurementSolver<SquareSpinlessFermion>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "charge" || meta.key == "spin_z") {
         meta.shape = {ly, lx};

@@ -80,6 +80,9 @@ protected:
     ham_onsite = Tensor({loc_phy_ket, loc_phy_bra});
     ham_onsite({0, 0}) = -kChemicalPotential;
     ham_onsite({1, 1}) = -kChemicalPotential;
+    // Fermion convention in Simple Update expects onsite operator indexes ordered as (bra, ket).
+    // See `tests/test_algorithm/test_fermion_simple_update.cpp`.
+    ham_onsite.Transpose({1, 0});
   }
   
   void SetUpParameters() override {

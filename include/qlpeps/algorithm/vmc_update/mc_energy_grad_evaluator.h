@@ -25,6 +25,7 @@
 #include "qlpeps/vmc_basic/monte_carlo_tools/statistics.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"
+#include "qlpeps/algorithm/vmc_update/psi_consistency.h"
 
 namespace qlpeps {
 
@@ -80,8 +81,13 @@ class MCEnergyGradEvaluator {
   MCEnergyGradEvaluator(MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> &engine,
                         EnergySolver &solver,
                         const MPI_Comm &comm,
-                        bool collect_sr_buffers = false)
-      : engine_(engine), solver_(solver), comm_(comm), collect_sr_buffers_(collect_sr_buffers) {}
+                        bool collect_sr_buffers = false,
+                        PsiConsistencyWarningParams psi_warning_params = {})
+      : engine_(engine),
+        solver_(solver),
+        comm_(comm),
+        collect_sr_buffers_(collect_sr_buffers),
+        psi_warning_params_(psi_warning_params) {}
 
   /**
    * @brief Reserve internal buffers for repeated evaluations (best-effort).
@@ -201,6 +207,32 @@ class MCEnergyGradEvaluator {
       TenElemT local_energy = solver_.template CalEnergyAndHoles<TenElemT, QNT, true>(&engine_.State(),
                                                                                        &engine_.WavefuncComp(),
                                                                                        holes);
+      // Psi consistency warning (executor-level policy, optional)
+      if (psi_warning_params_.enabled) {
+        const bool should_print_rank =
+            (!psi_warning_params_.master_only) ||
+            (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank);
+        if (should_print_rank && psi_warn_count_ < psi_warning_params_.max_warnings) {
+          if constexpr (requires(EnergySolver &s) { s.template GetLastPsiConsistencySummary<TenElemT>(); }) {
+            const auto psi_s = solver_.template GetLastPsiConsistencySummary<TenElemT>();
+            if (psi_s.psi_rel_err > psi_warning_params_.threshold) {
+              ++psi_warn_count_;
+              std::cerr << "[psi_consistency] rel_err=" << std::scientific << psi_s.psi_rel_err
+                        << " > threshold=" << psi_warning_params_.threshold
+                        << ". Consider relaxing truncation parameters."
+                        << " psi_mean=" << psi_s.psi_mean;
+              if constexpr (requires(EnergySolver &s) { s.GetLastPsiListTruncated(); }) {
+                std::cerr << " psi_list=" << solver_.GetLastPsiListTruncated();
+              }
+              std::cerr << "\n";
+              if (psi_warn_count_ == psi_warning_params_.max_warnings) {
+                std::cerr << "[psi_consistency] reached max warnings (" << psi_warning_params_.max_warnings
+                          << ") on this rank, suppressing further messages.\n";
+              }
+            }
+          }
+        }
+      }
       TenElemT local_energy_conjugate = ComplexConjugate(local_energy);
       TenElemT inverse_amplitude = ComplexConjugate(1.0 / engine_.WavefuncComp().GetAmplitude());
       energy_samples.push_back(local_energy);
@@ -317,6 +349,8 @@ class MCEnergyGradEvaluator {
   const MPI_Comm &comm_;
   bool collect_sr_buffers_;
   size_t reserved_samples_ = 0;
+  PsiConsistencyWarningParams psi_warning_params_{};
+  size_t psi_warn_count_ = 0;
 
   /**
    * @brief Detect and report anomalies when the energy error is infinite.

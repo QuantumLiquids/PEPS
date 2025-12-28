@@ -45,12 +45,20 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOp
       tps_lowest_(monte_carlo_engine_.State()),
       current_energy_error_(0.0) {
 
+  // EnergySolver contract: must support receiving runtime warning params.
+  // Printing is handled at executor/evaluator level for consistent budgets and rank policies.
+  static_assert(requires(EnergySolver &s, const PsiConsistencyWarningParams &p) {
+    s.SetPsiConsistencyWarningParams(p);
+  }, "EnergySolver must implement SetPsiConsistencyWarningParams(const PsiConsistencyWarningParams&).");
+  energy_solver_.SetPsiConsistencyWarningParams(params_.runtime_warning_params.psi_consistency);
+
   // Check if using stochastic reconfiguration algorithm
   stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
   // Create persistent evaluator to reuse internal buffers; SR buffers toggled by algorithm type
   energy_grad_evaluator_ = std::make_unique<MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>(
-      monte_carlo_engine_, energy_solver_, monte_carlo_engine_.Comm(), stochastic_reconfiguration_update_class_);
+      monte_carlo_engine_, energy_solver_, monte_carlo_engine_.Comm(), stochastic_reconfiguration_update_class_,
+      params_.runtime_warning_params.psi_consistency);
 
   // Ensure necessary directories exist for output
   if (!params_.tps_dump_base_name.empty()) {

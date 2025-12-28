@@ -16,6 +16,7 @@
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/vmc_basic/configuration.h"
 #include "qlpeps/consts.h"                          // kTpsPathBase
+#include "qlpeps/algorithm/vmc_update/psi_consistency.h"
 
 namespace qlpeps {
 struct VMCPEPSOptimizerParams {
@@ -24,6 +25,9 @@ struct VMCPEPSOptimizerParams {
   PEPSParams peps_params;
   std::string tps_dump_base_name;  ///< Base name for TPS dump files
   std::string tps_dump_path;  ///< Path for dumping optimized TPS (empty = no dump)
+
+  // psi(S) consistency warning controls (per-rank). Applied by the optimizer/evaluator.
+  RuntimeWarningParams runtime_warning_params;
 
   VMCPEPSOptimizerParams() : tps_dump_base_name(kTpsPathBase), tps_dump_path("./") {}
 
