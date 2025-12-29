@@ -23,19 +23,21 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
                                          TensorNetwork2D<TenElemT, QNT> &tn,
                                          BMPSContractor<TenElemT, QNT> &contractor,
                                          std::vector<TenElemT> &two_point_functions_loc,
-                                         double inv_psi,
+                                         const TenElemT inv_psi,
                                          const Configuration &config,
-                                         size_t &row) {
+                                         const size_t row) {
   const size_t lx = tn.cols();
-  SiteIdx site1 = {row, lx / 4};
+  const SiteIdx site1 = {row, lx / 4};
   std::vector<TenElemT> off_diag_corr(lx / 2);// sp(i) * sm(j) or sm(i) * sp(j), the valid channel
   tn.UpdateSiteTensor(site1, 1 - config(site1), *split_index_tps);
   contractor.EraseEnvsAfterUpdate(site1);
+  contractor.CheckInvalidateEnvs(site1);
   //temporally change, and also trucated the left boundary tensor
   contractor.GrowBTenStep(tn, LEFT); // left boundary tensor just across Lx/4
   contractor.GrowFullBTen(tn, RIGHT, row, lx / 4 + 2, false); //environment for Lx/4 + 1 site
   for (size_t i = 1; i <= lx / 2; i++) {
     SiteIdx site2 = {row, lx / 4 + i};
+    contractor.CheckInvalidateEnvs(site2);
     //sm(i) * sp(j) + sp(j) * sm(i)
     if (config(site2) == config(site1)) {
       off_diag_corr[i - 1] = 0.0;
@@ -43,6 +45,7 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
       TenElemT psi_ex = contractor.ReplaceOneSiteTrace(tn, site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
       off_diag_corr[i - 1] = (ComplexConjugate(psi_ex * inv_psi));
     }
+    contractor.CheckInvalidateEnvs(site2);
     contractor.BTenMoveStep(tn, RIGHT);
   }
   tn.UpdateSiteTensor(site1, config(site1), *split_index_tps);
@@ -140,9 +143,9 @@ class SquareSpinOneHalfXXZModelMixIn {
                                         TensorNetwork2D<TenElemT, QNT> &tn,
                                         BMPSContractor<TenElemT, QNT> &contractor,
                                         std::vector<TenElemT> &two_point_function_loc,
-                                        double inv_psi,
+                                        const TenElemT inv_psi,
                                         const Configuration &config,
-                                        size_t &row) const {
+                                        const size_t row) const {
     MeasureSpinOneHalfOffDiagOrderInRow(split_index_tps, tn, contractor, two_point_function_loc, inv_psi, config, row);
   }
 
@@ -176,17 +179,12 @@ class SquareSpinOneHalfXXZModel
   ObservableMap<TenElemT> EvaluateObservables(
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
-    std::vector<TenElemT> psi_list;
-    TensorNetwork2D<TenElemT, QNT> hole_dummy(tps_sample->tn.rows(), tps_sample->tn.cols());
-    auto e = this->template CalEnergyAndHolesImpl<TenElemT, QNT, false>(split_index_tps, tps_sample, hole_dummy, psi_list);
-    ObservableMap<TenElemT> out;
-    out["energy"] = {e};
-    // spin_z from configuration
+    // Use the generic registry traversal (consistent with other square-lattice models).
+    // This also enables the unified row-hook EvaluateOffDiagOrderInRow().
+    ObservableMap<TenElemT> out =
+        this->SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::EvaluateObservables(split_index_tps, tps_sample);
+
     const auto &config = tps_sample->config;
-    std::vector<TenElemT> sz;
-    sz.reserve(config.size());
-    for (auto &c : config) { sz.push_back(this->CalSpinSzImpl(c)); }
-    out["spin_z"] = std::move(sz);
     // Optional: SzSz_all2all packed upper triangular (i<=j)
     const size_t N = config.size();
     // collect linear Sz values in iteration order
@@ -201,6 +199,42 @@ class SquareSpinOneHalfXXZModel
     out["SzSz_all2all"] = std::move(szsz);
     // psi_list is not emitted via registry; Measurer computes PsiSummary separately
     return out;
+  }
+
+  // Unified row-hook (registry-based) for off-diagonal observables along a row.
+  // This is invoked by SquareNNNModelMeasurementSolver via BondTraversalMixin.
+  template<typename TenElemT, typename QNT>
+  void EvaluateOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+                                 TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+                                 const size_t row,
+                                 const TenElemT inv_psi,
+                                 ObservableMap<TenElemT> &out) const {
+    auto &tn = tps_sample->tn;
+    const auto &config = tps_sample->config;
+    const size_t ly = tn.rows();
+    const size_t lx = tn.cols();
+    if (ly == 0 || lx == 0) {
+      return;
+    }
+    if (row != ly / 2) {
+      return;
+    }
+
+    auto &contractor = tps_sample->contractor;
+    std::vector<TenElemT> diag_corr;
+    diag_corr.reserve(lx / 2);
+    MeasureSpinOneHalfOffDiagOrderInRow(split_index_tps, tn, contractor, diag_corr, inv_psi, config, row);
+
+    // Split channel to provide more information, consistent with triangular solvers.
+    std::vector<TenElemT> SmSp_row = diag_corr;
+    std::vector<TenElemT> SpSm_row(diag_corr.size(), TenElemT(0));
+    const SiteIdx site1{row, lx / 4};
+    if (config(site1) == 0) {
+      SpSm_row = diag_corr;
+      std::fill(SmSp_row.begin(), SmSp_row.end(), TenElemT(0));
+    }
+    if (!SmSp_row.empty()) out["SmSp_row"] = std::move(SmSp_row);
+    if (!SpSm_row.empty()) out["SpSm_row"] = std::move(SpSm_row);
   }
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
@@ -229,6 +263,8 @@ class SquareSpinOneHalfXXZModel
     }
     const size_t N = ly * lx;
     base.push_back({"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {N * (N + 1) / 2}, {"pair_packed_upper_tri"}});
+    base.push_back({"SmSp_row", "Row Sm(i)Sp(j) along middle row (flat)", {lx / 2}, {"segment"}});
+    base.push_back({"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {lx / 2}, {"segment"}});
     return base;
   }
 };

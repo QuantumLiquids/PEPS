@@ -513,6 +513,13 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
     double sz_tol = SigmaWithFallback(sz_err, 5e-2);
     EXPECT_NEAR(sz_sum, 0.0, sz_tol);
 
+    // Off-diagonal row correlations (hook-based). Only check shape/availability here.
+    // For 2x2, Lx/2 = 1.
+    auto smsp_row_stats = LoadFlatStats(stats_dir / "SmSp_row.csv");
+    auto spsm_row_stats = LoadFlatStats(stats_dir / "SpSm_row.csv");
+    ASSERT_EQ(smsp_row_stats.means.size(), Lx / 2);
+    ASSERT_EQ(spsm_row_stats.means.size(), Lx / 2);
+
     const auto bond_h_mean_path = stats_dir / "bond_energy_h_mean.csv";
     const auto bond_v_mean_path = stats_dir / "bond_energy_v_mean.csv";
     if (FileExists(bond_h_mean_path) && FileExists(bond_v_mean_path)) {
@@ -529,6 +536,67 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
       double expected_per_bond = energy_stats.means.front() / 4.0;
       EXPECT_NEAR(expected_per_bond, energy_exact / 4.0, std::abs(energy_exact) * 1e-4);
     }
+  }
+
+  delete executor;
+}
+
+// Smoke test: triangular Heisenberg mapped onto square PEPS should publish row off-diagonal keys via the unified hook.
+TEST_F(Test2x2MCPEPSBoson, TriangularHeisenbergSqrPEPSModelSmoke) {
+  using Model = SpinOneHalfTriHeisenbergSqrPEPS;
+
+  // Reuse an existing 2x2 spin-1/2 TPS dataset; physics value is not asserted in this smoke test.
+  Configuration compatible_config(2, 2);
+  compatible_config({0, 0}) = 0; // up
+  compatible_config({0, 1}) = 1; // down
+  compatible_config({1, 0}) = 1; // down
+  compatible_config({1, 1}) = 0; // up
+
+  std::string source_tps_path = (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("heisenberg_tps")).string();
+  std::string output_dir = GetTestOutputPath("mc_peps_measure", "triangular_heisenberg_sqrpeps_results");
+  std::filesystem::create_directories(output_dir);
+
+  MonteCarloParams mc_params(20, 20, 1, compatible_config, false, output_dir + "/final_config");
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15, CompressMPSScheme::SVD_COMPRESS,
+                                                                std::make_optional<double>(1e-14),
+                                                                std::make_optional<size_t>(10)));
+  MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");
+
+  Model model;
+  auto executor = MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+      source_tps_path, para, comm, model
+  ).release();
+
+  executor->Execute();
+  (void)executor->OutputEnergy();
+
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+    const auto stats_dir = StatsDirPath(output_dir);
+    ASSERT_TRUE(std::filesystem::exists(stats_dir));
+    ASSERT_TRUE(std::filesystem::is_directory(stats_dir));
+
+    // Energy exists
+    auto energy_stats = LoadFlatStats(stats_dir / "energy.csv");
+    ASSERT_FALSE(energy_stats.means.empty());
+
+    // Bond-energy internal consistency: energy = sum of h + v + ur (this model intentionally omits dr)
+    auto bond_h_mean = LoadMatrixCSV(stats_dir / "bond_energy_h_mean.csv");
+    auto bond_v_mean = LoadMatrixCSV(stats_dir / "bond_energy_v_mean.csv");
+    auto bond_ur_mean = LoadMatrixCSV(stats_dir / "bond_energy_ur_mean.csv");
+    auto bond_h_err = LoadMatrixCSV(stats_dir / "bond_energy_h_stderr.csv");
+    auto bond_v_err = LoadMatrixCSV(stats_dir / "bond_energy_v_stderr.csv");
+    auto bond_ur_err = LoadMatrixCSV(stats_dir / "bond_energy_ur_stderr.csv");
+    const double bond_total = SumMatrix(bond_h_mean) + SumMatrix(bond_v_mean) + SumMatrix(bond_ur_mean);
+    const double tol = CombineTol(energy_stats.stderrs.front()) + CombineTol(bond_h_err) + CombineTol(bond_v_err) + CombineTol(bond_ur_err);
+    EXPECT_NEAR(bond_total, energy_stats.means.front(), tol);
+
+    // Row correlations exist and have expected length (Lx/2).
+    auto szsz_row_stats = LoadFlatStats(stats_dir / "SzSz_row.csv");
+    auto smsp_row_stats = LoadFlatStats(stats_dir / "SmSp_row.csv");
+    auto spsm_row_stats = LoadFlatStats(stats_dir / "SpSm_row.csv");
+    ASSERT_EQ(szsz_row_stats.means.size(), Lx / 2);
+    ASSERT_EQ(smsp_row_stats.means.size(), Lx / 2);
+    ASSERT_EQ(spsm_row_stats.means.size(), Lx / 2);
   }
 
   delete executor;

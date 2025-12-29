@@ -165,8 +165,19 @@ class SquareNNNModelMeasurementSolver
       energy_bond_total += eb;
     };
 
-    // No off-diagonal long-range measurement at this layer
-    auto off_diag_long_range_measure_func = [](const auto &, const auto &) {};
+    // Optional row hook for *off-diagonal* observables that require contractor environment
+    // (e.g., S^+S^- along a row). Purely diagonal correlations (SzSz, nn) should NOT use this hook.
+    auto off_diag_long_range_measure_func = [&](const size_t row, const TenElemT inv_psi_row) {
+      if constexpr (requires(ModelType *m) {
+                      m->template EvaluateOffDiagOrderInRow<TenElemT, QNT>(
+                          split_index_tps, tps_sample, row, inv_psi_row, out
+                      );
+                    }) {
+        derived->template EvaluateOffDiagOrderInRow<TenElemT, QNT>(
+            split_index_tps, tps_sample, row, inv_psi_row, out
+        );
+      }
+    };
 
     std::vector<TenElemT> psi_list;
     psi_list.reserve(ly + lx);

@@ -1499,6 +1499,36 @@ void BMPSContractor<TenElemT, QNT>::EraseEnvsAfterUpdate(const SiteIdx &site) {
   if (bmps_set_.at(RIGHT).size() > right_allow_mps_num) {
     bmps_set_[RIGHT].erase(bmps_set_[RIGHT].cbegin() + right_allow_mps_num, bmps_set_[RIGHT].end());
   }
+
+  // Targeted invalidation for cached boundary tensors (BTen/BTen2).
+  //
+  // These caches are anchored at boundaries and indexed by the starting site coordinate
+  // (e.g. LEFT bten at index 'col' corresponds to the environment up to that column).
+  // After a local update at (row,col), any cached entries that cross this site become stale.
+  // Truncate them in-place so caller-side local measurement routines can keep using the contractor
+  // without rebuilding everything from scratch.
+  auto truncate_bten = [](auto &bten_map, BTenPOSITION pos, size_t keep) {
+    auto it = bten_map.find(pos);
+    if (it == bten_map.end()) {
+      return;
+    }
+    auto &vec = it->second;
+    if (keep == 0) {
+      vec.clear();
+      return;
+    }
+    if (vec.size() > keep) {
+      vec.resize(keep);
+    }
+  };
+  truncate_bten(bten_set_, LEFT, col + 1);
+  truncate_bten(bten_set_, UP, row + 1);
+  truncate_bten(bten_set_, RIGHT, cols_ - col);
+  truncate_bten(bten_set_, DOWN, rows_ - row);
+  truncate_bten(bten_set2_, LEFT, col + 1);
+  truncate_bten(bten_set2_, UP, row + 1);
+  truncate_bten(bten_set2_, RIGHT, cols_ - col);
+  truncate_bten(bten_set2_, DOWN, rows_ - row);
 }
 
 template<typename TenElemT, typename QNT>
@@ -1516,6 +1546,23 @@ void BMPSContractor<TenElemT, QNT>::CheckInvalidateEnvs(const SiteIdx &site) con
   const size_t right_allow_mps_num = cols_ - col;
   assert(bmps_set_.at(DOWN).size() <= down_allow_mps_num);
   assert(bmps_set_.at(RIGHT).size() <= right_allow_mps_num);
+
+  // BTens should not cross (row,col) after invalidation.
+  auto check_bten = [](const auto &bten_map, BTenPOSITION pos, size_t max_len) {
+    auto it = bten_map.find(pos);
+    if (it == bten_map.end()) {
+      return;
+    }
+    assert(it->second.size() <= max_len);
+  };
+  check_bten(bten_set_, LEFT, col + 1);
+  check_bten(bten_set_, UP, row + 1);
+  check_bten(bten_set_, RIGHT, cols_ - col);
+  check_bten(bten_set_, DOWN, rows_ - row);
+  check_bten(bten_set2_, LEFT, col + 1);
+  check_bten(bten_set2_, UP, row + 1);
+  check_bten(bten_set2_, RIGHT, cols_ - col);
+  check_bten(bten_set2_, DOWN, rows_ - row);
 #else
   (void)site;
 #endif
