@@ -72,7 +72,8 @@ class MonteCarloEngine {
                    const MonteCarloParams &monte_carlo_params,
                    const PEPSParams &peps_params,
                    const MPI_Comm &comm,
-                   MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater())
+                   MonteCarloSweepUpdater mc_updater = MonteCarloSweepUpdater(),
+                   const ConfigurationRescueParams &config_rescue = ConfigurationRescueParams())
       : split_index_tps_(sitps),
         lx_(sitps.cols()),
         ly_(sitps.rows()),
@@ -81,7 +82,8 @@ class MonteCarloEngine {
         mc_sweep_updater_(std::move(mc_updater)),
         u_double_(0, 1),
         monte_carlo_params_(monte_carlo_params),
-        warm_up_(monte_carlo_params.is_warmed_up) {
+        warm_up_(monte_carlo_params.is_warmed_up),
+        config_rescue_(config_rescue) {
     MPI_SetUp_();
     Initialize_();
   }
@@ -278,11 +280,16 @@ class MonteCarloEngine {
   /**
    * @brief Validate and rescue configurations across MPI ranks.
    *
-   * Each rank checks amplitude legality. If some ranks are invalid, a valid configuration is broadcast from
-   * a healthy rank and replaced locally; those ranks are marked as not warmed up. Abort if all ranks are invalid.
+   * Each rank checks both construction success (init_valid_) and amplitude legality.
+   * If some ranks are invalid, a valid configuration is broadcast from a healthy rank
+   * and replaced locally; those ranks are marked as not warmed up.
+   *
+   * Rescue can be disabled via runtime_params_.config_rescue.enabled.
+   * When disabled, invalid configurations cause immediate abort.
    */
   void EnsureConfigurationValidity() {
-    int local_valid = CheckWaveFunctionAmplitudeValidity(tps_sample_) ? 1 : 0;
+    // Validity requires both successful construction and legal amplitude
+    int local_valid = (init_valid_ && CheckWaveFunctionAmplitudeValidity(tps_sample_)) ? 1 : 0;
     std::vector<int> global_valid(mpi_size_);
     HANDLE_MPI_ERROR(MPI_Allgather(&local_valid, 1, MPI_INT,
                                    global_valid.data(), 1, MPI_INT, comm_));
@@ -294,6 +301,22 @@ class MonteCarloEngine {
       }
       return;
     }
+
+    // Check if rescue is enabled
+    if (!config_rescue_.enabled) {
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        std::cerr << "\n=== CONFIGURATION FAILURE ===\n"
+                  << (mpi_size_ - num_valid) << "/" << mpi_size_ << " processes have invalid configurations.\n"
+                  << "Configuration rescue is DISABLED. Aborting.\n";
+      }
+      std::ostringstream oss;
+      oss << "Rank " << rank_ << ": valid=" << local_valid
+          << ", init_valid=" << init_valid_
+          << ", amplitude=" << (init_valid_ ? std::abs(tps_sample_.amplitude) : 0.0) << std::endl;
+      hp_numeric::GatherAndPrintErrorMessages(oss.str(), comm_);
+      MPI_Abort(comm_, EXIT_FAILURE);
+    }
+
     auto valid_iter = std::find(global_valid.begin(), global_valid.end(), 1);
     if (valid_iter == global_valid.end()) {
       if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
@@ -302,25 +325,37 @@ class MonteCarloEngine {
                   << "Check: bond dimension, truncation cutoff, initial configuration\n";
       }
       std::ostringstream oss;
-      oss << "Rank " << rank_ << ": amplitude=" << tps_sample_.amplitude
-          << ", magnitude=" << std::abs(tps_sample_.amplitude) << std::endl;
+      oss << "Rank " << rank_ << ": init_valid=" << init_valid_
+          << ", amplitude=" << (init_valid_ ? tps_sample_.amplitude : TenElemT(0))
+          << ", magnitude=" << (init_valid_ ? std::abs(tps_sample_.amplitude) : 0.0) << std::endl;
       hp_numeric::GatherAndPrintErrorMessages(oss.str(), comm_);
       MPI_Abort(comm_, EXIT_FAILURE);
     }
+
     int source_rank = static_cast<int>(valid_iter - global_valid.begin());
     Configuration config_valid(ly_, lx_);
     if (rank_ == source_rank) {
       config_valid = tps_sample_.config;
     }
     MPI_BCast(config_valid, source_rank, comm_);
+
     if (local_valid == 0) {
-      tps_sample_ = WaveFunctionComponentT(split_index_tps_, config_valid, tps_sample_.trun_para);
+      bool rescue_success = TryConstructWavefunction_(config_valid);
+      if (!rescue_success) {
+        // Even the valid configuration from another rank failed here
+        // This indicates a fundamental problem (e.g., TPS incompatible with local truncation params)
+        std::cerr << "Rank " << rank_ << ": rescue FAILED - construction threw exception even with valid config from rank "
+                  << source_rank << ". This may indicate TPS or truncation parameter issues." << std::endl;
+        MPI_Abort(comm_, EXIT_FAILURE);
+      }
+      init_valid_ = true;
       warm_up_ = false;
       std::cout << "Rank " << rank_ << ": rescued from rank " << source_rank
                 << " (new amplitude: " << std::abs(tps_sample_.amplitude) << ")" << std::endl;
     }
+
     if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-      std::cout << " Configuration rescue completed: " << (mpi_size_ - num_valid) << "/" << mpi_size_
+      std::cout << "\u2713 Configuration rescue completed: " << (mpi_size_ - num_valid) << "/" << mpi_size_
                 << " processes rescued from rank " << source_rank << std::endl;
     }
   }
@@ -332,11 +367,25 @@ class MonteCarloEngine {
   }
 
   void Initialize_() {
-    tps_sample_ = WaveFunctionComponentT(split_index_tps_,
-                                         monte_carlo_params_.initial_config,
-                                         tps_sample_.trun_para);
+    init_valid_ = TryConstructWavefunction_(monte_carlo_params_.initial_config);
     EnsureConfigurationValidity();
     NormalizeStateOrder1();
+  }
+
+  /**
+   * @brief Attempt to construct WaveFunctionComponent with given configuration.
+   * @param config Configuration to use.
+   * @return true if construction succeeded; false if an exception was caught.
+   */
+  bool TryConstructWavefunction_(const Configuration &config) {
+    try {
+      tps_sample_ = WaveFunctionComponentT(split_index_tps_, config, tps_sample_.trun_para);
+      return true;
+    } catch (const std::runtime_error &e) {
+      // Catch Empty tensor exceptions from BMPS contraction
+      std::cerr << "Rank " << rank_ << ": WaveFunctionComponent construction failed: " << e.what() << std::endl;
+      return false;
+    }
   }
 
  private:
@@ -351,6 +400,8 @@ class MonteCarloEngine {
   std::uniform_real_distribution<double> u_double_;
   MonteCarloParams monte_carlo_params_;
   bool warm_up_;
+  ConfigurationRescueParams config_rescue_;
+  bool init_valid_ = true;  ///< Whether initial WaveFunctionComponent construction succeeded
 };
 
 } // namespace qlpeps

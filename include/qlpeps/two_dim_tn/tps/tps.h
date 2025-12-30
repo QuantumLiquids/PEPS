@@ -112,6 +112,109 @@ class TPS : public TenMatrix<QLTensor<TenElemT, QNT>> {
   BoundaryCondition boundary_condition_;
 };
 
+// =====================================================================
+// Wave Function Superposition for TPS
+// =====================================================================
+
+/**
+ * @brief Wave function sum: \f$|\psi\rangle = |\psi_1\rangle + |\psi_2\rangle\f$
+ *
+ * Computes the quantum superposition of two tensor product states by expanding 
+ * (direct sum) all virtual bond indices.
+ *
+ * Implementation:
+ * ---------------
+ * For each site tensor \f$A\f$ and \f$B\f$, the result tensor \f$C\f$ is computed via:
+ *
+ * \f[
+ *   C^{s}_{(l_1 l_2)(d_1 d_2)(r_1 r_2)(u_1 u_2)} = 
+ *   \begin{pmatrix} A^{s}_{l_1 d_1 r_1 u_1} & 0 \\ 0 & B^{s}_{l_2 d_2 r_2 u_2} \end{pmatrix}
+ * \f]
+ *
+ * where \f$s\f$ is the physical index, and \f$(l, d, r, u)\f$ are the virtual indices
+ * (West, South, East, North). The bond dimension of \f$C\f$ is \f$D_1 + D_2\f$.
+ *
+ * Boundary Conditions:
+ * --------------------
+ * - OBC: Boundary indices (dim=1) are NOT expanded. Only bulk virtual indices are expanded.
+ * - PBC: All four virtual indices are expanded at every site.
+ *
+ * @tparam TenElemT Tensor element type (e.g., double, std::complex<double>)
+ * @tparam QNT Quantum number type (e.g., U1QN)
+ *
+ * @param tps1 First TPS wave function \f$|\psi_1\rangle\f$
+ * @param tps2 Second TPS wave function \f$|\psi_2\rangle\f$
+ *
+ * @return TPS representing \f$|\psi_1\rangle + |\psi_2\rangle\f$
+ *
+ * @pre tps1 and tps2 must have the same lattice dimensions
+ * @pre tps1 and tps2 must have the same boundary condition
+ * @pre Physical indices at corresponding sites must match exactly
+ *
+ * @note This is NOT element-wise tensor addition. Use operator+ on tensors for that.
+ * @note The returned TPS has bond dimension \f$D_1 + D_2\f$ (or \f$D\f$ at boundaries for OBC)
+ *
+ * @see Expand() in TensorToolkit for the underlying tensor direct sum operation
+ */
+template<typename TenElemT, typename QNT>
+TPS<TenElemT, QNT> WaveFunctionSum(
+    const TPS<TenElemT, QNT> &tps1,
+    const TPS<TenElemT, QNT> &tps2
+);
+
+/**
+ * @brief Wave function sum with coefficients: \f$|\psi\rangle = \alpha|\psi_1\rangle + \beta|\psi_2\rangle\f$
+ *
+ * Computes a weighted superposition of two tensor product states. Each tensor in
+ * tps1 is scaled by \f$\alpha^{1/N}\f$ and each tensor in tps2 is scaled by 
+ * \f$\beta^{1/N}\f$, where \f$N\f$ is the total number of sites.
+ *
+ * @tparam TenElemT Tensor element type
+ * @tparam QNT Quantum number type
+ *
+ * @param alpha Coefficient for \f$|\psi_1\rangle\f$
+ * @param tps1 First TPS wave function \f$|\psi_1\rangle\f$
+ * @param beta Coefficient for \f$|\psi_2\rangle\f$
+ * @param tps2 Second TPS wave function \f$|\psi_2\rangle\f$
+ *
+ * @return TPS representing \f$\alpha|\psi_1\rangle + \beta|\psi_2\rangle\f$
+ *
+ * @note The scaling is distributed across all sites to maintain numerical stability.
+ *       Each site tensor is scaled by \f$\alpha^{1/N}\f$ or \f$\beta^{1/N}\f$ respectively.
+ */
+template<typename TenElemT, typename QNT>
+TPS<TenElemT, QNT> WaveFunctionSum(
+    TenElemT alpha, const TPS<TenElemT, QNT> &tps1,
+    TenElemT beta, const TPS<TenElemT, QNT> &tps2
+);
+
+/**
+ * @brief Wave function sum of N states: \f$|\psi\rangle = \sum_i c_i |\psi_i\rangle\f$
+ *
+ * Computes the superposition of multiple tensor product states with optional coefficients.
+ * This is implemented as successive pairwise wave function sums.
+ *
+ * @tparam TenElemT Tensor element type
+ * @tparam QNT Quantum number type
+ *
+ * @param tps_list Vector of TPS wave functions \f$\{|\psi_i\rangle\}\f$
+ * @param coefficients Optional vector of coefficients \f$\{c_i\}\f$. 
+ *                     If empty, all coefficients default to 1.
+ *
+ * @return TPS representing \f$\sum_i c_i |\psi_i\rangle\f$
+ *
+ * @pre tps_list must be non-empty
+ * @pre If coefficients is non-empty, it must have the same size as tps_list
+ * @pre All TPS in tps_list must have the same dimensions and boundary conditions
+ *
+ * @note The resulting bond dimension is \f$\sum_i D_i\f$
+ */
+template<typename TenElemT, typename QNT>
+TPS<TenElemT, QNT> WaveFunctionSum(
+    const std::vector<TPS<TenElemT, QNT>> &tps_list,
+    const std::vector<TenElemT> &coefficients = {}
+);
+
 } // qlpeps
 
 #include "qlpeps/two_dim_tn/tps/tps_impl.h"

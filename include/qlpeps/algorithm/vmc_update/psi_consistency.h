@@ -35,7 +35,7 @@ namespace qlpeps {
 /**
  * @brief Psi(S) consistency warning controls.
  *
- * Used as a sub-field of RuntimeWarningParams and applied by executors/evaluators.
+ * Used as a sub-field of RuntimeParams and applied by executors/evaluators.
  *
  * Notes:
  * - `master_only=true` makes the warning budget "global" (printed by master rank only).
@@ -50,13 +50,25 @@ struct PsiConsistencyWarningParams {
 };
 
 /**
- * @brief Executor-level runtime warning parameter pack.
+ * @brief Configuration rescue controls.
+ *
+ * When enabled, MonteCarloEngine attempts to rescue invalid configurations (e.g., due to
+ * near-zero amplitude or Empty tensor exceptions from BMPS contraction) by broadcasting
+ * a valid configuration from another MPI rank.
+ */
+struct ConfigurationRescueParams {
+  bool enabled = true;  ///< Whether to attempt configuration rescue across MPI ranks
+};
+
+/**
+ * @brief Executor-level runtime parameter pack.
  *
  * This is intended to live alongside other top-level parameter packs (optimizer/mc/peps).
- * Extend this struct when new warning categories are introduced.
+ * Extend this struct when new runtime behavior categories are introduced.
  */
-struct RuntimeWarningParams {
+struct RuntimeParams {
   PsiConsistencyWarningParams psi_consistency;
+  ConfigurationRescueParams config_rescue;
 };
 
 /**

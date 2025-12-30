@@ -55,6 +55,14 @@ TensorNetwork2D<TenElemT, QNT>::TensorNetwork2D(const SplitIndexTPS<TenElemT, QN
                                    " is default (uninitialized). TPS must be properly initialized before creating TensorNetwork2D.");
       }
       
+      // Check if tensor has actual data (not just structure)
+      // This catches cases where configuration is outside the wavefunction support
+      if (site_tensors[config_val].GetActualDataSize() == 0) {
+        throw std::runtime_error("TensorNetwork2D: TPS tensor at site (" + std::to_string(row) + 
+                                ", " + std::to_string(col) + ") component " + std::to_string(config_val) + 
+                                " has no data. Configuration may be outside wavefunction support.");
+      }
+      
 #ifndef NDEBUG
       (*this)({row, col}) = tps({row, col}).at(config({row, col}));
 #else

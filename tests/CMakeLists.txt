@@ -165,6 +165,10 @@ add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+add_unittest(test_tps
+        "test_2d_tn/test_tps.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 add_unittest(test_split_index_tps
         "test_2d_tn/test_split_index_tps.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
@@ -372,6 +376,14 @@ add_two_type_unittest(test_mc_energy_grad_evaluator
 
 add_mpi_unittest_run(test_mc_energy_grad_evaluator_double "4" " ")
 add_mpi_unittest_run(test_mc_energy_grad_evaluator_complex "4" " ")
+
+# MonteCarloEngine tests (configuration rescue, etc.)
+# Tests require 4 MPI ranks to test all configuration rescue scenarios
+add_mpi_unittest(test_monte_carlo_engine
+        "test_algorithm/test_monte_carlo_engine.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "4"
+        ""
+)
 
 
 ## Test utility

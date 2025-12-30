@@ -27,7 +27,7 @@ struct VMCPEPSOptimizerParams {
   std::string tps_dump_path;  ///< Path for dumping optimized TPS (empty = no dump)
 
   // psi(S) consistency warning controls (per-rank). Applied by the optimizer/evaluator.
-  RuntimeWarningParams runtime_warning_params;
+  RuntimeParams runtime_params;
 
   VMCPEPSOptimizerParams() : tps_dump_base_name(kTpsPathBase), tps_dump_path("./") {}
 

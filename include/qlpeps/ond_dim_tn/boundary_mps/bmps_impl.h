@@ -760,7 +760,11 @@ BMPS<TenElemT, QNT>::MultipleMPOSVDCompress_(const TransferMPO &mpo,
         ctrct_axes = {0, 2};
       }
       Contract(&tmp2, ctrct_axes, &right_boundary, {0, 1}, res_mps(i));
-      assert(res_mps[i].GetActualDataSize() > 0);
+      if (res_mps[i].GetActualDataSize() == 0) {
+        throw std::runtime_error(
+            "BMPS::MultipleMPOSVDCompress_: Empty tensor at site " + std::to_string(i) +
+            ". Configuration may have near-zero amplitude due to numerical degeneracy.");
+      }
       if constexpr (Tensor::IsFermionic()) {
         res_mps(i)->Transpose({1, 2, 3, 0});
         assert(res_mps(i)->GetIndex(3).GetDir() == IN);

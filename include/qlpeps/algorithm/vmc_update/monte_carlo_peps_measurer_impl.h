@@ -181,7 +181,7 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
       &engine_.State(),
       &engine_.WavefuncComp());
 
-    const auto &p = mc_measure_params.runtime_warning_params.psi_consistency;
+    const auto &p = mc_measure_params.runtime_params.psi_consistency;
 
     const bool should_print_rank =
         (!p.master_only) || (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank);

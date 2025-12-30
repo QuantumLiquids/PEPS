@@ -110,11 +110,11 @@ struct MCMeasurementParams {
   MonteCarloParams mc_params;
   PEPSParams peps_params;
   std::string measurement_data_dump_path;  ///< Path for dumping measurement results (empty = current dir)
-  RuntimeWarningParams runtime_warning_params; ///< Applied by MCPEPSMeasurer
+  RuntimeParams runtime_params; ///< Applied by MCPEPSMeasurer
 
   MCMeasurementParams() : measurement_data_dump_path("./") {
     // Preserve historical default for measurement warnings.
-    runtime_warning_params.psi_consistency.threshold = 1e-4;
+    runtime_params.psi_consistency.threshold = 1e-4;
   }
 
   MCMeasurementParams(const MonteCarloParams &mc_params,
@@ -123,7 +123,7 @@ struct MCMeasurementParams {
     : mc_params(mc_params), peps_params(peps_params), 
       measurement_data_dump_path(measurement_data_dump_path) {
     // Preserve historical default for measurement warnings.
-    runtime_warning_params.psi_consistency.threshold = 1e-4;
+    runtime_params.psi_consistency.threshold = 1e-4;
   }
 
   // Explicit accessors - no implicit conversions
