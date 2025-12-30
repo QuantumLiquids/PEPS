@@ -386,11 +386,26 @@ struct TPSWaveFunctionComponent {
   std::optional<PendingTrial> pending_trial_;
 };
 
-template<typename MonteCarloSweepUpdater>
-bool CheckWaveFunctionAmplitudeValidity(const MonteCarloSweepUpdater &tps_sample) {
-  return (std::abs(tps_sample.amplitude) > std::numeric_limits<double>::min()) &&
-      (std::abs(tps_sample.amplitude) < std::numeric_limits<double>::max()) &&
-      !std::isnan(std::abs(tps_sample.amplitude)) && !std::isinf(std::abs(tps_sample.amplitude));
+/**
+ * @brief Check if wavefunction amplitude is valid for Monte Carlo sampling.
+ *
+ * Checks that the amplitude magnitude is within the given thresholds and is not NaN or Inf.
+ *
+ * @tparam WFC Wavefunction component type with amplitude member
+ * @param wfc The wavefunction component to check
+ * @param min_threshold Minimum amplitude threshold (must be explicitly specified)
+ * @param max_threshold Maximum amplitude threshold (must be explicitly specified)
+ * @return true if amplitude is valid for MC sampling
+ */
+template<typename WFC>
+bool CheckWaveFunctionAmplitudeValidity(
+    const WFC &wfc,
+    double min_threshold,
+    double max_threshold) {
+  const double amp_mag = std::abs(wfc.amplitude);
+  return !std::isnan(amp_mag) && !std::isinf(amp_mag) &&
+         amp_mag > min_threshold &&
+         amp_mag < max_threshold;
 }
 
 }//qlpeps

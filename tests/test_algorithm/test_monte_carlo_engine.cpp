@@ -182,21 +182,17 @@ struct TestConfigurationRescueSum : MPITest {
 };
 
 /**
- * @brief Test rescue with 4 ranks having different configurations
+ * @brief Test rescue with strict threshold (1e-100) - all 3 invalid ranks rescued
  * 
- * Scenario (4 MPI ranks):
+ * Scenario (4 MPI ranks) with strict threshold 1e-100:
  * - Rank 0: Neel config {{0,1},{1,0}} -> amplitude O(1), VALID
- * - Rank 1: Anti-Neel config {{1,0},{0,1}} -> amplitude ~1e-300, INVALID (too small)
- * - Rank 2: Third Sz=0 config {{0,0},{1,1}} -> amplitude = 0, INVALID (not in wavefunction)
- * - Rank 3: Fourth Sz=0 config {{1,1},{0,0}} -> amplitude = 0, INVALID (not in wavefunction)
- * 
- * This tests two failure modes:
- * 1. Near-zero amplitude (rank 1) - caught by CheckWaveFunctionAmplitudeValidity
- * 2. Configuration outside wavefunction support (ranks 2,3) - caught by Empty tensor exception
+ * - Rank 1: Anti-Neel config {{1,0},{0,1}} -> amplitude ~1e-300 < 1e-100, INVALID
+ * - Rank 2: Third Sz=0 config {{0,0},{1,1}} -> construction fails, INVALID
+ * - Rank 3: Fourth Sz=0 config {{1,1},{0,0}} -> construction fails, INVALID
  * 
  * Expected: Ranks 1, 2, and 3 should be rescued by rank 0's configuration.
  */
-TEST_F(TestConfigurationRescueSum, RescueFourRanks) {
+TEST_F(TestConfigurationRescueSum, RescueWithStrictThreshold) {
   if (mpi_size < 4) {
     GTEST_SKIP() << "This test requires at least 4 MPI ranks";
   }
@@ -208,7 +204,7 @@ TEST_F(TestConfigurationRescueSum, RescueFourRanks) {
   if (rank == 0) {
     config = CreateNeelConfig();        // Valid: amplitude O(1)
   } else if (rank == 1) {
-    config = CreateAntiNeelConfig();    // Invalid: amplitude ~1e-300
+    config = CreateAntiNeelConfig();    // Invalid with strict threshold
   } else if (rank == 2) {
     config = CreateThirdSz0Config();    // Invalid: not in wavefunction
   } else {
@@ -222,7 +218,9 @@ TEST_F(TestConfigurationRescueSum, RescueFourRanks) {
       std::make_optional<double>(1e-14),
       std::make_optional<size_t>(10)));
 
+  // Use strict threshold: 1e-100
   ConfigurationRescueParams rescue_params;
+  rescue_params.amplitude_min_threshold = 1e-100;
   EXPECT_TRUE(rescue_params.enabled);
 
   // Create engine - this triggers rescue for ranks 1, 2, and 3
@@ -231,7 +229,10 @@ TEST_F(TestConfigurationRescueSum, RescueFourRanks) {
 
   // After rescue, all ranks should have valid amplitude
   const auto& wfc = engine.WavefuncComp();
-  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(wfc))
+  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(
+      wfc,
+      rescue_params.amplitude_min_threshold,
+      rescue_params.amplitude_max_threshold))
       << "Rank " << rank << " should have valid amplitude after rescue";
 
   // All ranks should have the Neel configuration (rescued from rank 0)
@@ -240,7 +241,80 @@ TEST_F(TestConfigurationRescueSum, RescueFourRanks) {
       << "Rank " << rank << " should have been rescued to Neel config";
 
   if (rank == 0) {
-    std::cout << "✓ All 4 ranks now have valid Neel configuration" << std::endl;
+    std::cout << "✓ Strict threshold test: All 4 ranks now have Neel configuration" << std::endl;
+  }
+}
+
+/**
+ * @brief Test rescue with permissive threshold (DBL_MIN) - only construction failures rescued
+ * 
+ * Scenario (4 MPI ranks) with permissive threshold DBL_MIN:
+ * - Rank 0: Neel config -> amplitude O(1), VALID
+ * - Rank 1: Anti-Neel config -> amplitude ~1e-300 > DBL_MIN, VALID (not rescued)
+ * - Rank 2: Third Sz=0 config -> construction fails, INVALID (rescued)
+ * - Rank 3: Fourth Sz=0 config -> construction fails, INVALID (rescued)
+ * 
+ * Expected: Only ranks 2 and 3 should be rescued.
+ */
+TEST_F(TestConfigurationRescueSum, RescueWithPermissiveThreshold) {
+  if (mpi_size < 4) {
+    GTEST_SKIP() << "This test requires at least 4 MPI ranks";
+  }
+
+  auto sitps = CreateSuperpositionTPS(1e-300);
+
+  // Assign different configurations based on rank
+  Configuration config(Ly, Lx);
+  if (rank == 0) {
+    config = CreateNeelConfig();        // Valid: amplitude O(1)
+  } else if (rank == 1) {
+    config = CreateAntiNeelConfig();    // Valid with permissive threshold (amplitude > DBL_MIN)
+  } else if (rank == 2) {
+    config = CreateThirdSz0Config();    // Invalid: not in wavefunction
+  } else {
+    config = CreateFourthSz0Config();   // Invalid: not in wavefunction
+  }
+
+  MonteCarloParams mc_params(5, 2, 1, config, false);
+  PEPSParams peps_params(BMPSTruncateParams<QLTEN_Double>(
+      Dpeps, 2 * Dpeps, 1e-15,
+      CompressMPSScheme::SVD_COMPRESS,
+      std::make_optional<double>(1e-14),
+      std::make_optional<size_t>(10)));
+
+  // Use permissive threshold: DBL_MIN (default)
+  ConfigurationRescueParams rescue_params;
+  // amplitude_min_threshold defaults to std::numeric_limits<double>::min()
+  EXPECT_TRUE(rescue_params.enabled);
+
+  // Create engine - only ranks 2 and 3 should be rescued
+  MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange> engine(
+      sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
+
+  const auto& wfc = engine.WavefuncComp();
+
+  // After rescue, amplitude should be valid
+  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(
+      wfc,
+      rescue_params.amplitude_min_threshold,
+      rescue_params.amplitude_max_threshold))
+      << "Rank " << rank << " should have valid amplitude";
+
+  // Rank 0: original Neel config
+  // Rank 1: original Anti-Neel config (NOT rescued with permissive threshold)
+  // Rank 2, 3: rescued to Neel config
+  if (rank == 0) {
+    EXPECT_EQ(wfc.config, CreateNeelConfig());
+  } else if (rank == 1) {
+    EXPECT_EQ(wfc.config, CreateAntiNeelConfig())
+        << "Rank 1 should NOT be rescued with permissive threshold";
+  } else {
+    EXPECT_EQ(wfc.config, CreateNeelConfig())
+        << "Rank " << rank << " should be rescued to Neel config";
+  }
+
+  if (rank == 0) {
+    std::cout << "✓ Permissive threshold test: Rank 1 keeps Anti-Neel, Ranks 2,3 rescued" << std::endl;
   }
 }
 
@@ -266,7 +340,10 @@ TEST_F(TestConfigurationRescueSum, NoRescueWhenAllValid) {
       sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
 
   const auto& wfc = engine.WavefuncComp();
-  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(wfc));
+  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(
+      wfc,
+      rescue_params.amplitude_min_threshold,
+      rescue_params.amplitude_max_threshold));
   EXPECT_GT(std::abs(wfc.amplitude), 0.1);  // Should have O(1) amplitude
 }
 
@@ -304,12 +381,26 @@ TEST_F(TestConfigurationRescueSum, WarmupAfterRescue) {
   MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange> engine(
       sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
 
+  // After rescue, all ranks should have the Neel configuration
+  // This is the key assertion that validates CheckWaveFunctionAmplitudeValidity threshold
+  Configuration expected_config = CreateNeelConfig();
+  EXPECT_EQ(engine.WavefuncComp().config, expected_config)
+      << "Rank " << rank << " should have been rescued to Neel config before warmup";
+
   // Warmup should succeed after rescue
   int warmup_result = engine.WarmUp();
   EXPECT_EQ(warmup_result, 0) << "Warmup should succeed after rescue";
 
   // Amplitude should remain valid
-  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(engine.WavefuncComp()));
+  EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(
+      engine.WavefuncComp(),
+      rescue_params.amplitude_min_threshold,
+      rescue_params.amplitude_max_threshold));
+
+  // Configuration should still be valid (Neel or evolved from Neel) after warmup
+  // Note: After warmup MC sweeps, config may have changed, but amplitude must remain valid
+  EXPECT_TRUE(engine.WavefuncComp().IsAmplitudeSquareLegal())
+      << "Rank " << rank << " should have legal amplitude after warmup";
 }
 
 /**
@@ -330,6 +421,10 @@ TEST_F(TestConfigurationRescueSum, VerifyAmplitudeMagnitudes) {
       std::make_optional<double>(1e-14),
       std::make_optional<size_t>(10)));
 
+  // Use default thresholds for amplitude validity checks
+  const double amp_min = std::numeric_limits<double>::min();
+  const double amp_max = std::numeric_limits<double>::max();
+
   // Test Neel configuration amplitude (should be O(1))
   {
     Configuration neel_config = CreateNeelConfig();
@@ -340,7 +435,7 @@ TEST_F(TestConfigurationRescueSum, VerifyAmplitudeMagnitudes) {
       std::cout << "Neel config {{0,1},{1,0}} amplitude: " << amp_mag << std::endl;
     }
     EXPECT_GT(amp_mag, 0.1) << "Neel config should have O(1) amplitude";
-    EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(wfc));
+    EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(wfc, amp_min, amp_max));
   }
 
   // Test anti-Neel configuration amplitude (should be ~beta)

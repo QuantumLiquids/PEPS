@@ -58,6 +58,31 @@ struct PsiConsistencyWarningParams {
  */
 struct ConfigurationRescueParams {
   bool enabled = true;  ///< Whether to attempt configuration rescue across MPI ranks
+
+  /**
+   * @brief Minimum amplitude threshold for valid configurations.
+   *
+   * Configurations with |amplitude| <= this threshold are considered invalid and will
+   * trigger rescue if enabled. The default value is std::numeric_limits<double>::min(),
+   * which is the most permissive setting (only truly zero amplitudes are invalid).
+   *
+   * For stricter control, consider using larger values such as:
+   * - 1e-100: reasonable for most physical applications
+   * - sqrt(DBL_MIN) ≈ 1.5e-154: ensures |amplitude|^2 is representable
+   *
+   * Note: Monte Carlo updates use amplitude ratios, so small amplitudes don't directly
+   * cause numerical issues there. The main concern is warmup efficiency and edge cases.
+   */
+  double amplitude_min_threshold = std::numeric_limits<double>::min();
+
+  /**
+   * @brief Maximum amplitude threshold for valid configurations.
+   *
+   * Configurations with |amplitude| >= this threshold are considered invalid and will
+   * trigger rescue if enabled. The default value is std::numeric_limits<double>::max(),
+   * which is the most permissive setting.
+   */
+  double amplitude_max_threshold = std::numeric_limits<double>::max();
 };
 
 /**

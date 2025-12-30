@@ -135,7 +135,10 @@ class MonteCarloEngine {
       warm_up_timer.PrintElapsed();
       warm_up_ = true;
     }
-    bool psi_legal = CheckWaveFunctionAmplitudeValidity(tps_sample_);
+    bool psi_legal = CheckWaveFunctionAmplitudeValidity(
+        tps_sample_,
+        config_rescue_.amplitude_min_threshold,
+        config_rescue_.amplitude_max_threshold);
     if (!psi_legal) {
       std::cout << "Proc " << rank_
                 << ", psi : " << std::scientific << tps_sample_.amplitude
@@ -289,7 +292,10 @@ class MonteCarloEngine {
    */
   void EnsureConfigurationValidity() {
     // Validity requires both successful construction and legal amplitude
-    int local_valid = (init_valid_ && CheckWaveFunctionAmplitudeValidity(tps_sample_)) ? 1 : 0;
+    int local_valid = (init_valid_ && CheckWaveFunctionAmplitudeValidity(
+        tps_sample_,
+        config_rescue_.amplitude_min_threshold,
+        config_rescue_.amplitude_max_threshold)) ? 1 : 0;
     std::vector<int> global_valid(mpi_size_);
     HANDLE_MPI_ERROR(MPI_Allgather(&local_valid, 1, MPI_INT,
                                    global_valid.data(), 1, MPI_INT, comm_));
