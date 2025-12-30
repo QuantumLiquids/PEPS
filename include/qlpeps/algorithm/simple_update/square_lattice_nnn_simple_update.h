@@ -105,11 +105,19 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
 
   /**
    * @return h_{ABC} = ham_{nnn}^A \otimes id \otimes ham_{nnn}^C
-   *                 + id \otimes ham_{nn}^{BC} / bondtri\_horizontal
-   *                 + ham_{nn}^{AB} \otimes id / bondtri\_vertical
-   *                 + ham\_on\_site\_terms_A \otimes id \otimes id / site\_share\_tri_A
-   *                 + id \otimes ham\_on\_site\_terms_B \otimes id / site\_share\_tri_B
-   *                 + id \otimes id \otimes ham\_on\_site\_terms_C / site\_share\_tri_C
+   *                 + id \otimes ham_{nn}^{BC} / ver\_bond\_tri\_num
+   *                 + ham_{nn}^{AB} \otimes id / hor\_bond\_tri\_num
+   *                 + ham\_on\_site\_terms_A \otimes id \otimes id / site\_tri\_num\_A
+   *                 + id \otimes ham\_on\_site\_terms_B \otimes id / site\_tri\_num\_B
+   *                 + id \otimes id \otimes ham\_on\_site\_terms_C / site\_tri\_num\_C
+   *        (For UpperLeft and UpperRight)
+   *        h_{ABC} = ham_{nnn}^A \otimes id \otimes ham_{nnn}^C
+   *                 + id \otimes ham_{nn}^{BC} / hor\_bond\_tri\_num
+   *                 + ham_{nn}^{AB} \otimes id / ver\_bond\_tri\_num
+   *                 + ham\_on\_site\_terms_A \otimes id \otimes id / site\_tri\_num\_A
+   *                 + id \otimes ham\_on\_site\_terms_B \otimes id / site\_tri\_num\_B
+   *                 + id \otimes id \otimes ham\_on\_site\_terms_C / site\_tri\_num\_C
+   *        (For LowerLeft and LowerRight)
    *
    *         UpperLeft                      UpperRight                     LowerLeft                      LowerRight
    *      |             |                |             |                |             |                |             |
