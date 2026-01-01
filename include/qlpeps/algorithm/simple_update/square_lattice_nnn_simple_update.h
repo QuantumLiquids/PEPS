@@ -38,28 +38,29 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
                                        const Tensor &ham_nn,
                                        const Tensor &ham_nnn,
                                        const Tensor &ham_onsite = Tensor()) :
-    SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial),
-    ham_nn_(ham_nn), ham_nnn_(ham_nnn),
-    ham_on_site_terms_(this->ly_, this->lx_),
-    ham_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    ham_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    ham_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    ham_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                                peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                               peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                                peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                               peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1) {
-    if (!ham_onsite.IsDefault())
-    for (auto &ten : ham_on_site_terms_) {
-      ten = ham_onsite;
+      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial),
+      ham_nn_(ham_nn), ham_nnn_(ham_nnn),
+      ham_on_site_terms_(this->ly_, this->lx_),
+      ham_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                          peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      ham_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                         peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      ham_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                          peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      ham_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                         peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                  peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                 peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                  peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                 peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1) {
+    if (!ham_onsite.IsDefault()) {
+      for (auto &ten : ham_on_site_terms_) {
+        ten = ham_onsite;
+      }
     }
   }
   /**
@@ -70,31 +71,31 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
                                        const Tensor &ham_nn,
                                        const Tensor &ham_nnn,
                                        const TenMatrix<Tensor> &ham_onsite_terms) :
-    SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial),
-    ham_nn_(ham_nn), ham_nnn_(ham_nnn),
-    ham_on_site_terms_(ham_onsite_terms),
-    ham_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    ham_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    ham_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    ham_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                        peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                                peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                               peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                                peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
-    evolve_gate_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, 
-                               peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1) {
-      assert(ham_on_site_terms_.rows() == this->ly_);
-      assert(ham_on_site_terms_.cols() == this->lx_);
-    }
+      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial),
+      ham_nn_(ham_nn), ham_nnn_(ham_nnn),
+      ham_on_site_terms_(ham_onsite_terms),
+      ham_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                          peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      ham_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                         peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      ham_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                          peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      ham_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                         peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_upperright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                  peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_upperleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                 peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_lowerright_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                  peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      evolve_gate_lowerleft_tri_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1,
+                                 peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1) {
+    assert(ham_on_site_terms_.rows() == this->ly_);
+    assert(ham_on_site_terms_.cols() == this->lx_);
+  }
 
  private:
- void SetEvolveGate_(void) override;
+  void SetEvolveGate_(void) override;
 
   enum TriProjPOSITION {
     UpperRight = 0,
@@ -396,7 +397,7 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0
-            << "Estimated En =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
+            << " Estimated En =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << -std::log(norm) / this->update_para.tau
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " TruncErr = " << std::setprecision(2) << std::scientific << max_trunc_err << std::fixed
