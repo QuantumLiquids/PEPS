@@ -224,6 +224,8 @@ struct SpinOneHalfSystemSimpleUpdateTrivial : public testing::Test {
 
   Tensor ham_ising_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
   Tensor ham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
+  double j_nnn = -0.52; // next-neighbor interaction in square lattice
+  Tensor ham_hei_nnn; // next-neighbor hamiltonian in square lattice
 
   double pinning_field_strength = 0.1;
   TenMatrix<Tensor> afm_pinning_field = TenMatrix<Tensor>(Ly, Lx);
@@ -260,6 +262,7 @@ struct SpinOneHalfSystemSimpleUpdateTrivial : public testing::Test {
     for (const auto &element : ham_hei_nn_elements) {
       ham_hei_nn(element.coors) = element.elem;
     }
+    ham_hei_nnn = j_nnn * ham_hei_nn;
 
     Tensor ham_hei_tri_terms[3];
     for (size_t i = 0; i < 3; i++) {
@@ -480,6 +483,49 @@ TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNHeisenbergWithAMFPinningFie
 
   double en_exact = -6.878533413625821;
   EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.3);
+}
+
+TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNNHeisenbergWithAMFPinningFieldOBC) {
+  std::string model_name = "square_nnn_hei_pin_obc";
+  
+  auto su_exe = std::make_unique<SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.1, 1, 2, 1e-5),
+                                                                                     *peps0,
+                                                                                     ham_hei_nn,
+                                                                                     ham_hei_nnn,
+                                                                                     afm_pinning_field);
+  su_exe->Execute();
+
+  std::vector<UpdateStage> stages = {
+      {4, 1e-6, 0.05},
+      {8, 1e-10, 0.01, 50}
+  };
+
+  RunStages<decltype(*su_exe), QNT>(*su_exe, model_name, stages, true);
+
+  double en_exact = -8.2563506175000985;
+  EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.5);
+}
+
+TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, SquareNNNHeisenbergWithAMFPinningFieldPBC) {
+  InitializePEPS(BoundaryCondition::Periodic);
+  std::string model_name = "square_nnn_hei_pin_pbc";
+  
+  auto su_exe = std::make_unique<SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>>(SimpleUpdatePara(50, 0.1, 1, 2, 1e-5),
+                                                                                     *peps0,
+                                                                                     ham_hei_nn,
+                                                                                     ham_hei_nnn,
+                                                                                     afm_pinning_field);
+  su_exe->Execute();
+
+  std::vector<UpdateStage> stages = {
+      {4, 1e-6, 0.05},
+      {8, 1e-10, 0.01, 50}
+  };
+
+  RunStages<decltype(*su_exe), QNT>(*su_exe, model_name, stages, true);
+
+  double en_exact = -8.9324003607025837;
+  EXPECT_NEAR(su_exe->GetEstimatedEnergy(), en_exact, 0.5);
 }
 
 TEST_F(SpinOneHalfSystemSimpleUpdateTrivial, TriangleNNHeisenbergOBC) {
