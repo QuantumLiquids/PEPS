@@ -121,6 +121,16 @@ class SquareSpinlessFermion : public SquareNNNModelEnergySolver<SquareSpinlessFe
   const double V_; // nearest-neighbor density interaction, V * n_i * n_j
 };
 
+/**
+ * @brief NN bond energy contribution.
+ *
+ * @param psi Output: Wavefunction amplitude computed via Trace (for accuracy check).
+ *
+ * **Fermion sign consistency**: For non-diagonal terms (config1 != config2), psi
+ * is always recalculated locally using Trace. This ensures psi and psi_ex (from
+ * ReplaceNNSiteTrace) use the same contraction path, guaranteeing consistent
+ * fermion signs. See docs/dev/design/math/fermion-sign-in-bmps-contraction.md.
+ */
 template<typename TenElemT, typename QNT>
 TenElemT SquareSpinlessFermion::EvaluateBondEnergy(
     const SiteIdx site1, const SiteIdx site2,
@@ -148,6 +158,22 @@ TenElemT SquareSpinlessFermion::EvaluateBondEnergy(
   }
 }
 
+/**
+ * @brief NNN hopping energy contribution.
+ *
+ * @param psi Input/output: If has value, reuse it; otherwise compute and store.
+ *
+ * **Psi reuse mechanism**: Within the same 2x2 plaquette, the base class calls
+ * this function twice (LEFTUP_TO_RIGHTDOWN, then LEFTDOWN_TO_RIGHTUP) with the
+ * same `psi` object. The first call computes psi via ReplaceNNNSiteTrace; the
+ * second call reuses it. This is safe because both calls share the same BTen2
+ * environment, ensuring identical contraction paths and consistent fermion signs.
+ *
+ * After BTen2MoveStep is called (moving to the next plaquette), psi goes out
+ * of scope and a fresh one is created for the new plaquette.
+ *
+ * @see SquareNNNModelEnergySolver::CalHorizontalBondEnergyAndHolesSweepRowImpl
+ */
 template<typename TenElemT, typename QNT>
 TenElemT SquareSpinlessFermion::EvaluateNNNEnergy(
     const SiteIdx site1, const SiteIdx site2,
@@ -157,7 +183,7 @@ TenElemT SquareSpinlessFermion::EvaluateNNNEnergy(
     BMPSContractor<TenElemT, QNT> &contractor,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
-    std::optional<TenElemT> &psi // return value, used for check the accuracy
+    std::optional<TenElemT> &psi
 ) {
   if (config1 == config2) {
     return 0;

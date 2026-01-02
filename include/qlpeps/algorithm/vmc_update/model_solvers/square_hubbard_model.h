@@ -176,6 +176,16 @@ class SquareHubbardModel : public SquareNNModelEnergySolver<SquareHubbardModel>,
   double mu_;
 };
 
+/**
+ * @brief NN bond energy contribution (hopping terms).
+ *
+ * @param psi Output: Wavefunction amplitude computed via Trace (for accuracy check).
+ *
+ * **Fermion sign consistency**: For non-diagonal terms (config1 != config2), psi
+ * is always recalculated locally using Trace. This ensures psi and psi_ex (from
+ * ReplaceNNSiteTrace) use the same contraction path, guaranteeing consistent
+ * fermion signs. See docs/dev/design/math/fermion-sign-in-bmps-contraction.md.
+ */
 template<typename TenElemT, typename QNT>
 TenElemT SquareHubbardModel::EvaluateBondEnergy(
     const SiteIdx site1, const SiteIdx site2,

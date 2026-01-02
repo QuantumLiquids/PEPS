@@ -49,6 +49,7 @@ TenElemT EvaluateBondEnergy(
     const size_t config1, const size_t config2,         // 格点上的局域状态
     const BondOrientation orient,                       // 键方向：HORIZONTAL/VERTICAL
     const TensorNetwork2D<TenElemT, QNT> &tn,          // 张量网络
+    BMPSContractor<TenElemT, QNT> &contractor,         // BMPS收缩器
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     const TenElemT inv_psi                              // 波函数倒数（输入参数）
@@ -63,6 +64,7 @@ TenElemT EvaluateBondEnergy(
     const size_t config1, const size_t config2,         // 格点上的局域状态
     const BondOrientation orient,                       // 键方向：HORIZONTAL/VERTICAL
     const TensorNetwork2D<TenElemT, QNT> &tn,          // 张量网络
+    BMPSContractor<TenElemT, QNT> &contractor,         // BMPS收缩器
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi                        // 波函数振幅（返回值，用于数值检查）
@@ -74,6 +76,7 @@ TenElemT EvaluateBondEnergy(
 - `config1, config2`：每个格点上的粒子配置（编码为整数）
 - `orient`：键的方向，用于张量网络收缩
 - `tn`：当前的二维张量网络
+- `contractor`：BMPS收缩器，用于计算Trace和ReplaceXXXTrace
 - `split_index_tps_on_site1/2`：每个格点的所有可能态张量
 
 **关键差异**：
@@ -152,6 +155,7 @@ public:
         const size_t config1, const size_t config2,
         const BondOrientation orient,
         const TensorNetwork2D<TenElemT, QNT> &tn,
+        BMPSContractor<TenElemT, QNT> &contractor,
         const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
         const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
         const TenElemT inv_psi  // 玻色子系统：输入参数
@@ -162,9 +166,9 @@ public:
         } else {
             // 非对角项：J * <S^x_i S^x_j + S^y_i S^y_j>
             // 计算 <config'|H|config> 其中 config' 是翻转后的配置
-            TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
-                                                   split_index_tps_on_site1[config2],
-                                                   split_index_tps_on_site2[config1]);
+            TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
+                                                            split_index_tps_on_site1[config2],
+                                                            split_index_tps_on_site2[config1]);
             TenElemT ratio = ComplexConjugate(psi_ex * inv_psi);
             return (-0.25 * J_ + ratio * 0.5 * J_);
         }
@@ -219,12 +223,13 @@ public:
         const size_t config1, const size_t config2,
         const BondOrientation orient,
         const TensorNetwork2D<TenElemT, QNT> &tn,
+        BMPSContractor<TenElemT, QNT> &contractor,
         const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
         const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
         std::optional<TenElemT> &psi  // 费米子系统：输出参数
     ) {
         if (config1 == config2) {
-            psi.reset(); // 这里可能不是一个好的设计，在上层代码中引入负担。需考虑基类设计。
+            psi.reset(); // 对角项不需要计算psi
             if (tJSingleSiteState(config1) == tJSingleSiteState::Empty) {
                 return 0.0;
             } else {
@@ -232,10 +237,14 @@ public:
                 return 0.0;  // sz * sz - 1/4 * n * n = 0 for parallel spins
             }
         } else {
-            psi = tn.Trace(site1, site2, orient);// CRITICAL: 费米子系统中，需要用到波函数振幅psi时，要在局部重新计算psi，以确保和psi_ex符号的一致性。这一情况在NNN系统中会变得更加复杂。用户需完整理解费米子符号如何在能量计算中起作用！
-            TenElemT psi_ex = tn.ReplaceNNSiteTrace(site1, site2, orient,
-                                                   split_index_tps_on_site1[config2],
-                                                   split_index_tps_on_site2[config1]);
+            // ⚠️ CRITICAL: Fermion sign consistency
+            // Must recalculate psi locally using the same contraction path as psi_ex.
+            // DO NOT reuse a globally cached amplitude!
+            // See: docs/dev/design/math/fermion-sign-in-bmps-contraction.md
+            psi = contractor.Trace(tn, site1, site2, orient);
+            TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
+                                                            split_index_tps_on_site1[config2],
+                                                            split_index_tps_on_site2[config1]);
             TenElemT ratio = ComplexConjugate(psi_ex / psi.value());
             
             if (tJSingleSiteState(config1) == tJSingleSiteState::Empty ||
@@ -287,6 +296,7 @@ TenElemT EvaluateNNNEnergy(
     const size_t config1, const size_t config2,
     const DIAGONAL_DIR diagonal_dir,                    // 对角方向
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,         // BMPS收缩器
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     const TenElemT inv_psi
@@ -301,9 +311,10 @@ TenElemT EvaluateNNNEnergy(
     const size_t config1, const size_t config2,
     const DIAGONAL_DIR diagonal_dir,
     const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,         // BMPS收缩器
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
-    std::optional<TenElemT> &psi //这里的sign需要比较仔细的考虑！可以参考次近邻 tJ 模型的实现。
+    std::optional<TenElemT> &psi  // 费米子NNN的sign处理更复杂，参考spinless_fermion的实现
 );
 ```
 
