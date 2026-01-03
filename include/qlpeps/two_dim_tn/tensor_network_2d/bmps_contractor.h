@@ -289,8 +289,37 @@ class BMPSContractor {
     TenElemT ContractRow(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary) const;
 
     // ==================== BTen Cache Methods ====================
-    // These methods provide efficient caching for multiple trace calculations
-    // on the same row with different site replacements.
+    //
+    // These methods provide O(Lx) row contraction for multi-site measurements,
+    // reducing from O(Lx²) when using ContractRow() for each site.
+    //
+    // ## Index Conventions
+    // The BTen index structure is CONSISTENT with BMPSContractor::InitBTen().
+    // For an UP walker with DOWN opposite boundary (horizontal row contraction):
+    //   - LEFT BTen:  indices = (UP_R, site_L, DOWN_L) - same as InitBTen(LEFT, row)
+    //   - RIGHT BTen: indices = (DOWN_R, site_R, UP_L) - same as InitBTen(RIGHT, row)
+    // See BMPSContractor's BTen documentation for complete 4-direction conventions.
+    //
+    // ## Typical Usage Pattern (right-to-left scan)
+    //
+    // ```cpp
+    // // Initialize both BTens
+    // walker.InitBTenLeft(mpo, down_boundary, Lx);   // Pre-compute full LEFT
+    // walker.InitBTenRight(mpo, down_boundary, Lx-1); // Start RIGHT at boundary
+    //
+    // // Scan right-to-left
+    // for (int x = Lx-1; x >= 0; --x) {
+    //   TenElemT val = walker.TraceWithBTen(modified_site, x, down_boundary);
+    //   if (x > 0) walker.GrowBTenRightStep(mpo, down_boundary);
+    // }
+    //
+    // walker.ClearBTen();
+    // ```
+    //
+    // ## Key Points
+    // - InitBTenLeft grows from left (col=0) towards right (target_col)
+    // - InitBTenRight grows from right (col=N-1) towards left (target_col)
+    // - For scan at column k: LEFT covers [0,k), RIGHT covers (k,N-1]
 
     /**
      * @brief Initialize the BTen cache for efficient multi-site trace calculations.
@@ -403,16 +432,76 @@ class BMPSContractor {
   BMPSWalker GetWalker(const TensorNetwork2D<TenElemT, QNT>& tn, BMPSPOSITION position) const;
 
   // --- Boundary Tensor (BTen) Methods ---
+  //
+  // BTen (Boundary Tensor) represents the partially contracted environment along a row or column.
+  // Each BTen is a 3-index tensor connecting to the boundary MPS tensors and site tensors.
+  //
+  // ============================================================================
+  // BTen INDEX CONVENTIONS (for all four positions)
+  // ============================================================================
+  //
+  // IMPORTANT: Opposite BTens have REVERSED index ordering!
+  // This is by design so they can be contracted with reversed index matching.
+  //
+  // Example: When contracting UP BTen with DOWN BTen (from ReplaceNNSiteTrace):
+  //   Contract(&up_result, {0, 1, 2}, &down_result, {2, 1, 0}, &scalar);
+  // The {0,1,2} vs {2,1,0} handles the reversed convention automatically.
+  //
+  // ----------------------------------------------------------------------------
+  // HORIZONTAL PAIR (LEFT/RIGHT) - for row contraction
+  // ----------------------------------------------------------------------------
+  //
+  // ## LEFT BTen: indices ordered TOP → MIDDLE → BOTTOM
+  //
+  //   +-------+
+  //   | LEFT  |---[0]---> UP[R=2]     (connects to UP boundary)
+  //   | BTen  |---[1]---> site[L=0]   (connects to site tensor)
+  //   |       |---[2]---> DOWN[L=0]   (connects to DOWN boundary)
+  //   +-------+
+  //
+  // ## RIGHT BTen: indices ordered BOTTOM → MIDDLE → TOP (reversed!)
+  //
+  //                       +-------+
+  //   UP[L=0]   <---[2]---|       |   (connects to UP boundary)
+  //   site[R=2] <---[1]---| RIGHT |   (connects to site tensor)
+  //   DOWN[R=2] <---[0]---| BTen  |   (connects to DOWN boundary)
+  //                       +-------+
+  //
+  // ----------------------------------------------------------------------------
+  // VERTICAL PAIR (UP/DOWN) - for column contraction
+  // ----------------------------------------------------------------------------
+  //
+  // ## DOWN BTen: indices ordered LEFT → MIDDLE → RIGHT
+  //
+  //             LEFT[2]       site[1]       RIGHT[0]
+  //                ^             ^             ^
+  //                |             |             |
+  //               [0]           [1]           [2]
+  //          +---------------------------------------+
+  //          |               DOWN BTen               |
+  //          +---------------------------------------+
+  //
+  // ## UP BTen: indices ordered RIGHT → MIDDLE → LEFT (reversed!)
+  //
+  //          +---------------------------------------+
+  //          |                UP BTen                |
+  //          +---------------------------------------+
+  //               [2]           [1]           [0]
+  //                |             |             |
+  //                v             v             v
+  //             LEFT[0]       site[3]       RIGHT[2]
+  //
+  // ============================================================================
 
   /**
    * @brief Initializes the boundary tensor (environment) set for a specific position and slice.
    * 
-   * "BTen" (Boundary Tensor) usually refers to the environment tensors accumulated during the contraction
-   * of a strip/slice, orthogonal to the BMPS direction.
+   * Creates a "vacuum" BTen at the boundary edge with trivial indices.
+   * See the BTen INDEX CONVENTIONS section above for the index structure of each position.
    * 
    * @param tn The tensor network.
-   * @param position The position/direction of the boundary.
-   * @param slice_num The index of the slice (row or column) being processed.
+   * @param position The position/direction of the boundary (LEFT, RIGHT, UP, DOWN).
+   * @param slice_num The index of the slice (row for LEFT/RIGHT, column for UP/DOWN).
    */
   void InitBTen(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position, const size_t slice_num);
 

@@ -18,6 +18,165 @@ namespace qlpeps {
 using qlmps::IN;
 using qlmps::OUT;
 
+// ============================================================================
+//                    BMPS CONTRACTOR CONVENTIONS & REFERENCE
+// ============================================================================
+//
+// This document explains the critical index conventions, storage orders, and
+// contraction patterns used throughout BMPSContractor. Understanding these is
+// essential for correctly implementing new features.
+//
+// ============================================================================
+// 1. TENSOR INDEX CONVENTIONS
+// ============================================================================
+//
+// ## 1.1 Site Tensor (TN node, 4-leg tensor)
+//
+//            U (index 3)
+//            |
+//     L -----+------ R
+//   (idx 0)  |    (idx 2)
+//            D (index 1)
+//
+// Indices: (L=0, D=1, R=2, U=3)
+// Physical meaning: virtual bonds connecting to neighboring sites in 2D lattice.
+//
+// ## 1.2 BMPS Tensor (Boundary MPS tensor, 3-leg tensor)
+//
+//       P (index 1)
+//       |
+//  L ---+--- R
+// (0)       (2)
+//
+// Indices: (L=0, P=1, R=2)
+//
+// NAMING CLARIFICATION:
+// - From MPS perspective: index 1 is the "physical" index of the MPS.
+// - From PEPS/TN2D perspective: index 1 is still a VIRTUAL bond that connects
+//   to a site tensor's virtual index (e.g., U or D).
+// - We use "P" for brevity, but remember it's NOT a true physical index
+//   of the underlying quantum system.
+//
+// Connection example (DOWN BMPS at row r):
+//   BMPS_tensor[P=1] connects to site_tensor[D=1] at row r.
+//
+// ============================================================================
+// 2. BMPS STORAGE ORDER (CRITICAL!)
+// ============================================================================
+//
+// Different BMPS positions have different storage conventions:
+//
+// ## 2.1 DOWN BMPS (Normal Order)
+//
+//   Storage:  bmps[0]  bmps[1]  bmps[2]  ...  bmps[N-1]
+//   Columns:    0        1        2             N-1
+//
+//   bmps[i] corresponds to column i. Left-to-right storage.
+//
+// ## 2.2 UP BMPS (Reversed Order!) *** IMPORTANT ***
+//
+//   Storage:  bmps[0]  bmps[1]  bmps[2]  ...  bmps[N-1]
+//   Columns:   N-1      N-2      N-3            0
+//
+//   bmps[i] corresponds to column (N-1-i). Right-to-left storage!
+//
+// Why reversed? The UP BMPS is constructed by absorbing rows from top to bottom,
+// and the internal MPS bond direction naturally reverses compared to DOWN.
+//
+// ## 2.3 Mapping between storage index and column index
+//
+// For N columns (0 to N-1):
+//   - DOWN BMPS: storage_idx = col
+//   - UP BMPS:   storage_idx = N - 1 - col
+//
+// ============================================================================
+// 3. BTen (BOUNDARY TENSOR) STRUCTURE
+// ============================================================================
+//
+// BTen represents the partially contracted environment along a row or column.
+// Used for efficient trace calculations when scanning across multiple sites.
+//
+// IMPORTANT: Opposite BTens have REVERSED index ordering by design!
+// See bmps_contractor.h for complete documentation.
+//
+// Summary for horizontal (LEFT/RIGHT) pair:
+//   LEFT BTen:  [0]=UP_R,   [1]=site_L, [2]=DOWN_L  (order: TOP→BOTTOM)
+//   RIGHT BTen: [0]=DOWN_R, [1]=site_R, [2]=UP_L    (order: BOTTOM→TOP, reversed!)
+//
+// When contracting opposite BTens, use reversed index matching:
+//   Contract(&left_result, {0, 1, 2}, &right_result, {2, 1, 0}, &scalar);
+//
+// ## 3.1 LEFT BTen (grows from left to right)
+//
+//       +---------+
+//       | LEFT    |====> index 0: UP[R]   (top boundary)
+//       | BTen    |====> index 1: site[L] (middle, site tensor)
+//       |         |====> index 2: DOWN[L] (bottom boundary)
+//       +---------+
+//
+// ## 3.2 RIGHT BTen (grows from right to left)
+//
+//                       +-------+
+//   UP[L=0]   <---[2]---|       |   (connects to UP boundary)
+//   site[R=2] <---[1]---| RIGHT |   (connects to site tensor)
+//   DOWN[R=2] <---[0]---| BTen  |   (connects to DOWN boundary)
+//                       +-------+
+//
+// ============================================================================
+// 4. CONTRACTION PATTERNS (for GrowFullBTen)
+// ============================================================================
+//
+// ## 4.1 LEFT case (bosonic):
+//
+//   Contraction Order:
+//   1. UP_BMPS[R]  connects with  BTen[0]      -> forms Tmp1
+//   2. Tmp1        connects with  Site[U, L]   -> forms Tmp2
+//   3. Tmp2        connects with  DOWN_BMPS[L] -> New BTen
+//
+// ## 4.2 RIGHT case (bosonic):
+//
+//   Contraction Order:
+//   1. DOWN_BMPS[R] connects with  BTen[0]      -> forms Tmp1
+//   2. Tmp1         connects with  Site[D, R]   -> forms Tmp2
+//   3. Tmp2         connects with  UP_BMPS[L]   -> New BTen
+//
+// ============================================================================
+// 5. ASCII DIAGRAM: Row Contraction Alignment
+// ============================================================================
+//
+// Alignment of vector indices vs physical columns (for N=4):
+//
+//   Physical Col:     0            1            2            3
+//   (Left -> Right)
+//
+//   UP BMPS vec:    [3]          [2]          [1]          [0]    (Reversed Storage!)
+//                    |            |            |            |
+//   Site Tensor:    [0]          [1]          [2]          [3]    (Normal Storage)
+//                    |            |            |            |
+//   DOWN BMPS vec:  [0]          [1]          [2]          [3]    (Normal Storage)
+//
+//
+// LEFT BTen grows from left (col 0 -> 3):
+//
+//   +------+ 
+//   |      |--- [UP vec 3]
+//   | LEFT |--- [Site 0  ] ...
+//   | BTen |--- [DOWN 0  ]
+//   |  0   |
+//   |      |
+//   +------+
+//
+// RIGHT BTen grows from right (col 3 -> 0):
+//
+//                                            +-------+   
+//                               [UP vec 0]---|       |
+//                          ...  [Site 3  ]---| RIGHT |
+//                          ...  [DOWN 3  ]---| BTen  |
+//                                            |  0    |
+//                                            +-------+
+//
+// ============================================================================
+
 namespace {
 template<bool is_fermion>
 inline std::vector<size_t> GenMpoTen1TransposeAxesForBrowBTen2(const size_t post) {
@@ -577,6 +736,49 @@ void BMPSContractor<TenElemT, QNT>::InitBTen2(const TensorNetwork2D<TenElemT, QN
   bten_set2_[position].emplace_back(ten);
 }
 
+/**
+ * @brief Grows the boundary tensor (BTen) by absorbing sites along a slice.
+ *
+ * ## Contraction Pattern for LEFT position (bosonic):
+ *
+ * @verbatim
+ *   +-------+      up_mps[R,P]      +-------+
+ *   | BTen  |=========*=============| BTen' |
+ *   | (k)   |      site[U,L,D]      | (k+1) |
+ *   |       |=========*=============|       |
+ *   |       |     down_mps[L,P]     |       |
+ *   |       |=========*=============|       |
+ *   +-------+                       +-------+
+ *
+ *   Contract order:
+ *   1. up_mps[R=2] with BTen[0]
+ *   2. Result with site[U=3,L=0]  
+ *   3. Result with down_mps[L=0,P=1]
+ *   
+ *   Key: UP BMPS is reversed, so up_mps[R] connects to BTen[0] (pointing left).
+ * @endverbatim
+ *
+ * ## Contraction Pattern for RIGHT position (bosonic):
+ *
+ * RIGHT BTen grows from right to left (absorbing columns N-1, N-2, ...).
+ *
+ * @verbatim
+ *   +-------+    up_mps[L,P]     +-------+
+ *   | BTen' |=========*==========| BTen  |
+ *   | (k+1) |     site[D,R,U]    | (k)   |   <-- BTen(k) is on the RIGHT
+ *   |       |=========*==========|       |
+ *   |       |   down_mps[P,R]    |       |
+ *   |       |=========*==========|       |
+ *   +-------+                    +-------+
+ *
+ *   Contract order:
+ *   1. down_mps[R=2] with BTen[0]
+ *   2. Result with site[D=1,R=2]
+ *   3. Result with up_mps[L=0,P=1]
+ * @endverbatim
+ *
+ * @note The UP BMPS uses reversed storage (see file header for details).
+ */
 template<typename TenElemT, typename QNT>
 void BMPSContractor<TenElemT, QNT>::GrowFullBTen(const TensorNetwork2D<TenElemT, QNT>& tn,
                                                   const qlpeps::BTenPOSITION position,
@@ -1792,16 +1994,101 @@ TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::ContractRow(const TransferMP
   return accumulator.GetElem(coords);
 }
 
-// ==================== BTen Cache Implementation ====================
+// ============================================================================
+//                    BTen Cache Implementation (BMPSWalker)
+// ============================================================================
+//
+// This section implements BTen caching for BMPSWalker, enabling O(Lx) row
+// contraction instead of O(Lx²) when computing multiple traces on the same row.
+//
+// ## Index Conventions
+// BMPSWalker BTen uses the SAME index conventions as BMPSContractor::InitBTen().
+// See bmps_contractor.h for complete documentation of all 4-direction BTen indices.
+//
+// For UP walker with DOWN opposite (horizontal row contraction):
+//   - LEFT BTen:  (UP_R, site_L, DOWN_L) - matches InitBTen(LEFT, row)
+//   - RIGHT BTen: (DOWN_R, site_R, UP_L) - matches InitBTen(RIGHT, row)
+//
+// ## Storage Order Reminder
+//   - UP BMPS (walker.bmps_): REVERSED. bmps_[i] → col = N-1-i
+//   - DOWN BMPS (opposite):   Normal.   opposite[i] → col = i
+//   - Site MPO (mpo):         Normal.   mpo[i] → col = i
+//
+// ## Contraction Patterns (bosonic case)
+// Uses the same patterns as GrowFullBTen:
+//
+// ### GrowBTenLeftStep (LEFT pattern):
+//   Contract<true,true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1);
+//   Contract<false,false>(tmp1, mpo_ten, 1, 3, 2, tmp2);
+//   Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &tmp3);
+//
+// ### GrowBTenRightStep (RIGHT pattern):
+//   Contract<true,true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1);
+//   Contract<false,false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
+//   Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &tmp3);
+//
+// ### TraceWithBTen: Contract at column k
+//
+//   +---------+     up[k]      +---------+
+//   | LEFT[k] |=====[L,R]=====| RIGHT   |
+//   |         |    site[k]    | [N-1-k] |
+//   |         |====[L,R,U,D]==|         |
+//   |         |    down[k]    |         |
+//   |         |=====[L,R]=====|         |
+//   +---------+               +---------+
+//         ↓
+//      Scalar result
 
 template<typename TenElemT, typename QNT>
 void BMPSContractor<TenElemT, QNT>::BMPSWalker::InitBTenLeft(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary, 
     size_t target_col) {
-  // Simplified implementation: just track the target column
-  // The actual BTen caching is deferred to future optimization
-  bten_left_col_ = target_col;
+  using IndexT = qlten::Index<QNT>;
+  
+  const size_t N = bmps_.size();
+  if (N == 0 || mpo.size() != N || opposite_boundary.size() != N) {
+    return;
+  }
+  
+  bten_left_.clear();
+  bten_left_col_ = 0;
+  
+  // Following the same pattern as BMPSContractor::InitBTen(LEFT, row):
+  // vacuum BTen connects via:
+  //   index0: UP BMPS last tensor (col=0 in reversed) RIGHT index
+  //   index1: site tensor at col=0 LEFT index
+  //   index2: DOWN BMPS first tensor (col=0) LEFT index
+  
+  const Tensor& up_ten_col0 = bmps_[N - 1];  // UP reversed: bmps_[N-1] = col 0
+  const Tensor& site_col0 = *mpo[0];
+  const Tensor& down_ten_col0 = opposite_boundary[0];
+  
+  // Match InitBTen LEFT pattern: index0 from UP[R], index1 from site[L], index2 from DOWN[L]
+  IndexT index0 = qlten::InverseIndex(up_ten_col0.GetIndex(2));    // UP col0 RIGHT
+  IndexT index1 = qlten::InverseIndex(site_col0.GetIndex(0));      // site col0 LEFT
+  IndexT index2 = qlten::InverseIndex(down_ten_col0.GetIndex(0));  // DOWN col0 LEFT
+  
+#ifndef NDEBUG
+  std::cerr << "[InitBTenLeft] N=" << N << ", target_col=" << target_col << std::endl;
+  std::cerr << "[InitBTenLeft] up_ten_col0: "; up_ten_col0.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[InitBTenLeft] site_col0: "; site_col0.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[InitBTenLeft] down_ten_col0: "; down_ten_col0.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  Tensor vacuum_bten({index0, index1, index2});
+  vacuum_bten({0, 0, 0}) = TenElemT(1.0);
+  
+#ifndef NDEBUG
+  std::cerr << "[InitBTenLeft] vacuum_bten: "; vacuum_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  bten_left_.push_back(std::move(vacuum_bten));
+  
+  // Grow to target_col
+  while (bten_left_col_ < target_col && bten_left_col_ < N) {
+    GrowBTenLeftStep(mpo, opposite_boundary);
+  }
 }
 
 template<typename TenElemT, typename QNT>
@@ -1809,32 +2096,169 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::InitBTenRight(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary, 
     size_t target_col) {
-  // Simplified implementation: just track the target column
+  using IndexT = qlten::Index<QNT>;
+  
   const size_t N = bmps_.size();
-  bten_right_col_ = (target_col < N) ? target_col + 1 : N;
+  if (N == 0 || mpo.size() != N || opposite_boundary.size() != N) {
+    return;
+  }
+  
+  bten_right_.clear();
+  bten_right_col_ = N;  // Right edge starts at N (nothing absorbed yet)
+  
+  // Following the same pattern as BMPSContractor::InitBTen(RIGHT, row):
+  // vacuum BTen connects via:
+  //   index0: DOWN BMPS last tensor (col=N-1) RIGHT index
+  //   index1: site tensor at col=N-1 RIGHT index
+  //   index2: UP BMPS first tensor (col=N-1 in reversed) LEFT index
+  
+  const Tensor& down_ten_colN1 = opposite_boundary[N - 1];
+  const Tensor& site_colN1 = *mpo[N - 1];
+  const Tensor& up_ten_colN1 = bmps_[0];  // UP reversed: bmps_[0] = col N-1
+  
+  // Match InitBTen RIGHT pattern
+  IndexT index0 = qlten::InverseIndex(down_ten_colN1.GetIndex(2));  // DOWN col=N-1 RIGHT
+  IndexT index1 = qlten::InverseIndex(site_colN1.GetIndex(2));      // site col=N-1 RIGHT
+  IndexT index2 = qlten::InverseIndex(up_ten_colN1.GetIndex(0));    // UP col=N-1 LEFT
+  
+#ifndef NDEBUG
+  std::cerr << "[InitBTenRight] N=" << N << ", target_col=" << target_col << std::endl;
+  std::cerr << "[InitBTenRight] down_ten_colN1: "; down_ten_colN1.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[InitBTenRight] site_colN1: "; site_colN1.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[InitBTenRight] up_ten_colN1: "; up_ten_colN1.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  Tensor vacuum_bten({index0, index1, index2});
+  vacuum_bten({0, 0, 0}) = TenElemT(1.0);
+  
+#ifndef NDEBUG
+  std::cerr << "[InitBTenRight] vacuum_bten: "; vacuum_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  bten_right_.push_back(std::move(vacuum_bten));
+  
+  // Grow to target_col (towards left)
+  // target_col means we want RIGHT BTen to cover (target_col, N-1]
+  // So we need bten_right_col_ == target_col + 1
+  while (bten_right_col_ > target_col + 1 && bten_right_col_ > 0) {
+    GrowBTenRightStep(mpo, opposite_boundary);
+  }
 }
 
 template<typename TenElemT, typename QNT>
 void BMPSContractor<TenElemT, QNT>::BMPSWalker::GrowBTenLeftStep(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary) {
-  // Simplified implementation: just advance the column counter
-  // Actual BTen caching is deferred to future optimization
   const size_t N = bmps_.size();
-  if (bten_left_col_ < N) {
-    bten_left_col_++;
+  if (bten_left_.empty() || bten_left_col_ >= N) {
+    return;
   }
+  
+  // Absorb column at bten_left_col_
+  const size_t col = bten_left_col_;
+  
+  // Get tensors for this column (same as GrowFullBTen LEFT case)
+  const Tensor& up_mps_ten = bmps_[N - 1 - col];  // UP reversed
+  const Tensor& mpo_ten = *mpo[col];
+  const Tensor& down_mps_ten = opposite_boundary[col];
+  const Tensor& left_bten = bten_left_.back();
+
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenLeftStep] col=" << col << std::endl;
+  std::cerr << "[GrowBTenLeftStep] up_mps_ten: "; up_mps_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[GrowBTenLeftStep] mpo_ten: "; mpo_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[GrowBTenLeftStep] down_mps_ten: "; down_mps_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[GrowBTenLeftStep] left_bten: "; left_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  // Use EXACT same contraction pattern as GrowFullBTen LEFT case (bosonic):
+  // Contract<TenElemT, QNT, true, true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1);
+  // Contract<TenElemT, QNT, false, false>(tmp1, *mpo[i], 1, 3, 2, tmp2);
+  // Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &tmp3);
+  
+  Tensor tmp1, tmp2, next_bten;
+  qlten::Contract<TenElemT, QNT, true, true>(up_mps_ten, left_bten, 2, 0, 1, tmp1);
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenLeftStep] tmp1 after up*bten: "; tmp1.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  qlten::Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 3, 2, tmp2);
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenLeftStep] tmp2 after tmp1*mpo: "; tmp2.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  qlten::Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &next_bten);
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenLeftStep] next_bten: "; next_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  bten_left_.push_back(std::move(next_bten));
+  bten_left_col_++;
 }
 
 template<typename TenElemT, typename QNT>
 void BMPSContractor<TenElemT, QNT>::BMPSWalker::GrowBTenRightStep(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary) {
-  // Simplified implementation: just decrement the column counter
-  // Actual BTen caching is deferred to future optimization
-  if (bten_right_col_ > 0) {
-    bten_right_col_--;
+  const size_t N = bmps_.size();
+  if (bten_right_.empty() || bten_right_col_ == 0) {
+    return;
   }
+  
+  // Absorb column at bten_right_col_ - 1 (moving left)
+  const size_t col = bten_right_col_ - 1;
+  
+  // Get tensors for this column (same indexing as GrowFullBTen RIGHT case)
+  // In GrowFullBTen RIGHT: i-th iteration processes col = N-1-i
+  // Here we use col directly, so we need:
+  // up_mps_ten = up_bmps[N-1-col] = bmps_[N-1-col] but wait...
+  // Actually in GrowFullBTen RIGHT: up_mps_ten = up_bmps[i] where col=N-1-i
+  // So when col=N-1, i=0, up_mps_ten = up_bmps[0]
+  // Since UP BMPS is reversed: up_bmps[0] corresponds to col=N-1. Correct!
+  // When col=N-2, i=1, up_mps_ten = up_bmps[1] corresponds to col=N-2. Correct!
+  
+  const Tensor& up_mps_ten = bmps_[N - 1 - col];  // UP reversed
+  const Tensor& down_mps_ten = opposite_boundary[col];
+  const Tensor& mpo_ten = *mpo[col];
+  const Tensor& right_bten = bten_right_.back();
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenRightStep] col=" << col << std::endl;
+  std::cerr << "[GrowBTenRightStep] down_mps_ten: "; down_mps_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[GrowBTenRightStep] mpo_ten: "; mpo_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[GrowBTenRightStep] up_mps_ten: "; up_mps_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[GrowBTenRightStep] right_bten: "; right_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  // Use EXACT same contraction pattern as GrowFullBTen RIGHT case (bosonic):
+  // Contract<TenElemT, QNT, true, true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1);
+  // Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
+  // Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &tmp3);
+  
+  Tensor tmp1, tmp2, next_bten;
+  qlten::Contract<TenElemT, QNT, true, true>(down_mps_ten, right_bten, 2, 0, 1, tmp1);
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenRightStep] tmp1 after down*bten: "; tmp1.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  qlten::Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenRightStep] tmp2 after tmp1*mpo: "; tmp2.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  qlten::Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &next_bten);
+  
+#ifndef NDEBUG
+  std::cerr << "[GrowBTenRightStep] next_bten: "; next_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  bten_right_.push_back(std::move(next_bten));
+  bten_right_col_--;
 }
 
 template<typename TenElemT, typename QNT>
@@ -1842,10 +2266,110 @@ TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::TraceWithBTen(
     const Tensor& site, 
     size_t site_col, 
     const BMPS<TenElemT, QNT>& opposite_boundary) const {
-  // Simplified implementation: BTen caching is not yet implemented
-  // Fall back to returning 0 to indicate BTen is not available
-  // The caller should use ContractRow as fallback
-  return TenElemT(0);
+  const size_t N = bmps_.size();
+  
+  // Check if BTen caches are available and cover the required columns
+  // LEFT BTen should cover [0, site_col), so bten_left_col_ >= site_col
+  // RIGHT BTen should cover (site_col, N-1], so bten_right_col_ <= site_col + 1
+  if (bten_left_.empty() || bten_right_.empty()) {
+    return TenElemT(0);  // BTen not initialized
+  }
+  
+  if (bten_left_col_ < site_col || bten_right_col_ > site_col + 1) {
+    return TenElemT(0);  // BTen doesn't cover the required range
+  }
+  
+  // Get the appropriate BTen
+  // bten_left_[k] covers [0, k-1] after k grow steps, so for [0, site_col) we need bten_left_[site_col]
+  // But bten_left_[0] is vacuum, bten_left_[k] covers [0, k-1]
+  // Actually: bten_left_[0] is vacuum (before col 0), bten_left_[k] has absorbed cols [0, k-1]
+  // So to cover [0, site_col), we need bten_left_[site_col]
+  const Tensor& left_bten = bten_left_[site_col];
+  
+  // bten_right_[0] is vacuum (after col N-1), bten_right_[k] has absorbed cols [N-k, N-1]
+  // For (site_col, N-1], we need to have absorbed cols [site_col+1, N-1]
+  // Number of cols = N-1 - site_col = N - 1 - site_col
+  // So we need bten_right_[N - 1 - site_col]
+  const size_t right_idx = N - 1 - site_col;
+  if (right_idx >= bten_right_.size()) {
+    return TenElemT(0);
+  }
+  const Tensor& right_bten = bten_right_[right_idx];
+  
+  // Get tensors at site_col
+  const Tensor& up_ten = bmps_[N - 1 - site_col];  // UP reversed
+  const Tensor& down_ten = opposite_boundary[site_col];
+  
+#ifndef NDEBUG
+  std::cerr << "[TraceWithBTen] site_col=" << site_col << ", right_idx=" << right_idx << std::endl;
+  std::cerr << "[TraceWithBTen] left_bten: "; left_bten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[TraceWithBTen] up_ten: "; up_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[TraceWithBTen] site: "; site.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[TraceWithBTen] down_ten: "; down_ten.ConciseShow(0); std::cerr << std::endl;
+  std::cerr << "[TraceWithBTen] right_bten: "; right_bten.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  // The BTen structure from GrowFullBTen (LEFT case):
+  // After contracting up_mps_ten[2] with bten[0], then mpo, then down_mps_ten,
+  // the result has indices connecting to the RIGHT side of the current column.
+  // So left_bten's indices should connect to column's LEFT sides, not the MPS tensors' L indices.
+  //
+  // Looking at the contraction in GrowFullBTen more carefully:
+  // Contract<true,true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1)
+  // This contracts up_mps_ten[R=2] with bten[0].
+  // So bten[0] should be compatible with up_mps_ten[R], meaning bten[0] connects from the RIGHT.
+  //
+  // This is confusing. Let me just follow the same contraction pattern as GrowFullBTen
+  // but for calculating the full trace.
+  //
+  // For a single-column trace, we need to contract:
+  // left_bten -- up_mps_ten -- right_bten
+  //            |-- mpo_ten --|
+  //            -- down_mps_ten --
+  //
+  // Using GrowFullBTen pattern:
+  // Step 1: Contract up_mps_ten with left_bten (same as GrowBTenLeftStep)
+  // Step 2: Contract result with mpo_ten
+  // Step 3: Contract result with down_mps_ten
+  // Step 4: Contract result with right_bten
+  
+  Tensor tmp1, tmp2, tmp3, result;
+  
+  // Follow GrowBTenLeftStep pattern exactly for first 3 contractions
+  qlten::Contract<TenElemT, QNT, true, true>(up_ten, left_bten, 2, 0, 1, tmp1);
+  
+#ifndef NDEBUG
+  std::cerr << "[TraceWithBTen] tmp1: "; tmp1.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  qlten::Contract<TenElemT, QNT, false, false>(tmp1, site, 1, 3, 2, tmp2);
+  
+#ifndef NDEBUG
+  std::cerr << "[TraceWithBTen] tmp2: "; tmp2.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  qlten::Contract(&tmp2, {0, 2}, &down_ten, {0, 1}, &tmp3);
+  
+#ifndef NDEBUG
+  std::cerr << "[TraceWithBTen] tmp3: "; tmp3.ConciseShow(0); std::cerr << std::endl;
+#endif
+  
+  // Now tmp3 has the same structure as a LEFT BTen after absorbing one column
+  // tmp3 indices should match what right_bten expects to contract with
+  // right_bten from GrowFullBTen RIGHT case has indices after Contract pattern:
+  // Contract<true,true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1)
+  // So right_bten[0] connects to down_mps_ten[R]
+  // This means tmp3 needs to be contracted with right_bten appropriately
+  
+  // Contract all remaining indices
+  qlten::Contract(&tmp3, {0, 1, 2}, &right_bten, {2, 1, 0}, &result);
+  
+  // Result should be a scalar
+  if (result.Rank() != 0) {
+    return TenElemT(0);
+  }
+  
+  return result();
 }
 
 } // namespace qlpeps

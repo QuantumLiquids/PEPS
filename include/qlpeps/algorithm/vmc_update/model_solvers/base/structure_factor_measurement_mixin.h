@@ -75,11 +75,15 @@ class StructureFactorMeasurementMixin {
    * - (y2, x2): target site where S- is applied
    * - val: the correlation value (ratio of overlaps, needs normalization by caller)
    *
-   * ## Current Implementation
+   * ## Implementation with BTen Optimization
    * 
-   * Uses ContractRow for each (y2, x2) measurement. This is correct but 
-   * has O(Lx^2) complexity per row. Future optimization with BTen caching
-   * could reduce this to O(Lx) per row.
+   * Uses BTen (Boundary Tensor) caching for efficient multi-site trace calculations.
+   * For each target row y2, the algorithm:
+   * 1. Builds complete LEFT BTen from col=0 to col=Lx-1 using standard_mpo
+   * 2. Scans x2 from right to left, using TraceWithBTen for O(1) per-site calculation
+   * 3. Incrementally grows RIGHT BTen as x2 moves left
+   *
+   * This reduces complexity from O(Lx^2) to O(Lx) per target row.
    */
   template<typename TenElemT, typename QNT>
   void MeasureStructureFactor(
@@ -155,12 +159,22 @@ class StructureFactorMeasurementMixin {
           }
           const auto& bottom_env = down_stack[down_stack_idx];
           
-          // Build standard MPO for this row (will be modified per x2)
+          // Build standard MPO for this row
           TransferMPO standard_mpo = tn.get_row(y2);
           
-          // Measure at each x2 in this row using ContractRow
-          for (size_t x2 = 0; x2 < Lx; ++x2) {
-            TenElemT val(0);
+          // BTen optimization: Build LEFT BTen fully, then scan right-to-left
+          // Initialize LEFT BTen to cover all columns (for any x2 we might need)
+          excited_walker.InitBTenLeft(standard_mpo, bottom_env, Lx);
+          
+          // Initialize RIGHT BTen at the right boundary (nothing absorbed yet)
+          excited_walker.InitBTenRight(standard_mpo, bottom_env, Lx - 1);
+          
+          // Temporary storage for results (to maintain left-to-right order in output)
+          std::vector<TenElemT> row_results(Lx, TenElemT(0));
+          
+          // Scan from right to left for efficient BTen-based trace
+          for (size_t x2_rev = 0; x2_rev < Lx; ++x2_rev) {
+            size_t x2 = Lx - 1 - x2_rev;  // x2 goes from Lx-1 down to 0
             
             // Only compute non-zero if S+ and S- both contribute:
             // S+|↓⟩ ≠ 0 (source spin-down) AND S-|↑⟩ ≠ 0 (target spin-up)
@@ -170,21 +184,28 @@ class StructureFactorMeasurementMixin {
               // Get the S- tensor (spin flipped from 1 to 0)
               Tensor target_tensor = static_cast<const ModelType*>(this)->GetSiteTensor(split_index_tps, y2, x2, 0);
               
-              // Build target MPO with replaced tensor
-              TransferMPO target_mpo = standard_mpo;
-              target_mpo[x2] = &target_tensor;
-              
-              // Contract: <excited_walker | target_mpo | bottom_env>
-              val = excited_walker.ContractRow(target_mpo, bottom_env);
+              // Use TraceWithBTen for O(1) single-site trace
+              // BTen is guaranteed to be initialized by InitBTenLeft/Right above
+              row_results[x2] = excited_walker.TraceWithBTen(target_tensor, x2, bottom_env);
             }
-            // Otherwise val remains 0
             
+            // Grow RIGHT BTen by one step (absorb column x2 into RIGHT BTen)
+            if (x2 > 0) {
+              excited_walker.GrowBTenRightStep(standard_mpo, bottom_env);
+            }
+          }
+          
+          // Output results in left-to-right order
+          for (size_t x2 = 0; x2 < Lx; ++x2) {
             spsm_cross.push_back(TenElemT(y1));
             spsm_cross.push_back(TenElemT(x1));
             spsm_cross.push_back(TenElemT(y2));
             spsm_cross.push_back(TenElemT(x2));
-            spsm_cross.push_back(val);
+            spsm_cross.push_back(row_results[x2]);
           }
+          
+          // Clear BTen cache before evolving
+          excited_walker.ClearBTen();
           
           // Absorb row y2 with standard MPO for next y2 iteration
           if (y2 < Ly - 1) {
