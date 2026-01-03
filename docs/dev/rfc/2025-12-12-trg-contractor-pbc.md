@@ -28,7 +28,7 @@ tags: [design, rfc, pbc, trg, caching, incremental-update]
 
 ## 0.1 实施进度更新（2025-12）
 已落地的内容（代码已合入工作区并通过单测）：
-- `TRGContractor` 已创建：`include/qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h/.cpp (header-only impl)`
+- `TRGContractor` 已创建：`include/qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h/.cpp (header-only impl)`
 - **Finite-size bosonic `Trace()` 已实现**：checkerboard plaquette TRG（even→odd→even…直到最后的 even 2×2），并且保证 even-scale leg order 始终为 `[L,D,R,U]`，避免奇偶步的腿约定漂移。
 - **终结收缩改为 2×2 精确收缩**：不再做最后一次 2×2→1×1 的 TRG coarse-graining（避免多一次 SVD/截断；也避免额外特殊情况）。
 - **显式截断参数**：`TRGContractor` 不再持有“隐藏默认截断参数”，调用方必须 `SetTruncateParams()`（否则 `Trace()` 抛异常）。

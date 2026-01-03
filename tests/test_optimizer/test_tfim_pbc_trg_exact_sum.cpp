@@ -15,7 +15,7 @@
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/algorithm/vmc_update/exact_summation_energy_evaluator.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square_pbc.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"
 
 using namespace qlten;
 using namespace qlpeps;

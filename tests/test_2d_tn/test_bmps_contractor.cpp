@@ -14,7 +14,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/api/conversions.h"
 #include "qlpeps/qlpeps.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -1121,27 +1121,40 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerBTenCacheTest) {
       << "InitBTenRight should set right edge to target_col + 1";
   
   // Test 3: GrowBTenLeftStep functionality
+  // To test manual step-by-step growth, we reset and grow manually
   walker.ClearBTen();
   EXPECT_EQ(walker.GetBTenLeftCol(), 0);
   EXPECT_EQ(walker.GetBTenRightCol(), 0);
   
-  // Grow LEFT BTen step by step
+  // Grow LEFT BTen step by step up to mid_col
+  // Note: walker needs initial vacuum state. 
+  // Since we cleared it, we need to re-init. 
+  // But InitBTenLeft does full growth loop. 
+  // Let's use InitBTenLeft with target=0 to just setup vacuum.
+  walker.InitBTenLeft(row2_mpo, bottom_env, 0); 
+  
   for (size_t col = 0; col < mid_col; ++col) {
     walker.GrowBTenLeftStep(row2_mpo, bottom_env);
     EXPECT_EQ(walker.GetBTenLeftCol(), col + 1) 
         << "GrowBTenLeftStep should advance left edge by 1";
   }
-  
-  // Test 4: TraceWithBTen returns 0 (placeholder, should use ContractRow instead)
-  const DQLTensor& mid_site = dtn2d({2, mid_col});
+
+  // Now we need to prepare RIGHT BTen for Test 4
   walker.InitBTenRight(row2_mpo, bottom_env, mid_col);
+
+  // Test 4: TraceWithBTen should match reference_val
+  // Now both Left (manually grown) and Right (Init func) are ready at mid_col.
+  const DQLTensor& mid_site = dtn2d({2, mid_col});
   TenElemT bten_val = walker.TraceWithBTen(mid_site, mid_col, bottom_env);
-  EXPECT_EQ(bten_val, 0.0) << "TraceWithBTen is placeholder, should return 0";
+  EXPECT_NEAR(bten_val, reference_val, 1e-8) << "TraceWithBTen should match ContractRow result";
   
   // Test 5: Verify ContractRow still works as fallback for structure factor
   // This is the intended usage pattern until BTen caching is fully implemented
-  TenElemT fallback_val = walker.ContractRow(row2_mpo, bottom_env);
-  EXPECT_NEAR(fallback_val / reference_val, 1.0, 1e-8) 
+  // Note: We use a fresh walker to ensure no interference from BTen cache state
+  // (though ContractRow should be independent, this isolates the test).
+  WalkerT walker_fallback = contractor.GetWalker(dtn2d, UP);
+  TenElemT fallback_val = walker_fallback.ContractRow(row2_mpo, bottom_env);
+  EXPECT_NEAR(fallback_val, reference_val, 1e-8) 
       << "ContractRow should remain functional as fallback";
 }
 

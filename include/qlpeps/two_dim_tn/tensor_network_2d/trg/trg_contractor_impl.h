@@ -17,7 +17,7 @@
 #include <map>
 
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "trg_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"
 
 namespace qlpeps {
 

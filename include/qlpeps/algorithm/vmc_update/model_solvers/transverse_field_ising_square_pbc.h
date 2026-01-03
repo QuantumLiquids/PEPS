@@ -16,7 +16,7 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
-#include "qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h"    // TRGContractor
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"    // TRGContractor
 
 namespace qlpeps {
 

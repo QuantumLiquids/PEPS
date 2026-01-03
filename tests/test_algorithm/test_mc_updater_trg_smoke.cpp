@@ -14,7 +14,7 @@
 #include <vector>
 
 #include "qlten/qlten.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 

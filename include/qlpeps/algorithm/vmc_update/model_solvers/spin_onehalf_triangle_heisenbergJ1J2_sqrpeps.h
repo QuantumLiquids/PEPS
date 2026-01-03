@@ -11,7 +11,7 @@
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"    //ModelEnergySolver
 #include "qlpeps/utility/helpers.h"                             //ComplexConjugate
 #include "qlpeps/utility/observable_matrix.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" // BMPSContractor
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h" // BMPSContractor
 namespace qlpeps {
 using namespace qlten;
 

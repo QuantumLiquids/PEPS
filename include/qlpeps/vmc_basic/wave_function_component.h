@@ -19,7 +19,7 @@
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"    // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"  // SplitIndexTPS
 #include "qlpeps/vmc_basic/jastrow_factor.h"        // JastrowFactor
-#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" // BMPSContractor
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h" // BMPSContractor
 namespace qlpeps {
 
 namespace detail {

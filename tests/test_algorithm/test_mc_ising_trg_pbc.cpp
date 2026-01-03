@@ -27,7 +27,7 @@
 
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"
 #include "qlpeps/vmc_basic/wave_function_component.h"
 
 using namespace qlten;

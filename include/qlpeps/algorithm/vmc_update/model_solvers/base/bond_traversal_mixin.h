@@ -11,7 +11,7 @@
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BOND_TRAVERSAL_MIXIN_H
 
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"    //TensorNetwork2D
-#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" //BMPSContractor
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h" //BMPSContractor
 
 namespace qlpeps {
 

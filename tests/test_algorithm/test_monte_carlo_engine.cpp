@@ -192,7 +192,7 @@ struct TestConfigurationRescueSum : MPITest {
  * 
  * Expected: Ranks 1, 2, and 3 should be rescued by rank 0's configuration.
  */
-TEST_F(TestConfigurationRescueSum, RescueWithStrictThreshold) {
+TEST_F(TestConfigurationRescueSum, Rescue3of4_Threshold1e100) {
   if (mpi_size < 4) {
     GTEST_SKIP() << "This test requires at least 4 MPI ranks";
   }
@@ -241,7 +241,7 @@ TEST_F(TestConfigurationRescueSum, RescueWithStrictThreshold) {
       << "Rank " << rank << " should have been rescued to Neel config";
 
   if (rank == 0) {
-    std::cout << "✓ Strict threshold test: All 4 ranks now have Neel configuration" << std::endl;
+    std::cout << "✓ Rescue3of4: All 4 ranks now have Neel configuration" << std::endl;
   }
 }
 
@@ -256,7 +256,7 @@ TEST_F(TestConfigurationRescueSum, RescueWithStrictThreshold) {
  * 
  * Expected: Only ranks 2 and 3 should be rescued.
  */
-TEST_F(TestConfigurationRescueSum, RescueWithPermissiveThreshold) {
+TEST_F(TestConfigurationRescueSum, Rescue2of4_DefaultThreshold) {
   if (mpi_size < 4) {
     GTEST_SKIP() << "This test requires at least 4 MPI ranks";
   }
@@ -314,14 +314,14 @@ TEST_F(TestConfigurationRescueSum, RescueWithPermissiveThreshold) {
   }
 
   if (rank == 0) {
-    std::cout << "✓ Permissive threshold test: Rank 1 keeps Anti-Neel, Ranks 2,3 rescued" << std::endl;
+    std::cout << "✓ Rescue2of4: Rank 1 keeps Anti-Neel, Ranks 2,3 rescued" << std::endl;
   }
 }
 
 /**
  * @brief Test that all-valid configurations don't trigger rescue
  */
-TEST_F(TestConfigurationRescueSum, NoRescueWhenAllValid) {
+TEST_F(TestConfigurationRescueSum, Rescue0of4_AllValid) {
   // Use equal coefficients so both configs have O(1) amplitude
   auto sitps = CreateSuperpositionTPS(1.0);
 
@@ -350,7 +350,7 @@ TEST_F(TestConfigurationRescueSum, NoRescueWhenAllValid) {
 /**
  * @brief Test warmup works correctly after rescue
  */
-TEST_F(TestConfigurationRescueSum, WarmupAfterRescue) {
+TEST_F(TestConfigurationRescueSum, WarmupAfterRescue2of4) {
   if (mpi_size < 4) {
     GTEST_SKIP() << "This test requires at least 4 MPI ranks";
   }
@@ -381,26 +381,32 @@ TEST_F(TestConfigurationRescueSum, WarmupAfterRescue) {
   MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange> engine(
       sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
 
-  // After rescue, all ranks should have the Neel configuration
-  // This is the key assertion that validates CheckWaveFunctionAmplitudeValidity threshold
-  Configuration expected_config = CreateNeelConfig();
-  EXPECT_EQ(engine.WavefuncComp().config, expected_config)
-      << "Rank " << rank << " should have been rescued to Neel config before warmup";
+  // After rescue with default permissive threshold (DBL_MIN):
+  // - Rank 0: Neel config (original, valid)
+  // - Rank 1: Anti-Neel config (NOT rescued because amplitude ~1e-300 > DBL_MIN)
+  // - Rank 2, 3: rescued to Neel config
+  const auto& wfc = engine.WavefuncComp();
+  if (rank == 1) {
+    EXPECT_EQ(wfc.config, CreateAntiNeelConfig())
+        << "Rank 1 should NOT be rescued with default permissive threshold";
+  } else {
+    EXPECT_EQ(wfc.config, CreateNeelConfig())
+        << "Rank " << rank << " should have Neel config (original or rescued)";
+  }
 
   // Warmup should succeed after rescue
   int warmup_result = engine.WarmUp();
   EXPECT_EQ(warmup_result, 0) << "Warmup should succeed after rescue";
 
-  // Amplitude should remain valid
+  // Amplitude should remain valid according to rescue_params thresholds
+  // Note: We use CheckWaveFunctionAmplitudeValidity with the same threshold as rescue,
+  // not IsAmplitudeSquareLegal() which has a stricter threshold (sqrt(DBL_MIN) vs DBL_MIN).
+  // For rank 1 with amplitude ~1e-300: 1e-300 > DBL_MIN (valid) but < sqrt(DBL_MIN) (~1.5e-154).
   EXPECT_TRUE(CheckWaveFunctionAmplitudeValidity(
       engine.WavefuncComp(),
       rescue_params.amplitude_min_threshold,
-      rescue_params.amplitude_max_threshold));
-
-  // Configuration should still be valid (Neel or evolved from Neel) after warmup
-  // Note: After warmup MC sweeps, config may have changed, but amplitude must remain valid
-  EXPECT_TRUE(engine.WavefuncComp().IsAmplitudeSquareLegal())
-      << "Rank " << rank << " should have legal amplitude after warmup";
+      rescue_params.amplitude_max_threshold))
+      << "Rank " << rank << " should have valid amplitude after warmup";
 }
 
 /**

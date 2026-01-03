@@ -634,6 +634,6 @@ class TRGContractor {
 
 }  // namespace qlpeps
 
-#include "trg_contractor_impl.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor_impl.h"
 
 #endif  // QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_TRG_CONTRACTOR_H

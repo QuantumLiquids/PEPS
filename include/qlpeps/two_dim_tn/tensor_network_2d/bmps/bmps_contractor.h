@@ -924,6 +924,6 @@ class BMPSContractor {
 
 } // namespace qlpeps
 
-#include "bmps_contractor_impl.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor_impl.h"
 
 #endif //QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_BMPS_CONTRACTOR_H

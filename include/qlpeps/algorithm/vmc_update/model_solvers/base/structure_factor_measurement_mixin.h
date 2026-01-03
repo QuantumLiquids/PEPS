@@ -11,7 +11,7 @@
 
 #include "qlpeps/basic.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h"
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h"
 
 namespace qlpeps {

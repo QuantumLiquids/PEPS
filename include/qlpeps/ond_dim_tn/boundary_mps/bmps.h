@@ -220,7 +220,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
 
   void Reverse();
 
-  void InplaceMultipleMPO(TransferMPO &, const size_t, const size_t, const RealT,
+  void InplaceMultiplyMPO(TransferMPO &, const size_t, const size_t, const RealT,
                           const size_t max_iter, //only valid for variational methods
                           const CompressMPSScheme &scheme);
 
@@ -230,13 +230,13 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
    * @param scheme
    * @return
    */
-  BMPS MultipleMPO(TransferMPO &, const CompressMPSScheme &,
+  BMPS MultiplyMPO(TransferMPO &, const CompressMPSScheme &,
                    const size_t, const size_t, const RealT,
                    const std::optional<RealT> variational_converge_tol,//only valid for variational methods
                    const std::optional<size_t> max_iter
   ) const;
 
-  BMPS MultipleMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const RealT,
+  BMPS MultiplyMPOWithPhyIdx(TransferMPO &, const size_t, const size_t, const RealT,
                              const size_t max_iter, //only valid for variational methods
                              const CompressMPSScheme &) const;
 
@@ -247,15 +247,15 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
  */
   void AlignTransferMPOTensorOrder_(TransferMPO &) const;
 
-  BMPS MultipleMPOSVDCompress_(const TransferMPO &,
+  BMPS MultiplyMPOSVDCompress_(const TransferMPO &,
                                const size_t, const size_t, const RealT,
                                size_t &actual_Dmax, RealT &actual_trunc_err_max) const;
 
-  BMPS MultipleMPO2SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
+  BMPS MultiplyMPO2SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
                                             const RealT variational_converge_tol, const size_t max_iter) const;
 
   // strictly, 1-site variational compress method is only suitable for the cases those tensors have no symmetry constrain.
-  BMPS MultipleMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
+  BMPS MultiplyMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
                                             const RealT variational_converge_tol, const size_t max_iter) const;
   BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const RealT) const;
 

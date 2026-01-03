@@ -12,7 +12,7 @@
 #include <array>
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/two_dim_tn/tensor_network_2d/trg_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"
 
 using namespace qlten;
 using namespace qlpeps;
