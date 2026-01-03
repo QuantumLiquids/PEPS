@@ -127,15 +127,22 @@ class BMPSContractor {
   const std::pair<BMPST, BMPST> GetBMPSForCol(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t col, const BMPSTruncateParams<RealT> &trunc_para);
 
   /**
-   * @brief Advances the BMPS at the specified position by one step (one row or column).
+   * @brief Shifts the BMPS environment window by one slice.
    * 
-   * This absorbs one layer of the bulk tensor network into the boundary MPS at `position`.
+   * This pops the outermost BMPS at `position` and grows a new one at `Opposite(position)`.
+   * The net effect is that the "sandwich" environment moves one row/column toward `position`.
    * 
    * @param tn The tensor network.
-   * @param position The boundary position (UP, DOWN, LEFT, RIGHT) to advance.
+   * @param position The boundary position (UP, DOWN, LEFT, RIGHT) to shift toward.
    * @param trunc_para Truncation parameters for the bond compression after absorption.
    */
-  void BMPSMoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para);
+  void ShiftBMPSWindow(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para);
+
+  /// @deprecated Use ShiftBMPSWindow instead
+  [[deprecated("Use ShiftBMPSWindow instead")]]
+  void BMPSMoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para) {
+    ShiftBMPSWindow(tn, position, trunc_para);
+  }
 
   /**
    * @brief Fully grows the BMPS from the boundary at `position` across the entire network.
@@ -158,6 +165,242 @@ class BMPSContractor {
       bmps_set_[position].erase(bmps_set_[position].begin() + 1, bmps_set_[position].end());
     }
   }
+
+ 
+  /**
+   * @brief A lightweight, independent walker for Boundary MPS evolution.
+   *
+   * The BMPSWalker holds a detached copy of a BMPS state and can evolve independently
+   * from the main BMPSContractor's state stack.
+   *
+   * ## Usage Scenario
+   * - "Forking" the evolution logic to measure non-local observables (e.g., structure factors).
+   * - Implementing "Excited State Propagation" where an operator is injected and propagated.
+   *
+   * The Walker holds a reference to the TensorNetwork2D to automatically resolve
+   * MPOs for evolution steps (via EvolveStep), but it does not modify the TN or the Contractor.
+   *
+   * ## BMPS Storage Order (Critical for ContractRow)
+   * 
+   * The storage order differs by direction (see also BMPS class documentation):
+   * 
+   * - **UP BMPS**: Reversed storage. `bmps_[0]` corresponds to the rightmost column (col = N-1),
+   *   `bmps_[N-1]` corresponds to the leftmost column (col = 0).
+   *   Virtual bond connectivity: `bmps_[i].right (idx2)` connects `bmps_[i+1].left (idx0)`.
+   * 
+   * - **DOWN BMPS**: Normal storage. `bmps_[0]` corresponds to the leftmost column (col = 0),
+   *   `bmps_[N-1]` corresponds to the rightmost column (col = N-1).
+   *   Virtual bond connectivity: `bmps_[i].right (idx2)` connects `bmps_[i+1].left (idx0)`.
+   * 
+   * - **LEFT BMPS**: Normal storage (top to bottom).
+   * - **RIGHT BMPS**: Reversed storage (bottom to top).
+   * 
+   * This asymmetry must be accounted for when performing sandwich contractions in ContractRow().
+   */
+  class BMPSWalker {
+   public:
+    /**
+     * @brief Construct a new BMPSWalker.
+     * @param tn Reference to the TensorNetwork (must outlive the Walker).
+     * @param bmps The initial boundary MPS state (will be copied/moved in).
+     * @param pos The direction of evolution (UP, DOWN, LEFT, RIGHT).
+     * @param current_stack_size The number of layers already absorbed in the initial 'bmps'.
+     *                           (Equivalent to bmps_set_[pos].size() at creation).
+     */
+    BMPSWalker(const TensorNetwork2D<TenElemT, QNT>& tn,
+               BMPS<TenElemT, QNT> bmps,
+               BMPSPOSITION pos,
+               size_t current_stack_size)
+        : tn_(tn), bmps_(std::move(bmps)), pos_(pos), stack_size_(current_stack_size) {}
+
+    /**
+     * @brief Evolve the walker by one step according to the lattice structure.
+     *
+     * Automatically determines the next row/column MPO to absorb based on current position
+     * and stack size. Increments the internal stack size counter.
+     *
+     * @param trunc_para Truncation parameters.
+     */
+    void EvolveStep(const BMPSTruncateParams<RealT> &trunc_para);
+
+    /**
+     * @brief Evolve using a manually provided MPO.
+     *
+     * Useful for applying operators or custom evolution steps.
+     * Updates the internal BMPS state.
+     *
+     * @note This does NOT increment the internal 'stack_size' counter. If this MPO corresponds
+     * to a physical lattice layer, you might want to manually track that or use EvolveStep instead.
+     *
+     * @param mpo The MPO to absorb.
+     * @param trunc_para Truncation parameters.
+     */
+    void Evolve(const TransferMPO& mpo, const BMPSTruncateParams<RealT> &trunc_para);
+
+    /**
+     * @brief Access the current Boundary MPS state.
+     */
+    const BMPS<TenElemT, QNT>& GetBMPS() const { return bmps_; }
+
+    /**
+     * @brief Access mutable Boundary MPS state (e.g., to apply local operators directly).
+     */
+    BMPS<TenElemT, QNT>& GetBMPSRef() { return bmps_; }
+
+    /**
+     * @brief Contracts the walker's boundary with a single row/column MPO and an opposing boundary.
+     *
+     * This calculates the scalar overlap: `<Walker_Boundary | MPO | Opposite_Boundary>`.
+     * Useful for measuring observables or overlaps in the middle of evolution without modifying the Walker.
+     *
+     * ## Tensor Network Structure (for UP walker with DOWN opposite)
+     * @verbatim
+     *   top[col] (UP BMPS tensor)
+     *      |
+     *   mpo[col] (TN site tensor)  
+     *      |
+     *   bot[col] (DOWN BMPS tensor)
+     * @endverbatim
+     *
+     * ## Index Conventions
+     * - BMPS tensor (boson): `0: left, 1: physical, 2: right`
+     * - TN site tensor: `0: left, 1: down, 2: right, 3: up`
+     *
+     * ## Storage Order Considerations
+     * - **UP BMPS** (walker): Reversed storage. `bmps_[0]` = rightmost column (col=N-1).
+     * - **DOWN BMPS** (opposite): Normal storage. `opposite[0]` = leftmost column (col=0).
+     * - **Site tensors** (mpo): Normal order. `mpo[0]` = leftmost column (col=0).
+     *
+     * Due to the reversed UP storage, the contraction proceeds from col=N-1 to col=0 (right-to-left)
+     * to properly match virtual bond indices between adjacent BMPS tensors.
+     *
+     * ## Connection Pattern
+     * When contracting column tensors from right to left:
+     * - `accumulator.top_R` connects `column.top_L` (UP BMPS internal bond)
+     * - `column.site_R` connects `accumulator.site_L` (site tensor horizontal bond)
+     * - `column.bot_R` connects `accumulator.bot_L` (DOWN BMPS internal bond)
+     *
+     * @param mpo The MPO row/column to sandwich (normal order: mpo[0] = leftmost).
+     * @param opposite_boundary The boundary MPS from the opposite direction.
+     * @return The scalar contraction result (overlap). Returns 0 if dimensions mismatch or direction is unsupported.
+     *
+     * @note Currently only supports UP walker with DOWN opposite_boundary (horizontal row contraction).
+     */
+    TenElemT ContractRow(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary) const;
+
+    // ==================== BTen Cache Methods ====================
+    // These methods provide efficient caching for multiple trace calculations
+    // on the same row with different site replacements.
+
+    /**
+     * @brief Initialize the BTen cache for efficient multi-site trace calculations.
+     * 
+     * This pre-computes the LEFT boundary tensors from col=0 up to (but not including) `target_col`.
+     * After calling this, you can use TraceWithBTen() to efficiently compute traces
+     * with different site replacements at `target_col` or beyond.
+     *
+     * @param mpo The MPO row (normal order: mpo[0] = leftmost).
+     * @param opposite_boundary The opposing BMPS (e.g., DOWN boundary for UP walker).
+     * @param target_col The column index up to which to pre-compute the LEFT BTen.
+     */
+    void InitBTenLeft(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary, size_t target_col);
+
+    /**
+     * @brief Initialize the RIGHT BTen cache.
+     * 
+     * Pre-computes the RIGHT boundary tensors from col=N-1 down to (but not including) `target_col`.
+     *
+     * @param mpo The MPO row (normal order: mpo[0] = leftmost).
+     * @param opposite_boundary The opposing BMPS.
+     * @param target_col The column index down to which to pre-compute the RIGHT BTen.
+     */
+    void InitBTenRight(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary, size_t target_col);
+
+    /**
+     * @brief Grow the LEFT BTen by one column.
+     * 
+     * Absorbs the column at the current LEFT BTen edge and advances the edge by one.
+     *
+     * @param mpo The MPO row.
+     * @param opposite_boundary The opposing BMPS.
+     */
+    void GrowBTenLeftStep(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary);
+
+    /**
+     * @brief Grow the RIGHT BTen by one column (towards left).
+     *
+     * @param mpo The MPO row.
+     * @param opposite_boundary The opposing BMPS.
+     */
+    void GrowBTenRightStep(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary);
+
+    /**
+     * @brief Compute trace at a specific site using cached BTen.
+     * 
+     * This is much more efficient than ContractRow when you need to compute
+     * multiple traces on the same row with different site replacements.
+     *
+     * ## Prerequisite
+     * Either:
+     * - Call InitBTenLeft() to grow LEFT BTen up to `site_col`, then use this with RIGHT BTen grown from right, or
+     * - Have both LEFT and RIGHT BTen meeting at `site_col`.
+     *
+     * @param site The replacement site tensor.
+     * @param site_col The column index of the site.
+     * @param opposite_boundary The opposing BMPS.
+     * @return The scalar trace result.
+     */
+    TenElemT TraceWithBTen(const Tensor& site, size_t site_col, const BMPS<TenElemT, QNT>& opposite_boundary) const;
+
+    /**
+     * @brief Clear all BTen caches.
+     */
+    void ClearBTen() { bten_left_.clear(); bten_right_.clear(); bten_left_col_ = 0; bten_right_col_ = 0; }
+
+    /**
+     * @brief Get the current left BTen edge column (exclusive upper bound).
+     */
+    size_t GetBTenLeftCol() const { return bten_left_col_; }
+
+    /**
+     * @brief Get the current right BTen edge column (exclusive lower bound).
+     */
+    size_t GetBTenRightCol() const { return bten_right_col_; }
+
+    /**
+     * @brief Get the current underlying stack size.
+     * Indicates how many lattice layers have been effectively absorbed into the current boundary.
+     */
+    size_t GetStackSize() const { return stack_size_; }
+
+    /**
+     * @brief Get the evolution direction.
+     */
+    BMPSPOSITION GetPosition() const { return pos_; }
+
+   private:
+    const TensorNetwork2D<TenElemT, QNT>& tn_;
+    BMPS<TenElemT, QNT> bmps_;
+    BMPSPOSITION pos_;
+    size_t stack_size_;
+
+    // BTen cache for efficient multi-site trace calculations
+    // bten_left_[i] represents the environment from col=0 to col=i (inclusive)
+    // bten_right_[i] represents the environment from col=N-1 to col=N-1-i (inclusive)
+    mutable std::vector<Tensor> bten_left_;
+    mutable std::vector<Tensor> bten_right_;
+    mutable size_t bten_left_col_ = 0;   // Current left edge (exclusive): BTen covers [0, bten_left_col_)
+    mutable size_t bten_right_col_ = 0;  // Current right edge (exclusive): BTen covers (bten_right_col_, N-1]
+  };
+
+  /**
+   * @brief Creates a BMPSWalker initialized with the current boundary state at the given position.
+   *
+   * @param tn The tensor network (must be the one being contracted).
+   * @param position The boundary position to fork from.
+   * @return BMPSWalker A detached walker ready for independent evolution.
+   */
+  BMPSWalker GetWalker(const TensorNetwork2D<TenElemT, QNT>& tn, BMPSPOSITION position) const;
 
   // --- Boundary Tensor (BTen) Methods ---
 
@@ -216,12 +459,20 @@ class BMPSContractor {
   void GrowFullBTen2(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION post, const size_t slice_num1, const size_t remain_sites = 2, bool init = true);
 
   /**
-   * @brief Moves the single-layer boundary tensor one step.
+   * @brief Shifts the single-slice boundary tensor window by one site.
+   * 
+   * This pops the outermost BTen at `position` and grows a new one at `Opposite(position)`.
    * 
    * @param tn The tensor network.
-   * @param position The position/direction.
+   * @param position The position/direction to shift toward.
    */
-  void BTenMoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position);
+  void ShiftBTenWindow(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position);
+
+  /// @deprecated Use ShiftBTenWindow instead
+  [[deprecated("Use ShiftBTenWindow instead")]]
+  void BTenMoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position) {
+    ShiftBTenWindow(tn, position);
+  }
 
   /**
    * @brief Truncates the boundary tensor set to a specific length.
@@ -234,13 +485,21 @@ class BMPSContractor {
   void TruncateBTen(const BTenPOSITION position, const size_t length);
   
   /**
-   * @brief Moves the double-slice boundary tensor one step.
+   * @brief Shifts the double-slice boundary tensor window by one site.
+   * 
+   * This pops the outermost BTen2 at `position` and grows a new one at `Opposite(position)`.
    * 
    * @param tn The tensor network.
-   * @param position The position/direction.
+   * @param position The position/direction to shift toward.
    * @param slice_num1 The first slice index (used for context).
    */
-  void BTen2MoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position, const size_t slice_num1);
+  void ShiftBTen2Window(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position, const size_t slice_num1);
+
+  /// @deprecated Use ShiftBTen2Window instead
+  [[deprecated("Use ShiftBTen2Window instead")]]
+  void BTen2MoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION position, const size_t slice_num1) {
+    ShiftBTen2Window(tn, position, slice_num1);
+  }
 
   // --- Trace Methods ---
 
@@ -407,15 +666,15 @@ class BMPSContractor {
    */
   void CheckInvalidateEnvs(const SiteIdx &site) const;
 
- private:
   void InitBMPS(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION post);
 
-  size_t GrowBMPSStep_(const BMPSPOSITION position, TransferMPO, const BMPSTruncateParams<RealT> &);
+  size_t GrowBMPSStep(const BMPSPOSITION position, TransferMPO, const BMPSTruncateParams<RealT> &);
 
-  size_t GrowBMPSStep_(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &);
+  size_t GrowBMPSStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &);
 
-  void GrowBTen2Step_(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION post, const size_t slice_num1);
+  void GrowBTen2Step(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION post, const size_t slice_num1);
 
+ private:
   std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> bmps_set_;
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layers between two bmps

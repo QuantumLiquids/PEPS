@@ -47,11 +47,11 @@ class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase<WaveF
                                                                sitps,
                                                                tps_component);
         if (col < tn.cols() - 3) {
-          contractor.BTenMoveStep(tn, RIGHT);
+          contractor.ShiftBTenWindow(tn, RIGHT);
         }
       }
       if (row < tn.rows() - 1) {
-        contractor.BMPSMoveStep(tn, DOWN, tps_component.trun_para);
+        contractor.ShiftBMPSWindow(tn, DOWN, tps_component.trun_para);
       }
     }
 
@@ -75,11 +75,11 @@ class MCUpdateSquareTNN3SiteUpdateBase : public MonteCarloSweepUpdaterBase<WaveF
                                                                sitps,
                                                                tps_component);
         if (row < tn.rows() - 3) {
-          contractor.BTenMoveStep(tn, DOWN);
+          contractor.ShiftBTenWindow(tn, DOWN);
         }
       }
       if (col < tn.cols() - 1) {
-        contractor.BMPSMoveStep(tn, RIGHT, tps_component.trun_para);
+        contractor.ShiftBMPSWindow(tn, RIGHT, tps_component.trun_para);
       }
     }
 

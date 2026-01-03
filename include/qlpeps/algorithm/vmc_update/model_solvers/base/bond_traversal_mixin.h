@@ -79,7 +79,7 @@ class BondTraversalMixin {
         const SiteIdx site1{row, col};
         const SiteIdx site2{row, col + 1};
         bond_measure_func(site1, site2, HORIZONTAL, inv_psi);
-        contractor.BTenMoveStep(tn, RIGHT);
+        contractor.ShiftBTenWindow(tn, RIGHT);
       }
       if constexpr (!std::is_same_v<NNNLinkMeasureFunc, std::nullptr_t>) {
         if (row < tn.rows() - 1) {
@@ -94,7 +94,7 @@ class BondTraversalMixin {
             site1 = {row + 1, col}; //left-down
             site2 = {row, col + 1}; //right-up
             nnn_link_measure_func(site1, site2, LEFTDOWN_TO_RIGHTUP, inv_psi, fermion_psi);
-            contractor.BTen2MoveStep(tn, RIGHT, row);
+            contractor.ShiftBTen2Window(tn, RIGHT, row);
           }
         }
       }
@@ -102,7 +102,7 @@ class BondTraversalMixin {
         off_diag_long_range_measure_func(row, inv_psi);
       }
       if (row < tn.rows() - 1) {
-        contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+        contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
       }
     }
   }
@@ -137,11 +137,11 @@ class BondTraversalMixin {
         const SiteIdx site2{row + 1, col};
         bond_measure_func(site1, site2, VERTICAL, inv_psi);
         if (row < tn.rows() - 2) {
-          contractor.BTenMoveStep(tn, DOWN);
+          contractor.ShiftBTenWindow(tn, DOWN);
         }
       }
       if (col < tn.cols() - 1) {
-        contractor.BMPSMoveStep(tn, RIGHT, trunc_para);
+        contractor.ShiftBMPSWindow(tn, RIGHT, trunc_para);
       }
     }
   }

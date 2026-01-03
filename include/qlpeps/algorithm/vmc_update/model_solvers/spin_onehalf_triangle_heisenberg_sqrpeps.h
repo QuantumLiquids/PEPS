@@ -12,6 +12,7 @@
 
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/structure_factor_measurement_mixin.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h" // MeasureSpinOneHalfOffDiagOrderInRow
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 #include "qlpeps/two_dim_tn/tensor_network_2d/bmps_contractor.h" //BMPSContractor
@@ -37,7 +38,8 @@ using namespace qlten;
  */
 class SpinOneHalfTriHeisenbergSqrPEPS : 
     public SquareNNNModelEnergySolver<SpinOneHalfTriHeisenbergSqrPEPS>,
-    public SquareNNNModelMeasurementSolver<SpinOneHalfTriHeisenbergSqrPEPS> {
+    public SquareNNNModelMeasurementSolver<SpinOneHalfTriHeisenbergSqrPEPS>,
+    public StructureFactorMeasurementMixin<SpinOneHalfTriHeisenbergSqrPEPS> {
  public:
   static constexpr bool requires_spin_sz_measurement = true;
   static constexpr bool requires_density_measurement = false;
@@ -47,6 +49,7 @@ class SpinOneHalfTriHeisenbergSqrPEPS :
   using SquareNNNModelEnergySolver<SpinOneHalfTriHeisenbergSqrPEPS>::CalEnergyAndHoles;
   using SquareNNNModelMeasurementSolver<SpinOneHalfTriHeisenbergSqrPEPS>::EvaluateObservables;
   using SquareNNNModelMeasurementSolver<SpinOneHalfTriHeisenbergSqrPEPS>::DescribeObservables;
+  using StructureFactorMeasurementMixin<SpinOneHalfTriHeisenbergSqrPEPS>::MeasureStructureFactor;
 
   // Implement interfaces required by SquareNNNModelMeasurementSolver
   [[nodiscard]] inline double CalSpinSzImpl(const size_t config_val) const { return double(config_val) - 0.5; }
@@ -111,6 +114,9 @@ class SpinOneHalfTriHeisenbergSqrPEPS :
         this->SquareNNNModelMeasurementSolver<SpinOneHalfTriHeisenbergSqrPEPS>::EvaluateObservables(
             split_index_tps, tps_sample
         );
+    
+    // Expensive S+S- Structure Factor (controlled by flag)
+    this->MeasureStructureFactor(tps_sample->tn, split_index_tps, tps_sample->contractor, tps_sample->config, out, tps_sample->trun_para);
 
     // Keep legacy public API: this model historically exposed only the interacting diagonal as bond_energy_ur.
     out.erase("bond_energy_dr");
@@ -167,7 +173,19 @@ class SpinOneHalfTriHeisenbergSqrPEPS :
     desc.push_back({"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {row_corr_len}, {"segment"}});
     desc.push_back({"SzSz_all2all", "All-to-all SzSz correlations (upper-tri packed)", {site_num * (site_num + 1) / 2},
                     {"pair_packed_upper_tri"}});
+    desc.push_back({"SpSm_cross", "All-to-all SpSm structure factor correlations (sparse format)", {0}, {"y1", "x1", "y2", "x2", "val"}});
     return desc;
+  }
+
+  /**
+   * @brief Get the tensor at site (row, col) for a given spin state.
+   * Required by StructureFactorMeasurementMixin.
+   */
+  template<typename TenElemT, typename QNT>
+  qlten::QLTensor<TenElemT, QNT> GetSiteTensor(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      size_t row, size_t col, size_t spin_val) const {
+      return (*split_index_tps)({row, col})[spin_val];
   }
 
   template<typename TenElemT, typename QNT>

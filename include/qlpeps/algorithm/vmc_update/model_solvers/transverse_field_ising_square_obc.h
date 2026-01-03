@@ -98,7 +98,7 @@ class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIs
         energy_ex += ex_term;
         sigma_x_mat(site) = (h_ != 0.0) ? (-ex_term) / static_cast<double>(h_) : TenElemT(0);
         if (col < lx - 1) {
-          contractor.BTenMoveStep(tn, RIGHT);
+          contractor.ShiftBTenWindow(tn, RIGHT);
         }
       }
       if (row == ly / 2) {
@@ -112,7 +112,7 @@ class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIs
         }
       }
       if (row < ly - 1) {
-        contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+        contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
       }
     }
 
@@ -235,11 +235,11 @@ TenElemT TransverseFieldIsingSquareOBC::CalEnergyAndHolesImplParsed(const SplitI
       //transverse-field terms
       energy += EvaluateOnSiteOffDiagEnergy(site, config(site), tn, contractor, (*split_index_tps)(site), inv_psi);
       if (col < tn.cols() - 1) {
-        contractor.BTenMoveStep(tn, RIGHT);
+        contractor.ShiftBTenWindow(tn, RIGHT);
       }
     }
     if (row < tn.rows() - 1) {
-      contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+      contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
     }
   }
   energy += CalDiagTermEnergy<TenElemT>(config);

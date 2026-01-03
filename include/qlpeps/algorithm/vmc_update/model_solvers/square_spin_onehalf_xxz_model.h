@@ -13,6 +13,7 @@
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/structure_factor_measurement_mixin.h"
 
 namespace qlpeps {
 using namespace qlten;
@@ -46,7 +47,7 @@ void MeasureSpinOneHalfOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *spl
       off_diag_corr[i - 1] = (ComplexConjugate(psi_ex * inv_psi));
     }
     contractor.CheckInvalidateEnvs(site2);
-    contractor.BTenMoveStep(tn, RIGHT);
+    contractor.ShiftBTenWindow(tn, RIGHT);
   }
   tn.UpdateSiteTensor(site1, config(site1), *split_index_tps);
   contractor.EraseEnvsAfterUpdate(site1);
@@ -158,23 +159,59 @@ class SquareSpinOneHalfXXZModelMixIn {
 };
 
 /**
- *  $$H = sum_<i,j> (J_z * S^z_i \cdot S^z_j + J_{xy} * ( S^x_i \cdot S^x_j  +  S^y_i \cdot S^y_j ))- h_{00} * S^z_{00}$$
- * $S^{\alpha}_i$ are spin-1/2 operator, h_{00} is the pinning field in corner.
+ * @brief Spin-1/2 XXZ model on a square lattice.
+ * 
+ * Hamiltonian:
+ * \f[
+ *   H = \sum_{\langle i,j \rangle} \left( J_z S^z_i S^z_j + J_{xy} (S^x_i S^x_j + S^y_i S^y_j) \right) - h_{00} S^z_{00}
+ * \f]
+ * 
+ * where \f$S^{\alpha}_i\f$ are spin-1/2 operators and \f$h_{00}\f$ is a pinning field at the corner.
+ *
+ * This class supports structure factor measurement via the StructureFactorMeasurementMixin.
+ * Enable with `SetEnableStructureFactor(true)` before calling EvaluateObservables.
  */
 class SquareSpinOneHalfXXZModel
     : public SquareNNModelEnergySolver<SquareSpinOneHalfXXZModel>,
       public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>,
-      public SquareSpinOneHalfXXZModelMixIn {
+      public SquareSpinOneHalfXXZModelMixIn,
+      public StructureFactorMeasurementMixin<SquareSpinOneHalfXXZModel> {
  public:
   using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::EvaluateObservables;
   using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables;
-  ///< Isotropic Heisenberg model with J = 1 and no pinning field
+
+  /// Isotropic Heisenberg model with J = 1 and no pinning field
   SquareSpinOneHalfXXZModel(void) : SquareSpinOneHalfXXZModelMixIn(1.0, 1.0, 0.0, 0.0, 0.0) {}
 
   SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning00) :
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, 0.0, 0.0, pinning00) {}
 
-  // Registry API: emit energy and spin_z; models can extend to bond_energy_h/v if desired.
+  /**
+   * @brief Get the site tensor for a given spin configuration.
+   * 
+   * Required by StructureFactorMeasurementMixin for constructing excited MPOs.
+   * 
+   * @param split_index_tps The split-index TPS.
+   * @param row Row index.
+   * @param col Column index.
+   * @param spin_val Spin value (0 = down, 1 = up).
+   * @return The site tensor corresponding to the specified spin configuration.
+   */
+  template<typename TenElemT, typename QNT>
+  qlten::QLTensor<TenElemT, QNT> GetSiteTensor(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      size_t row, size_t col, size_t spin_val) const {
+    return (*split_index_tps)({row, col})[spin_val];
+  }
+
+  /**
+   * @brief Evaluate all observables for the current sample.
+   * 
+   * This includes:
+   * - Energy and standard spin measurements (via base class)
+   * - SzSz correlations (all-to-all)
+   * - Structure factor S+S- correlations (if enabled)
+   */
   template<typename TenElemT, typename QNT>
   ObservableMap<TenElemT> EvaluateObservables(
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
@@ -197,7 +234,21 @@ class SquareSpinOneHalfXXZModel
       for (size_t j = i; j < N; ++j) { szsz.push_back(static_cast<TenElemT>(szi * sz_vals[j])); }
     }
     out["SzSz_all2all"] = std::move(szsz);
-    // psi_list is not emitted via registry; Measurer computes PsiSummary separately
+
+    // Measure structure factor if enabled
+    if (this->IsStructureFactorEnabled()) {
+      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+      // Use default truncation parameters; caller can customize if needed
+      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      this->MeasureStructureFactor(
+          tps_sample->tn,
+          split_index_tps,
+          tps_sample->contractor,
+          config,
+          out,
+          trunc_para);
+    }
+
     return out;
   }
 
@@ -237,6 +288,13 @@ class SquareSpinOneHalfXXZModel
     if (!SpSm_row.empty()) out["SpSm_row"] = std::move(SpSm_row);
   }
 
+  /**
+   * @brief Describe all observables that can be measured by this model.
+   * 
+   * @param ly Number of rows.
+   * @param lx Number of columns.
+   * @return Vector of observable metadata.
+   */
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
     auto base = this->SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
@@ -265,6 +323,8 @@ class SquareSpinOneHalfXXZModel
     base.push_back({"SzSz_all2all", "Packed upper-triangular SzSz(i,j) with i<=j (flat)", {N * (N + 1) / 2}, {"pair_packed_upper_tri"}});
     base.push_back({"SmSp_row", "Row Sm(i)Sp(j) along middle row (flat)", {lx / 2}, {"segment"}});
     base.push_back({"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {lx / 2}, {"segment"}});
+    // Structure factor cross-row correlations (variable size, depends on configuration)
+    base.push_back({"SpSm_cross", "Cross-row S+S- correlations: {y1,x1,y2,x2,val,...} (flat tuples)", {}, {"cross_row_tuples"}});
     return base;
   }
 };

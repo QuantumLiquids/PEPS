@@ -122,7 +122,7 @@ CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_in
                                                                                         bond_energy_set,
                                                                                         psi_list);
     if (row < tn.rows() - 1) {
-      tps_sample->contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+      tps_sample->contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
     }
   }
 }
@@ -191,7 +191,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
                                                                                inv_psi);
       }
       bond_energy_set.push_back(bond_energy);
-      contractor.BTenMoveStep(tn, RIGHT);
+      contractor.ShiftBTenWindow(tn, RIGHT);
     }
   }
   if constexpr (has_nnn_interaction) {
@@ -253,7 +253,7 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
         }
         bond_energy_set.push_back(nnn_energy);
 
-        contractor.BTen2MoveStep(tn, RIGHT, row);
+        contractor.ShiftBTen2Window(tn, RIGHT, row);
       }
     }
   } // evaluate NNN energy.

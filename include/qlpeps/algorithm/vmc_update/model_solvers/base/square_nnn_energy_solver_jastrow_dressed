@@ -79,7 +79,7 @@ class SquareNNNModelEnergySolverJastrowDressed
                                                                                           bond_energy_set,
                                                                                           psi_list);
       if (row < tn.rows() - 1) {
-        tps_sample->contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+        tps_sample->contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
       }
     }
   }
@@ -140,7 +140,7 @@ class SquareNNNModelEnergySolverJastrowDressed
           );
         }
         bond_energy_set.push_back(bond_energy);
-        contractor.BTenMoveStep(tn, RIGHT);
+        contractor.ShiftBTenWindow(tn, RIGHT);
       }
     }
     if constexpr (has_nnn_interaction) {
@@ -193,7 +193,7 @@ class SquareNNNModelEnergySolverJastrowDressed
             );
           }
           bond_energy_set.push_back(nnn_energy);
-          contractor.BTen2MoveStep(tn, RIGHT, row);
+          contractor.ShiftBTen2Window(tn, RIGHT, row);
         }
       }
     }

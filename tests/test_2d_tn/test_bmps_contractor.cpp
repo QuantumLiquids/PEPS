@@ -289,7 +289,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
                                                 tn2d({2, 0}),
                                                 tn2d({2, 1}),
                                                 tn2d({2, 2})));
-  contractor.BTenMoveStep(tn2d, BTenPOSITION::RIGHT);
+  contractor.ShiftBTenWindow(tn2d, BTenPOSITION::RIGHT);
   amplitudes.push_back(contractor.Trace(tn2d, {2, 1}, HORIZONTAL));
   amplitudes.push_back(contractor.ReplaceTNNSiteTrace(tn2d, {2, 1},
                                                 HORIZONTAL,
@@ -301,7 +301,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
   contractor.InitBTen(tn2d, BTenPOSITION::DOWN, 1);
   contractor.GrowFullBTen(tn2d, BTenPOSITION::UP, 1, 2, true);
   amplitudes.push_back(contractor.Trace(tn2d, {tn2d.rows() - 2, 1}, VERTICAL));
-  contractor.BTenMoveStep(tn2d, BTenPOSITION::UP);
+  contractor.ShiftBTenWindow(tn2d, BTenPOSITION::UP);
   amplitudes.push_back(contractor.Trace(tn2d, {tn2d.rows() - 3, 1}, VERTICAL));
   amplitudes.push_back(contractor.ReplaceTNNSiteTrace(tn2d, {tn2d.rows() - 3, 1},
                                                 VERTICAL,
@@ -326,7 +326,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
                                                 tn2d({1, 0}),
                                                 tn2d({2, 1}))); // trace original tn
 
-  contractor.BTen2MoveStep(tn2d, BTenPOSITION::RIGHT, 1);
+  contractor.ShiftBTen2Window(tn2d, BTenPOSITION::RIGHT, 1);
   amplitudes.push_back(contractor.ReplaceNNNSiteTrace(tn2d, {1, 1},
                                                 LEFTDOWN_TO_RIGHTUP,
                                                 HORIZONTAL,
@@ -378,7 +378,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
                                                 tn2d({2, 1}),
                                                 tn2d({3, 2}))); // trace original tn
 
-  contractor.BTen2MoveStep(tn2d, BTenPOSITION::UP, 1);
+  contractor.ShiftBTen2Window(tn2d, BTenPOSITION::UP, 1);
   amplitudes.push_back(contractor.ReplaceNNNSiteTrace(tn2d, {1, 1},
                                                 LEFTDOWN_TO_RIGHTUP,
                                                 VERTICAL,
@@ -936,6 +936,213 @@ TEST_F(ProjectedSpinTenNet, HeisenbergD4WaveFunctionComponnet) {
   for (size_t i = 1; i < psi.size(); i++) {
     EXPECT_NEAR(1, psi[i] / psi[0], 1e-10);
   }
+}
+
+/**
+ * @brief Test BMPSWalker basic functionality.
+ *
+ * Verifies that:
+ * 1. GetWalker correctly forks a walker from the contractor's internal state.
+ * 2. Walker::EvolveStep correctly absorbs lattice layers.
+ * 3. Walker's BMPS state is independent of the contractor's internal state.
+ */
+TEST_F(ProjectedSpinTenNet, BMPSWalkerBasicTest) {
+  using TenElemT = QLTEN_Double;
+  using QNT = U1QN;
+  using ContractorT = BMPSContractor<TenElemT, QNT>;
+  using WalkerT = typename ContractorT::BMPSWalker;
+
+  // Initialize contractor with row environments
+  ContractorT contractor(tn2d.rows(), tn2d.cols());
+  contractor.Init(tn2d);
+
+  // Grow BMPS from top (UP direction) to row 1
+  // After this, UP stack has absorbed row 0
+  contractor.GrowBMPSForRow(tn2d, 1, trunc_para);
+
+  // Get a walker forked from UP direction
+  WalkerT walker = contractor.GetWalker(tn2d, UP);
+
+  // Verify walker's initial state matches contractor's UP stack
+  const auto& contractor_up_stack = contractor.GetBMPS(UP);
+  EXPECT_GT(contractor_up_stack.size(), 0);
+  EXPECT_EQ(walker.GetStackSize(), contractor_up_stack.size());
+  EXPECT_EQ(walker.GetPosition(), UP);
+
+  // Save original stack size
+  size_t original_stack_size = walker.GetStackSize();
+
+  // Evolve the walker by one step (should absorb the next row)
+  walker.EvolveStep(trunc_para);
+  EXPECT_EQ(walker.GetStackSize(), original_stack_size + 1);
+
+  // Verify that contractor's stack is unchanged (walker is independent)
+  EXPECT_EQ(contractor.GetBMPS(UP).size(), original_stack_size);
+
+  // Evolve walker one more step
+  walker.EvolveStep(trunc_para);
+  EXPECT_EQ(walker.GetStackSize(), original_stack_size + 2);
+
+  // Contractor still unchanged
+  EXPECT_EQ(contractor.GetBMPS(UP).size(), original_stack_size);
+
+  // Test that we can create multiple independent walkers
+  WalkerT walker2 = contractor.GetWalker(tn2d, UP);
+  EXPECT_EQ(walker2.GetStackSize(), original_stack_size);  // Fresh copy from contractor
+
+  // Evolve walker2 - should not affect walker1
+  walker2.EvolveStep(trunc_para);
+  EXPECT_EQ(walker2.GetStackSize(), original_stack_size + 1);
+  EXPECT_EQ(walker.GetStackSize(), original_stack_size + 2);  // walker1 unchanged
+}
+
+/**
+ * @brief Test BMPSWalker::ContractRow functionality.
+ *
+ * Verifies that ContractRow produces correct overlap values by comparing
+ * with the standard Trace method from BMPSContractor.
+ */
+TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerContractRowTest) {
+  using TenElemT = QLTEN_Double;
+  using ContractorT = BMPSContractor<TenElemT, QNT>;
+  using WalkerT = typename ContractorT::BMPSWalker;
+  using TransferMPO = std::vector<DQLTensor *>;
+  
+  auto trunc_para = BMPSTruncateParams<QLTEN_Double>::SVD(10, 30, 1e-15);
+
+  ContractorT contractor(dtn2d.rows(), dtn2d.cols());
+  contractor.Init(dtn2d);
+
+  // Build environments for a middle row (e.g., row 2)
+  // UP environment: absorb rows 0, 1
+  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  
+  // Get UP walker (has absorbed rows 0, 1)
+  // GrowBMPSForRow(row=2) means UP stack contains: vacuum, row0, row1
+  // So stack size = 3 (or row + 1 for general case)
+  WalkerT walker = contractor.GetWalker(dtn2d, UP);
+  EXPECT_EQ(walker.GetStackSize(), 3); // vacuum + row0 + row1 absorbed
+  
+  // DOWN environment should have absorbed rows Ly-1, Ly-2, ..., 3
+  const auto& down_stack = contractor.GetBMPS(DOWN);
+  
+  // The DOWN stack should cover rows from bottom up to just below row 2
+  // GrowBMPSForRow(row=2) means: UP covers [0, row), DOWN covers (row, Ly)
+  // So DOWN should have Ly - 1 - 2 = Ly - 3 BMPS entries (plus vacuum = Ly-2)
+  
+  // DOWN environment: GrowBMPSForRow(row=2) creates DOWN stack with rows [3, Ly-1] absorbed
+  // For 12x12 lattice: DOWN stack size should be Ly - 2 = 10 (vacuum + 9 rows)
+  EXPECT_GE(down_stack.size(), dtn2d.rows() - 2);
+  
+  // Build MPO for row 2
+  TransferMPO row2_mpo;
+  row2_mpo.reserve(dtn2d.cols());
+  for (size_t col = 0; col < dtn2d.cols(); ++col) {
+    row2_mpo.push_back(const_cast<DQLTensor*>(&dtn2d({2, col})));
+  }
+  
+  // Get the correct DOWN boundary covering rows [3, Ly-1]
+  // down_stack[k] has absorbed k rows from bottom (row Ly-1 down to row Ly-k)
+  // We need down_stack that covers rows 3 to Ly-1, that's Ly - 3 rows
+  size_t needed_down_idx = dtn2d.rows() - 1 - 2; // = Ly - 3 = 9 for 12x12
+  ASSERT_LT(needed_down_idx, down_stack.size()) << "DOWN stack should cover row 3 to Ly-1";
+  
+  const auto& bottom_env = down_stack[needed_down_idx];
+  
+  // ContractRow: <walker_bmps | row2_mpo | bottom_env>
+  TenElemT walker_val = walker.ContractRow(row2_mpo, bottom_env);
+  
+  // Compare with contractor's Trace method
+  contractor.InitBTen(dtn2d, BTenPOSITION::LEFT, 2);
+  contractor.GrowFullBTen(dtn2d, BTenPOSITION::RIGHT, 2, 2, true);
+  TenElemT contractor_val = contractor.Trace(dtn2d, {2, 0}, HORIZONTAL);
+  
+  // Both should give the partition function (same value)
+  EXPECT_NE(contractor_val, 0.0);
+  EXPECT_NEAR(walker_val / contractor_val, 1.0, 1e-8);
+}
+
+/**
+ * @brief Test BMPSWalker BTen cache interface functionality.
+ * 
+ * Note: BTen caching is a placeholder for future optimization.
+ * This test verifies the interface works correctly (column tracking).
+ * Actual BTen caching with tensor contraction is deferred to future work.
+ * 
+ * Tests:
+ * 1. InitBTenLeft / InitBTenRight correctly track column positions
+ * 2. GrowBTenLeftStep / GrowBTenRightStep correctly advance counters
+ * 3. ClearBTen resets state
+ */
+TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerBTenCacheTest) {
+  using TenElemT = double;
+  using DQLTensor = qlten::QLTensor<TenElemT, U1QN>;
+  using TransferMPO = std::vector<DQLTensor *>;
+  using ContractorT = BMPSContractor<TenElemT, U1QN>;
+  using WalkerT = ContractorT::BMPSWalker;
+  
+  // Create contractor and grow boundaries
+  ContractorT contractor(dtn2d.rows(), dtn2d.cols());
+  contractor.Init(dtn2d);
+  
+  BMPSTruncateParams<double> trunc_para(1, 20, 1e-14, CompressMPSScheme::SVD_COMPRESS);
+  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  
+  // Get walker
+  WalkerT walker = contractor.GetWalker(dtn2d, UP);
+  
+  // Get DOWN boundary for row 2
+  const auto& down_stack = contractor.GetBMPS(DOWN);
+  size_t needed_down_idx = dtn2d.rows() - 1 - 2;
+  ASSERT_LT(needed_down_idx, down_stack.size());
+  const auto& bottom_env = down_stack[needed_down_idx];
+  
+  // Build MPO for row 2
+  TransferMPO row2_mpo;
+  row2_mpo.reserve(dtn2d.cols());
+  for (size_t col = 0; col < dtn2d.cols(); ++col) {
+    row2_mpo.push_back(const_cast<DQLTensor*>(&dtn2d({2, col})));
+  }
+  
+  // Test 1: ContractRow as reference (BTen optimization falls back to this)
+  TenElemT reference_val = walker.ContractRow(row2_mpo, bottom_env);
+  EXPECT_NE(reference_val, 0.0) << "ContractRow should return non-zero for valid contraction";
+  
+  // Test 2: Initialize BTen column tracking
+  const size_t Lx = dtn2d.cols();
+  const size_t mid_col = Lx / 2;
+  
+  walker.InitBTenLeft(row2_mpo, bottom_env, mid_col);
+  EXPECT_EQ(walker.GetBTenLeftCol(), mid_col) 
+      << "InitBTenLeft should set left edge to target_col";
+  
+  walker.InitBTenRight(row2_mpo, bottom_env, mid_col);
+  EXPECT_EQ(walker.GetBTenRightCol(), mid_col + 1) 
+      << "InitBTenRight should set right edge to target_col + 1";
+  
+  // Test 3: GrowBTenLeftStep functionality
+  walker.ClearBTen();
+  EXPECT_EQ(walker.GetBTenLeftCol(), 0);
+  EXPECT_EQ(walker.GetBTenRightCol(), 0);
+  
+  // Grow LEFT BTen step by step
+  for (size_t col = 0; col < mid_col; ++col) {
+    walker.GrowBTenLeftStep(row2_mpo, bottom_env);
+    EXPECT_EQ(walker.GetBTenLeftCol(), col + 1) 
+        << "GrowBTenLeftStep should advance left edge by 1";
+  }
+  
+  // Test 4: TraceWithBTen returns 0 (placeholder, should use ContractRow instead)
+  const DQLTensor& mid_site = dtn2d({2, mid_col});
+  walker.InitBTenRight(row2_mpo, bottom_env, mid_col);
+  TenElemT bten_val = walker.TraceWithBTen(mid_site, mid_col, bottom_env);
+  EXPECT_EQ(bten_val, 0.0) << "TraceWithBTen is placeholder, should return 0";
+  
+  // Test 5: Verify ContractRow still works as fallback for structure factor
+  // This is the intended usage pattern until BTen caching is fully implemented
+  TenElemT fallback_val = walker.ContractRow(row2_mpo, bottom_env);
+  EXPECT_NEAR(fallback_val / reference_val, 1.0, 1e-8) 
+      << "ContractRow should remain functional as fallback";
 }
 
 int main(int argc, char *argv[]) {

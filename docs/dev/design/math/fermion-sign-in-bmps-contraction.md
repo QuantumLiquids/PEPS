@@ -140,7 +140,7 @@ nnn_energy = EvaluateNNNEnergy(..., LEFTUP_TO_RIGHTDOWN, ..., psi);
 // 第2条对角线: LEFTDOWN_TO_RIGHTUP（复用 psi）
 nnn_energy += EvaluateNNNEnergy(..., LEFTDOWN_TO_RIGHTUP, ..., psi);
 
-contractor.BTen2MoveStep(...);  // 移动到下一个 plaquette，psi 超出作用域
+contractor.ShiftBTen2Window(...);  // 移动到下一个 plaquette，psi 超出作用域
 ```
 
 **符号一致性保持**：两次调用都使用 `ReplaceNNNSiteTrace`，在相同的 BTen2 环境下收缩，路径相同。

@@ -169,7 +169,7 @@ TenElemT SquareSpinlessFermion::EvaluateBondEnergy(
  * second call reuses it. This is safe because both calls share the same BTen2
  * environment, ensuring identical contraction paths and consistent fermion signs.
  *
- * After BTen2MoveStep is called (moving to the next plaquette), psi goes out
+ * After ShiftBTen2Window is called (moving to the next plaquette), psi goes out
  * of scope and a fresh one is created for the new plaquette.
  *
  * @see SquareNNNModelEnergySolver::CalHorizontalBondEnergyAndHolesSweepRowImpl

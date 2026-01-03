@@ -121,7 +121,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             e_h(row, col) = eb;
           }
           energy_total += eb;
-          contractor.BTenMoveStep(tn, RIGHT);
+          contractor.ShiftBTenWindow(tn, RIGHT);
         }
       }
 
@@ -151,7 +151,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             TenElemT psi_ex = contractor.ReplaceOneSiteTrace(tn, site2, (*split_index_tps)(site2)[1 - config(site2)], HORIZONTAL);
             diag_corr[i - 1] = ComplexConjugate(psi_ex * inv_psi);
           }
-          contractor.BTenMoveStep(tn, RIGHT);
+          contractor.ShiftBTenWindow(tn, RIGHT);
         }
         tn(site1) = (*split_index_tps)(site1)[config(site1)];
         std::vector<TenElemT> SmSp_row = diag_corr;
@@ -186,7 +186,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             e_ur(row, col) = eb;
           }
           energy_total += eb;
-          if (col + 2 < lx) contractor.BTen2MoveStep(tn, RIGHT, row);
+          if (col + 2 < lx) contractor.ShiftBTen2Window(tn, RIGHT, row);
         }
 
         // J2 contribution on the same row window (left-up to right-down)
@@ -202,7 +202,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
           }
         }
-        contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+        contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
       }
     }
 
@@ -230,7 +230,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
           e_v(row, col) = eb;
         }
         energy_total += eb;
-        if (row + 2 < ly) contractor.BTenMoveStep(tn, DOWN);
+        if (row + 2 < ly) contractor.ShiftBTenWindow(tn, DOWN);
       }
 
       // J2 vertical window (sqrt(5) separation)
@@ -248,10 +248,10 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
                                                               (*split_index_tps)(s2)[config(s1)]);
             energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
-          if (row + 3 < ly) contractor.BTen2MoveStep(tn, DOWN, col);
+          if (row + 3 < ly) contractor.ShiftBTen2Window(tn, DOWN, col);
         }
       }
-      if (col + 1 < lx) contractor.BMPSMoveStep(tn, RIGHT, trunc_para);
+      if (col + 1 < lx) contractor.ShiftBMPSWindow(tn, RIGHT, trunc_para);
     }
 
     out["energy"] = {energy_total + j2_ * energy_j2_total};
@@ -340,7 +340,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                                                   (*split_index_tps)(site2)[config(site1)]);
           e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
-        contractor.BTenMoveStep(tn, RIGHT);
+        contractor.ShiftBTenWindow(tn, RIGHT);
       }
     }
     if (row < tn.rows() - 1) {
@@ -389,9 +389,9 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
             e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
         }
-        contractor.BTen2MoveStep(tn, RIGHT, row);
+        contractor.ShiftBTen2Window(tn, RIGHT, row);
       }
-      contractor.BMPSMoveStep(tn, DOWN, trunc_para);
+      contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
     }
   }
 
@@ -415,7 +415,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         e1 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
       }
       if (row < tn.rows() - 2) {
-        contractor.BTenMoveStep(tn, DOWN);
+        contractor.ShiftBTenWindow(tn, DOWN);
       }
     }
     if (col < tn.cols() - 1) {
@@ -436,10 +436,10 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
           e2 += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
         }
         if ((int) row < (int) tn.rows() - 3) {
-          contractor.BTen2MoveStep(tn, DOWN, col);
+          contractor.ShiftBTen2Window(tn, DOWN, col);
         }
       }
-      contractor.BMPSMoveStep(tn, RIGHT, trunc_para);
+      contractor.ShiftBMPSWindow(tn, RIGHT, trunc_para);
     }
   }
   return e1 + j2_ * e2;
