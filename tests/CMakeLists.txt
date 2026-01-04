@@ -224,6 +224,12 @@ add_unittest(test_square_xxz_measurer
         ""
 )
 
+add_unittest(test_hubbard_u1u1_updater
+        "test_model_solvers/test_hubbard_u1u1_updater.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
 # PBC/TRG exact-sum smoke tests (single-rank, no MPI required)
 add_unittest(test_tfim_pbc_trg_exact_sum
         "test_optimizer/test_tfim_pbc_trg_exact_sum.cpp"

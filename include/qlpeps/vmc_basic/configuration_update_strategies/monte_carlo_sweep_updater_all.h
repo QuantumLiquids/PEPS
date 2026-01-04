@@ -48,5 +48,6 @@ class MonteCarloSweepUpdaterBase {
 
 #include "square_nn_updater.h"
 #include "square_3site_updater.h"
+#include "square_hubbard_u1u1_updater.h"
 
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_CLASSES_WAVE_FUNCTION_COMPONENT_ALL_H
