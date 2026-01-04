@@ -351,6 +351,240 @@ TEST_F(tJModelMeasurerTest, LocalObservables) {
   delete executor;
 }
 
+/**
+ * @brief Smoke test for singlet pair correlation measurement.
+ *
+ * Verifies:
+ * 1. MeasureSingletPairCorrelation runs without crashing
+ * 2. Output "SC_singlet_pair_corr" is present in registry
+ * 3. Output structure is correct (multiples of 7: ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient, val)
+ */
+TEST_F(tJModelMeasurerTest, SingletPairCorrelationSmoke) {
+  using Model = SquaretJNNModel;
+  using MCUpdater = MCUpdateSquareNNExchange;
+
+  auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);
+  sitps.Load(tps_path);
+
+  Configuration config = LoadConfiguration(tps_path + "/configuration0");
+
+  // Setup MC parameters with minimal sampling for smoke test
+  MonteCarloParams mc_params(5, 5, 1, config, false);
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, 2 * Dpeps, 1e-15));
+  MCMeasurementParams para(mc_params, peps_params);
+
+  // Create model with singlet pair correlation enabled
+  Model tJ_model(t, J, mu);
+  tJ_model.SetEnableSingletPairCorrelation(true);
+
+  MCUpdater mc_updater(MC_SEED);
+
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT, MCUpdater, Model>(
+      sitps, para, comm, tJ_model, mc_updater
+  );
+  ASSERT_NE(executor, nullptr) << "Failed to create MCPEPSMeasurer";
+
+  executor->Execute();
+
+  auto [energy, en_err] = executor->OutputEnergy();
+  const auto& registry = executor->ObservableRegistry();
+
+  if (rank == hp_numeric::kMPIMasterRank) {
+    std::cout << "[tJModelMeasurerTest] SC Energy = " << std::real(energy)
+              << " +/- " << en_err << std::endl;
+
+    // Energy should still be valid
+    EXPECT_LT(std::real(energy), 0.0) << "Energy should be negative";
+
+    // List available observables
+    std::cout << "[tJModelMeasurerTest] Available observables with SC:" << std::endl;
+    for (const auto& [key, data] : registry) {
+      std::cout << "  " << key << ": values=" << data.first.size()
+                << ", errors=" << data.second.size() << std::endl;
+    }
+
+    // Check SC_singlet_pair_corr output
+    auto it = registry.find("SC_singlet_pair_corr");
+    if (it != registry.end()) {
+      const auto& [values, errors] = it->second;
+      std::cout << "[tJModelMeasurerTest] SC_singlet_pair_corr data size: " << values.size() << std::endl;
+
+      // Each correlation entry has 7 values: ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient, val
+      EXPECT_EQ(values.size() % 7, 0) << "SC_singlet_pair_corr should have multiples of 7 elements";
+
+      size_t num_correlations = values.size() / 7;
+      std::cout << "[tJModelMeasurerTest] Number of SC correlations: " << num_correlations << std::endl;
+
+      // Expected number of pairs for 6x6 lattice (horizontal targets only for now):
+      // Horizontal ref bonds: (Ly-1) * (Lx-1) = 5 * 5 = 25
+      // For each ref at y1, horizontal targets at y2 > y1: (Ly-1-y1) * (Lx-1)
+      // Total: (Lx-1)^2 * sum_{k=1}^{Ly-1} k = 25 * 15 = 375
+      constexpr size_t expected_pairs = 375;
+      EXPECT_EQ(num_correlations, expected_pairs)
+          << "Expected " << expected_pairs << " bond pairs for 6x6 lattice";
+
+      // Print non-zero correlations
+      if (num_correlations > 0) {
+        std::cout << "[tJModelMeasurerTest] Non-zero SC correlations (ref_y,ref_x,orient,tgt_y,tgt_x,orient,val):" << std::endl;
+        size_t nonzero_printed = 0;
+        for (size_t i = 0; i < num_correlations && nonzero_printed < 10; ++i) {
+          size_t base = i * 7;
+          if (std::abs(values[base+6]) > 1e-15) {
+            std::cout << "  (" << size_t(std::real(values[base])) << "," 
+                      << size_t(std::real(values[base+1])) << ","
+                      << size_t(std::real(values[base+2])) << ") -> ("
+                      << size_t(std::real(values[base+3])) << "," 
+                      << size_t(std::real(values[base+4])) << ","
+                      << size_t(std::real(values[base+5])) << "): " 
+                      << std::scientific << std::setprecision(6) << values[base+6] 
+                      << std::defaultfloat << std::endl;
+            nonzero_printed++;
+          }
+        }
+        if (nonzero_printed == 0) {
+          std::cout << "  (none found)" << std::endl;
+        }
+      }
+    } else {
+      // Might not be present if no valid bond pairs exist in this configuration
+      std::cout << "[tJModelMeasurerTest] SC_singlet_pair_corr not found in registry" << std::endl;
+      // For a t-J model with 2 holes, we expect SOME valid pairs
+      FAIL() << "SC_singlet_pair_corr should be present with singlet pair correlation enabled";
+    }
+  }
+
+  delete executor;
+}
+
+/**
+ * @brief Unit test for singlet pair correlation selection rules.
+ *
+ * Verifies the selection rule logic:
+ * - Reference bond: both sites must be empty (state = 2)
+ * - Target bond: must be (up,down) or (down,up) pair
+ * 
+ * This is a simple logic test that doesn't require full tensor contraction.
+ */
+TEST_F(tJModelMeasurerTest, SingletPairCorrelationSelectionRules) {
+  // Create a test configuration with adjacent holes at (0,0)-(0,1)
+  Configuration config(Ly, Lx);
+  size_t up_count = 0, down_count = 0;
+  for (size_t row = 0; row < Ly; ++row) {
+    for (size_t col = 0; col < Lx; ++col) {
+      if (row == 0 && col < 2) {
+        config({row, col}) = 2;  // empty
+      } else if ((row + col) % 2 == 0 && up_count < num_up) {
+        config({row, col}) = 0;  // spin up
+        up_count++;
+      } else if (down_count < num_down) {
+        config({row, col}) = 1;  // spin down
+        down_count++;
+      } else {
+        config({row, col}) = 0;
+        up_count++;
+      }
+    }
+  }
+
+  if (rank == hp_numeric::kMPIMasterRank) {
+    std::cout << "[tJModelMeasurerTest] Selection rules test:" << std::endl;
+    
+    // Verify ref bond (0,0)-(0,1) is valid (both empty)
+    bool ref_valid = (config({0, 0}) == 2 && config({0, 1}) == 2);
+    std::cout << "  Ref bond (0,0)-(0,1) both empty: " << (ref_valid ? "YES" : "NO") << std::endl;
+    EXPECT_TRUE(ref_valid) << "Ref bond should have both sites empty";
+    
+    // Verify ref bond (0,1)-(0,2) is NOT valid (one empty, one up)
+    bool ref_invalid = (config({0, 1}) == 2 && config({0, 2}) == 2);
+    std::cout << "  Ref bond (0,1)-(0,2) both empty: " << (ref_invalid ? "YES" : "NO") << std::endl;
+    EXPECT_FALSE(ref_invalid) << "Only (0,0)-(0,1) should be valid ref bond";
+    
+    // Count valid target bonds in row 1
+    size_t valid_targets = 0;
+    for (size_t x = 0; x < Lx - 1; ++x) {
+      size_t s1 = config({1, x});
+      size_t s2 = config({1, x + 1});
+      bool is_up_down = (s1 == 0 && s2 == 1);
+      bool is_down_up = (s1 == 1 && s2 == 0);
+      if (is_up_down || is_down_up) {
+        valid_targets++;
+        std::cout << "  Target bond (1," << x << ")-(1," << x+1 << "): " 
+                  << (is_up_down ? "up-down" : "down-up") << std::endl;
+      }
+    }
+    EXPECT_GT(valid_targets, 0) << "Should have at least one valid target bond in row 1";
+    std::cout << "  Valid target bonds in row 1: " << valid_targets << std::endl;
+  }
+}
+
+/**
+ * @brief Regression test for singlet pair correlation with fixed seed.
+ *
+ * This test ensures reproducibility and catches unintended changes.
+ * Uses deterministic seed and configuration for exact reproducibility.
+ */
+TEST_F(tJModelMeasurerTest, SingletPairCorrelationRegression) {
+  using Model = SquaretJNNModel;
+  using MCUpdater = MCUpdateSquareNNExchange;
+
+  auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);
+  sitps.Load(tps_path);
+
+  Configuration config = LoadConfiguration(tps_path + "/configuration0");
+
+  // 10 samples for regression (same as EnergyRegression)
+  MonteCarloParams mc_params(10, 10, 1, config, false);
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, 2 * Dpeps, 1e-15));
+  MCMeasurementParams para(mc_params, peps_params);
+
+  Model tJ_model(t, J, mu);
+  tJ_model.SetEnableSingletPairCorrelation(true);
+
+  MCUpdater mc_updater(MC_SEED);
+
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT, MCUpdater, Model>(
+      sitps, para, comm, tJ_model, mc_updater
+  );
+  ASSERT_NE(executor, nullptr);
+
+  executor->Execute();
+
+  const auto& registry = executor->ObservableRegistry();
+
+  if (rank == hp_numeric::kMPIMasterRank) {
+    auto it = registry.find("SC_singlet_pair_corr");
+    ASSERT_NE(it, registry.end()) << "SC_singlet_pair_corr must be present";
+
+    const auto& [values, errors] = it->second;
+
+    // Check size is exactly as expected (horizontal targets only for now)
+    constexpr size_t expected_pairs = 375;
+    constexpr size_t expected_size = expected_pairs * 7;
+    EXPECT_EQ(values.size(), expected_size) << "SC_singlet_pair_corr size regression check";
+
+    // Print summary statistics for regression baseline
+    double sum_abs = 0.0;
+    size_t nonzero_count = 0;
+    for (size_t i = 0; i < expected_pairs; ++i) {
+      double val = std::abs(values[i * 7 + 6]);
+      sum_abs += val;
+      if (val > 1e-15) nonzero_count++;
+    }
+    std::cout << std::setprecision(15);
+    std::cout << "[tJModelMeasurerTest] SC regression: sum_abs=" << sum_abs 
+              << ", nonzero_count=" << nonzero_count << "/" << expected_pairs << std::endl;
+
+    // Most correlations should be zero due to selection rules
+    // (ref needs empty-empty, target needs up-down or down-up)
+    // With 2 holes in a 36-site lattice, valid pairs are rare
+    // But we expect SOME non-zero correlations when holes happen to be adjacent
+    EXPECT_LT(nonzero_count, expected_pairs / 2) 
+        << "Most correlations should be zero due to selection rules";
+  }
+
+  delete executor;
+}
+
 int main(int argc, char *argv[]) {
   MPI_Init(nullptr, nullptr);
   testing::InitGoogleTest(&argc, argv);

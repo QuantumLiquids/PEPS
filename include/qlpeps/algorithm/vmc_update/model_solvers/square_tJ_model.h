@@ -18,6 +18,7 @@
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/base/singlet_pair_correlation_measurement_mixin.h"
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 #include "qlpeps/vmc_basic/tj_single_site_state.h"
 
@@ -450,15 +451,47 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
 */
 class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
                         public SquareNNModelMeasurementSolver<SquaretJNNModel>,
-                        public SquaretJModelMixIn {
+                        public SquaretJModelMixIn,
+                        public SingletPairCorrelationMixin<SquaretJNNModel> {
  public:
-  using SquareNNModelMeasurementSolver<SquaretJNNModel>::EvaluateObservables;
   using SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables;
   explicit SquaretJNNModel(double t, double J, double mu) : SquaretJModelMixIn(t,
                                                                                0,
                                                                                J,
                                                                                0,
                                                                                mu) {}
+
+  /**
+   * @brief Evaluate all observables for the current sample.
+   * 
+   * This includes:
+   * - Energy and standard t-J measurements (via base class)
+   * - Singlet pair correlation ⟨Δ†Δ⟩ (if enabled)
+   */
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    // Use the generic registry traversal from base class
+    ObservableMap<TenElemT> out =
+        this->SquareNNModelMeasurementSolver<SquaretJNNModel>::EvaluateObservables(split_index_tps, tps_sample);
+
+    // Measure singlet pair correlation if enabled
+    if (this->IsSingletPairCorrelationEnabled()) {
+      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+      // Use default truncation parameters; caller can customize if needed
+      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      this->MeasureSingletPairCorrelation(
+          tps_sample->tn,
+          split_index_tps,
+          tps_sample->contractor,
+          tps_sample->config,
+          out,
+          trunc_para);
+    }
+
+    return out;
+  }
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
     auto base = this->SquareNNModelMeasurementSolver<SquaretJNNModel>::DescribeObservables(ly, lx);
@@ -478,6 +511,9 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
     }
     base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
     base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
+    // Singlet pair correlation: tuples of {ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient, val}
+    // Number of pairs: (Ly-1) * (Lx-1) reference bonds × sum_{dy=1}^{Ly-1-y1} (Lx-1) target bonds
+    base.push_back({"SC_singlet_pair_corr", "Singlet pair correlation <Delta^dag Delta>: {ref_y,ref_x,ref_orient,tgt_y,tgt_x,tgt_orient,val,...}", {}, {"bond_pair_tuples"}});
     return base;
   }
 };
