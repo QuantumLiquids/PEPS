@@ -509,11 +509,14 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
         meta.index_labels = {"bond_y", "bond_x"};
       }
     }
-    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
-    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
-    // Singlet pair correlation: tuples of {ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient, val}
-    // Number of pairs: (Ly-1) * (Lx-1) reference bonds × sum_{dy=1}^{Ly-1-y1} (Lx-1) target bonds
-    base.push_back({"SC_singlet_pair_corr", "Singlet pair correlation <Delta^dag Delta>: {ref_y,ref_x,ref_orient,tgt_y,tgt_x,tgt_orient,val,...}", {}, {"bond_pair_tuples"}});
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}, {}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}, {}});
+    // Singlet pair correlation: values only, coordinate mapping generated automatically
+    size_t num_pairs = SingletPairCorrelationMixin<SquaretJNNModel>::ComputeNumSCPairs(ly, lx);
+    base.push_back({"SC_singlet_pair_corr",
+        "Singlet pair correlation <Delta^dag Delta> values.",
+        {num_pairs}, {"pair_idx"},
+        SingletPairCorrelationMixin<SquaretJNNModel>::GenerateSCPairCorrCoordString});
     return base;
   }
 };

@@ -9,7 +9,9 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BASE_SINGLET_PAIR_CORRELATION_MEASUREMENT_MIXIN_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BASE_SINGLET_PAIR_CORRELATION_MEASUREMENT_MIXIN_H
 
+#include <array>
 #include <iostream>
+#include <sstream>
 #include "qlpeps/basic.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h"
@@ -66,6 +68,25 @@ namespace qlpeps {
  * - Reference bond: both sites must be empty (state = 2)
  * - Target bond: must be (up,down) or (down,up) pair
  *
+ * ## Output Format
+ *
+ * MeasureSingletPairCorrelation() stores only correlation values (one per bond pair).
+ * Use GenerateSCPairCorrIndexMapping() to get coordinate mapping:
+ *
+ * @code
+ * // Get values from MC measurement
+ * auto values = registry["SC_singlet_pair_corr"];  // size = num_pairs
+ *
+ * // Generate coordinate mapping (once, for post-processing)
+ * auto mapping = SingletPairCorrelationMixin<M>::GenerateSCPairCorrIndexMapping(Ly, Lx);
+ * for (size_t i = 0; i < mapping.size(); ++i) {
+ *     auto [ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient] = mapping[i];
+ *     std::cout << "Pair " << i << ": bond(" << ref_y << "," << ref_x << ")@" << ref_orient
+ *               << " -> bond(" << tgt_y << "," << tgt_x << ")@" << tgt_orient
+ *               << " = " << values[i] << std::endl;
+ * }
+ * @endcode
+ *
  * @tparam ModelType The derived model class (CRTP pattern).
  */
 template<typename ModelType>
@@ -74,6 +95,89 @@ class SingletPairCorrelationMixin {
   void SetEnableSingletPairCorrelation(bool enable) { enable_singlet_pair_correlation_ = enable; }
 
   bool IsSingletPairCorrelationEnabled() const { return enable_singlet_pair_correlation_; }
+
+  /**
+   * @brief Compute the number of singlet pair correlation bond pairs.
+   *
+   * For horizontal reference bonds at row y1, targets are horizontal bonds at rows y2 > y1.
+   * Reference bonds: (Ly-1) rows × (Lx-1) cols.
+   * For ref at y1: (Ly-1-y1) target rows × (Lx-1) target bonds per row.
+   *
+   * @param Ly Number of rows.
+   * @param Lx Number of columns.
+   * @return Total number of bond pairs.
+   */
+  static size_t ComputeNumSCPairs(size_t Ly, size_t Lx) {
+    if (Ly < 2 || Lx < 2) return 0;
+    size_t count = 0;
+    for (size_t y1 = 0; y1 < Ly - 1; ++y1) {
+      for (size_t x1 = 0; x1 < Lx - 1; ++x1) {
+        count += (Ly - 1 - y1) * (Lx - 1);
+      }
+    }
+    return count;
+  }
+
+  /**
+   * @brief Generate coordinate mapping for singlet pair correlation indices.
+   *
+   * Each entry: {ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient}
+   * where orient = 0 for horizontal bonds.
+   *
+   * This should be called once when dumping results, not per MC sample.
+   * The ordering matches MeasureSingletPairCorrelation() output exactly.
+   *
+   * @param Ly Number of rows.
+   * @param Lx Number of columns.
+   * @return Vector of coordinate tuples, one per bond pair.
+   */
+  static std::vector<std::array<size_t, 6>> GenerateSCPairCorrIndexMapping(size_t Ly, size_t Lx) {
+    std::vector<std::array<size_t, 6>> mapping;
+    if (Ly < 2 || Lx < 2) return mapping;
+
+    mapping.reserve(ComputeNumSCPairs(Ly, Lx));
+
+    // Enumerate all horizontal reference bonds (y1, x1)-(y1, x1+1)
+    for (size_t y1 = 0; y1 < Ly - 1; ++y1) {
+      for (size_t x1 = 0; x1 < Lx - 1; ++x1) {
+        // Enumerate all horizontal target bonds in rows y2 > y1
+        for (size_t y2 = y1 + 1; y2 < Ly; ++y2) {
+          for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
+            mapping.push_back({y1, x1, 0, y2, x2, 0});  // 0 = horizontal
+          }
+        }
+      }
+    }
+
+    return mapping;
+  }
+
+  /**
+   * @brief Generate coordinate mapping as a string for file output.
+   *
+   * Format:
+   * # idx ref_y ref_x ref_orient tgt_y tgt_x tgt_orient
+   * 0 0 0 0 1 0 0
+   * 1 0 0 0 1 1 0
+   * ...
+   *
+   * This is suitable for use with ObservableMeta::coord_generator.
+   *
+   * @param Ly Number of rows.
+   * @param Lx Number of columns.
+   * @return Coordinate mapping as string content.
+   */
+  static std::string GenerateSCPairCorrCoordString(size_t Ly, size_t Lx) {
+    auto mapping = GenerateSCPairCorrIndexMapping(Ly, Lx);
+    std::ostringstream oss;
+    oss << "# idx ref_y ref_x ref_orient tgt_y tgt_x tgt_orient\n";
+    for (size_t i = 0; i < mapping.size(); ++i) {
+      const auto& m = mapping[i];
+      oss << i << " " << m[0] << " " << m[1] << " " << m[2] << " "
+          << m[3] << " " << m[4] << " " << m[5] << "\n";
+    }
+    return oss.str();
+  }
 
   /**
    * @brief Measure singlet pair correlations between horizontal bonds.
@@ -89,13 +193,8 @@ class SingletPairCorrelationMixin {
    * @param[out] out Observable map to store results under key "SC_singlet_pair_corr".
    * @param trunc_para Truncation parameters for BMPS evolution.
    *
-   * Results stored as flat tuples: {ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient, val, ...}
-   * where:
-   * - (ref_y, ref_x): reference bond position (row, left column for horizontal)
-   * - ref_orient: 0 = horizontal
-   * - (tgt_y, tgt_x): target bond position (row, left column for horizontal)
-   * - tgt_orient: 0 = horizontal (vertical not yet supported)
-   * - val: correlation value ⟨Δ†(ref)Δ(tgt)⟩
+   * Results stored as correlation values only (one per bond pair).
+   * Use GenerateSCPairCorrIndexMapping() to obtain coordinate mapping.
    */
   template<typename TenElemT, typename QNT>
   void MeasureSingletPairCorrelation(
@@ -183,13 +282,7 @@ class SingletPairCorrelationMixin {
           if (down_stack_idx >= down_stack.size()) {
             // Record zeros for all horizontal bonds in this row
             for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
-              sc_corr.push_back(TenElemT(y1));    // ref_y
-              sc_corr.push_back(TenElemT(x1));    // ref_x
-              sc_corr.push_back(TenElemT(0));     // ref_orient (horizontal)
-              sc_corr.push_back(TenElemT(y2));    // tgt_y
-              sc_corr.push_back(TenElemT(x2));    // tgt_x
-              sc_corr.push_back(TenElemT(0));     // tgt_orient (horizontal)
-              sc_corr.push_back(TenElemT(0));     // value
+              sc_corr.push_back(TenElemT(0));  // value only
             }
             continue;
           }
@@ -247,15 +340,9 @@ class SingletPairCorrelationMixin {
             }
           }
           
-          // Output horizontal results
+          // Output horizontal results (values only)
           for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
-            sc_corr.push_back(TenElemT(y1));    // ref_y
-            sc_corr.push_back(TenElemT(x1));    // ref_x
-            sc_corr.push_back(TenElemT(0));     // ref_orient (horizontal)
-            sc_corr.push_back(TenElemT(y2));    // tgt_y
-            sc_corr.push_back(TenElemT(x2));    // tgt_x
-            sc_corr.push_back(TenElemT(0));     // tgt_orient (horizontal)
-            sc_corr.push_back(row_results[x2]); // value
+            sc_corr.push_back(row_results[x2]);
           }
           
           // TODO: Vertical target bonds (y2, x2) -> (y2+1, x2)

@@ -16,6 +16,7 @@
 #include <string>
 #include <vector>
 #include <complex>
+#include <functional>
 #include <limits>
 #include <type_traits>
 
@@ -35,6 +36,18 @@ struct ObservableMeta {
   std::string description;            ///< Concise physical meaning (English)
   std::vector<size_t> shape;          ///< Data shape. Empty for scalar; lattice-aware entries should use runtime sizes
   std::vector<std::string> index_labels; ///< Optional axis labels, e.g., {"y","x"} or {"bond_y","bond_x"}
+
+  /**
+   * @brief Optional coordinate mapping generator.
+   *
+   * If set, DumpData() will call this function to generate coordinate mapping file
+   * (stats/<key>_coords.txt). Signature: (ly, lx) -> file content string.
+   *
+   * Use this for observables with non-trivial index semantics (e.g., bond pair correlations,
+   * structure factor). The generator should produce human-readable text describing the mapping
+   * from linear index to physical coordinates.
+   */
+  std::function<std::string(size_t, size_t)> coord_generator;
 };
 
 /**

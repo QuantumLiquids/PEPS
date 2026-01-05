@@ -299,6 +299,17 @@ MCPEPSMeasurer<TenElemT,
           }
         }
       }
+
+      // Generate coordinate mapping files for observables with coord_generator
+      for (const auto &meta : observables_meta_) {
+        if (meta.coord_generator) {
+          std::string content = meta.coord_generator(engine_.Ly(), engine_.Lx());
+          std::ofstream ofs(stats_dir + meta.key + "_coords.txt");
+          if (ofs.is_open()) {
+            ofs << content;
+          }
+        }
+      }
     }
   }
   // Dump psi samples separately (samples/psi.csv)

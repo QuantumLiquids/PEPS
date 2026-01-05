@@ -33,6 +33,7 @@
 #include "../test_mpi_env.h"
 #include <filesystem>
 #include <iomanip>
+#include <sstream>
 
 using namespace qlten;
 using namespace qlpeps;
@@ -403,40 +404,37 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationSmoke) {
                 << ", errors=" << data.second.size() << std::endl;
     }
 
-    // Check SC_singlet_pair_corr output
+    // Check SC_singlet_pair_corr output (new format: values only)
     auto it = registry.find("SC_singlet_pair_corr");
     if (it != registry.end()) {
       const auto& [values, errors] = it->second;
       std::cout << "[tJModelMeasurerTest] SC_singlet_pair_corr data size: " << values.size() << std::endl;
-
-      // Each correlation entry has 7 values: ref_y, ref_x, ref_orient, tgt_y, tgt_x, tgt_orient, val
-      EXPECT_EQ(values.size() % 7, 0) << "SC_singlet_pair_corr should have multiples of 7 elements";
-
-      size_t num_correlations = values.size() / 7;
-      std::cout << "[tJModelMeasurerTest] Number of SC correlations: " << num_correlations << std::endl;
 
       // Expected number of pairs for 6x6 lattice (horizontal targets only for now):
       // Horizontal ref bonds: (Ly-1) * (Lx-1) = 5 * 5 = 25
       // For each ref at y1, horizontal targets at y2 > y1: (Ly-1-y1) * (Lx-1)
       // Total: (Lx-1)^2 * sum_{k=1}^{Ly-1} k = 25 * 15 = 375
       constexpr size_t expected_pairs = 375;
-      EXPECT_EQ(num_correlations, expected_pairs)
-          << "Expected " << expected_pairs << " bond pairs for 6x6 lattice";
+      EXPECT_EQ(values.size(), expected_pairs)
+          << "SC_singlet_pair_corr should have exactly " << expected_pairs << " values";
 
-      // Print non-zero correlations
-      if (num_correlations > 0) {
-        std::cout << "[tJModelMeasurerTest] Non-zero SC correlations (ref_y,ref_x,orient,tgt_y,tgt_x,orient,val):" << std::endl;
+      // Verify using ComputeNumSCPairs
+      size_t computed_pairs = SingletPairCorrelationMixin<SquaretJNNModel>::ComputeNumSCPairs(Ly, Lx);
+      EXPECT_EQ(computed_pairs, expected_pairs) << "ComputeNumSCPairs should return " << expected_pairs;
+
+      // Print non-zero correlations with coordinate mapping
+      if (values.size() > 0) {
+        auto mapping = SingletPairCorrelationMixin<SquaretJNNModel>::GenerateSCPairCorrIndexMapping(Ly, Lx);
+        EXPECT_EQ(mapping.size(), values.size()) << "Mapping size should equal values size";
+
+        std::cout << "[tJModelMeasurerTest] Non-zero SC correlations (ref_y,ref_x,orient -> tgt_y,tgt_x,orient: val):" << std::endl;
         size_t nonzero_printed = 0;
-        for (size_t i = 0; i < num_correlations && nonzero_printed < 10; ++i) {
-          size_t base = i * 7;
-          if (std::abs(values[base+6]) > 1e-15) {
-            std::cout << "  (" << size_t(std::real(values[base])) << "," 
-                      << size_t(std::real(values[base+1])) << ","
-                      << size_t(std::real(values[base+2])) << ") -> ("
-                      << size_t(std::real(values[base+3])) << "," 
-                      << size_t(std::real(values[base+4])) << ","
-                      << size_t(std::real(values[base+5])) << "): " 
-                      << std::scientific << std::setprecision(6) << values[base+6] 
+        for (size_t i = 0; i < values.size() && nonzero_printed < 10; ++i) {
+          if (std::abs(values[i]) > 1e-15) {
+            const auto& m = mapping[i];
+            std::cout << "  (" << m[0] << "," << m[1] << "," << m[2] << ") -> ("
+                      << m[3] << "," << m[4] << "," << m[5] << "): " 
+                      << std::scientific << std::setprecision(6) << values[i] 
                       << std::defaultfloat << std::endl;
             nonzero_printed++;
           }
@@ -454,6 +452,65 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationSmoke) {
   }
 
   delete executor;
+}
+
+/**
+ * @brief Unit test for coordinate mapping generation.
+ *
+ * Verifies:
+ * 1. GenerateSCPairCorrCoordString() produces correct format
+ * 2. Number of lines matches ComputeNumSCPairs()
+ * 3. coord_generator is set in DescribeObservables()
+ */
+TEST_F(tJModelMeasurerTest, CoordinateMappingGeneration) {
+  using Model = SquaretJNNModel;
+
+  // Test GenerateSCPairCorrCoordString output format
+  std::string coord_str = SingletPairCorrelationMixin<Model>::GenerateSCPairCorrCoordString(Ly, Lx);
+  
+  // Count non-header lines
+  size_t line_count = 0;
+  std::istringstream iss(coord_str);
+  std::string line;
+  while (std::getline(iss, line)) {
+    if (!line.empty() && line[0] != '#') {
+      line_count++;
+    }
+  }
+  
+  size_t expected_pairs = SingletPairCorrelationMixin<Model>::ComputeNumSCPairs(Ly, Lx);
+  EXPECT_EQ(line_count, expected_pairs) 
+      << "Coordinate string should have " << expected_pairs << " data lines";
+
+  // Verify first line format (after header)
+  iss.clear();
+  iss.str(coord_str);
+  std::getline(iss, line);  // Skip header
+  std::getline(iss, line);  // First data line
+  EXPECT_EQ(line, "0 0 0 0 1 0 0") << "First line should be index 0 with ref(0,0,0)->tgt(1,0,0)";
+
+  // Verify coord_generator is set in DescribeObservables
+  Model tJ_model(t, J, mu);
+  tJ_model.SetEnableSingletPairCorrelation(true);
+  auto metas = tJ_model.DescribeObservables(Ly, Lx);
+  
+  bool found_sc_corr = false;
+  for (const auto& meta : metas) {
+    if (meta.key == "SC_singlet_pair_corr") {
+      found_sc_corr = true;
+      EXPECT_TRUE(static_cast<bool>(meta.coord_generator)) 
+          << "SC_singlet_pair_corr should have coord_generator set";
+      
+      // Verify coord_generator produces same output
+      if (meta.coord_generator) {
+        std::string generated = meta.coord_generator(Ly, Lx);
+        EXPECT_EQ(generated, coord_str) 
+            << "coord_generator should produce same output as GenerateSCPairCorrCoordString";
+      }
+      break;
+    }
+  }
+  EXPECT_TRUE(found_sc_corr) << "SC_singlet_pair_corr should be in DescribeObservables";
 }
 
 /**
@@ -557,16 +614,15 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationRegression) {
 
     const auto& [values, errors] = it->second;
 
-    // Check size is exactly as expected (horizontal targets only for now)
+    // Check size is exactly as expected (values only, no coordinates)
     constexpr size_t expected_pairs = 375;
-    constexpr size_t expected_size = expected_pairs * 7;
-    EXPECT_EQ(values.size(), expected_size) << "SC_singlet_pair_corr size regression check";
+    EXPECT_EQ(values.size(), expected_pairs) << "SC_singlet_pair_corr should have exactly num_pairs values";
 
     // Print summary statistics for regression baseline
     double sum_abs = 0.0;
     size_t nonzero_count = 0;
-    for (size_t i = 0; i < expected_pairs; ++i) {
-      double val = std::abs(values[i * 7 + 6]);
+    for (size_t i = 0; i < values.size(); ++i) {
+      double val = std::abs(values[i]);
       sum_abs += val;
       if (val > 1e-15) nonzero_count++;
     }
