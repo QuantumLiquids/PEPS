@@ -863,6 +863,124 @@ TEST_F(ProjectedtJTensorNetwork, TestTrace) {
 }
 
 /**
+ * @brief Test BMPSWalker BTen cache interface for fermionic tensor networks.
+ *
+ * This test verifies that the fermionic BTen contraction patterns work correctly
+ * by comparing TraceWithBTen results against BMPSContractor::Trace reference values.
+ *
+ * Key differences from bosonic case:
+ * - Fermionic tensors use FuseIndex for correct fermion sign handling
+ * - Vacuum BTen has 4 indices (vs 3 for bosonic)
+ * - Different contraction patterns with Transpose operations
+ */
+TEST_F(ProjectedtJTensorNetwork, BMPSWalkerFermionicBTenTest) {
+  using TenElemT = QLTEN_Double;
+  using ContractorT = BMPSContractor<TenElemT, QNT>;
+  using WalkerT = ContractorT::BMPSWalker;
+  using TransferMPO = std::vector<Tensor *>;
+
+  BMPSTruncateParams<qlten::QLTEN_Double> trunc_para = BMPSTruncateParams<qlten::QLTEN_Double>(Db_min,
+                                                 Db_max,
+                                                 1e-15,
+                                                 CompressMPSScheme::SVD_COMPRESS,
+                                                 std::make_optional<double>(1e-14),
+                                                 std::make_optional<size_t>(10));
+
+  // Initialize contractor
+  ContractorT contractor(dtn2d.rows(), dtn2d.cols());
+  contractor.Init(dtn2d);
+
+  // Grow BMPS environments for a middle row
+  const size_t test_row = Ly / 2;
+  contractor.GrowBMPSForRow(dtn2d, test_row, trunc_para);
+
+  // Get walker from UP direction
+  WalkerT walker = contractor.GetWalker(dtn2d, UP);
+  EXPECT_EQ(walker.GetStackSize(), test_row + 1) << "Walker should have absorbed rows [0, test_row)";
+
+  // Build MPO for test_row (needed for BTen operations)
+  TransferMPO row_mpo;
+  row_mpo.reserve(dtn2d.cols());
+  for (size_t col = 0; col < dtn2d.cols(); ++col) {
+    row_mpo.push_back(const_cast<Tensor*>(&dtn2d({test_row, col})));
+  }
+
+  // Get DOWN boundary
+  const auto& down_stack = contractor.GetBMPS(DOWN);
+  size_t needed_down_idx = dtn2d.rows() - 1 - test_row;
+  ASSERT_LT(needed_down_idx, down_stack.size()) << "DOWN stack should cover rows below test_row";
+  const auto& bottom_env = down_stack[needed_down_idx];
+
+  // Use BMPSContractor::Trace as reference (it already supports fermionic tensors)
+  // Need to initialize BOTH left and right BTen for Trace to work
+  const size_t mid_col = Lx / 2;
+  contractor.InitBTen(dtn2d, BTenPOSITION::LEFT, test_row);
+  contractor.GrowFullBTen(dtn2d, BTenPOSITION::LEFT, test_row, mid_col, true);
+  contractor.InitBTen(dtn2d, BTenPOSITION::RIGHT, test_row);
+  contractor.GrowFullBTen(dtn2d, BTenPOSITION::RIGHT, test_row, mid_col + 1, true);
+  TenElemT reference_val = contractor.Trace(dtn2d, {test_row, mid_col}, HORIZONTAL);
+  EXPECT_NE(reference_val, 0.0) << "Reference Trace should return non-zero for valid fermionic contraction";
+
+  // Test 1: Initialize LEFT BTen from col 0 to mid_col
+  walker.InitBTenLeft(row_mpo, bottom_env, mid_col);
+  EXPECT_EQ(walker.GetBTenLeftCol(), mid_col)
+      << "InitBTenLeft should grow left BTen to target_col";
+
+  // Test 2: Initialize RIGHT BTen from col Lx-1 to mid_col+1
+  walker.InitBTenRight(row_mpo, bottom_env, mid_col);
+  EXPECT_EQ(walker.GetBTenRightCol(), mid_col + 1)
+      << "InitBTenRight should set right edge to target_col + 1";
+
+  // Test 3: TraceWithBTen should match reference_val
+  const Tensor& mid_site = dtn2d({test_row, mid_col});
+  TenElemT bten_val = walker.TraceWithBTen(mid_site, mid_col, bottom_env);
+  EXPECT_NEAR(std::abs(bten_val), std::abs(reference_val), 1e-8 * std::abs(reference_val))
+      << "TraceWithBTen should match BMPSContractor::Trace result for fermionic tensors";
+
+  // Test 4: Step-by-step growth and trace at different columns
+  walker.ClearBTen();
+
+  // Grow LEFT BTen step by step
+  walker.InitBTenLeft(row_mpo, bottom_env, 0);
+  for (size_t col = 0; col < mid_col; ++col) {
+    walker.GrowBTenLeftStep(row_mpo, bottom_env);
+    EXPECT_EQ(walker.GetBTenLeftCol(), col + 1)
+        << "GrowBTenLeftStep should advance left edge by 1";
+  }
+
+  // Initialize RIGHT BTen
+  walker.InitBTenRight(row_mpo, bottom_env, mid_col);
+
+  // Trace again - should still match
+  TenElemT bten_val2 = walker.TraceWithBTen(mid_site, mid_col, bottom_env);
+  EXPECT_NEAR(std::abs(bten_val2), std::abs(reference_val), 1e-8 * std::abs(reference_val))
+      << "Step-by-step grown BTen should produce same result";
+
+  // Test 5: Test GrowBTenRightStep
+  walker.ClearBTen();
+
+  // Initialize RIGHT BTen at rightmost column
+  walker.InitBTenRight(row_mpo, bottom_env, Lx - 1);
+  EXPECT_EQ(walker.GetBTenRightCol(), Lx) << "InitBTenRight at Lx-1 should set right col to Lx";
+
+  // Grow RIGHT BTen leftward step by step
+  for (size_t step = 0; step < Lx - 1 - mid_col; ++step) {
+    walker.GrowBTenRightStep(row_mpo, bottom_env);
+    EXPECT_EQ(walker.GetBTenRightCol(), Lx - 1 - step)
+        << "GrowBTenRightStep should decrease right edge by 1";
+  }
+  EXPECT_EQ(walker.GetBTenRightCol(), mid_col + 1);
+
+  // Now initialize LEFT BTen
+  walker.InitBTenLeft(row_mpo, bottom_env, mid_col);
+
+  // Trace - should match reference
+  TenElemT bten_val3 = walker.TraceWithBTen(mid_site, mid_col, bottom_env);
+  EXPECT_NEAR(std::abs(bten_val3), std::abs(reference_val), 1e-8 * std::abs(reference_val))
+      << "Right-to-left grown BTen should produce same result";
+}
+
+/**
  * @note Tests based on this class should be run after simple update.
  */
 struct ProjectedSpinTenNet : public testing::Test {

@@ -3,6 +3,8 @@
 #define QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_IMPL_BMPS_WALKER_H
 
 #include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/impl/bmps_contractor_helpers.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/bmps/impl/bten_operations.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 
 namespace qlpeps {
@@ -206,8 +208,6 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::InitBTenLeft(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary, 
     size_t target_col) {
-  using IndexT = qlten::Index<QNT>;
-  
   const size_t N = bmps_.size();
   if (N == 0 || mpo.size() != N || opposite_boundary.size() != N) {
     throw std::runtime_error("BMPSWalker::InitBTenLeft: Size mismatch. N=" + std::to_string(N) + 
@@ -218,36 +218,11 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::InitBTenLeft(
   bten_left_.clear();
   bten_left_col_ = 0;
   
-  // Following the same pattern as BMPSContractor::InitBTen(LEFT, row):
-  // vacuum BTen connects via:
-  //   index0: UP BMPS last tensor (col=0 in reversed) RIGHT index
-  //   index1: site tensor at col=0 LEFT index
-  //   index2: DOWN BMPS first tensor (col=0) LEFT index
-  
-  const Tensor& up_ten_col0 = bmps_[N - 1];  // UP reversed: bmps_[N-1] = col 0
-  const Tensor& site_col0 = *mpo[0];
-  const Tensor& down_ten_col0 = opposite_boundary[0];
-  
-  // Match InitBTen LEFT pattern: index0 from UP[R], index1 from site[L], index2 from DOWN[L]
-  IndexT index0 = qlten::InverseIndex(up_ten_col0.GetIndex(2));    // UP col0 RIGHT
-  IndexT index1 = qlten::InverseIndex(site_col0.GetIndex(0));      // site col0 LEFT
-  IndexT index2 = qlten::InverseIndex(down_ten_col0.GetIndex(0));  // DOWN col0 LEFT
-  
-#ifndef NDEBUG
-  std::cerr << "[InitBTenLeft] N=" << N << ", target_col=" << target_col << std::endl;
-  std::cerr << "[InitBTenLeft] up_ten_col0: "; up_ten_col0.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[InitBTenLeft] site_col0: "; site_col0.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[InitBTenLeft] down_ten_col0: "; down_ten_col0.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  Tensor vacuum_bten({index0, index1, index2});
-  vacuum_bten({0, 0, 0}) = TenElemT(1.0);
-  
-#ifndef NDEBUG
-  std::cerr << "[InitBTenLeft] vacuum_bten: "; vacuum_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  bten_left_.push_back(std::move(vacuum_bten));
+  // Create vacuum BTen using shared function
+  // UP BMPS reversed: bmps_[N-1] = col 0
+  Tensor vacuum = bten_ops::CreateVacuumBTenLeft<TenElemT, QNT>(
+      bmps_[N - 1], *mpo[0], opposite_boundary[0]);
+  bten_left_.push_back(std::move(vacuum));
   
   // Grow to target_col
   while (bten_left_col_ < target_col && bten_left_col_ < N) {
@@ -260,8 +235,6 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::InitBTenRight(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary, 
     size_t target_col) {
-  using IndexT = qlten::Index<QNT>;
-  
   const size_t N = bmps_.size();
   if (N == 0 || mpo.size() != N || opposite_boundary.size() != N) {
     throw std::runtime_error("BMPSWalker::InitBTenRight: Size mismatch. N=" + std::to_string(N) + 
@@ -272,40 +245,13 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::InitBTenRight(
   bten_right_.clear();
   bten_right_col_ = N;  // Right edge starts at N (nothing absorbed yet)
   
-  // Following the same pattern as BMPSContractor::InitBTen(RIGHT, row):
-  // vacuum BTen connects via:
-  //   index0: DOWN BMPS last tensor (col=N-1) RIGHT index
-  //   index1: site tensor at col=N-1 RIGHT index
-  //   index2: UP BMPS first tensor (col=N-1 in reversed) LEFT index
-  
-  const Tensor& down_ten_colN1 = opposite_boundary[N - 1];
-  const Tensor& site_colN1 = *mpo[N - 1];
-  const Tensor& up_ten_colN1 = bmps_[0];  // UP reversed: bmps_[0] = col N-1
-  
-  // Match InitBTen RIGHT pattern
-  IndexT index0 = qlten::InverseIndex(down_ten_colN1.GetIndex(2));  // DOWN col=N-1 RIGHT
-  IndexT index1 = qlten::InverseIndex(site_colN1.GetIndex(2));      // site col=N-1 RIGHT
-  IndexT index2 = qlten::InverseIndex(up_ten_colN1.GetIndex(0));    // UP col=N-1 LEFT
-  
-#ifndef NDEBUG
-  std::cerr << "[InitBTenRight] N=" << N << ", target_col=" << target_col << std::endl;
-  std::cerr << "[InitBTenRight] down_ten_colN1: "; down_ten_colN1.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[InitBTenRight] site_colN1: "; site_colN1.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[InitBTenRight] up_ten_colN1: "; up_ten_colN1.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  Tensor vacuum_bten({index0, index1, index2});
-  vacuum_bten({0, 0, 0}) = TenElemT(1.0);
-  
-#ifndef NDEBUG
-  std::cerr << "[InitBTenRight] vacuum_bten: "; vacuum_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  bten_right_.push_back(std::move(vacuum_bten));
+  // Create vacuum BTen using shared function
+  // UP BMPS reversed: bmps_[0] = col N-1
+  Tensor vacuum = bten_ops::CreateVacuumBTenRight<TenElemT, QNT>(
+      opposite_boundary[N - 1], *mpo[N - 1], bmps_[0]);
+  bten_right_.push_back(std::move(vacuum));
   
   // Grow to target_col (towards left)
-  // target_col means we want RIGHT BTen to cover (target_col, N-1]
-  // So we need bten_right_col_ == target_col + 1
   while (bten_right_col_ > target_col + 1 && bten_right_col_ > 0) {
     GrowBTenRightStep(mpo, opposite_boundary);
   }
@@ -317,74 +263,38 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::GrowBTenLeftStep(
     const BMPS<TenElemT, QNT>& opposite_boundary) {
   const size_t N = bmps_.size();
 
-  // Auto-initialize vacuum if empty and at start
+  // Validate inputs
+  if (N == 0 || mpo.size() != N || opposite_boundary.size() != N) {
+    throw std::runtime_error("BMPSWalker::GrowBTenLeftStep: Size mismatch. N=" + 
+                             std::to_string(N) + ", mpo=" + std::to_string(mpo.size()) + 
+                             ", opposite=" + std::to_string(opposite_boundary.size()));
+  }
+
+  // Auto-initialize vacuum BTen if empty
   if (bten_left_.empty()) {
-    if (bten_left_col_ == 0 && N > 0 && mpo.size() == N && opposite_boundary.size() == N) {
-      using IndexT = qlten::Index<QNT>;
-      const Tensor& up_ten_col0 = bmps_[N - 1];  // UP reversed: bmps_[N-1] = col 0
-      const Tensor& site_col0 = *mpo[0];
-      const Tensor& down_ten_col0 = opposite_boundary[0];
-
-      IndexT index0 = qlten::InverseIndex(up_ten_col0.GetIndex(2));    // UP col0 RIGHT
-      IndexT index1 = qlten::InverseIndex(site_col0.GetIndex(0));      // site col0 LEFT
-      IndexT index2 = qlten::InverseIndex(down_ten_col0.GetIndex(0));  // DOWN col0 LEFT
-
-      Tensor vacuum_bten({index0, index1, index2});
-      vacuum_bten({0, 0, 0}) = TenElemT(1.0);
-      bten_left_.push_back(std::move(vacuum_bten));
-    } else {
-      throw std::runtime_error("BMPSWalker::GrowBTenLeftStep: Auto-initialization failed. "
-                               "Ensure N > 0 and input dimensions match (mpo=" + 
-                               std::to_string(mpo.size()) + ", opposite=" + 
-                               std::to_string(opposite_boundary.size()) + ", N=" + std::to_string(N) + ")");
+    if (bten_left_col_ != 0) {
+      throw std::runtime_error("BMPSWalker::GrowBTenLeftStep: bten_left_ is empty but col != 0");
     }
+    // Use shared function to create vacuum BTen
+    // UP BMPS reversed: bmps_[N-1] = col 0
+    Tensor vacuum = bten_ops::CreateVacuumBTenLeft<TenElemT, QNT>(
+        bmps_[N - 1], *mpo[0], opposite_boundary[0]);
+    bten_left_.push_back(std::move(vacuum));
   }
 
   if (bten_left_col_ >= N) {
-    throw std::runtime_error("BMPSWalker::GrowBTenLeftStep: Cannot grow further right. Current col is " + 
-                             std::to_string(bten_left_col_) + ", N is " + std::to_string(N));
+    throw std::runtime_error("BMPSWalker::GrowBTenLeftStep: Cannot grow beyond N. col=" + 
+                             std::to_string(bten_left_col_) + ", N=" + std::to_string(N));
   }
   
-  // Absorb column at bten_left_col_
+  // Absorb column using shared function
   const size_t col = bten_left_col_;
-  
-  // Get tensors for this column (same as GrowFullBTen LEFT case)
-  const Tensor& up_mps_ten = bmps_[N - 1 - col];  // UP reversed
-  const Tensor& mpo_ten = *mpo[col];
-  const Tensor& down_mps_ten = opposite_boundary[col];
-  const Tensor& left_bten = bten_left_.back();
-
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenLeftStep] col=" << col << std::endl;
-  std::cerr << "[GrowBTenLeftStep] up_mps_ten: "; up_mps_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[GrowBTenLeftStep] mpo_ten: "; mpo_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[GrowBTenLeftStep] down_mps_ten: "; down_mps_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[GrowBTenLeftStep] left_bten: "; left_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  // Use EXACT same contraction pattern as GrowFullBTen LEFT case (bosonic):
-  // Contract<TenElemT, QNT, true, true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1);
-  // Contract<TenElemT, QNT, false, false>(tmp1, *mpo[i], 1, 3, 2, tmp2);
-  // Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &tmp3);
-  
-  Tensor tmp1, tmp2, next_bten;
-  qlten::Contract<TenElemT, QNT, true, true>(up_mps_ten, left_bten, 2, 0, 1, tmp1);
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenLeftStep] tmp1 after up*bten: "; tmp1.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  qlten::Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 3, 2, tmp2);
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenLeftStep] tmp2 after tmp1*mpo: "; tmp2.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  qlten::Contract(&tmp2, {0, 2}, &down_mps_ten, {0, 1}, &next_bten);
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenLeftStep] next_bten: "; next_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
+  Tensor next_bten = bten_ops::GrowBTenLeftStep<TenElemT, QNT>(
+      bten_left_.back(),
+      bmps_[N - 1 - col],    // UP reversed
+      *mpo[col],
+      opposite_boundary[col]
+  );
   
   bten_left_.push_back(std::move(next_bten));
   bten_left_col_++;
@@ -395,61 +305,25 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::GrowBTenRightStep(
     const TransferMPO& mpo, 
     const BMPS<TenElemT, QNT>& opposite_boundary) {
   const size_t N = bmps_.size();
+  
   if (bten_right_.empty()) {
     throw std::runtime_error("BMPSWalker::GrowBTenRightStep: Right BTen cache is empty. Call InitBTenRight first.");
   }
   if (bten_right_col_ == 0) {
-    throw std::runtime_error("BMPSWalker::GrowBTenRightStep: Cannot grow further left. Current col is 0.");
+    throw std::runtime_error("BMPSWalker::GrowBTenRightStep: Cannot grow further left. col is already 0.");
   }
   
   // Absorb column at bten_right_col_ - 1 (moving left)
   const size_t col = bten_right_col_ - 1;
   
-  // Get tensors for this column (same indexing as GrowFullBTen RIGHT case)
-  // In GrowFullBTen RIGHT: i-th iteration processes col = N-1-i
-  // Here we use col directly, so we need:
-  // up_mps_ten = up_bmps[N-1-col] = bmps_[N-1-col] but wait...
-  // Actually in GrowFullBTen RIGHT: up_mps_ten = up_bmps[i] where col=N-1-i
-  // So when col=N-1, i=0, up_mps_ten = up_bmps[0]
-  // Since UP BMPS is reversed: up_bmps[0] corresponds to col=N-1. Correct!
-  // When col=N-2, i=1, up_mps_ten = up_bmps[1] corresponds to col=N-2. Correct!
-  
-  const Tensor& up_mps_ten = bmps_[N - 1 - col];  // UP reversed
-  const Tensor& down_mps_ten = opposite_boundary[col];
-  const Tensor& mpo_ten = *mpo[col];
-  const Tensor& right_bten = bten_right_.back();
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenRightStep] col=" << col << std::endl;
-  std::cerr << "[GrowBTenRightStep] down_mps_ten: "; down_mps_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[GrowBTenRightStep] mpo_ten: "; mpo_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[GrowBTenRightStep] up_mps_ten: "; up_mps_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[GrowBTenRightStep] right_bten: "; right_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  // Use EXACT same contraction pattern as GrowFullBTen RIGHT case (bosonic):
-  // Contract<TenElemT, QNT, true, true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1);
-  // Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
-  // Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &tmp3);
-  
-  Tensor tmp1, tmp2, next_bten;
-  qlten::Contract<TenElemT, QNT, true, true>(down_mps_ten, right_bten, 2, 0, 1, tmp1);
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenRightStep] tmp1 after down*bten: "; tmp1.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  qlten::Contract<TenElemT, QNT, false, false>(tmp1, mpo_ten, 1, 1, 2, tmp2);
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenRightStep] tmp2 after tmp1*mpo: "; tmp2.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  qlten::Contract(&tmp2, {0, 2}, &up_mps_ten, {0, 1}, &next_bten);
-  
-#ifndef NDEBUG
-  std::cerr << "[GrowBTenRightStep] next_bten: "; next_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
+  // Use shared function
+  // UP BMPS reversed: bmps_[N-1-col] corresponds to physical col
+  Tensor next_bten = bten_ops::GrowBTenRightStep<TenElemT, QNT>(
+      bten_right_.back(),
+      opposite_boundary[col],  // DOWN
+      *mpo[col],               // site
+      bmps_[N - 1 - col]       // UP reversed
+  );
   
   bten_right_.push_back(std::move(next_bten));
   bten_right_col_--;
@@ -462,117 +336,37 @@ TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::TraceWithBTen(
     const BMPS<TenElemT, QNT>& opposite_boundary) const {
   const size_t N = bmps_.size();
   
-  // Check if BTen caches are available and cover the required columns
-  // LEFT BTen should cover [0, site_col), so bten_left_col_ >= site_col
-  // RIGHT BTen should cover (site_col, N-1], so bten_right_col_ <= site_col + 1
+  // Validate BTen caches
   if (bten_left_.empty() || bten_right_.empty()) {
-    throw std::runtime_error("BMPSWalker::TraceWithBTen: BTen caches not initialized. "
-                             "Call InitBTenLeft/Right first.");
+    throw std::runtime_error("BMPSWalker::TraceWithBTen: BTen caches not initialized.");
   }
   
   if (bten_left_col_ < site_col) {
-    throw std::runtime_error("BMPSWalker::TraceWithBTen: Left BTen cache insufficient. "
-                             "Current left edge: " + std::to_string(bten_left_col_) + 
-                             ", required: " + std::to_string(site_col));
+    throw std::runtime_error("BMPSWalker::TraceWithBTen: Left BTen insufficient. "
+                             "edge=" + std::to_string(bten_left_col_) + ", need=" + std::to_string(site_col));
   }
 
   if (bten_right_col_ > site_col + 1) {
-    throw std::runtime_error("BMPSWalker::TraceWithBTen: Right BTen cache insufficient. "
-                             "Current right edge: " + std::to_string(bten_right_col_) + 
-                             ", required: " + std::to_string(site_col + 1));
+    throw std::runtime_error("BMPSWalker::TraceWithBTen: Right BTen insufficient. "
+                             "edge=" + std::to_string(bten_right_col_) + ", need=" + std::to_string(site_col + 1));
   }
   
-  // Get the appropriate BTen
-  // bten_left_[k] covers [0, k-1] after k grow steps, so for [0, site_col) we need bten_left_[site_col]
+  // Get BTen at correct positions
   const Tensor& left_bten = bten_left_[site_col];
-  
-  // bten_right_[0] is vacuum (after col N-1), bten_right_[k] has absorbed cols [N-k, N-1]
-  // For (site_col, N-1], we need to have absorbed cols [site_col+1, N-1]
-  // Number of cols = N-1 - site_col = N - 1 - site_col
-  // So we need bten_right_[N - 1 - site_col]
   const size_t right_idx = N - 1 - site_col;
   if (right_idx >= bten_right_.size()) {
-    throw std::runtime_error("BMPSWalker::TraceWithBTen: Right BTen index out of bounds. "
-                             "Idx: " + std::to_string(right_idx) + 
-                             ", Size: " + std::to_string(bten_right_.size()));
+    throw std::runtime_error("BMPSWalker::TraceWithBTen: Right BTen index out of bounds.");
   }
   const Tensor& right_bten = bten_right_[right_idx];
   
-  // Get tensors at site_col
-  const Tensor& up_ten = bmps_[N - 1 - site_col];  // UP reversed
-  const Tensor& down_ten = opposite_boundary[site_col];
-  
-#ifndef NDEBUG
-  std::cerr << "[TraceWithBTen] site_col=" << site_col << ", right_idx=" << right_idx << std::endl;
-  std::cerr << "[TraceWithBTen] left_bten: "; left_bten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[TraceWithBTen] up_ten: "; up_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[TraceWithBTen] site: "; site.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[TraceWithBTen] down_ten: "; down_ten.ConciseShow(0); std::cerr << std::endl;
-  std::cerr << "[TraceWithBTen] right_bten: "; right_bten.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  // The BTen structure from GrowFullBTen (LEFT case):
-  // After contracting up_mps_ten[2] with bten[0], then mpo, then down_mps_ten,
-  // the result has indices connecting to the RIGHT side of the current column.
-  // So left_bten's indices should connect to column's LEFT sides, not the MPS tensors' L indices.
-  //
-  // Looking at the contraction in GrowFullBTen more carefully:
-  // Contract<true,true>(up_mps_ten, btens.back(), 2, 0, 1, tmp1)
-  // This contracts up_mps_ten[R=2] with bten[0].
-  // So bten[0] should be compatible with up_mps_ten[R], meaning bten[0] connects from the RIGHT.
-  //
-  // This is confusing. Let me just follow the same contraction pattern as GrowFullBTen
-  // but for calculating the full trace.
-  //
-  // For a single-column trace, we need to contract:
-  // left_bten -- up_mps_ten -- right_bten
-  //            |-- mpo_ten --|
-  //            -- down_mps_ten --
-  //
-  // Using GrowFullBTen pattern:
-  // Step 1: Contract up_mps_ten with left_bten (same as GrowBTenLeftStep)
-  // Step 2: Contract result with mpo_ten
-  // Step 3: Contract result with down_mps_ten
-  // Step 4: Contract result with right_bten
-  
-  Tensor tmp1, tmp2, tmp3, result;
-  
-  // Follow GrowBTenLeftStep pattern exactly for first 3 contractions
-  qlten::Contract<TenElemT, QNT, true, true>(up_ten, left_bten, 2, 0, 1, tmp1);
-  
-#ifndef NDEBUG
-  std::cerr << "[TraceWithBTen] tmp1: "; tmp1.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  qlten::Contract<TenElemT, QNT, false, false>(tmp1, site, 1, 3, 2, tmp2);
-  
-#ifndef NDEBUG
-  std::cerr << "[TraceWithBTen] tmp2: "; tmp2.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  qlten::Contract(&tmp2, {0, 2}, &down_ten, {0, 1}, &tmp3);
-  
-#ifndef NDEBUG
-  std::cerr << "[TraceWithBTen] tmp3: "; tmp3.ConciseShow(0); std::cerr << std::endl;
-#endif
-  
-  // Now tmp3 has the same structure as a LEFT BTen after absorbing one column
-  // tmp3 indices should match what right_bten expects to contract with
-  // right_bten from GrowFullBTen RIGHT case has indices after Contract pattern:
-  // Contract<true,true>(down_mps_ten, btens.back(), 2, 0, 1, tmp1)
-  // So right_bten[0] connects to down_mps_ten[R]
-  // This means tmp3 needs to be contracted with right_bten appropriately
-  
-  // Contract all remaining indices
-  qlten::Contract(&tmp3, {0, 1, 2}, &right_bten, {2, 1, 0}, &result);
-  
-  // Result should be a scalar
-  if (result.Rank() != 0) {
-    throw std::runtime_error("BMPSWalker::TraceWithBTen: Contraction result is not a scalar. Rank: " + 
-                             std::to_string(result.Rank()));
-  }
-  
-  return result();
+  // Use shared function for trace computation
+  return bten_ops::TraceBTen<TenElemT, QNT>(
+      bmps_[N - 1 - site_col],    // UP reversed
+      left_bten,
+      site,
+      opposite_boundary[site_col], // DOWN
+      right_bten
+  );
 }
 
 } // namespace qlpeps

@@ -547,6 +547,22 @@ class BMPSContractor {
     size_t GetBTenRightCol() const { return bten_right_col_; }
 
     /**
+     * @brief Access the left BTen cache (read-only).
+     *
+     * bten_left_[k] contains the contracted environment for columns [0, k-1].
+     * Used for two-site BTen-based trace calculations.
+     */
+    const std::vector<Tensor>& GetBTenLeft() const { return bten_left_; }
+
+    /**
+     * @brief Access the right BTen cache (read-only).
+     *
+     * bten_right_[k] contains the contracted environment for columns [N-k, N-1].
+     * Used for two-site BTen-based trace calculations.
+     */
+    const std::vector<Tensor>& GetBTenRight() const { return bten_right_; }
+
+    /**
      * @brief Get the current underlying stack size.
      * Indicates how many lattice layers have been effectively absorbed into the current boundary.
      */

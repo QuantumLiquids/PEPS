@@ -139,6 +139,14 @@ using BMPSTruncatePara [[deprecated("Use BMPSTruncateParams<> instead")]] = BMPS
  *             |    |   |   |   |   |   |   |
  *             0----1---2---3---4---5---6---7
  *                      DOWN
+ *
+ * @warning CRITICAL STORAGE CONVENTION:
+ * The physical storage order varies by position:
+ * - UP/RIGHT: Reversed order. bmps[0] = rightmost/bottommost column, bmps[i] = col N-1-i
+ * - DOWN/LEFT: Natural order. bmps[0] = leftmost/topmost column, bmps[i] = col i
+ *
+ * This convention is internally handled by AlignTransferMPOTensorOrder_() during MultiplyMPO.
+ * Use AtLogicalCol() for position-independent access by logical column index.
  */
 template<typename TenElemT, typename QNT>
 class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
@@ -188,6 +196,33 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
 
   // get function
   const Tensor *operator()(const size_t idx) const;
+
+  /**
+   * @brief Access tensor by logical column index (position-independent).
+   *
+   * Handles the storage convention difference between UP/RIGHT (reversed)
+   * and DOWN/LEFT (natural order).
+   *
+   * @param col Logical column index in the 2D grid (0 = leftmost/topmost)
+   * @return Reference to the tensor at logical column col
+   *
+   * @note For UP/RIGHT: returns (*this)[size()-1-col]
+   *       For DOWN/LEFT: returns (*this)[col]
+   */
+  const Tensor &AtLogicalCol(size_t col) const {
+    return (position_ == UP || position_ == RIGHT)
+           ? (*this)[this->size() - 1 - col]
+           : (*this)[col];
+  }
+
+  /**
+   * @brief Mutable version of AtLogicalCol.
+   */
+  Tensor &AtLogicalCol(size_t col) {
+    return (position_ == UP || position_ == RIGHT)
+           ? (*this)[this->size() - 1 - col]
+           : (*this)[col];
+  }
 
   BMPSPOSITION Direction() const { return position_; }
   // MPS global operations
