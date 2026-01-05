@@ -9,7 +9,7 @@
 #ifndef QLPEPS_VMC_BASIC_CONFIGURATION_UPDATE_STRATEGIES_SQUARE_HUBBARD_U1U1_UPDATER_H
 #define QLPEPS_VMC_BASIC_CONFIGURATION_UPDATE_STRATEGIES_SQUARE_HUBBARD_U1U1_UPDATER_H
 
-#include "monte_carlo_sweep_updater_all.h"
+#include "square_nn_updater.h"
 #include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/square_hubbard_model.h"
 

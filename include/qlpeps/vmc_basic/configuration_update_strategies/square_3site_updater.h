@@ -11,6 +11,7 @@
 #include "qlpeps/vmc_basic/wave_function_component.h"    // TPSWaveFunctionComponent
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"     // NonDBMCMCStateUpdate
+#include "monte_carlo_sweep_updater_base.h"                          // MonteCarloSweepUpdaterBase
 
 namespace qlpeps {
 
