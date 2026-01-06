@@ -9,9 +9,13 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BASE_SINGLET_PAIR_CORRELATION_MEASUREMENT_MIXIN_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BASE_SINGLET_PAIR_CORRELATION_MEASUREMENT_MIXIN_H
 
+#include <algorithm>
 #include <array>
 #include <iostream>
+#include <set>
 #include <sstream>
+#include <utility>
+#include <vector>
 #include "qlpeps/basic.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h"
@@ -97,6 +101,27 @@ class SingletPairCorrelationMixin {
   bool IsSingletPairCorrelationEnabled() const { return enable_singlet_pair_correlation_; }
 
   /**
+   * @brief Set selected reference bonds for singlet pair correlation measurement.
+   *
+   * Only the specified reference bonds will be measured, reducing computational cost.
+   * Each bond is specified by (y, x) coordinates of the left site.
+   * Empty list means all horizontal reference bonds will be measured.
+   *
+   * @param bonds Vector of (y, x) coordinates for reference bonds.
+   */
+  void SetSelectedRefBonds(std::vector<std::pair<size_t, size_t>> bonds) {
+    selected_ref_bonds_ = std::move(bonds);
+  }
+
+  /**
+   * @brief Get the currently selected reference bonds.
+   * @return Const reference to the selected bonds vector.
+   */
+  const std::vector<std::pair<size_t, size_t>>& GetSelectedRefBonds() const {
+    return selected_ref_bonds_;
+  }
+
+  /**
    * @brief Compute the number of singlet pair correlation bond pairs.
    *
    * For horizontal reference bonds at row y1, targets are horizontal bonds at rows y2 > y1.
@@ -105,14 +130,30 @@ class SingletPairCorrelationMixin {
    *
    * @param Ly Number of rows.
    * @param Lx Number of columns.
+   * @param ref_bonds Optional list of selected reference bonds (y, x). Empty means all.
    * @return Total number of bond pairs.
    */
-  static size_t ComputeNumSCPairs(size_t Ly, size_t Lx) {
+  static size_t ComputeNumSCPairs(
+      size_t Ly, size_t Lx,
+      const std::vector<std::pair<size_t, size_t>>& ref_bonds = {}) {
     if (Ly < 2 || Lx < 2) return 0;
     size_t count = 0;
-    for (size_t y1 = 0; y1 < Ly - 1; ++y1) {
-      for (size_t x1 = 0; x1 < Lx - 1; ++x1) {
-        count += (Ly - 1 - y1) * (Lx - 1);
+    
+    if (ref_bonds.empty()) {
+      // All reference bonds
+      for (size_t y1 = 0; y1 < Ly - 1; ++y1) {
+        for (size_t x1 = 0; x1 < Lx - 1; ++x1) {
+          count += (Ly - 1 - y1) * (Lx - 1);
+        }
+      }
+    } else {
+      // Only selected reference bonds
+      for (const auto& bond : ref_bonds) {
+        size_t y1 = bond.first;
+        size_t x1 = bond.second;
+        if (y1 < Ly - 1 && x1 < Lx - 1) {
+          count += (Ly - 1 - y1) * (Lx - 1);
+        }
       }
     }
     return count;
@@ -129,23 +170,44 @@ class SingletPairCorrelationMixin {
    *
    * @param Ly Number of rows.
    * @param Lx Number of columns.
+   * @param ref_bonds Optional list of selected reference bonds (y, x). Empty means all.
    * @return Vector of coordinate tuples, one per bond pair.
    */
-  static std::vector<std::array<size_t, 6>> GenerateSCPairCorrIndexMapping(size_t Ly, size_t Lx) {
+  static std::vector<std::array<size_t, 6>> GenerateSCPairCorrIndexMapping(
+      size_t Ly, size_t Lx,
+      const std::vector<std::pair<size_t, size_t>>& ref_bonds = {}) {
     std::vector<std::array<size_t, 6>> mapping;
     if (Ly < 2 || Lx < 2) return mapping;
 
-    mapping.reserve(ComputeNumSCPairs(Ly, Lx));
+    mapping.reserve(ComputeNumSCPairs(Ly, Lx, ref_bonds));
 
-    // Enumerate all horizontal reference bonds (y1, x1)-(y1, x1+1)
-    for (size_t y1 = 0; y1 < Ly - 1; ++y1) {
-      for (size_t x1 = 0; x1 < Lx - 1; ++x1) {
-        // Enumerate all horizontal target bonds in rows y2 > y1
-        for (size_t y2 = y1 + 1; y2 < Ly; ++y2) {
-          for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
-            mapping.push_back({y1, x1, 0, y2, x2, 0});  // 0 = horizontal
-          }
+    // Helper lambda to add target bonds for a given reference bond
+    auto add_targets = [&](size_t y1, size_t x1) {
+      for (size_t y2 = y1 + 1; y2 < Ly; ++y2) {
+        for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
+          mapping.push_back({y1, x1, 0, y2, x2, 0});  // 0 = horizontal
         }
+      }
+    };
+
+    if (ref_bonds.empty()) {
+      // Enumerate all horizontal reference bonds (y1, x1)-(y1, x1+1)
+      for (size_t y1 = 0; y1 < Ly - 1; ++y1) {
+        for (size_t x1 = 0; x1 < Lx - 1; ++x1) {
+          add_targets(y1, x1);
+        }
+      }
+    } else {
+      // Only selected reference bonds (sorted by y then x for consistent ordering)
+      std::vector<std::pair<size_t, size_t>> sorted_bonds;
+      for (const auto& bond : ref_bonds) {
+        if (bond.first < Ly - 1 && bond.second < Lx - 1) {
+          sorted_bonds.push_back(bond);
+        }
+      }
+      std::sort(sorted_bonds.begin(), sorted_bonds.end());
+      for (const auto& bond : sorted_bonds) {
+        add_targets(bond.first, bond.second);
       }
     }
 
@@ -165,10 +227,13 @@ class SingletPairCorrelationMixin {
    *
    * @param Ly Number of rows.
    * @param Lx Number of columns.
+   * @param ref_bonds Optional list of selected reference bonds (y, x). Empty means all.
    * @return Coordinate mapping as string content.
    */
-  static std::string GenerateSCPairCorrCoordString(size_t Ly, size_t Lx) {
-    auto mapping = GenerateSCPairCorrIndexMapping(Ly, Lx);
+  static std::string GenerateSCPairCorrCoordString(
+      size_t Ly, size_t Lx,
+      const std::vector<std::pair<size_t, size_t>>& ref_bonds = {}) {
+    auto mapping = GenerateSCPairCorrIndexMapping(Ly, Lx, ref_bonds);
     std::ostringstream oss;
     oss << "# idx ref_y ref_x ref_orient tgt_y tgt_x tgt_orient\n";
     for (size_t i = 0; i < mapping.size(); ++i) {
@@ -253,8 +318,24 @@ class SingletPairCorrelationMixin {
     // Initially, no rows absorbed
     size_t main_walker_absorbed_rows = 0;
 
-    // Enumerate all horizontal reference bonds
-    for (size_t y1 = 0; y1 < Ly - 1; ++y1) {  // y1 < Ly-1 because we need at least one row below
+    // Build reference bonds set for fast lookup
+    // If selected_ref_bonds_ is empty, process all bonds
+    std::set<std::pair<size_t, size_t>> ref_bonds_set;
+    size_t max_ref_y = Ly - 2;  // Default: process all rows
+    if (!selected_ref_bonds_.empty()) {
+      for (const auto& bond : selected_ref_bonds_) {
+        // Validate and add to set
+        if (bond.first < Ly - 1 && bond.second < Lx - 1) {
+          ref_bonds_set.insert(bond);
+          max_ref_y = std::max(max_ref_y, bond.first);
+        }
+      }
+      if (ref_bonds_set.empty()) return;  // No valid bonds selected
+    }
+    const bool filter_enabled = !ref_bonds_set.empty();
+
+    // Enumerate horizontal reference bonds
+    for (size_t y1 = 0; y1 <= max_ref_y; ++y1) {  // Only iterate up to max_ref_y
       
       // Ensure main_walker has absorbed up to row y1-1 (exclusive)
       // so it can be forked and then Evolve with excited_mpo at row y1
@@ -267,6 +348,10 @@ class SingletPairCorrelationMixin {
       }
       
       for (size_t x1 = 0; x1 < Lx - 1; ++x1) {  // x1 < Lx-1 for horizontal bond
+        // Skip if filtering is enabled and this bond is not selected
+        if (filter_enabled && ref_bonds_set.find({y1, x1}) == ref_bonds_set.end()) {
+          continue;
+        }
         
         const SiteIdx site1_ref{y1, x1};
         const SiteIdx site2_ref{y1, x1 + 1};
@@ -553,6 +638,7 @@ class SingletPairCorrelationMixin {
 
  protected:
   bool enable_singlet_pair_correlation_ = false;
+  std::vector<std::pair<size_t, size_t>> selected_ref_bonds_;  ///< Selected reference bonds (y, x)
 
  private:
   /**

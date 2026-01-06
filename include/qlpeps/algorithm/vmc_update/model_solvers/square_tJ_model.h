@@ -512,11 +512,14 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
     base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}, {}});
     base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}, {}});
     // Singlet pair correlation: values only, coordinate mapping generated automatically
-    size_t num_pairs = SingletPairCorrelationMixin<SquaretJNNModel>::ComputeNumSCPairs(ly, lx);
+    const auto& ref_bonds = this->GetSelectedRefBonds();
+    size_t num_pairs = SingletPairCorrelationMixin<SquaretJNNModel>::ComputeNumSCPairs(ly, lx, ref_bonds);
     base.push_back({"SC_singlet_pair_corr",
         "Singlet pair correlation <Delta^dag Delta> values.",
         {num_pairs}, {"pair_idx"},
-        SingletPairCorrelationMixin<SquaretJNNModel>::GenerateSCPairCorrCoordString});
+        [ref_bonds](size_t ly_, size_t lx_) {
+          return SingletPairCorrelationMixin<SquaretJNNModel>::GenerateSCPairCorrCoordString(ly_, lx_, ref_bonds);
+        }});
     return base;
   }
 };
