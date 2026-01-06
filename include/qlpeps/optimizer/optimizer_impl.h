@@ -55,9 +55,10 @@ Optimizer<TenElemT, QNT>::Optimizer(const OptimizerParams &params,
                                     int rank,
                                     int mpi_size)
     : params_(params), comm_(comm), rank_(rank), mpi_size_(mpi_size),
-      
       adagrad_initialized_(false),
-      sgd_momentum_initialized_(false) {
+      sgd_momentum_initialized_(false),
+      adam_timestep_(0),
+      adam_initialized_(false) {
 }
 
 template<typename TenElemT, typename QNT>
@@ -495,8 +496,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         updated_state = AdaGradUpdate(current_state, preprocessed_gradient, learning_rate);
       }
       else if constexpr (std::is_same_v<T, AdamParams>) {
-        // TODO: Implement Adam when needed
-        throw std::runtime_error("Adam algorithm not yet implemented");
+        updated_state = AdamUpdate(current_state, preprocessed_gradient, 
+                                   learning_rate, algo_params);
       }
       else if constexpr (std::is_same_v<T, LBFGSParams>) {
         // TODO: Implement L-BFGS when needed
@@ -788,6 +789,95 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
   return updated_state;
 }
 
+/**
+ * @brief Adam optimizer with bias-corrected moment estimates
+ * 
+ * MPI CONTRACT:
+ * - gradient: Valid ONLY on master rank (gathered by energy_evaluator)
+ * - first_moment_, second_moment_, adam_timestep_: Master rank ONLY
+ * - updated_state: Valid ONLY on master rank
+ * - State broadcast: Energy evaluator's sole responsibility (NOT here)
+ * 
+ * Algorithm (AdamW-style decoupled weight decay):
+ *   m_t = β₁ m_{t-1} + (1-β₁) g_t
+ *   v_t = β₂ v_{t-1} + (1-β₂) g_t²
+ *   m̂_t = m_t / (1 - β₁^t)
+ *   v̂_t = v_t / (1 - β₂^t)
+ *   θ_{t+1} = (1 - αλ) θ_t - α m̂_t / (√v̂_t + ε)
+ */
+template<typename TenElemT, typename QNT>
+typename Optimizer<TenElemT, QNT>::SITPST
+Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
+                                     const SITPST &gradient,
+                                     double step_length,
+                                     const AdamParams &params) {
+  SITPST updated_state = current_state;
+  
+  // MPI VERIFICATION: Only master rank processes gradients and algorithm state
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    // LAZY INITIALIZATION on first use (master rank only)
+    if (!adam_initialized_) {
+      first_moment_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      second_moment_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      // Initialize with zeros
+      for (size_t row = 0; row < first_moment_.rows(); ++row) {
+        for (size_t col = 0; col < first_moment_.cols(); ++col) {
+          for (size_t i = 0; i < first_moment_({row, col}).size(); ++i) {
+            first_moment_({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
+            second_moment_({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
+            QNT div = gradient({row, col})[i].Div();
+            first_moment_({row, col})[i].Fill(div, 0.0);
+            second_moment_({row, col})[i].Fill(div, 0.0);
+          }
+        }
+      }
+      adam_timestep_ = 0;
+      adam_initialized_ = true;
+    }
+    
+    // Increment timestep
+    adam_timestep_++;
+    
+    // Apply decoupled L2 weight decay (AdamW-style) to parameters
+    if (params.weight_decay > 0.0) {
+      const double decay_factor = 1.0 - step_length * params.weight_decay;
+      updated_state *= decay_factor;
+    }
+    
+    // Update biased first moment estimate: m_t = β₁ m_{t-1} + (1-β₁) g_t
+    first_moment_ = params.beta1 * first_moment_ + (1.0 - params.beta1) * gradient;
+    
+    // Update biased second moment estimate: v_t = β₂ v_{t-1} + (1-β₂) g_t²
+    SITPST squared_gradient = ElementWiseSquare(gradient);
+    second_moment_ = params.beta2 * second_moment_ + (1.0 - params.beta2) * squared_gradient;
+    
+    // Compute bias correction factors
+    double bias_correction1 = 1.0 - std::pow(params.beta1, adam_timestep_);
+    double bias_correction2 = 1.0 - std::pow(params.beta2, adam_timestep_);
+    
+    // Compute bias-corrected estimates
+    SITPST m_hat = (1.0 / bias_correction1) * first_moment_;
+    SITPST v_hat = (1.0 / bias_correction2) * second_moment_;
+    
+    // Compute update: -α * m̂_t / (√v̂_t + ε)
+    SITPST sqrt_v_hat = ElementWiseSqrt(v_hat);
+    SITPST denom = ElementWiseInverse(sqrt_v_hat, params.epsilon);  // 1/(√v̂ + ε)
+    
+    for (size_t row = 0; row < current_state.rows(); ++row) {
+      for (size_t col = 0; col < current_state.cols(); ++col) {
+        for (size_t i = 0; i < current_state({row, col}).size(); ++i) {
+          Tensor update = ElementWiseMultiply(denom({row, col})[i], m_hat({row, col})[i]) * step_length;
+          updated_state({row, col})[i] += (-update);
+        }
+      }
+    }
+  }
+  
+  // CRITICAL MPI DESIGN: Do NOT broadcast here!
+  // Energy evaluator owns all state distribution for Monte Carlo sampling.
+  return updated_state;
+}
+
 // Element-wise helpers are now defined on SplitIndexTPS; Optimizer no longer owns them.
 
 
@@ -896,13 +986,13 @@ void Optimizer<TenElemT, QNT>::ClearUp() {
     sgd_momentum_initialized_ = false;
   }
 
-  // Clear any other algorithm-specific state here
-  // For example, if we add Adam in the future:
-  // if (adam_initialized_) {
-  //   first_moment_ = SITPST();
-  //   second_moment_ = SITPST();
-  //   adam_initialized_ = false;
-  // }
+  // Clear Adam state
+  if (adam_initialized_) {
+    first_moment_ = SITPST();
+    second_moment_ = SITPST();
+    adam_timestep_ = 0;
+    adam_initialized_ = false;
+  }
 
   // RNG state removed from Optimizer; nothing to reset here.
 

@@ -34,7 +34,7 @@ using qlten::QLTensor;
  * 2. AdaGrad (Adaptive Gradient)
  * 3. Stochastic reconfiguration (natural gradient)
  * 4. Bounded gradient element update
- * 5. Adam (planned)
+ * 5. Adam (with AdamW-style decoupled weight decay)
  * 6. L-BFGS (planned)
  * 
  * ⚠️ CRITICAL MPI RESPONSIBILITY SEPARATION:
@@ -259,6 +259,33 @@ class Optimizer {
                        double step_length);
 
   /**
+   * @brief Apply Adam update with bias-corrected moment estimates
+   * 
+   * MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * Energy evaluator handles all state distribution for Monte Carlo sampling.
+   * 
+   * Algorithm:
+   *   m_t = β₁ m_{t-1} + (1-β₁) g_t
+   *   v_t = β₂ v_{t-1} + (1-β₂) g_t²
+   *   m̂_t = m_t / (1 - β₁^t)
+   *   v̂_t = v_t / (1 - β₂^t)
+   *   θ_{t+1} = θ_t - α m̂_t / (√v̂_t + ε)
+   * 
+   * With optional decoupled weight decay (AdamW):
+   *   θ_{t+1} = (1 - αλ) θ_t - α m̂_t / (√v̂_t + ε)
+   * 
+   * @param current_state Current TPS state (valid on all ranks)
+   * @param gradient Gradient (valid ONLY on master rank)
+   * @param step_length Step length (learning rate)
+   * @param params Adam parameters (beta1, beta2, epsilon, weight_decay)
+   * @return Updated TPS state (valid ONLY on master rank)
+   */
+  WaveFunctionT AdamUpdate(const WaveFunctionT& current_state,
+                           const WaveFunctionT& gradient,
+                           double step_length,
+                           const AdamParams& params);
+
+  /**
    * @brief Get current learning rate based on iteration and scheduler
    * 
    * @param iteration Current optimization iteration
@@ -314,6 +341,12 @@ class Optimizer {
   // SGD Momentum state
   WaveFunctionT velocity_;
   bool sgd_momentum_initialized_;
+
+  // Adam state (master rank ONLY)
+  WaveFunctionT first_moment_;      // m_t: first moment estimate
+  WaveFunctionT second_moment_;     // v_t: second moment estimate
+  size_t adam_timestep_;            // t: iteration counter for bias correction
+  bool adam_initialized_;
 
   // Helper methods (none needed - keep it simple)
   void LogOptimizationStep(size_t iteration, 

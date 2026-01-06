@@ -316,6 +316,14 @@ add_two_type_unittest(test_optimizer_sgd_exact_sum
 add_mpi_unittest_run(test_optimizer_sgd_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_sgd_exact_sum_complex "4" " ")
 
+## Optimizer exact-sum Adam test (pure optimizer, deterministic gradients)
+add_two_type_unittest(test_optimizer_adam_exact_sum
+        "test_optimizer/test_optimizer_adam_exact_sum.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+add_mpi_unittest_run(test_optimizer_adam_exact_sum_double "4" " ")
+add_mpi_unittest_run(test_optimizer_adam_exact_sum_complex "4" " ")
+
 
 # Learning rate scheduler unit tests (header-only, no extra libs)
 add_unittest(test_lr_schedulers

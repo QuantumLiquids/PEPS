@@ -44,12 +44,18 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 ## 纯 Optimizer 测试布局与命名
 
 - 目录：`tests/test_optimizer/`
-- AdaGrad 用例：`tests/test_optimizer/test_optimizer_adagrad_exact_sum.cpp`
 - 命名规则：`test_optimizer_<algorithm>_exact_sum.cpp`
-  - 未来每个优化算法新增一个独立的纯优化器测试文件
+  - 每个优化算法对应一个独立的纯优化器测试文件
   - 统一采用 ExactSumEnergyEvaluator，确保梯度确定性，隔离 Monte-Carlo 噪声
 
-备注：CMake 中对应的双类型目标命名为 `test_optimizer_adagrad_exact_sum_double` 与 `test_optimizer_adagrad_exact_sum_complex`，并提供 MPI 运行用例。
+### 已实现测试
+
+| 算法 | 测试文件 | CMake目标 |
+|------|----------|-----------|
+| AdaGrad | `test_optimizer_adagrad_exact_sum.cpp` | `test_optimizer_adagrad_exact_sum_{double,complex}` |
+| Adam | `test_optimizer_adam_exact_sum.cpp` | `test_optimizer_adam_exact_sum_{double,complex}` |
+
+备注：CMake 中所有测试均提供 MPI 运行用例（4进程）。
 
 
 ### 缺口

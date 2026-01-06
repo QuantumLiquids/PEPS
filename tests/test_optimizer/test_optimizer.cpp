@@ -409,6 +409,78 @@ TEST_F(OptimizerTest, DifferentOptimizationAlgorithms) {
     EXPECT_FALSE(result.converged);
     EXPECT_TRUE(std::isfinite(result.final_energy));
   }
+  
+  // Test Adam
+  {
+    OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 1000, 0.001);
+    AdamParams adam_params(0.9, 0.999, 1e-8, 0.0);
+    OptimizerParams adam_test_params(base_params, adam_params);
+    
+    OptimizerT optimizer(adam_test_params, comm_, rank_, mpi_size_);
+    auto result = optimizer.IterativeOptimize(test_tps_,
+                                              [this](const SITPST &state) { return MockEnergyEvaluator(state); });
+    EXPECT_FALSE(result.converged);
+    EXPECT_TRUE(std::isfinite(result.final_energy));
+  }
+}
+
+// Test Adam optimization algorithm
+TEST_F(OptimizerTest, AdamOptimization) {
+  OptimizerParams::BaseParams base_params(1000, 1e-15, 1e-15, 1000, 0.001);
+  AdamParams adam_params(0.9, 0.999, 1e-8, 0.0);
+  OptimizerParams adam_test_params(base_params, adam_params);
+  
+  EXPECT_TRUE(adam_test_params.IsAlgorithm<AdamParams>());
+  EXPECT_TRUE(adam_test_params.IsFirstOrder());
+  
+  OptimizerT optimizer(adam_test_params, comm_, rank_, mpi_size_);
+  auto result = optimizer.IterativeOptimize(test_tps_,
+      [this](const SITPST &state) { return MockEnergyEvaluator(state); });
+  EXPECT_FALSE(result.converged);
+  EXPECT_TRUE(std::isfinite(result.final_energy));
+  EXPECT_FALSE(result.energy_trajectory.empty());
+}
+
+// Test Adam with weight decay (AdamW)
+TEST_F(OptimizerTest, AdamWOptimization) {
+  OptimizerParams::BaseParams base_params(10, 1e-15, 1e-15, 10, 0.001);
+  AdamParams adamw_params(0.9, 0.999, 1e-8, 0.01);  // weight_decay > 0
+  OptimizerParams adamw_test_params(base_params, adamw_params);
+  
+  OptimizerT optimizer(adamw_test_params, comm_, rank_, mpi_size_);
+  auto result = optimizer.IterativeOptimize(test_tps_,
+      [this](const SITPST &state) { return MockEnergyEvaluator(state); });
+  EXPECT_TRUE(std::isfinite(result.final_energy));
+}
+
+// Test Adam parameter access
+TEST_F(OptimizerTest, AdamParameterAccess) {
+  OptimizerParams::BaseParams base_params(100, 1e-15, 1e-15, 20, 0.001);
+  AdamParams adam_params(0.9, 0.999, 1e-8, 0.01);
+  OptimizerParams adam_test_params(base_params, adam_params);
+  
+  EXPECT_TRUE(adam_test_params.IsAlgorithm<AdamParams>());
+  EXPECT_FALSE(adam_test_params.IsAlgorithm<SGDParams>());
+  EXPECT_FALSE(adam_test_params.IsAlgorithm<AdaGradParams>());
+  
+  const auto& params = adam_test_params.GetAlgorithmParams<AdamParams>();
+  EXPECT_EQ(params.beta1, 0.9);
+  EXPECT_EQ(params.beta2, 0.999);
+  EXPECT_EQ(params.epsilon, 1e-8);
+  EXPECT_EQ(params.weight_decay, 0.01);
+}
+
+// Test Adam factory method
+TEST_F(OptimizerTest, AdamFactoryMethod) {
+  auto adam_params = OptimizerFactory::CreateAdam(100, 0.001, 0.9, 0.999);
+  
+  EXPECT_TRUE(adam_params.IsAlgorithm<AdamParams>());
+  EXPECT_EQ(adam_params.base_params.max_iterations, 100);
+  EXPECT_EQ(adam_params.base_params.learning_rate, 0.001);
+  
+  const auto& params = adam_params.GetAlgorithmParams<AdamParams>();
+  EXPECT_EQ(params.beta1, 0.9);
+  EXPECT_EQ(params.beta2, 0.999);
 }
 
 // Test error handling for unsupported algorithms
