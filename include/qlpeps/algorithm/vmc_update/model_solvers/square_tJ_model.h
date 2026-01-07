@@ -533,15 +533,37 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
 */
 class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
                          public SquareNNNModelMeasurementSolver<SquaretJNNNModel>,
-                         public SquaretJModelMixIn {
+                         public SquaretJModelMixIn,
+                         public SingletPairCorrelationMixin<SquaretJNNNModel> {
  public:
-  using SquareNNNModelMeasurementSolver<SquaretJNNNModel>::EvaluateObservables;
   using SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables;
   explicit SquaretJNNNModel(double t, double t2, double J, double mu) : SquaretJModelMixIn(t,
                                                                                            t2,
                                                                                            J,
                                                                                            0,
                                                                                            mu) {}
+
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    ObservableMap<TenElemT> out =
+        this->SquareNNNModelMeasurementSolver<SquaretJNNNModel>::EvaluateObservables(split_index_tps, tps_sample);
+
+    if (this->IsSingletPairCorrelationEnabled()) {
+      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      this->MeasureSingletPairCorrelation(
+          tps_sample->tn,
+          split_index_tps,
+          tps_sample->contractor,
+          tps_sample->config,
+          out,
+          trunc_para);
+    }
+
+    return out;
+  }
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
     auto base = this->SquareNNNModelMeasurementSolver<SquaretJNNNModel>::DescribeObservables(ly, lx);
@@ -567,8 +589,16 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
         meta.index_labels = {"bond_y", "bond_x"};
       }
     }
-    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}});
-    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}});
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}, {}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}, {}});
+    const auto& ref_bonds = this->GetSelectedRefBonds();
+    size_t num_pairs = SingletPairCorrelationMixin<SquaretJNNNModel>::ComputeNumSCPairs(ly, lx, ref_bonds);
+    base.push_back({"SC_singlet_pair_corr",
+        "Singlet pair correlation <Delta^dag Delta> values.",
+        {num_pairs}, {"pair_idx"},
+        [ref_bonds](size_t ly_, size_t lx_) {
+          return SingletPairCorrelationMixin<SquaretJNNNModel>::GenerateSCPairCorrCoordString(ly_, lx_, ref_bonds);
+        }});
     return base;
   }
 };
@@ -587,13 +617,74 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
  */
 class SquaretJVModel : public SquareNNNModelEnergySolver<SquaretJVModel>,
                        public SquareNNNModelMeasurementSolver<SquaretJVModel>,
-                       public SquaretJModelMixIn {
+                       public SquaretJModelMixIn,
+                       public SingletPairCorrelationMixin<SquaretJVModel> {
  public:
+  using SquareNNNModelMeasurementSolver<SquaretJVModel>::DescribeObservables;
   explicit SquaretJVModel(double t, double t2, double J, double V, double mu) : SquaretJModelMixIn(t,
                                                                                                    t2,
                                                                                                    J,
                                                                                                    V,
-                                                                                                   mu) {};
+                                                                                                   mu) {}
+
+  template<typename TenElemT, typename QNT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample) {
+    ObservableMap<TenElemT> out =
+        this->SquareNNNModelMeasurementSolver<SquaretJVModel>::EvaluateObservables(split_index_tps, tps_sample);
+
+    if (this->IsSingletPairCorrelationEnabled()) {
+      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      this->MeasureSingletPairCorrelation(
+          tps_sample->tn,
+          split_index_tps,
+          tps_sample->contractor,
+          tps_sample->config,
+          out,
+          trunc_para);
+    }
+
+    return out;
+  }
+
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    auto base = this->SquareNNNModelMeasurementSolver<SquaretJVModel>::DescribeObservables(ly, lx);
+    for (auto &meta : base) {
+      if (meta.key == "spin_z" || meta.key == "charge") {
+        meta.shape = {ly, lx};
+        meta.index_labels = {"y", "x"};
+      }
+      if (meta.key == "bond_energy_h") {
+        meta.shape = {ly, (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_v") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), lx};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_dr") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+      if (meta.key == "bond_energy_ur") {
+        meta.shape = {(ly > 0 ? ly - 1 : 0), (lx > 0 ? lx - 1 : 0)};
+        meta.index_labels = {"bond_y", "bond_x"};
+      }
+    }
+    base.push_back({"SC_bond_singlet_h", "Bond singlet SC (horizontal) avg(conj(delta_dag), delta)", {ly, (lx > 0 ? lx - 1 : 0)}, {"bond_y", "bond_x"}, {}});
+    base.push_back({"SC_bond_singlet_v", "Bond singlet SC (vertical) avg(conj(delta_dag), delta)", {(ly > 0 ? ly - 1 : 0), lx}, {"bond_y", "bond_x"}, {}});
+    const auto& ref_bonds = this->GetSelectedRefBonds();
+    size_t num_pairs = SingletPairCorrelationMixin<SquaretJVModel>::ComputeNumSCPairs(ly, lx, ref_bonds);
+    base.push_back({"SC_singlet_pair_corr",
+        "Singlet pair correlation <Delta^dag Delta> values.",
+        {num_pairs}, {"pair_idx"},
+        [ref_bonds](size_t ly_, size_t lx_) {
+          return SingletPairCorrelationMixin<SquaretJVModel>::GenerateSCPairCorrCoordString(ly_, lx_, ref_bonds);
+        }});
+    return base;
+  }
 };
 
 }//qlpeps
