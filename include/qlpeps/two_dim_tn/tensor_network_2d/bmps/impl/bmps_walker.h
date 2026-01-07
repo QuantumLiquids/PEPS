@@ -330,6 +330,30 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::GrowBTenRightStep(
 }
 
 template<typename TenElemT, typename QNT>
+void BMPSContractor<TenElemT, QNT>::BMPSWalker::ShiftBTenWindow(
+    const TransferMPO& mpo,
+    const BMPS<TenElemT, QNT>& opposite_boundary,
+    BTenPOSITION position) {
+  if (position == LEFT) {
+    // Shift window to the left: pop left, grow right
+    if (bten_left_.empty()) {
+      throw std::runtime_error("BMPSWalker::ShiftBTenWindow: Left BTen cache is empty.");
+    }
+    bten_left_.pop_back();
+    bten_left_col_--;
+    GrowBTenRightStep(mpo, opposite_boundary);
+  } else {  // RIGHT
+    // Shift window to the right: pop right, grow left
+    if (bten_right_.empty()) {
+      throw std::runtime_error("BMPSWalker::ShiftBTenWindow: Right BTen cache is empty.");
+    }
+    bten_right_.pop_back();
+    bten_right_col_++;
+    GrowBTenLeftStep(mpo, opposite_boundary);
+  }
+}
+
+template<typename TenElemT, typename QNT>
 TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::TraceWithBTen(
     const Tensor& site, 
     size_t site_col, 
@@ -365,6 +389,73 @@ TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::TraceWithBTen(
       left_bten,
       site,
       opposite_boundary[site_col], // DOWN
+      right_bten
+  );
+}
+
+template<typename TenElemT, typename QNT>
+TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::TraceWithTwoSiteBTen(
+    const Tensor& site_a, const Tensor& site_b, size_t site_col,
+    const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary) const {
+  const size_t N = bmps_.size();
+  
+  // Validate site_col
+  if (site_col + 1 >= N) {
+    throw std::runtime_error("BMPSWalker::TraceWithTwoSiteBTen: site_col+1 out of bounds.");
+  }
+  
+  // Validate BTen caches
+  if (bten_left_.empty() || bten_right_.empty()) {
+    throw std::runtime_error("BMPSWalker::TraceWithTwoSiteBTen: BTen caches not initialized.");
+  }
+  
+  // LEFT BTen must cover [0, site_col)
+  if (bten_left_col_ < site_col) {
+    throw std::runtime_error("BMPSWalker::TraceWithTwoSiteBTen: Left BTen insufficient. "
+                             "edge=" + std::to_string(bten_left_col_) + ", need=" + std::to_string(site_col));
+  }
+  
+  // RIGHT BTen must cover (site_col+1, N-1]
+  if (bten_right_col_ > site_col + 2) {
+    throw std::runtime_error("BMPSWalker::TraceWithTwoSiteBTen: Right BTen insufficient. "
+                             "edge=" + std::to_string(bten_right_col_) + ", need=" + std::to_string(site_col + 2));
+  }
+  
+  // Get LEFT BTen at site_col (covers [0, site_col))
+  if (site_col >= bten_left_.size()) {
+    throw std::runtime_error("BMPSWalker::TraceWithTwoSiteBTen: Left BTen index out of bounds.");
+  }
+  const Tensor& left_bten = bten_left_[site_col];
+  
+  // Get RIGHT BTen at site_col+1 (covers (site_col+1, N-1])
+  const size_t right_idx = N - 2 - site_col;  // = N - 1 - (site_col + 1)
+  if (right_idx >= bten_right_.size()) {
+    throw std::runtime_error("BMPSWalker::TraceWithTwoSiteBTen: Right BTen index out of bounds. "
+                             "idx=" + std::to_string(right_idx) + ", size=" + std::to_string(bten_right_.size()));
+  }
+  const Tensor& right_bten = bten_right_[right_idx];
+  
+  // Contract: left_bten + up[col] + site_a + down[col] -> intermediate
+  const size_t col_a = site_col;
+  const size_t col_b = site_col + 1;
+  
+  Tensor tmp[4];
+  
+  // Contract left_bten with up[col_a], site_a, down[col_a]
+  Tensor site_a_copy = site_a;
+  Tensor intermediate = bten_ops::GrowBTenLeftStep<TenElemT, QNT>(
+      left_bten,
+      bmps_[N - 1 - col_a],    // UP reversed
+      site_a_copy,
+      opposite_boundary[col_a] // DOWN
+  );
+  
+  // Contract intermediate with up[col_b], site_b, down[col_b], right_bten
+  return bten_ops::TraceBTen<TenElemT, QNT>(
+      bmps_[N - 1 - col_b],     // UP reversed
+      intermediate,
+      site_b,
+      opposite_boundary[col_b], // DOWN
       right_bten
   );
 }

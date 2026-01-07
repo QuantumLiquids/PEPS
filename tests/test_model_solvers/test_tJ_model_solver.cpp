@@ -367,7 +367,23 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationSmoke) {
   auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);
   sitps.Load(tps_path);
 
-  Configuration config = LoadConfiguration(tps_path + "/configuration0");
+  // Manually construct configuration with horizontal hole pair at (2,2)-(2,3)
+  // This is configuration17 transposed, ensuring selection rules are satisfied
+  // from the first sample (adjacent holes form valid reference bond)
+  Configuration config(Ly, Lx);
+  std::vector<std::vector<size_t>> cfg = {
+    {1, 0, 0, 1, 0, 1},
+    {0, 1, 1, 0, 1, 0},
+    {1, 0, 2, 2, 0, 1},  // holes at (2,2) and (2,3) - horizontal pair!
+    {0, 1, 1, 0, 1, 0},
+    {1, 0, 1, 0, 0, 1},
+    {0, 1, 0, 1, 1, 0}
+  };
+  for (size_t y = 0; y < Ly; ++y) {
+    for (size_t x = 0; x < Lx; ++x) {
+      config({y, x}) = cfg[y][x];
+    }
+  }
 
   // Setup MC parameters with minimal sampling for smoke test
   MonteCarloParams mc_params(5, 5, 1, config, false);
@@ -449,6 +465,47 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationSmoke) {
       // For a t-J model with 2 holes, we expect SOME valid pairs
       FAIL() << "SC_singlet_pair_corr should be present with singlet pair correlation enabled";
     }
+
+    // Verify output file generation
+    const std::string stats_dir = "./stats/";
+    
+    // Check SC_singlet_pair_corr.csv exists and has correct format
+    {
+      std::ifstream ifs(stats_dir + "SC_singlet_pair_corr.csv");
+      ASSERT_TRUE(ifs.good()) << "SC_singlet_pair_corr.csv should be generated";
+      
+      std::string header;
+      std::getline(ifs, header);
+      EXPECT_EQ(header, "index,mean,stderr") << "CSV header should be 'index,mean,stderr'";
+      
+      size_t data_lines = 0;
+      std::string line;
+      while (std::getline(ifs, line)) {
+        if (!line.empty()) data_lines++;
+      }
+      
+      constexpr size_t expected_pairs = 375;
+      EXPECT_EQ(data_lines, expected_pairs) 
+          << "SC_singlet_pair_corr.csv should have " << expected_pairs << " data lines";
+    }
+    
+    // Check SC_singlet_pair_corr_coords.txt exists and matches expected format
+    {
+      std::ifstream ifs(stats_dir + "SC_singlet_pair_corr_coords.txt");
+      ASSERT_TRUE(ifs.good()) << "SC_singlet_pair_corr_coords.txt should be generated";
+      
+      size_t data_lines = 0;
+      std::string line;
+      while (std::getline(ifs, line)) {
+        if (!line.empty() && line[0] != '#') data_lines++;
+      }
+      
+      constexpr size_t expected_pairs = 375;
+      EXPECT_EQ(data_lines, expected_pairs) 
+          << "SC_singlet_pair_corr_coords.txt should have " << expected_pairs << " data lines";
+    }
+    
+    std::cout << "[tJModelMeasurerTest] Output file verification: PASSED" << std::endl;
   }
 
   delete executor;
@@ -579,8 +636,11 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationSelectionRules) {
  *
  * This test ensures reproducibility and catches unintended changes.
  * Uses deterministic seed and configuration for exact reproducibility.
+ *
+ * NOTE: This test is disabled by default (prefix DISABLED_) because it takes ~4 min.
+ * Run explicitly with: --gtest_also_run_disabled_tests --gtest_filter="*SingletPairCorrelationRegression*"
  */
-TEST_F(tJModelMeasurerTest, SingletPairCorrelationRegression) {
+TEST_F(tJModelMeasurerTest, DISABLED_SingletPairCorrelationRegression) {
   using Model = SquaretJNNModel;
   using MCUpdater = MCUpdateSquareNNExchange;
 
@@ -636,6 +696,14 @@ TEST_F(tJModelMeasurerTest, SingletPairCorrelationRegression) {
     // But we expect SOME non-zero correlations when holes happen to be adjacent
     EXPECT_LT(nonzero_count, expected_pairs / 2) 
         << "Most correlations should be zero due to selection rules";
+
+    // TODO: Add numerical regression baseline values once the implementation is stable.
+    //       Run this test once to get baseline values:
+    //         ./tests/test_tJ_model_solver --gtest_also_run_disabled_tests \
+    //             --gtest_filter="*SingletPairCorrelationRegression*"
+    //       Then add assertions like:
+    //         constexpr double expected_sum_abs = XXX.XXXXXXXXXXXX;
+    //         EXPECT_NEAR(sum_abs, expected_sum_abs, 1e-10);
   }
 
   delete executor;

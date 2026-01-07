@@ -500,6 +500,9 @@ class BMPSContractor {
      * 
      * Absorbs the column at the current LEFT BTen edge and advances the edge by one.
      *
+     * @note For typical row scanning, prefer the InitBTenLeft/Right + ShiftBTenWindow pattern.
+     *       Direct Grow calls are exposed for advanced use cases requiring asymmetric growth.
+     *
      * @param mpo The MPO row.
      * @param opposite_boundary The opposing BMPS.
      */
@@ -508,10 +511,27 @@ class BMPSContractor {
     /**
      * @brief Grow the RIGHT BTen by one column (towards left).
      *
+     * @note For typical row scanning, prefer the InitBTenLeft/Right + ShiftBTenWindow pattern.
+     *       Direct Grow calls are exposed for advanced use cases requiring asymmetric growth.
+     *
      * @param mpo The MPO row.
      * @param opposite_boundary The opposing BMPS.
      */
     void GrowBTenRightStep(const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary);
+
+    /**
+     * @brief Shift BTen window by one site (like BMPSContractor::ShiftBTenWindow).
+     *
+     * Pops the outermost BTen at `position` and grows at `Opposite(position)`.
+     * This is the recommended way to scan through a row after InitBTenLeft/Right.
+     *
+     * @param mpo The MPO row.
+     * @param opposite_boundary The opposing BMPS.
+     * @param position Direction to shift (LEFT or RIGHT).
+     */
+    void ShiftBTenWindow(const TransferMPO& mpo,
+                         const BMPS<TenElemT, QNT>& opposite_boundary,
+                         BTenPOSITION position);
 
     /**
      * @brief Compute trace at a specific site using cached BTen.
@@ -530,6 +550,23 @@ class BMPSContractor {
      * @return The scalar trace result.
      */
     TenElemT TraceWithBTen(const Tensor& site, size_t site_col, const BMPS<TenElemT, QNT>& opposite_boundary) const;
+
+    /**
+     * @brief Compute trace with two adjacent sites replaced.
+     *
+     * For computing two-site observables like pairing correlations.
+     * Requires: LEFT BTen covers [0, site_col), RIGHT BTen covers (site_col+1, N-1].
+     *
+     * @param site_a Replacement tensor at site_col.
+     * @param site_b Replacement tensor at site_col + 1.
+     * @param site_col The column index of the left site.
+     * @param mpo The MPO row tensors.
+     * @param opposite_boundary The opposing BMPS.
+     * @return The scalar trace result.
+     */
+    TenElemT TraceWithTwoSiteBTen(
+        const Tensor& site_a, const Tensor& site_b, size_t site_col,
+        const TransferMPO& mpo, const BMPS<TenElemT, QNT>& opposite_boundary) const;
 
     /**
      * @brief Clear all BTen caches.

@@ -436,28 +436,21 @@ class SingletPairCorrelationMixin {
           // Build standard MPO for this row (y2)
           TransferMPO standard_mpo = tn.get_row(y2);
           
-          // BTen optimization: build LEFT BTen to cover all columns,
-          // then scan from right to left with incremental RIGHT BTen growth.
+          // BTen optimization: scan left to right with ShiftBTenWindow.
           //
           // For two-site replacement at (x2, x2+1):
           // - LEFT BTen covers [0, x2)
           // - RIGHT BTen covers (x2+1, Lx-1]
           // Total: O(Lx) per row instead of O(Lx²)
+          //
+          // Initialize: LEFT = vacuum, RIGHT covers [2, Lx-1]
+          excited_walker_up_down.InitBTenLeft(standard_mpo, bottom_env, 0);
+          excited_walker_down_up.InitBTenLeft(standard_mpo, bottom_env, 0);
+          excited_walker_up_down.InitBTenRight(standard_mpo, bottom_env, 1);
+          excited_walker_down_up.InitBTenRight(standard_mpo, bottom_env, 1);
           
-          excited_walker_up_down.InitBTenLeft(standard_mpo, bottom_env, Lx);
-          excited_walker_down_up.InitBTenLeft(standard_mpo, bottom_env, Lx);
-          
-          // Initialize RIGHT BTen at position Lx-1 (covers nothing initially)
-          // For x2 = Lx-2, RIGHT BTen needs to cover (Lx-1, Lx-1] = nothing
-          excited_walker_up_down.InitBTenRight(standard_mpo, bottom_env, Lx - 1);
-          excited_walker_down_up.InitBTenRight(standard_mpo, bottom_env, Lx - 1);
-          
-          // Initialize BTen for original_walker (used for psi_original normalization)
-          original_walker.InitBTenLeft(standard_mpo, bottom_env, Lx);
-          original_walker.InitBTenRight(standard_mpo, bottom_env, Lx - 1);
-          
-          // Results for this target row (will fill in reverse order)
-          std::vector<TenElemT> row_results(Lx - 1, TenElemT(0));
+          original_walker.InitBTenLeft(standard_mpo, bottom_env, 0);
+          original_walker.InitBTenRight(standard_mpo, bottom_env, 1);
           
           // Prepare empty tensors for target bond (reused across x2)
           std::vector<Tensor> empty_tensors(Lx);
@@ -466,10 +459,8 @@ class SingletPairCorrelationMixin {
                                                                  static_cast<size_t>(tJSingleSiteState::Empty));
           }
           
-          // Scan from right to left for efficient BTen-based trace
-          for (size_t x2_rev = 0; x2_rev < Lx - 1; ++x2_rev) {
-            size_t x2 = Lx - 2 - x2_rev;  // x2 goes from Lx-2 down to 0
-            
+          // Scan from left to right
+          for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
             const SiteIdx site1_tgt{y2, x2};
             const SiteIdx site2_tgt{y2, x2 + 1};
             
@@ -479,6 +470,7 @@ class SingletPairCorrelationMixin {
             const bool tgt_is_down_up = (config(site1_tgt) == static_cast<size_t>(tJSingleSiteState::SpinDown) &&
                                           config(site2_tgt) == static_cast<size_t>(tJSingleSiteState::SpinUp));
             
+            TenElemT result = TenElemT(0);
             if (ref_valid && (tgt_is_up_down || tgt_is_down_up)) {
               // Get original tensors for target bond (spin_pair in current config)
               Tensor original_tensor_x2 = GetSiteTensorImpl<TenElemT, QNT>(
@@ -486,56 +478,43 @@ class SingletPairCorrelationMixin {
               Tensor original_tensor_x2_plus_1 = GetSiteTensorImpl<TenElemT, QNT>(
                   split_index_tps, y2, x2 + 1, config(site2_tgt));
               
-              // Compute psi_original: original walker with ORIGINAL configuration
-              // original_walker uses original MPO at ref row (ref=empty)
-              // and original config at target row (target=spin_pair)
-              // This gives ⟨ψ|σ⟩ where σ is the current configuration
-              TenElemT psi_original = TraceWithTwoSiteBTen_<TenElemT, QNT>(
-                  original_walker, standard_mpo, bottom_env, x2,
-                  original_tensor_x2, original_tensor_x2_plus_1);
+              // Compute psi_original using BMPSWalker::TraceWithTwoSiteBTen
+              TenElemT psi_original = original_walker.TraceWithTwoSiteBTen(
+                  original_tensor_x2, original_tensor_x2_plus_1, x2, standard_mpo, bottom_env);
               
               // Compute excited overlap: target bond replaced with empty (Δ action)
-              // This gives ⟨ψ|Δ†(ref)|σ'⟩ where σ' has target=empty
-              TenElemT overlap_up_down = TraceWithTwoSiteBTen_<TenElemT, QNT>(
-                  excited_walker_up_down, standard_mpo, bottom_env, x2,
-                  empty_tensors[x2], empty_tensors[x2 + 1]);
-              TenElemT overlap_down_up = TraceWithTwoSiteBTen_<TenElemT, QNT>(
-                  excited_walker_down_up, standard_mpo, bottom_env, x2,
-                  empty_tensors[x2], empty_tensors[x2 + 1]);
+              TenElemT overlap_up_down = excited_walker_up_down.TraceWithTwoSiteBTen(
+                  empty_tensors[x2], empty_tensors[x2 + 1], x2, standard_mpo, bottom_env);
+              TenElemT overlap_down_up = excited_walker_down_up.TraceWithTwoSiteBTen(
+                  empty_tensors[x2], empty_tensors[x2 + 1], x2, standard_mpo, bottom_env);
               
-              // Numerical stability: skip if normalization factor is too small
-              using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-              constexpr RealT kMinNormThreshold = RealT(1e-14);
-              if (std::abs(psi_original) < kMinNormThreshold) {
-                continue;  // Skip this pair
+              // In VMC, configurations are sampled by |ψ(σ)|². 
+              // psi_original = 0 should never happen for a sampled configuration.
+              if (psi_original == TenElemT(0)) {
+                throw std::runtime_error(
+                    "MeasureSingletPairCorrelation: psi_original = 0 for sampled configuration. "
+                    "This indicates a bug in sampling or tensor network contraction.");
               }
               
               // Compute normalized local estimator
-              // Local estimator = ⟨σ|Δ†Δ|σ'⟩ · ψ(σ')/ψ(σ)
-              //                 = (1/2)[±1] · [overlap / psi_original]
               TenElemT ratio_up_down = overlap_up_down / psi_original;
               TenElemT ratio_down_up = overlap_down_up / psi_original;
               
               if (tgt_is_up_down) {
-                // ⟨Δ†Δ⟩_loc = (1/2) [ratio_up_down - ratio_down_up]
-                row_results[x2] = TenElemT(0.5) * ComplexConjugate(ratio_up_down - ratio_down_up);
+                result = TenElemT(0.5) * ComplexConjugate(ratio_up_down - ratio_down_up);
               } else {  // tgt_is_down_up
-                // ⟨Δ†Δ⟩_loc = (1/2) [-ratio_up_down + ratio_down_up]
-                row_results[x2] = TenElemT(0.5) * ComplexConjugate(-ratio_up_down + ratio_down_up);
+                result = TenElemT(0.5) * ComplexConjugate(-ratio_up_down + ratio_down_up);
               }
             }
             
-            // Grow RIGHT BTen by one step for next iteration
-            if (x2 > 0) {
-              excited_walker_up_down.GrowBTenRightStep(standard_mpo, bottom_env);
-              excited_walker_down_up.GrowBTenRightStep(standard_mpo, bottom_env);
-              original_walker.GrowBTenRightStep(standard_mpo, bottom_env);
+            sc_corr.push_back(result);
+            
+            // Shift BTen window to the right for next iteration
+            if (x2 < Lx - 2) {
+              excited_walker_up_down.ShiftBTenWindow(standard_mpo, bottom_env, RIGHT);
+              excited_walker_down_up.ShiftBTenWindow(standard_mpo, bottom_env, RIGHT);
+              original_walker.ShiftBTenWindow(standard_mpo, bottom_env, RIGHT);
             }
-          }
-          
-          // Output horizontal results (values only, in left-to-right order)
-          for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
-            sc_corr.push_back(row_results[x2]);
           }
           
           // TODO: Vertical target bonds (y2, x2) -> (y2+1, x2)
@@ -561,79 +540,6 @@ class SingletPairCorrelationMixin {
     if (!sc_corr.empty()) {
       out["SC_singlet_pair_corr"] = std::move(sc_corr);
     }
-  }
-
- private:
-  /**
-   * @brief Compute trace with two adjacent sites replaced at columns x and x+1 using BTen.
-   *
-   * Uses cached BTen for O(1) per-site computation instead of O(Lx) full row contraction.
-   *
-   * Structure:
-   * - left_bten[x]: environment from [0, x)
-   * - site tensors at x and x+1 (replacements)
-   * - right_bten[N-2-x]: environment from (x+1, N-1]
-   *
-   * @param walker The excited walker with initialized BTen caches.
-   * @param mpo The standard MPO (used for BTen growth, not for replacement sites).
-   * @param bottom_env The bottom BMPS boundary.
-   * @param x The left column of the two-site replacement.
-   * @param site_x Replacement tensor at column x.
-   * @param site_x1 Replacement tensor at column x+1.
-   * @return The trace value.
-   */
-  template<typename TenElemT, typename QNT>
-  TenElemT TraceWithTwoSiteBTen_(
-      const typename BMPSContractor<TenElemT, QNT>::BMPSWalker& walker,
-      const std::vector<qlten::QLTensor<TenElemT, QNT>*>& mpo,
-      const BMPS<TenElemT, QNT>& bottom_env,
-      size_t x,
-      const qlten::QLTensor<TenElemT, QNT>& site_x,
-      const qlten::QLTensor<TenElemT, QNT>& site_x1) const {
-    
-    using Tensor = qlten::QLTensor<TenElemT, QNT>;
-    const size_t N = mpo.size();
-    const auto& bmps = walker.GetBMPS();
-    
-    if (N < 2 || x + 1 >= N) {
-      return TenElemT(0);
-    }
-    
-    // Get boundary tensors from walker
-    const auto& bten_left = walker.GetBTenLeft();
-    const auto& bten_right = walker.GetBTenRight();
-    
-    // BTen must be properly initialized before calling this function
-    assert(bten_left.size() > x && "LEFT BTen not initialized for column x");
-    const Tensor& left_bten = bten_left[x];  // covers [0, x)
-    
-    // right_bten index: for covering (x+1, N-1], we need N-2-x absorbed columns
-    const size_t right_idx = N - 2 - x;
-    assert(right_idx < bten_right.size() && "RIGHT BTen not initialized for column x+1");
-    const Tensor& right_bten = bten_right[right_idx];
-    
-    // Get BMPS tensors for columns x and x+1
-    const Tensor& up_x = bmps[N - 1 - x];      // UP reversed
-    const Tensor& up_x1 = bmps[N - 2 - x];     // UP reversed
-    const Tensor& down_x = bottom_env[x];
-    const Tensor& down_x1 = bottom_env[x + 1];
-    
-    // Two-site BTen contraction strategy:
-    // 1. Use GrowBTenLeftStep to absorb column x into left_bten
-    //    Result: intermediate_bten covers [0, x] with standard BTen indices
-    // 2. Use TraceBTen with intermediate_bten to compute trace at column x+1
-    //
-    // This reuses existing functions and avoids manual index tracking.
-    
-    // Step 1: Absorb column x using GrowBTenLeftStep
-    Tensor site_x_copy = site_x;  // Copy for potential fermionic transpose
-    Tensor intermediate_bten = bten_ops::GrowBTenLeftStep<TenElemT, QNT>(
-        left_bten, up_x, site_x_copy, down_x);
-    
-    // Step 2: Use TraceBTen to compute trace at column x+1
-    // intermediate_bten now covers [0, x], and we trace at x+1 with right_bten
-    return bten_ops::TraceBTen<TenElemT, QNT>(
-        up_x1, intermediate_bten, site_x1, down_x1, right_bten);
   }
 
  protected:

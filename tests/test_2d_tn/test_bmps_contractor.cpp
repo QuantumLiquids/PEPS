@@ -1276,6 +1276,151 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerBTenCacheTest) {
       << "ContractRow should remain functional as fallback";
 }
 
+/**
+ * @brief Test BMPSWalker::ShiftBTenWindow functionality.
+ *
+ * Verifies:
+ * 1. ShiftBTenWindow(RIGHT) advances left BTen and pops right BTen
+ * 2. ShiftBTenWindow(LEFT) advances right BTen and pops left BTen
+ * 3. After shifting, TraceWithBTen still gives correct results
+ */
+TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerShiftBTenWindowTest) {
+  using TenElemT = double;
+  using DQLTensor = qlten::QLTensor<TenElemT, U1QN>;
+  using TransferMPO = std::vector<DQLTensor *>;
+  using ContractorT = BMPSContractor<TenElemT, U1QN>;
+  using WalkerT = ContractorT::BMPSWalker;
+  
+  // Create contractor and grow boundaries
+  ContractorT contractor(dtn2d.rows(), dtn2d.cols());
+  contractor.Init(dtn2d);
+  
+  BMPSTruncateParams<double> trunc_para(1, 20, 1e-14, CompressMPSScheme::SVD_COMPRESS);
+  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  
+  // Get walker
+  WalkerT walker = contractor.GetWalker(dtn2d, UP);
+  
+  // Get DOWN boundary for row 2
+  const auto& down_stack = contractor.GetBMPS(DOWN);
+  size_t needed_down_idx = dtn2d.rows() - 1 - 2;
+  ASSERT_LT(needed_down_idx, down_stack.size());
+  const auto& bottom_env = down_stack[needed_down_idx];
+  
+  // Build MPO for row 2
+  TransferMPO row2_mpo;
+  row2_mpo.reserve(dtn2d.cols());
+  for (size_t col = 0; col < dtn2d.cols(); ++col) {
+    row2_mpo.push_back(const_cast<DQLTensor*>(&dtn2d({2, col})));
+  }
+  
+  // Reference value from ContractRow
+  TenElemT reference_val = walker.ContractRow(row2_mpo, bottom_env);
+  
+  const size_t Lx = dtn2d.cols();
+  
+  // Test 1: Initialize BTen window at column 1 (left edge=1, right edge=2)
+  walker.InitBTenLeft(row2_mpo, bottom_env, 1);
+  walker.InitBTenRight(row2_mpo, bottom_env, 1);
+  
+  EXPECT_EQ(walker.GetBTenLeftCol(), 1);
+  EXPECT_EQ(walker.GetBTenRightCol(), 2);
+  
+  // Test 2: ShiftBTenWindow(RIGHT) - shift to the right
+  // This should: grow left (col 1->2), pop right (col 2->3)
+  walker.ShiftBTenWindow(row2_mpo, bottom_env, RIGHT);
+  EXPECT_EQ(walker.GetBTenLeftCol(), 2);
+  EXPECT_EQ(walker.GetBTenRightCol(), 3);
+  
+  // Test 3: Verify TraceWithBTen still works after shift
+  const DQLTensor& mid_site = dtn2d({2, 2});
+  TenElemT trace_val = walker.TraceWithBTen(mid_site, 2, bottom_env);
+  EXPECT_NEAR(trace_val, reference_val, 1e-8);
+  
+  // Test 4: ShiftBTenWindow(LEFT) - shift back to the left
+  // This should: grow right (col 3->2), pop left (col 2->1)
+  walker.ShiftBTenWindow(row2_mpo, bottom_env, LEFT);
+  EXPECT_EQ(walker.GetBTenLeftCol(), 1);
+  EXPECT_EQ(walker.GetBTenRightCol(), 2);
+  
+  // Test 5: Verify TraceWithBTen at column 1
+  const DQLTensor& site1 = dtn2d({2, 1});
+  TenElemT trace_val2 = walker.TraceWithBTen(site1, 1, bottom_env);
+  EXPECT_NEAR(trace_val2, reference_val, 1e-8);
+}
+
+/**
+ * @brief Test BMPSWalker::TraceWithTwoSiteBTen functionality.
+ *
+ * Verifies:
+ * 1. TraceWithTwoSiteBTen correctly computes trace for adjacent site pairs
+ * 2. Results match ContractRow reference when using identity-like operators
+ * 3. Window can be shifted and recomputed correctly
+ */
+TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerTraceWithTwoSiteBTenTest) {
+  using TenElemT = double;
+  using DQLTensor = qlten::QLTensor<TenElemT, U1QN>;
+  using TransferMPO = std::vector<DQLTensor *>;
+  using ContractorT = BMPSContractor<TenElemT, U1QN>;
+  using WalkerT = ContractorT::BMPSWalker;
+  
+  // Create contractor and grow boundaries
+  ContractorT contractor(dtn2d.rows(), dtn2d.cols());
+  contractor.Init(dtn2d);
+  
+  BMPSTruncateParams<double> trunc_para(1, 20, 1e-14, CompressMPSScheme::SVD_COMPRESS);
+  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  
+  // Get walker
+  WalkerT walker = contractor.GetWalker(dtn2d, UP);
+  
+  // Get DOWN boundary for row 2
+  const auto& down_stack = contractor.GetBMPS(DOWN);
+  size_t needed_down_idx = dtn2d.rows() - 1 - 2;
+  ASSERT_LT(needed_down_idx, down_stack.size());
+  const auto& bottom_env = down_stack[needed_down_idx];
+  
+  // Build MPO for row 2
+  TransferMPO row2_mpo;
+  row2_mpo.reserve(dtn2d.cols());
+  for (size_t col = 0; col < dtn2d.cols(); ++col) {
+    row2_mpo.push_back(const_cast<DQLTensor*>(&dtn2d({2, col})));
+  }
+  
+  // Reference value from ContractRow
+  TenElemT reference_val = walker.ContractRow(row2_mpo, bottom_env);
+  EXPECT_NE(reference_val, 0.0);
+  
+  const size_t Lx = dtn2d.cols();
+  
+  // Test 1: Initialize BTen window for two-site trace at columns 1 and 2
+  // Left BTen should cover [0, 1), Right BTen should cover (2, Lx-1]
+  walker.InitBTenLeft(row2_mpo, bottom_env, 1);
+  walker.InitBTenRight(row2_mpo, bottom_env, 2);
+  
+  EXPECT_EQ(walker.GetBTenLeftCol(), 1);
+  EXPECT_EQ(walker.GetBTenRightCol(), 3);  // Right edge is site_col+1 after the last covered site
+  
+  // Test 2: TraceWithTwoSiteBTen at columns 1-2 using original tensors
+  // This should give the same result as the full ContractRow
+  const DQLTensor& site1 = dtn2d({2, 1});
+  const DQLTensor& site2 = dtn2d({2, 2});
+  TenElemT two_site_val = walker.TraceWithTwoSiteBTen(site1, site2, 1, row2_mpo, bottom_env);
+  EXPECT_NEAR(two_site_val, reference_val, 1e-8) 
+      << "TraceWithTwoSiteBTen with original tensors should match ContractRow";
+  
+  // Test 3: Shift window to the right and compute at columns 2-3
+  walker.ShiftBTenWindow(row2_mpo, bottom_env, RIGHT);
+  EXPECT_EQ(walker.GetBTenLeftCol(), 2);
+  EXPECT_EQ(walker.GetBTenRightCol(), 4);
+  
+  const DQLTensor& site2b = dtn2d({2, 2});
+  const DQLTensor& site3 = dtn2d({2, 3});
+  TenElemT two_site_val2 = walker.TraceWithTwoSiteBTen(site2b, site3, 2, row2_mpo, bottom_env);
+  EXPECT_NEAR(two_site_val2, reference_val, 1e-8)
+      << "TraceWithTwoSiteBTen after shift should still match ContractRow";
+}
+
 int main(int argc, char *argv[]) {
 
   MPI_Init(nullptr, nullptr);
