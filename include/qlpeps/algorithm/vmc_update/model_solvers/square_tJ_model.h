@@ -478,9 +478,9 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
 
     // Measure singlet pair correlation if enabled
     if (this->IsSingletPairCorrelationEnabled()) {
-      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-      // Use default truncation parameters; caller can customize if needed
-      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      const auto& trunc_para = tps_sample->trun_para;
+      // Grow DOWN BMPS stack to cover all target rows
+      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN, trunc_para);
       this->MeasureSingletPairCorrelation(
           tps_sample->tn,
           split_index_tps,
@@ -551,8 +551,9 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
         this->SquareNNNModelMeasurementSolver<SquaretJNNNModel>::EvaluateObservables(split_index_tps, tps_sample);
 
     if (this->IsSingletPairCorrelationEnabled()) {
-      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      const auto& trunc_para = tps_sample->trun_para;
+      // Grow DOWN BMPS stack to cover all target rows
+      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN, trunc_para);
       this->MeasureSingletPairCorrelation(
           tps_sample->tn,
           split_index_tps,
@@ -635,8 +636,9 @@ class SquaretJVModel : public SquareNNNModelEnergySolver<SquaretJVModel>,
         this->SquareNNNModelMeasurementSolver<SquaretJVModel>::EvaluateObservables(split_index_tps, tps_sample);
 
     if (this->IsSingletPairCorrelationEnabled()) {
-      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      const auto& trunc_para = tps_sample->trun_para;
+      // Grow DOWN BMPS stack to cover all target rows
+      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN, trunc_para);
       this->MeasureSingletPairCorrelation(
           tps_sample->tn,
           split_index_tps,

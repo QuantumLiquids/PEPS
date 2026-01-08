@@ -284,6 +284,18 @@ class SingletPairCorrelationMixin {
       ObservableMap<TenElemT>& out,
       const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type>& trunc_para) {
     
+    // FIXME: Fermion sign is NOT correctly handled.
+    // The current implementation traces out parity indices during contraction,
+    // losing fermion sign information. Need to preserve target bond's physical
+    // indices through BMPS contraction and extract sign at the end.
+    // The results should not only miss some overall sign for each correlation,
+    // So we temporarily keep the code since the framework to calculate the environment window may be useful
+    // in the future.
+    // The possible ways to fix it:
+    // 1. Include the fusion tree information in the BMPS Contractor
+    // 2. Keep the parity indices of the tensors in the reference bond
+    // 3. Keep the whole parity indices of 2D tensor network in contracting the Amplitude.
+    throw std::runtime_error("MeasureSingletPairCorrelation: Fermion sign is NOT correctly handled. ");
     if (!enable_singlet_pair_correlation_) return;
 
     using Tensor = qlten::QLTensor<TenElemT, QNT>;
@@ -302,27 +314,17 @@ class SingletPairCorrelationMixin {
     // Get the UP BMPS stack - use contractor's cached vacuum BMPS
     const auto& up_stack = contractor.GetBMPS(UP);
     if (up_stack.empty()) {
-      std::cerr << "[MeasureSingletPairCorrelation] ERROR: UP BMPS stack is empty!" << std::endl;
-      return;
+      throw std::runtime_error(
+          "MeasureSingletPairCorrelation: UP BMPS stack is empty. "
+          "Contractor not properly initialized.");
     }
-
-    // Note: Removed debug test that was calling MultiplyMPO on up_stack[0]
-
-    // Create main_walker from the VACUUM state (up_stack[0])
-    // Initially covers "before row 0" (empty boundary)
-    auto main_walker = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
-        tn, up_stack[0], UP, 1);
-    
-    // Track how many rows main_walker has absorbed
-    // After Evolve(mpo_row_k), walker has absorbed rows [0, k]
-    // Initially, no rows absorbed
-    size_t main_walker_absorbed_rows = 0;
 
     // Build reference bonds set for fast lookup
     // If selected_ref_bonds_ is empty, process all bonds
     std::set<std::pair<size_t, size_t>> ref_bonds_set;
     size_t max_ref_y = Ly - 2;  // Default: process all rows
     if (!selected_ref_bonds_.empty()) {
+      max_ref_y = 0;  // Reset when filtering to avoid unnecessary iterations
       for (const auto& bond : selected_ref_bonds_) {
         // Validate and add to set
         if (bond.first < Ly - 1 && bond.second < Lx - 1) {
@@ -334,19 +336,18 @@ class SingletPairCorrelationMixin {
     }
     const bool filter_enabled = !ref_bonds_set.empty();
 
+    // Verify UP stack depth - must cover all reference rows
+    // up_stack[y1] represents boundary state after absorbing rows [0, y1-1]
+    if (up_stack.size() <= max_ref_y) {
+      throw std::runtime_error(
+          "MeasureSingletPairCorrelation: UP BMPS stack insufficient. "
+          "Need depth " + std::to_string(max_ref_y + 1) + 
+          ", got " + std::to_string(up_stack.size()) + 
+          ". Call contractor.GrowFullBMPS(tn, UP, trunc_para) before measurement.");
+    }
+
     // Enumerate horizontal reference bonds
-    for (size_t y1 = 0; y1 <= max_ref_y; ++y1) {  // Only iterate up to max_ref_y
-      
-      // Ensure main_walker has absorbed up to row y1-1 (exclusive)
-      // so it can be forked and then Evolve with excited_mpo at row y1
-      // For y1=0: no absorption needed, fork directly
-      // For y1>0: absorb rows [0, y1-1] with standard MPOs
-      while (main_walker_absorbed_rows < y1) {
-        TransferMPO evolve_mpo = tn.get_row(main_walker_absorbed_rows);
-        main_walker.Evolve(evolve_mpo, trunc_para);
-        main_walker_absorbed_rows++;
-      }
-      
+    for (size_t y1 = 0; y1 <= max_ref_y; ++y1) {
       for (size_t x1 = 0; x1 < Lx - 1; ++x1) {  // x1 < Lx-1 for horizontal bond
         // Skip if filtering is enabled and this bond is not selected
         if (filter_enabled && ref_bonds_set.find({y1, x1}) == ref_bonds_set.end()) {
@@ -359,9 +360,6 @@ class SingletPairCorrelationMixin {
         // Check if Δ† can act: both sites must be empty
         const bool ref_valid = (config(site1_ref) == static_cast<size_t>(tJSingleSiteState::Empty) &&
                                 config(site2_ref) == static_cast<size_t>(tJSingleSiteState::Empty));
-        
-        // Fork the walker at row y1 (main_walker covers up to row y1-1 for y1>0, or "before row 0")
-        auto excited_walker = main_walker;
         
         // Build excited MPOs for Δ† action
         // Δ†|empty,empty⟩ = (|↑,↓⟩ - |↓,↑⟩)/√2
@@ -385,13 +383,14 @@ class SingletPairCorrelationMixin {
           excited_mpo_down_up[x1 + 1] = &tensor_up_at_x1p1;
         }
         
-        // Evolve two excited walkers (for +/- combination)
-        auto excited_walker_up_down = excited_walker;
-        auto excited_walker_down_up = excited_walker;
-        
-        // Also create an "original walker" that uses original configuration
-        // for computing psi_original (normalization factor)
-        auto original_walker = excited_walker;
+        // Fork walkers directly from contractor's pre-computed BMPS at row y1
+        // up_stack[y1] = boundary state after absorbing rows [0, y1-1]
+        auto excited_walker_up_down = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
+            tn, up_stack[y1], UP, y1);
+        auto excited_walker_down_up = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
+            tn, up_stack[y1], UP, y1);
+        auto original_walker = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
+            tn, up_stack[y1], UP, y1);
         
         // Evolve walkers with their respective MPOs at ref row
         TransferMPO original_mpo_y1 = tn.get_row(y1);  // Original config (ref=empty)
@@ -410,11 +409,11 @@ class SingletPairCorrelationMixin {
           size_t down_stack_idx = Ly - 1 - y2;
           
           if (down_stack_idx >= down_stack.size()) {
-            // Record zeros for all horizontal bonds in this row
-            for (size_t x2 = 0; x2 < Lx - 1; ++x2) {
-              sc_corr.push_back(TenElemT(0));  // value only
-            }
-            continue;
+            throw std::runtime_error(
+                "MeasureSingletPairCorrelation: DOWN BMPS stack insufficient. "
+                "Need depth " + std::to_string(down_stack_idx + 1) + 
+                ", got " + std::to_string(down_stack.size()) + 
+                ". Call contractor.GrowFullBMPS(tn, DOWN, trunc_para) before measurement.");
           }
           const auto& bottom_env = down_stack[down_stack_idx];
           
@@ -452,7 +451,9 @@ class SingletPairCorrelationMixin {
           original_walker.InitBTenLeft(standard_mpo, bottom_env, 0);
           original_walker.InitBTenRight(standard_mpo, bottom_env, 1);
           
-          // Prepare empty tensors for target bond (reused across x2)
+          // Prepare empty tensors for target bond (reused across x2 in this row).
+          // Note: Cannot hoist outside y2 loop because TPS tensors at different rows
+          // may have different auxiliary space dimensions.
           std::vector<Tensor> empty_tensors(Lx);
           for (size_t x = 0; x < Lx; ++x) {
             empty_tensors[x] = GetSiteTensorImpl<TenElemT, QNT>(split_index_tps, y2, x,
@@ -530,11 +531,6 @@ class SingletPairCorrelationMixin {
           // This ensures absorbed_rows counters stay consistent.
         }
       }
-      
-      // Advance main_walker by absorbing row y1
-      TransferMPO standard_mpo = tn.get_row(y1);
-      main_walker.Evolve(standard_mpo, trunc_para);
-      main_walker_absorbed_rows++;  // Keep track
     }
     
     if (!sc_corr.empty()) {

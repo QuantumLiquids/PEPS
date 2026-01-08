@@ -237,9 +237,7 @@ class SquareSpinOneHalfXXZModel
 
     // Measure structure factor if enabled
     if (this->IsStructureFactorEnabled()) {
-      using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-      // Use default truncation parameters; caller can customize if needed
-      BMPSTruncateParams<RealT> trunc_para = BMPSTruncateParams<RealT>::SVD(1, 64, 1e-10);
+      const auto& trunc_para = tps_sample->trun_para;
       this->MeasureStructureFactor(
           tps_sample->tn,
           split_index_tps,
