@@ -28,8 +28,9 @@
 namespace qlpeps {
 using qlten::Timer;
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOptimizer(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::VMCPEPSOptimizer(
     const VMCPEPSOptimizerParams &params,
     const SITPST &sitpst_init,
     const MPI_Comm &comm,
@@ -56,7 +57,8 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOp
   stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
 
   // Create persistent evaluator to reuse internal buffers; SR buffers toggled by algorithm type
-  energy_grad_evaluator_ = std::make_unique<MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>(
+  energy_grad_evaluator_ = std::make_unique<
+      MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>>(
       monte_carlo_engine_, energy_solver_, monte_carlo_engine_.Comm(), stochastic_reconfiguration_update_class_,
       params_.runtime_params.psi_consistency);
 
@@ -73,9 +75,10 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::VMCPEPSOp
   this->SetStatus(ExecutorStatus::INITED);
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-std::unique_ptr<VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>
-VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::CreateByLoadingTPS(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+std::unique_ptr<VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>>
+VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::CreateByLoadingTPS(
     const VMCPEPSOptimizerParams &params,
     const std::string &tps_path,
     const MPI_Comm &comm,
@@ -89,11 +92,13 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::CreateByL
   }
 
   // Create executor using the primary constructor with loaded TPS
-  return std::make_unique<VMCPEPSOptimizer>(params, loaded_tps, comm, solver, std::move(mc_updater));
+  return std::make_unique<VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>>(
+      params, loaded_tps, comm, solver, std::move(mc_updater));
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Execute(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::Execute(void) {
   this->SetStatus(ExecutorStatus::EXEING);
   monte_carlo_engine_.WarmUp();
 
@@ -175,14 +180,16 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Exec
  * the normalized state is broadcasted to all ranks
  * and this->split_index_tps_ will be assigned by the normalized state.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
 std::tuple<TenElemT,
-           typename VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::SITPST,
+           typename VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::SITPST,
            double>
 VMCPEPSOptimizer<TenElemT,
                          QNT,
                          MonteCarloSweepUpdater,
-                         EnergySolver>::DefaultEnergyEvaluator_(const SITPST &state) {
+                         EnergySolver,
+                         ContractorT>::DefaultEnergyEvaluator_(const SITPST &state) {
   // Delegate to persistent evaluator which encapsulates state broadcast, sampling and MPI reductions
   auto result = energy_grad_evaluator_->Evaluate(state);
 
@@ -201,8 +208,9 @@ VMCPEPSOptimizer<TenElemT,
 /**
  * @brief Pre-allocate storage for energy samples, accumulators, and SR buffers.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::ReserveSamplesDataSpace_(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::ReserveSamplesDataSpace_(void) {
   const size_t mc_samples = params_.mc_params.num_samples;
   if (mc_samples == 0) {
     throw std::invalid_argument("Monte Carlo samples cannot be zero");
@@ -246,8 +254,9 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Rese
 /**
  * @brief Print human-readable configuration of the executor (algorithm name, SR params, tech info).
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::PrintExecutorInfo_(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::PrintExecutorInfo_(void) {
   monte_carlo_engine_.PrintCommonInfo("VMC PEPS OPTIMIZER EXECUTOR");
   if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     size_t indent = 40;
@@ -317,19 +326,22 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Prin
 /**
  * @brief Dump energy samples/trajectory and TPS using configured base name.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpData(const bool release_mem) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::DumpData(const bool release_mem) {
   DumpData(params_.tps_dump_base_name, release_mem);  // Use base name from parameters
 }
 
 /**
  * @brief Implementation of the dumping routine with explicit base path.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
 void VMCPEPSOptimizer<TenElemT,
                               QNT,
                               MonteCarloSweepUpdater,
-                              EnergySolver>::DumpData(const std::string &tps_base_name,
+                              EnergySolver,
+                              ContractorT>::DumpData(const std::string &tps_base_name,
                                                       const bool release_mem) {
   // Generate paths with consistent naming: tps_base_name + "final" and tps_base_name + "lowest"
   std::string final_tps_path = tps_base_name + "final";
@@ -385,8 +397,9 @@ void VMCPEPSOptimizer<TenElemT,
 /**
  * @brief Binary dump of a vector of tensor elements.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpVecData_(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::DumpVecData_(
     const std::string &path, const std::vector<TenElemT> &data) {
   std::ofstream ofs(path, std::ofstream::binary);
   if (ofs) {
@@ -397,11 +410,13 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::Dump
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
 void VMCPEPSOptimizer<TenElemT,
                               QNT,
                               MonteCarloSweepUpdater,
-                              EnergySolver>::ValidateState_(const SITPST &state) {
+                              EnergySolver,
+                              ContractorT>::ValidateState_(const SITPST &state) {
   // Check that all tensors in the state are valid
   for (size_t row = 0; row < state.rows(); ++row) {
     for (size_t col = 0; col < state.cols(); ++col) {
@@ -433,8 +448,9 @@ void VMCPEPSOptimizer<TenElemT,
 /**
  * @brief Binary dump of a vector of doubles.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>::DumpVecDataDouble_(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::DumpVecDataDouble_(
     const std::string &path, const std::vector<double> &data) {
   std::ofstream ofs(path, std::ofstream::binary);
   if (ofs) {

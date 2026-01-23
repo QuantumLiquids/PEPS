@@ -193,7 +193,8 @@ TEST(MCIsingTRG, PathwiseAgreementWithClassicalMetropolis_4x4_PBC) {
         {s2, c1},
     };
     const auto psi_a = comp.GetAmplitude();
-    const auto psi_b = comp.BeginTrial(repl, new_cfgs);
+    auto trial = comp.BeginTrial(repl, new_cfgs);
+    const auto psi_b = trial.amplitude;
     const double ratio_sq_trg = std::pow(std::abs(psi_b) / std::max(1e-300, std::abs(psi_a)), 2);
 
     EXPECT_NEAR(ratio_sq_trg, ratio_sq_classical, 5e-10 * std::max(1.0, std::abs(ratio_sq_classical)));
@@ -201,10 +202,10 @@ TEST(MCIsingTRG, PathwiseAgreementWithClassicalMetropolis_4x4_PBC) {
     EXPECT_EQ(accept_trg, accept_classical);
 
     if (accept_trg) {
-      comp.AcceptTrial(sitps);
+      comp.AcceptTrial(std::move(trial), sitps);
       cfg_classical = cfg_new;
     } else {
-      comp.RejectTrial();
+      comp.RejectTrial(std::move(trial));
     }
     EXPECT_TRUE(static_cast<const qlpeps::DuoMatrix<size_t>&>(comp.config) ==
                 static_cast<const qlpeps::DuoMatrix<size_t>&>(cfg_classical));

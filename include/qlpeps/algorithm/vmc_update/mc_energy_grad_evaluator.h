@@ -54,12 +54,13 @@ namespace qlpeps {
  * - As a light-weight guard, Evaluate() emits a warning when |amplitude| lies
  *   outside [sqrt(min_double), sqrt(max_double)], following TPS policy.
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT = BMPSContractor>
 class MCEnergyGradEvaluator {
  public:
   using Tensor = qlten::QLTensor<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
-  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
+  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, ContractorT>;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
 
   struct Result {
@@ -78,7 +79,7 @@ class MCEnergyGradEvaluator {
    * @param comm    MPI communicator
    * @param collect_sr_buffers  Whether to collect SR buffers (O* samples and mean O*)
    */
-  MCEnergyGradEvaluator(MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> &engine,
+  MCEnergyGradEvaluator(MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater, ContractorT> &engine,
                         EnergySolver &solver,
                         const MPI_Comm &comm,
                         bool collect_sr_buffers = false,
@@ -344,7 +345,7 @@ class MCEnergyGradEvaluator {
     return too_small;
   }
 
-  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> &engine_;
+  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater, ContractorT> &engine_;
   EnergySolver &solver_;
   const MPI_Comm &comm_;
   bool collect_sr_buffers_;

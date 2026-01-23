@@ -214,7 +214,8 @@ class MCUpdateSquareNNExchangePBC : public MCUpdateSquareNNUpdateBasePBC<MCUpdat
         {site1, c2},
         {site2, c1},
     };
-    TenElemT psi_b = tps_component.BeginTrial(replacements, new_cfgs);
+    auto trial = tps_component.BeginTrial(replacements, new_cfgs);
+    const TenElemT psi_b = trial.amplitude;
     
     bool exchange = false;
     if (std::abs(psi_b) >= std::abs(psi_a)) {
@@ -228,9 +229,9 @@ class MCUpdateSquareNNExchangePBC : public MCUpdateSquareNNUpdateBasePBC<MCUpdat
     }
     
     if (exchange) {
-        tps_component.AcceptTrial(sitps);
+        tps_component.AcceptTrial(std::move(trial), sitps);
     } else {
-        tps_component.RejectTrial();
+        tps_component.RejectTrial(std::move(trial));
     }
     
     return exchange;
@@ -287,6 +288,84 @@ class MCUpdateSquareNNFullSpaceUpdateOBC : public MCUpdateSquareNNUpdateBaseOBC<
 
 // Backward-compatible alias: never break userspace.
 using MCUpdateSquareNNFullSpaceUpdate = MCUpdateSquareNNFullSpaceUpdateOBC;
+
+/**
+ * Full-space NN update for PBC using TRG trial/commit.
+ * This updater does NOT assume Sz conservation.
+ */
+class MCUpdateSquareNNFullSpaceUpdatePBC : public MCUpdateSquareNNUpdateBasePBC<MCUpdateSquareNNFullSpaceUpdatePBC> {
+ public:
+  using MCUpdateSquareNNUpdateBasePBC<MCUpdateSquareNNFullSpaceUpdatePBC>::MCUpdateSquareNNUpdateBasePBC;
+
+  template<typename TenElemT, typename QNT, typename WaveFunctionDress, template<typename, typename> class ContractorT>
+  bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation /*bond_dir*/,
+                                const SplitIndexTPS<TenElemT, QNT> &sitps,
+                                TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress, ContractorT> &tps_component) {
+    static_assert(std::is_same_v<ContractorT<TenElemT, QNT>, TRGContractor<TenElemT, QNT>>,
+                  "MCUpdateSquareNNFullSpaceUpdatePBC requires TRGContractor.");
+
+    const size_t dim = sitps.PhysicalDim();
+    const size_t init_c1 = tps_component.config(site1);
+    const size_t init_c2 = tps_component.config(site2);
+    const size_t init_state = init_c1 * dim + init_c2;
+
+    using TrialT = typename TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress, ContractorT>::Trial;
+    std::vector<TrialT> trials;
+    trials.reserve(dim * dim);
+
+    std::vector<TenElemT> alternative_psi(dim * dim);
+    for (size_t c1 = 0; c1 < dim; ++c1) {
+      for (size_t c2 = 0; c2 < dim; ++c2) {
+        const size_t state = c1 * dim + c2;
+        if (state == init_state) {
+          alternative_psi[state] = tps_component.amplitude;
+          trials.emplace_back();
+          continue;
+        }
+        using TensorType = typename TPSWaveFunctionComponent<TenElemT, QNT, WaveFunctionDress, ContractorT>::Tensor;
+        std::vector<std::pair<SiteIdx, TensorType>> replacements{
+            {site1, sitps(site1)[c1]},
+            {site2, sitps(site2)[c2]},
+        };
+        std::vector<std::pair<SiteIdx, size_t>> new_cfgs{
+            {site1, c1},
+            {site2, c2},
+        };
+        auto trial = tps_component.BeginTrial(replacements, new_cfgs);
+        alternative_psi[state] = trial.amplitude;
+        trials.emplace_back(std::move(trial));
+      }
+    }
+
+    std::vector<double> weights(dim * dim);
+    const TenElemT psi_a = tps_component.amplitude;
+    for (size_t i = 0; i < weights.size(); ++i) {
+      const double r = std::abs(alternative_psi[i] / psi_a);
+      weights[i] = r * r;
+    }
+
+    const size_t final_state = SuwaTodoStateUpdate(init_state, weights, random_engine_);
+    if (final_state == init_state) {
+      // No change; discard trials (if any).
+      for (size_t i = 0; i < trials.size(); ++i) {
+        if (i != init_state) {
+          tps_component.RejectTrial(std::move(trials[i]));
+        }
+      }
+      return false;
+    }
+
+    // Commit chosen trial, discard others.
+    for (size_t i = 0; i < trials.size(); ++i) {
+      if (i == final_state) {
+        tps_component.AcceptTrial(std::move(trials[i]), sitps);
+      } else if (i != init_state) {
+        tps_component.RejectTrial(std::move(trials[i]));
+      }
+    }
+    return true;
+  }
+};
 
 /**
  * Monte Carlo update strategy for t-J model with Jastrow factor dressed wave function.

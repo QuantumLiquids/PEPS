@@ -8,7 +8,6 @@
 #ifndef QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 #define QLPEPS_VMC_PEPS_ALGORITHM_VMC_UPDATE_WAVE_FUNCTION_COMPONENT_H
 
-#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -186,8 +185,6 @@ struct TPSWaveFunctionComponent {
   }
 
   TenElemT EvaluateAmplitude() {
-    // Keep component and contractor in sync: no pending trial should exist here.
-    pending_trial_.reset();
     if (tn.rows() == 0 || tn.cols() == 0 || tn({0, 0}).IsDefault()) {
       throw std::logic_error("TPSWaveFunctionComponent::EvaluateAmplitude: TensorNetwork2D is not initialized.");
     }
@@ -223,13 +220,20 @@ struct TPSWaveFunctionComponent {
    * @param replacements (site, new_tensor) list.
    * @param new_configs (site, new_config) list (must correspond to replacements).
    */
-  TenElemT BeginTrial(const std::vector<std::pair<SiteIdx, Tensor>>& replacements,
-                     const std::vector<std::pair<SiteIdx, size_t>>& new_configs) {
+  struct Trial {
+    TenElemT amplitude{};
+    std::vector<std::pair<SiteIdx, Tensor>> replacements;
+    std::vector<std::pair<SiteIdx, size_t>> new_configs;
+    TrialToken token{};
+  };
+
+  Trial BeginTrial(const std::vector<std::pair<SiteIdx, Tensor>>& replacements,
+                   const std::vector<std::pair<SiteIdx, size_t>>& new_configs) {
     if (detail::HasSetTruncateParams<Contractor>) {
       contractor.SetTruncateParams(this->trun_para);
     }
 
-    PendingTrial trial;
+    Trial trial;
     trial.replacements = replacements;
     trial.new_configs = new_configs;
 
@@ -243,26 +247,24 @@ struct TPSWaveFunctionComponent {
       throw std::logic_error("BeginTrial: contractor does not support trial evaluation.");
     }
 
-    pending_trial_ = std::move(trial);
-    return pending_trial_->amplitude;
+    return trial;
   }
 
   /**
    * @brief Commit the pending trial: update config/tn, and swap-in contractor caches if supported.
    */
-  void AcceptTrial(const SplitIndexTPS<TenElemT, QNT>& sitps) {
-    if (!pending_trial_.has_value()) throw std::logic_error("AcceptTrial: no pending trial.");
+  void AcceptTrial(Trial&& trial, const SplitIndexTPS<TenElemT, QNT>& sitps) {
 
     // 1) Commit contractor caches first (so it doesn't see a dirty flag from UpdateSingleSite_()).
     if constexpr (detail::HasCommitTrial<Contractor>) {
       // Only meaningful if token holds a real trial.
       if constexpr (!std::is_same_v<TrialToken, std::monostate>) {
-        contractor.CommitTrial(std::move(pending_trial_->token));
+        contractor.CommitTrial(std::move(trial.token));
       }
     }
 
     // 2) Apply to config + TN (source of truth for tensors).
-    for (const auto& sc : pending_trial_->new_configs) {
+    for (const auto& sc : trial.new_configs) {
       const SiteIdx& site = sc.first;
       const size_t cfg = sc.second;
       config(site) = cfg;
@@ -296,14 +298,13 @@ struct TPSWaveFunctionComponent {
     }
 
     // 3) Update amplitude and clear trial.
-    amplitude = pending_trial_->amplitude;
-    pending_trial_.reset();
+    amplitude = trial.amplitude;
   }
 
   /**
    * @brief Discard the pending trial (no state changes).
    */
-  void RejectTrial() { pending_trial_.reset(); }
+  void RejectTrial(Trial&& /*trial*/) {}
 
   bool IsAmplitudeSquareLegal() const {
     const double min_positive = std::numeric_limits<double>::min();
@@ -357,13 +358,6 @@ struct TPSWaveFunctionComponent {
   TruncateParams trun_para;  ///< Uses contractor-specific truncation params type
   Dress dress;
  private:
-  struct PendingTrial {
-    TenElemT amplitude{};
-    std::vector<std::pair<SiteIdx, Tensor>> replacements;
-    std::vector<std::pair<SiteIdx, size_t>> new_configs;
-    TrialToken token{};
-  };
-
   void UpdateSingleSite_(const SiteIdx &site,
                          const size_t new_config,
                          const SplitIndexTPS<TenElemT, QNT> &sitps) {
@@ -382,8 +376,6 @@ struct TPSWaveFunctionComponent {
     }
 #endif
   }
-
-  std::optional<PendingTrial> pending_trial_;
 };
 
 /**

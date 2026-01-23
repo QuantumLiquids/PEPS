@@ -50,14 +50,15 @@ namespace qlpeps {
  * @tparam MonteCarloSweepUpdater MC sweep updater strategy
  * @tparam EnergySolver Model energy solver
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT = BMPSContractor>
 class VMCPEPSOptimizer : public qlten::Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using OptimizerT = Optimizer<TenElemT, QNT>;
-  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
+  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, ContractorT>;
 
   /**
    * @brief Constructor with explicit TPS provided by user.
@@ -171,7 +172,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
   void DumpVecDataDouble_(const std::string &path, const std::vector<double> &data);
 
  private:
-  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> monte_carlo_engine_;
+  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater, ContractorT> monte_carlo_engine_;
   VMCPEPSOptimizerParams params_;  // New parameter structure
   EnergySolver energy_solver_;
 
@@ -225,9 +226,13 @@ class VMCPEPSOptimizer : public qlten::Executor {
   std::tuple<TenElemT, SITPST, double> DefaultEnergyEvaluator_(const SITPST &state);
 
   // Persistent Monte-Carlo energy+gradient evaluator for buffer reuse
-  std::unique_ptr<MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver>>
+  std::unique_ptr<MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>>
       energy_grad_evaluator_;
 };
+
+// Explicit PBC/TRG alias for clarity at call sites.
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
+using VMCPEPSOptimizerPBC = VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, TRGContractor>;
 
 } // namespace qlpeps
 

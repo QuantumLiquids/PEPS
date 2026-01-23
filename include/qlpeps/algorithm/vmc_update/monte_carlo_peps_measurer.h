@@ -153,7 +153,8 @@ void DumpSampleData(const std::vector<std::vector<TenElemT>> sample_data, const 
   file.close();
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT = BMPSContractor>
 class MCPEPSMeasurer : public qlten::Executor {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
@@ -283,7 +284,7 @@ class MCPEPSMeasurer : public qlten::Executor {
   std::unordered_map<std::string, std::pair<std::vector<TenElemT>, std::vector<double>>> registry_stats_;
 
   MeasurementSolver measurement_solver_;
-  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater> engine_;
+  MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater, ContractorT> engine_;
   std::vector<ObservableMeta> observables_meta_;
 
   /**
@@ -358,6 +359,10 @@ class MCPEPSMeasurer : public qlten::Executor {
     }
   }
 };//MCPEPSMeasurer
+
+// Explicit PBC/TRG alias for clarity at call sites.
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+using MCPEPSMeasurerPBC = MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, TRGContractor>;
 
 
 }//qlpeps

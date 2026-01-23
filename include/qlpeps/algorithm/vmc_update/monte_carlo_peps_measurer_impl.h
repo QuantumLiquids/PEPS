@@ -34,11 +34,13 @@ inline std::string ToCsvString(const std::complex<double> &value) {
   return oss.str();
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 MCPEPSMeasurer<TenElemT,
                QNT,
                MonteCarloSweepUpdater,
-               MeasurementSolver>::MCPEPSMeasurer(
+               MeasurementSolver,
+               ContractorT>::MCPEPSMeasurer(
   const SITPST &sitpst,
   const MCMeasurementParams &measurement_params,
   const MPI_Comm &comm,
@@ -59,9 +61,10 @@ MCPEPSMeasurer<TenElemT,
   this->SetStatus(ExecutorStatus::INITED);
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-std::unique_ptr<MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver> >
-MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::CreateByLoadingTPS(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+std::unique_ptr<MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT> >
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::CreateByLoadingTPS(
   const std::string &tps_path,
   const MCMeasurementParams &measurement_params,
   const MPI_Comm &comm,
@@ -75,7 +78,7 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Create
   }
 
   // Create executor using the primary constructor with loaded TPS
-  return std::make_unique<MCPEPSMeasurer>(
+  return std::make_unique<MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>>(
     loaded_tps,
     measurement_params,
     comm,
@@ -83,8 +86,9 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Create
     std::move(mc_updater));
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::ReplicaTest(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::ReplicaTest(
   std::function<double(const Configuration &,
                        const Configuration &)> overlap_func // calculate overlap like, 1/N * sum (sz1 * sz2)
 ) {
@@ -146,8 +150,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::R
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Execute(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::Execute(void) {
   this->SetStatus(ExecutorStatus::EXEING);
   engine_.WarmUp();
   Measure_();
@@ -155,17 +160,20 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::E
   this->SetStatus(ExecutorStatus::FINISH);
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 void MCPEPSMeasurer<TenElemT,
                     QNT,
                     MonteCarloSweepUpdater,
-                    MeasurementSolver>::ReserveSamplesData_(
+                    MeasurementSolver,
+                    ContractorT>::ReserveSamplesData_(
   void) {
   sample_data_.Reserve(mc_measure_params.mc_params.num_samples);
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::MeasureSample_() {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::MeasureSample_() {
 #ifdef QLPEPS_TIMING_MODE
   Timer evaluate_sample_obsrvb_timer("evaluate_sample_observable (rank " + std::to_string(engine_.Rank()) + ")");
 #endif
@@ -205,8 +213,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
 #endif
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::GatherStatistic_() {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::GatherStatistic_() {
   // No legacy per-rank stats; we aggregate registry directly
   std::cout << "Rank " << engine_.Rank() << ": statistic data finished." << std::endl;
 
@@ -223,12 +232,14 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::G
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 void
 MCPEPSMeasurer<TenElemT,
                QNT,
                MonteCarloSweepUpdater,
-               MeasurementSolver>::DumpData(const std::string &measurement_data_path) {
+               MeasurementSolver,
+               ContractorT>::DumpData(const std::string &measurement_data_path) {
   // Dump configuration if path is specified in MonteCarloParams
   if (!mc_measure_params.mc_params.config_dump_path.empty()) {
     // Create directory for configuration dump with informative output
@@ -317,38 +328,45 @@ MCPEPSMeasurer<TenElemT,
   // raw samples dump removed in registry-only mode
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 void MCPEPSMeasurer<TenElemT,
                     QNT,
                     MonteCarloSweepUpdater,
-                    MeasurementSolver>::PrintExecutorInfo_(void) {
+                    MeasurementSolver,
+                    ContractorT>::PrintExecutorInfo_(void) {
   engine_.PrintCommonInfo("MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS");
   engine_.PrintTechInfo();
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 void MCPEPSMeasurer<TenElemT,
                     QNT,
                     MonteCarloSweepUpdater,
-                    MeasurementSolver>::SynchronizeConfiguration_(
+                    MeasurementSolver,
+                    ContractorT>::SynchronizeConfiguration_(
   const size_t root) {
   Configuration config(engine_.WavefuncComp().config);
   MPI_BCast(config, root, MPI_Comm(engine_.Comm()));
   if (engine_.Rank() != root) {
-    engine_.WavefuncComp() = typename MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater>::WaveFunctionComponentT(
+    engine_.WavefuncComp() =
+        typename MonteCarloEngine<TenElemT, QNT, MonteCarloSweepUpdater, ContractorT>::WaveFunctionComponentT(
       engine_.State(),
       config,
       engine_.WavefuncComp().trun_para);
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpData(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::DumpData(void) {
   DumpData(mc_measure_params.measurement_data_dump_path); // Use measurement data dump path
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Measure_(void) {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::Measure_(void) {
   std::vector<double> accept_rates_accum;
   const size_t print_bar_length = (mc_measure_params.mc_params.num_samples / 10) > 0
                                     ? (mc_measure_params.mc_params.num_samples / 10)
@@ -395,8 +413,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::M
    *  - DescribeObservables.shape = {rows, cols}, so CSV rows/cols align with lattice.
    * Any caller producing column-major buffers must transpose before invoking this helper.
    */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsMatrix_(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::DumpStatsMatrix_(
   const std::string &dir,
   const std::string &key,
   const std::vector<TenElemT> &vals,
@@ -442,8 +461,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsFlat_(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::DumpStatsFlat_(
   const std::string &dir,
   const std::string &key,
   const std::vector<TenElemT> &vals,
@@ -457,8 +477,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpStatsFlatReal_(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::DumpStatsFlatReal_(
   const std::string &dir,
   const std::string &key,
   const std::vector<double> &vals,
@@ -472,8 +493,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   }
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::DumpPackedUpperTriIndexMap_(
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::DumpPackedUpperTriIndexMap_(
   const std::string &dir,
   const std::string &key,
   size_t packed_len) const {
@@ -485,9 +507,10 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::D
   ofs << "# length=" << packed_len << "\n";
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 std::pair<TenElemT, double>
-MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::ComputePsiConsistencyRelErr_(
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::ComputePsiConsistencyRelErr_(
   const std::vector<TenElemT> &psi_list) const {
   TenElemT mean(0);
   if (psi_list.empty()) { return {mean, 0.0}; }
@@ -503,9 +526,10 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Comput
   return {mean, rel};
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-std::optional<typename MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::EnergyEstimate>
-MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::QueryEnergyEstimate_() const {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+std::optional<typename MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::EnergyEstimate>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::QueryEnergyEstimate_() const {
   auto it = registry_stats_.find("energy");
   if (it == registry_stats_.end()) {
     return std::nullopt;
@@ -520,9 +544,10 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::QueryE
   return EnergyEstimate{energy, stderr};
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
 std::pair<TenElemT, double>
-MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::OutputEnergy() const {
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::OutputEnergy() const {
   auto energy_opt = QueryEnergyEstimate_();
   if (!energy_opt.has_value()) {
     if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
@@ -545,9 +570,10 @@ MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::Output
   return {energy_est.energy, energy_est.stderr};
 }
 
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-std::optional<typename MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::EnergyEstimate>
-MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver>::GetEnergyEstimate() const {
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+std::optional<typename MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::EnergyEstimate>
+MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::GetEnergyEstimate() const {
   if (this->GetStatus() != ExecutorStatus::FINISH) {
     if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
       std::cout << "The program didn't complete the measurements. " << std::endl;

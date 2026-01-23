@@ -14,6 +14,7 @@
 #include <stdexcept>                                // std::runtime_error
 #include "qlpeps/vmc_basic/configuration.h"       // Configuration
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"  // TRGTruncateParams
 #include "qlpeps/algorithm/vmc_update/psi_consistency.h"
 
 namespace qlpeps {
@@ -89,6 +90,7 @@ struct MonteCarloParams {
  */
 struct PEPSParams {
   BMPSTruncateParams<qlten::QLTEN_Double> truncate_para;
+  TRGTruncateParams<qlten::QLTEN_Double> trg_truncate_para;
 
   PEPSParams() = default;
 
@@ -129,6 +131,9 @@ struct MCMeasurementParams {
   // Explicit accessors - no implicit conversions
   BMPSTruncateParams<qlten::QLTEN_Double> GetTruncatePara() const {
     return peps_params.truncate_para;
+  }
+  TRGTruncateParams<qlten::QLTEN_Double> GetTRGTruncatePara() const {
+    return peps_params.trg_truncate_para;
   }
   const MonteCarloParams& GetMCParams() const {
     return mc_params;

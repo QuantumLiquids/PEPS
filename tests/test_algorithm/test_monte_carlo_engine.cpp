@@ -40,6 +40,23 @@
 using namespace qlten;
 using namespace qlpeps;
 
+TEST(MonteCarloEngineGuards, PBCRequiresTRGContractor) {
+  using QNT = special_qn::TrivialRepQN;
+  using TenElemT = QLTEN_Double;
+  using SITPST = SplitIndexTPS<TenElemT, QNT>;
+
+  SITPST sitps(2, 2, BoundaryCondition::Periodic);
+  Configuration init_cfg(2, 2);
+  MonteCarloParams mc_params(/*samples=*/1, /*warmup_sweeps=*/0, /*sweeps_between=*/1, init_cfg, /*is_warmed_up=*/true);
+  PEPSParams peps_params;
+  peps_params.trg_truncate_para =
+      TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/2, /*trunc_error=*/0.0);
+
+  EXPECT_THROW((MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange>(
+                    sitps, mc_params, peps_params, MPI_COMM_WORLD)),
+               std::invalid_argument);
+}
+
 /**
  * @brief Test fixture for configuration rescue tests using WaveFunctionSum
  * 

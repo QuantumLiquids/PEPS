@@ -15,20 +15,24 @@
 #include <numeric>
 #include <sstream>
 #include <cmath>
+#include <stdexcept>
+#include <type_traits>
 #include "qlpeps/two_dim_tn/tps/tps.h"                            // TPS
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"                // SplitIndexTPS
+#include "qlpeps/two_dim_tn/common/boundary_condition.h"          // BoundaryCondition
 #include "qlpeps/vmc_basic/wave_function_component.h"             // TPSWaveFunctionComponent
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"  // MonteCarloParams, PEPSParams
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h" // TRGContractor
 #include "qlten/utility/timer.h"
 #include "qlpeps/utility/helpers.h"
 
 namespace qlpeps {
 
-template<typename T, typename TenElemT, typename QNT>
+template<typename T, typename TenElemT, typename QNT, template<typename, typename> class ContractorT>
 concept MonteCarloSweepUpdaterConcept = requires(
     T updater,
     const SplitIndexTPS<TenElemT, QNT> &sitps,
-    TPSWaveFunctionComponent<TenElemT, QNT> &component,
+    TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, ContractorT> &component,
     std::vector<double> &accept_ratios
 ) {
   { updater(sitps, component, accept_ratios) } -> std::same_as<void>;
@@ -58,15 +62,18 @@ concept MonteCarloSweepUpdaterConcept = requires(
  * @tparam MonteCarloSweepUpdater Functor that performs one MC sweep update with signature:
  *   void operator()(const SplitIndexTPS<TenElemT,QNT>&, TPSWaveFunctionComponent<TenElemT,QNT>&, std::vector<double>&)
  */
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater>
-requires MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT>
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater,
+         template<typename, typename> class ContractorT = BMPSContractor>
+requires MonteCarloSweepUpdaterConcept<MonteCarloSweepUpdater, TenElemT, QNT, ContractorT>
 class MonteCarloEngine {
  public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using TPST = TPS<TenElemT, QNT>;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;
   using IndexT = Index<QNT>;
-  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT>;
+  using WaveFunctionComponentT = TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, ContractorT>;
+  using TruncateParamsT = typename WaveFunctionComponentT::TruncateParams;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
 
   MonteCarloEngine(const SITPST &sitps,
                    const MonteCarloParams &monte_carlo_params,
@@ -77,7 +84,7 @@ class MonteCarloEngine {
       : split_index_tps_(sitps),
         lx_(sitps.cols()),
         ly_(sitps.rows()),
-        tps_sample_(sitps.rows(), sitps.cols(), peps_params.truncate_para),
+        tps_sample_(sitps.rows(), sitps.cols(), SelectTruncateParams_(peps_params)),
         comm_(comm),
         mc_sweep_updater_(std::move(mc_updater)),
         u_double_(0, 1),
@@ -254,11 +261,21 @@ class MonteCarloEngine {
       std::cout << "\n";
       std::cout << "=====> " << header << " <=====" << "\n";
       std::cout << std::setw(indent) << "System size (lx, ly):" << "(" << lx_ << ", " << ly_ << ")\n";
+      const std::string bc_str =
+          (split_index_tps_.GetBoundaryCondition() == BoundaryCondition::Periodic) ? "Periodic" : "Open";
+      std::cout << std::setw(indent) << "Boundary condition:" << bc_str << "\n";
       std::cout << std::setw(indent) << "PEPS bond dimension:" << split_index_tps_.GetMaxBondDimension() << "\n";
-      std::cout << std::setw(indent) << "BMPS bond dimension:" << tps_sample_.trun_para.D_min
-                << "/" << tps_sample_.trun_para.D_max << "\n";
-      std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
-                << static_cast<int>(tps_sample_.trun_para.compress_scheme) << "\n";
+      if constexpr (std::is_same_v<ContractorT<TenElemT, QNT>, TRGContractor<TenElemT, QNT>>) {
+        std::cout << std::setw(indent) << "TRG bond dimension:"
+                  << tps_sample_.trun_para.D_min << "/" << tps_sample_.trun_para.D_max << "\n";
+        std::cout << std::setw(indent) << "TRG trunc_err:" << tps_sample_.trun_para.trunc_err << "\n";
+        std::cout << std::setw(indent) << "TRG inv_relative_eps:" << tps_sample_.trun_para.inv_relative_eps << "\n";
+      } else {
+        std::cout << std::setw(indent) << "BMPS bond dimension:" << tps_sample_.trun_para.D_min
+                  << "/" << tps_sample_.trun_para.D_max << "\n";
+        std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
+                  << static_cast<int>(tps_sample_.trun_para.compress_scheme) << "\n";
+      }
       std::cout << std::setw(indent) << "Sampling numbers:" << monte_carlo_params_.num_samples << "\n";
       std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << monte_carlo_params_.sweeps_between_samples
                 << "\n";
@@ -373,6 +390,7 @@ class MonteCarloEngine {
   }
 
   void Initialize_() {
+    ValidateBoundaryCondition_();
     init_valid_ = TryConstructWavefunction_(monte_carlo_params_.initial_config);
     EnsureConfigurationValidity();
     NormalizeStateOrder1();
@@ -391,6 +409,44 @@ class MonteCarloEngine {
       // Catch Empty tensor exceptions from BMPS contraction
       std::cerr << "Rank " << rank_ << ": WaveFunctionComponent construction failed: " << e.what() << std::endl;
       return false;
+    }
+  }
+
+  static bool IsTRGSupportedLinearSize_(size_t n) {
+    if (n == 0) return false;
+    while ((n % 2) == 0) {
+      n /= 2;
+    }
+    return (n == 1) || (n == 3);
+  }
+
+  static TruncateParamsT SelectTruncateParams_(const PEPSParams &peps_params) {
+    if constexpr (std::is_same_v<ContractorT<TenElemT, QNT>, TRGContractor<TenElemT, QNT>>) {
+      return peps_params.trg_truncate_para;
+    } else {
+      return peps_params.truncate_para;
+    }
+  }
+
+  void ValidateBoundaryCondition_() const {
+    const BoundaryCondition bc = split_index_tps_.GetBoundaryCondition();
+    if constexpr (std::is_same_v<ContractorT<TenElemT, QNT>, TRGContractor<TenElemT, QNT>>) {
+      if (bc != BoundaryCondition::Periodic) {
+        throw std::invalid_argument("MonteCarloEngine: TRGContractor requires BoundaryCondition::Periodic.");
+      }
+      if (split_index_tps_.rows() != split_index_tps_.cols()) {
+        throw std::invalid_argument("MonteCarloEngine: TRGContractor requires a square lattice for PBC.");
+      }
+      if (!IsTRGSupportedLinearSize_(split_index_tps_.rows())) {
+        throw std::invalid_argument("MonteCarloEngine: TRGContractor requires L=2^k or L=3*2^k.");
+      }
+      if constexpr (Tensor::IsFermionic()) {
+        throw std::invalid_argument("MonteCarloEngine: TRGContractor does not support fermionic tensors.");
+      }
+    } else {
+      if (bc == BoundaryCondition::Periodic) {
+        throw std::invalid_argument("MonteCarloEngine: PBC requires TRGContractor in the current implementation.");
+      }
     }
   }
 

@@ -13,6 +13,8 @@
 #include "qlpeps/qlpeps.h"
 #include "qlpeps/algorithm/vmc_update/mc_energy_grad_evaluator.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/build_in_model_solvers_all.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/transverse_field_ising_square_pbc.h"
+#include "qlpeps/algorithm/simple_update/square_lattice_nn_simple_update.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 #include <filesystem>
 
@@ -43,6 +45,46 @@ struct SmokeEvaluator2x2 : MPITest {
     qlten::hp_numeric::SetTensorManipulationThreads(1);
   }
 };
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT> BuildTFIMSimpleUpdatePBC(
+    size_t n, double J, double h, size_t dmax, size_t steps, double tau) {
+  using Tensor = qlten::QLTensor<TenElemT, QNT>;
+  using IndexT = qlten::Index<QNT>;
+  using QNSctT = qlten::QNSector<QNT>;
+  using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+
+  IndexT pb_out({QNSctT(QNT(), 2)}, TenIndexDirType::OUT);
+  IndexT pb_in = InverseIndex(pb_out);
+
+  Tensor ham_nn({pb_in, pb_out, pb_in, pb_out});
+  Tensor ham_onsite({pb_in, pb_out});
+
+  const double z_vals[2] = {+1.0, -1.0};
+  for (size_t s1 = 0; s1 < 2; ++s1) {
+    for (size_t s2 = 0; s2 < 2; ++s2) {
+      ham_nn({s1, s1, s2, s2}) = TenElemT(-J * z_vals[s1] * z_vals[s2]);
+    }
+  }
+  ham_onsite({0, 1}) = TenElemT(-h);
+  ham_onsite({1, 0}) = TenElemT(-h);
+
+  PEPST peps0(pb_out, n, n, BoundaryCondition::Periodic);
+  std::vector<std::vector<size_t>> activates(n, std::vector<size_t>(n, 0));
+  for (size_t y = 0; y < n; ++y) {
+    for (size_t x = 0; x < n; ++x) {
+      activates[y][x] = (x + y) % 2;
+    }
+  }
+  peps0.Initial(activates);
+
+  SimpleUpdatePara update_para(steps, tau, /*Dmin=*/1, /*Dmax=*/dmax, /*Trunc_err=*/1e-6);
+  SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT> su_exe(update_para, peps0, ham_nn, ham_onsite);
+  su_exe.Execute();
+
+  auto tps = qlpeps::ToTPS<TenElemT, QNT>(su_exe.GetPEPS());
+  return SplitIndexTPS<TenElemT, QNT>::FromTPS(tps);
+}
 
 // Use Heisenberg XXZ model as a quick running Hamiltonian; any model works for smoke
 TEST_F(SmokeEvaluator2x2, EvaluateEnergyAndGradient) {
@@ -81,6 +123,40 @@ TEST_F(SmokeEvaluator2x2, EvaluateEnergyAndGradient) {
     EXPECT_TRUE(std::isfinite(std::real(result.energy)));
     EXPECT_TRUE(std::isfinite(result.energy_error) || result.energy_error == 0.0);
     EXPECT_GE(result.gradient.NormSquare(), 0.0);
+    EXPECT_FALSE(result.accept_rates_avg.empty());
+  }
+}
+
+TEST_F(SmokeEvaluator2x2, EvaluateTFIMPBC_TRG_8x8_Smoke) {
+  using TenElemT = TEN_ELEM_TYPE;
+  using QNT = qlten::special_qn::TrivialRepQN;
+
+  constexpr size_t n = 8;
+  SplitIndexTPS<TenElemT, QNT> sitps;
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+    sitps = BuildTFIMSimpleUpdatePBC<TenElemT, QNT>(
+        n, /*J=*/1.0, /*h=*/1.0, /*dmax=*/2, /*steps=*/4, /*tau=*/0.5);
+  }
+  qlpeps::MPI_Bcast(sitps, comm, qlten::hp_numeric::kMPIMasterRank);
+
+  Configuration config(n, n);
+  config.Random(std::vector<size_t>(2, n * n / 2));
+  MonteCarloParams mc_params(/*samples=*/5, /*warmup_sweeps=*/2, /*sweeps_between=*/1, config, false);
+
+  PEPSParams peps_params;
+  peps_params.trg_truncate_para = TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
+
+  MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdatePBC, TRGContractor> engine(
+      sitps, mc_params, peps_params, comm);
+
+  TransverseFieldIsingSquarePBC model(/*h=*/1.0);
+  MCEnergyGradEvaluator<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdatePBC, TransverseFieldIsingSquarePBC, TRGContractor>
+      evaluator(engine, model, comm, false);
+
+  auto result = evaluator.Evaluate(sitps);
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+    EXPECT_TRUE(std::isfinite(std::real(result.energy)));
+    EXPECT_TRUE(std::isfinite(result.energy_error) || result.energy_error == 0.0);
     EXPECT_FALSE(result.accept_rates_avg.empty());
   }
 }
