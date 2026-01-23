@@ -62,7 +62,7 @@ struct SquareTFIMPBCSystem : public MPITest {
   // Use smaller learning rate (0.1) since Simple Update already gives good initial state
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(
-          40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.1),
+          40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.03),
       MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx, 2),  // Physical dimension 2, random init
                        false),
@@ -106,7 +106,7 @@ TEST_F(SquareTFIMPBCSystem, SimpleUpdate) {
   su_exe->Execute();
 
   // Phase 2: Reduce step length
-  su_exe->update_para.Dmax = 6;
+  su_exe->update_para.Dmax = 3;
   su_exe->update_para.Trunc_err = 1e-15;
   su_exe->ResetStepLenth(0.01);
   su_exe->Execute();

@@ -412,6 +412,37 @@ class TRGContractor {
   Tensor PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn, const SiteIdx& site) const;
 
   /**
+   * @brief Compute hole tensors for all scale-0 sites in one batch.
+   *
+   * This is significantly more efficient than calling PunchHole() for each site
+   * individually, because it computes holes layer-by-layer and avoids redundant
+   * calculations at higher scales.
+   *
+   * For an L×L system with k = log₂(L) TRG layers:
+   * - Single-site approach: O(L² × k) redundant top-layer computations
+   * - Batch approach: Each node's hole computed exactly once
+   *
+   * Leg convention of each hole tensor matches single-site PunchHole:
+   * \code
+   *        3 (up)
+   *        |
+   * 0(left)-H-2(right)
+   *        |
+   *        1 (down)
+   * \endcode
+   *
+   * @param tn Tensor network container (must be periodic).
+   * @return TensorNetwork2D containing hole tensors at each site.
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called.
+   * @throws std::invalid_argument if `tn` is not periodic.
+   * @throws std::logic_error if called for unsupported sizes.
+   *
+   * @note Requires cache to be initialized via `Trace(tn)`.
+   */
+  TensorNetwork2D<TenElemT, QNT> PunchAllHoles(const TensorNetwork2D<TenElemT, QNT>& tn) const;
+
+  /**
    * @brief Clear all cached scales and dirty state.
    *
    * This drops all cached tensors, and resets the "cache initialized" flag.
@@ -502,6 +533,19 @@ class TRGContractor {
                                   uint32_t parent,
                                   const Tensor* H_P,
                                   const Tensor* H_Q) const;
+
+  // Backprop hole from coarse (odd) scale to fine (even) scale through plaquette contraction.
+  // Used by both single-site PunchHole and batch PunchAllHoles.
+  Tensor BackpropPlaquetteParent_(size_t scale, uint32_t child_id, uint32_t parent_id,
+                                  const Tensor& H_parent) const;
+
+  // Backprop hole from coarse (even) scale to fine (odd) scale through diamond contraction.
+  // Used by both single-site PunchHole and batch PunchAllHoles.
+  Tensor BackpropDiamondParent_(size_t scale, uint32_t child_id, uint32_t parent_id,
+                                const Tensor& H_parent) const;
+
+  // Internal batch implementation for PunchAllHoles.
+  TensorNetwork2D<TenElemT, QNT> PunchAllHolesImpl_() const;
 
   enum class SubLattice : uint8_t { A = 0, B = 1 };
   enum class SplitDir : uint8_t { Horizontal = 0, Vertical = 1 };

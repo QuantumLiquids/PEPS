@@ -34,9 +34,9 @@ namespace qlpeps {
  *   "same-as-larger-system" coding convention).
  *
  * Implementation status:
- * - Energy + gradient holes are supported for 2x2 PBC using `TRGContractor::PunchHole` terminator.
- * - For larger sizes, `PunchHole` is not implemented yet in TRGContractor; thus gradient holes
- *   are not available.
+ * - Energy + gradient holes are supported for all supported PBC sizes using
+ *   `TRGContractor::PunchAllHoles` batch API.
+ * - Supported sizes: 2x2, 3x3, and N=2^k or 3*2^k periodic torus.
  */
 class TransverseFieldIsingSquarePBC : public ModelEnergySolver<TransverseFieldIsingSquarePBC>,
                                       public ModelMeasurementSolver<TransverseFieldIsingSquarePBC> {
@@ -91,13 +91,15 @@ class TransverseFieldIsingSquarePBC : public ModelEnergySolver<TransverseFieldIs
       }
     }
 
+    // Batch compute all holes at once (much more efficient than per-site PunchHole)
+    const auto all_holes = contractor.PunchAllHoles(tn);
+
     TenElemT energy_ex(0);
     for (size_t row = 0; row < ly; ++row) {
       for (size_t col = 0; col < lx; ++col) {
         const SiteIdx site{row, col};
 
-        // Hole (environment) for this site; TRG PunchHole currently only supports 2x2.
-        const auto hole = contractor.PunchHole(tn, site);
+        const auto& hole = all_holes(site);
         if constexpr (calchols) {
           hole_res(site) = Dag(hole);  // matches exact-sum evaluator convention: hole_dag encodes ∂_{θ*}Ψ*
         }
