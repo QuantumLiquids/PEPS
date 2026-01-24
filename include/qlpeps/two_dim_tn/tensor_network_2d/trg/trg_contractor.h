@@ -364,6 +364,32 @@ class TRGContractor {
   Trial BeginTrialWithReplacement(const std::vector<std::pair<SiteIdx, Tensor>>& replacements) const;
 
   /**
+   * @brief Evaluate the amplitude under @p replacements without modifying caches or saving state.
+   *
+   * This is a pure read-only interface for energy calculation and measurement.
+   * Unlike BeginTrialWithReplacement, this method:
+   * - Does NOT allocate a Trial object with layer_updates
+   * - Does NOT save any state for subsequent CommitTrial
+   * - Uses temporary storage that is discarded after computation
+   *
+   * Use this for:
+   * - Energy calculation (e.g., NN bond energy terms)
+   * - Observable measurements (e.g., correlation functions)
+   *
+   * Use BeginTrialWithReplacement for:
+   * - VMC updates where you need accept/reject + commit
+   *
+   * @param replacements Scale-0 site tensor replacements, identified by `SiteIdx`.
+   * @return The scalar amplitude after applying the replacements.
+   *
+   * @note Requires initialized cache (Trace must have been called at least once).
+   *
+   * @throws std::logic_error if `Init(tn)` has not been called, truncation params are not set,
+   * or cache has not been initialized by `Trace(tn)`.
+   */
+  TenElemT EvaluateReplacement(const std::vector<std::pair<SiteIdx, Tensor>>& replacements) const;
+
+  /**
    * @brief Commit a previously created trial into the internal cache.
    *
    * Preconditions:

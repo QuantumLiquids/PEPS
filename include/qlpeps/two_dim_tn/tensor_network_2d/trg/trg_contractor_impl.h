@@ -780,6 +780,101 @@ void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
 }
 
 template <typename TenElemT, typename QNT>
+TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
+    const std::vector<std::pair<SiteIdx, Tensor>>& replacements) const {
+  if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::EvaluateReplacement: call Init(tn) first.");
+  if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::EvaluateReplacement: truncation params are not set.");
+  if (!tensors_initialized_) throw std::logic_error("TRGContractor::EvaluateReplacement: Trace(tn) must be called at least once to initialize cache.");
+
+  if (replacements.empty()) {
+    return GetCachedAmplitude_();
+  }
+
+  // Temporary layer updates (not saved, discarded after computation)
+  std::vector<std::map<uint32_t, Tensor>> layer_updates(scales_.size());
+
+  // Scale-0 updates
+  for (const auto& kv : replacements) {
+    const uint32_t id = NodeId_(kv.first.row(), kv.first.col());
+    layer_updates[0][id] = kv.second;
+  }
+
+  // Shadow RG propagation (same as BeginTrialWithReplacement)
+  for (size_t s = 0; s < scales_.size() - 1; ++s) {
+    if (layer_updates[s].empty()) break;
+
+    const auto& fine_layer = scales_[s];
+    const auto& coarse_layer = scales_[s + 1];
+    const bool even_to_odd = (s % 2 == 0);
+
+    // Identify affected coarse nodes
+    std::set<uint32_t> dirty_coarse_nodes;
+    for (const auto& kv : layer_updates[s]) {
+      const uint32_t f_id = kv.first;
+      const auto& parents = fine_layer.fine_to_coarse[f_id];
+      if (parents[0] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[0]);
+      if (parents[1] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[1]);
+    }
+
+    // Recompute affected coarse nodes
+    for (uint32_t c_id : dirty_coarse_nodes) {
+      const auto& children = coarse_layer.coarse_to_fine[c_id];
+
+      auto get_fine_tensor = [&](uint32_t id) -> const Tensor& {
+        auto it = layer_updates[s].find(id);
+        if (it != layer_updates[s].end()) return it->second;
+        return fine_layer.tens[id];
+      };
+
+      const Tensor& T0 = get_fine_tensor(children[0]);
+      const Tensor& T1 = get_fine_tensor(children[1]);
+      const Tensor& T2 = get_fine_tensor(children[2]);
+      const Tensor& T3 = get_fine_tensor(children[3]);
+
+      if (even_to_odd) {
+        auto tl = SplitType0_(T0);
+        auto tr = SplitType1_(T1);
+        auto bl = SplitType1_(T2);
+        auto br = SplitType0_(T3);
+        layer_updates[s + 1][c_id] = ContractPlaquetteCore_(tl.Q, tr.Q, bl.P, br.P);
+      } else {
+        auto nB = SplitType1_(T0);
+        auto eA = SplitType0_(T1);
+        auto sB = SplitType1_(T2);
+        auto wA = SplitType0_(T3);
+        layer_updates[s + 1][c_id] = ContractDiamondCore_(nB.P, eA.P, sB.Q, wA.Q);
+      }
+    }
+  }
+
+  // Final amplitude computation
+  const size_t last = layer_updates.size() - 1;
+  if (scales_.back().tens.size() == 1) {
+    auto it = layer_updates[last].find(0);
+    return ContractFinal1x1_(it != layer_updates[last].end() ? it->second : scales_.back().tens[0]);
+  } else if (scales_.back().tens.size() == 4) {
+    std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
+                                  scales_.back().tens[2], scales_.back().tens[3]};
+    for (uint32_t id = 0; id < 4; ++id) {
+      auto it = layer_updates[last].find(id);
+      if (it != layer_updates[last].end()) t2x2[id] = it->second;
+    }
+    return ContractFinal2x2_(t2x2);
+  } else if (scales_.back().tens.size() == 9) {
+    std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
+                                  scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
+                                  scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+    for (uint32_t id = 0; id < 9; ++id) {
+      auto it = layer_updates[last].find(id);
+      if (it != layer_updates[last].end()) t3x3[id] = it->second;
+    }
+    return ContractFinal3x3_(t3x3);
+  } else {
+    throw std::logic_error("TRGContractor::EvaluateReplacement: invalid final scale size.");
+  }
+}
+
+template <typename TenElemT, typename QNT>
 TenElemT TRGContractor<TenElemT, QNT>::ContractFinal1x1_(const Tensor& T) const {
     using qlten::Contract;
     using qlten::Eye;

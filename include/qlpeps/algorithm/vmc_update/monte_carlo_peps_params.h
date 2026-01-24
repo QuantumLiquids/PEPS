@@ -87,6 +87,10 @@ struct MonteCarloParams {
  * @brief Parameters for PEPS calculations.
  * 
  * Simplified structure - user handles TPS I/O separately.
+ * 
+ * Use the appropriate constructor based on boundary condition:
+ * - OBC: PEPSParams(BMPSTruncateParams) for BMPS contraction
+ * - PBC: PEPSParams(TRGTruncateParams) for TRG contraction
  */
 struct PEPSParams {
   BMPSTruncateParams<qlten::QLTEN_Double> truncate_para;
@@ -94,8 +98,14 @@ struct PEPSParams {
 
   PEPSParams() = default;
 
+  /// OBC: BMPS contraction parameters
   explicit PEPSParams(const BMPSTruncateParams<qlten::QLTEN_Double> &trunc_para)
     : truncate_para(trunc_para) {
+  }
+
+  /// PBC: TRG contraction parameters
+  explicit PEPSParams(const TRGTruncateParams<qlten::QLTEN_Double> &trg_para)
+    : trg_truncate_para(trg_para) {
   }
 };
 

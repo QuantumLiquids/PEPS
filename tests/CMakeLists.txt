@@ -547,6 +547,16 @@ if(BUILD_SLOW_TESTS)
     )
     add_mpi_unittest_run(test_square_tfim_pbc_trg_double "${SLOW_TESTS_MPI_PROCS}" " ")
     add_mpi_unittest_run(test_square_tfim_pbc_trg_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+
+    add_two_type_unittest(test_square_heisenberg_pbc
+            "integration_tests/test_square_heisenberg_pbc.cpp"
+            "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+            " "
+    )
+    add_mpi_unittest_run(test_square_heisenberg_pbc_double "${SLOW_TESTS_MPI_PROCS}" " ")
+    add_mpi_unittest_run(test_square_heisenberg_pbc_complex "${SLOW_TESTS_MPI_PROCS}" " ")
+    set_tests_properties(test_square_heisenberg_pbc_double_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
+    set_tests_properties(test_square_heisenberg_pbc_complex_mpi PROPERTIES LABELS "integration;mpi;mpi-integration;slow")
     if (NOT ENABLE_INTEGRATION_SINGLE_RANK)
         set_tests_properties(test_square_tj_model_double PROPERTIES DISABLED TRUE)
         set_tests_properties(test_square_tj_model_complex PROPERTIES DISABLED TRUE)
