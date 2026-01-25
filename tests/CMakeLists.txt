@@ -192,6 +192,12 @@ add_unittest(test_trg_contractor
         "test_2d_tn/test_trg_contractor.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+
+# TRG PBC performance benchmark (for profiling VMC bottlenecks)
+add_unittest(test_trg_pbc_benchmark
+        "test_2d_tn/test_trg_pbc_benchmark.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""

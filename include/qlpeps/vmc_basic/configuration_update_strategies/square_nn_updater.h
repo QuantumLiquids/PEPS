@@ -14,6 +14,10 @@
 #include "qlpeps/vmc_basic/monte_carlo_tools/suwa_todo_update.h"     // NonDBMCMCStateUpdate
 #include "monte_carlo_sweep_updater_base.h"                         // MonteCarloSweepUpdaterBase
 #include "qlpeps/vmc_basic/tj_single_site_state.h"
+#include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"  // TRGContractor
+#include <chrono>
+#include <fstream>
+#include <type_traits>
 
 namespace qlpeps {
 

@@ -84,8 +84,10 @@ class HeisenbergSquarePBC : public ModelEnergySolver<HeisenbergSquarePBC>,
     }
 
     // Keep TRG truncation params in sync with component.
+    // Contracting assumes: tn, contractor cache, and any cached amplitude are in sync
+    // after each MC CommitTrial (and truncation params are unchanged).
     contractor.SetTruncateParams(trunc_para);
-    contractor.Init(tn);
+    // Init already performed in TPSWaveFunctionComponent; MC CommitTrial keeps it in sync.
 
     const TenElemT psi = contractor.Trace(tn);
     psi_list.push_back(psi);

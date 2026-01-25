@@ -71,8 +71,10 @@ class TransverseFieldIsingSquarePBC : public ModelEnergySolver<TransverseFieldIs
     }
 
     // Keep TRG truncation params in sync with component.
+    // Contracting assumes: tn, contractor cache, and any cached amplitude are in sync
+    // after each MC CommitTrial (and truncation params are unchanged).
     contractor.SetTruncateParams(trunc_para);
-    contractor.Init(tn);
+    // Init already performed in TPSWaveFunctionComponent.
 
     const TenElemT psi = contractor.Trace(tn);
     psi_list.push_back(psi);
@@ -126,5 +128,3 @@ class TransverseFieldIsingSquarePBC : public ModelEnergySolver<TransverseFieldIs
 } // namespace qlpeps
 
 #endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_TRANSVERSE_FIELD_ISING_SQUARE_PBC_H
-
-
