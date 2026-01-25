@@ -175,7 +175,7 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
 
 // Test VMC PEPS Optimizer Executor Construction with TPS loading
 TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPS) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -198,7 +198,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPS) {
 
 // Test VMC PEPS Optimizer Executor Construction with TPS loading from file (migrated from legacy test)
 TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPSFromFile) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -223,7 +223,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPSFromFile) {
 
 // Test VMC PEPS Optimizer Parameter Validation
 TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -246,7 +246,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
 
 // Test VMC PEPS Optimizer Enhanced Parameter Validation (migrated from legacy test)
 TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -292,7 +292,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
 
 // Test VMC PEPS Optimizer State Management
 TEST_F(VMCPEPSOptimizerUnitTest, StateManagement) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -313,7 +313,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, StateManagement) {
 
 // Test VMC PEPS Optimizer Optimization Schemes
 TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -358,7 +358,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
 
 // Test VMC PEPS Optimizer Legacy Optimization Schemes (migrated from legacy WAVEFUNCTION_UPDATE_SCHEME)
 TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -427,7 +427,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
 
   // Test with different energy solvers
   {
-    using Model = SquareSpinOneHalfXXZModel;
+    using Model = SquareSpinOneHalfXXZModelOBC;
     Model model;
 
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
@@ -436,7 +436,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
   }
 
   {
-    using Model = SquareSpinOneHalfJ1J2XXZModel;
+    using Model = SquareSpinOneHalfJ1J2XXZModelOBC;
     Model model(1.0, 1.0, 0.2, 0.2, 0.0);
 
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
@@ -447,7 +447,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
 
 // Test VMC PEPS Optimizer with Different MC Updaters
 TEST_F(VMCPEPSOptimizerUnitTest, DifferentMCUpdaters) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   Model model;
 
   // Test with different MC updaters
@@ -468,7 +468,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentMCUpdaters) {
 
 // Test VMC PEPS Optimizer Data Dumping
 TEST_F(VMCPEPSOptimizerUnitTest, DataDumping) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -487,7 +487,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DataDumping) {
 
 // Test VMC PEPS Optimizer BMPSTruncateParams
 TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncateParams) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -509,7 +509,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncateParams) {
 
 // Test VMC PEPS Optimizer Interface Compatibility
 TEST_F(VMCPEPSOptimizerUnitTest, InterfaceCompatibility) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -531,7 +531,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, InterfaceCompatibility) {
 
 // Test VMC PEPS Optimizer Callback System
 TEST_F(VMCPEPSOptimizerUnitTest, CallbackSystem) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -552,7 +552,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, CallbackSystem) {
 
 // Test VMC PEPS Optimizer Custom Energy Evaluator
 TEST_F(VMCPEPSOptimizerUnitTest, CustomEnergyEvaluator) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;
@@ -572,7 +572,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, CustomEnergyEvaluator) {
 
 // Test VMC PEPS Optimizer Input Validation (prevents segfault from empty TPS)
 TEST_F(VMCPEPSOptimizerUnitTest, InputValidation) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
 
   Model model;

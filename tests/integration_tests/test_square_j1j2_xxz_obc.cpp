@@ -184,7 +184,7 @@ TEST_F(J1J2XXZSystem, SimpleUpdate) {
 }
 
 TEST_F(J1J2XXZSystem, StochasticGradientOpt) {
-  using Model = SquareSpinOneHalfJ1J2XXZModel;
+  using Model = SquareSpinOneHalfJ1J2XXZModelOBC;
   Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
   
   // VMC optimization with Stochastic Gradient Descent
@@ -196,7 +196,7 @@ TEST_F(J1J2XXZSystem, StochasticGradientOpt) {
 
 #if 0
 TEST_F(J1J2XXZSystem, LBFGSLineSearch) {
-  using Model = SquareSpinOneHalfJ1J2XXZModel;
+  using Model = SquareSpinOneHalfJ1J2XXZModelOBC;
   Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
   
   // VMC optimization with L-BFGS (replaces NaturalGradientLineSearch)

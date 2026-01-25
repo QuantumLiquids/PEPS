@@ -32,7 +32,7 @@ last_updated: 2025-09-02
 ## 用例清单
 
 ### Square Heisenberg 3x4, D=6（SR + 测量）
-- 入口：`tests/integration_tests/test_square_heisenberg.cpp`
+- 入口：`tests/integration_tests/test_square_heisenberg_obc.cpp`
 - 状态生成：SimpleUpdate（主 rank），规范化后保存至 `final_config/` 路径（`GenTPSPath`）。
 - 优化：Stochastic Reconfiguration（SR）通过 `api/vmc_api.h` 包装调用。
 - 测量：`MonteCarloMeasure` 包装调用。
@@ -81,5 +81,4 @@ ctest -V -R test_square_heisenberg_.*_mpi --test-dir build
 - 以“运行记录”形式长期保存关键指标，路径：`docs/dev/testing/runs/`。
 - 命名规范：`YYYY-MM-DD-<ctest-name>.md`，如：`2025-09-02-test_square_heisenberg_double_mpi.md`。
 - 必填字段：日期、测试名、MPI ranks、线程数、采样配置、关键用时（阶段与总时长）、能量及误差、通过性（GTest/CTest）。
-
 

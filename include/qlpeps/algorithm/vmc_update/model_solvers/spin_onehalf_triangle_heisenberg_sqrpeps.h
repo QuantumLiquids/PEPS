@@ -13,7 +13,7 @@
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/structure_factor_measurement_mixin.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h" // MeasureSpinOneHalfOffDiagOrderInRow
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_obc.h" // MeasureSpinOneHalfOffDiagOrderInRow
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 #include "qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor.h" //BMPSContractor
 

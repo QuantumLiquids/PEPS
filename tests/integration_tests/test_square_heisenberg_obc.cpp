@@ -132,8 +132,8 @@ TEST_F(HeisenbergSystem, SGDWithZeroLR) {
   }
   qlpeps::MPI_Bcast(tps, comm);
   auto init_tps = tps;
-  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
-      vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModel());
+  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
+      vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModelOBC());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
   // already executed inside VmcOptimize
@@ -160,8 +160,8 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   qlpeps::MPI_Bcast(tps, comm);
 
   //VMC
-  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
-      vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModel());
+  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
+      vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModelOBC());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
 
@@ -176,8 +176,8 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   // unique_ptr auto cleanup
 
   //Measure
-  auto measure_exe_ptr = MonteCarloMeasure<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModel>(
-      tps, measure_para, comm, SquareSpinOneHalfXXZModel());
+  auto measure_exe_ptr = MonteCarloMeasure<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
+      tps, measure_para, comm, SquareSpinOneHalfXXZModelOBC());
   start_flop = flop;
 
   // already executed inside MonteCarloMeasure

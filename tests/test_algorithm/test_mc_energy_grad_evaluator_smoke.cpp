@@ -88,7 +88,7 @@ SplitIndexTPS<TenElemT, QNT> BuildTFIMSimpleUpdatePBC(
 
 // Use Heisenberg XXZ model as a quick running Hamiltonian; any model works for smoke
 TEST_F(SmokeEvaluator2x2, EvaluateEnergyAndGradient) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
 
   // Prepare TPS from test data (already small and compatible)
   std::string type_tag = std::is_same_v<TEN_ELEM_TYPE, QLTEN_Double> ? std::string("double") : std::string("complex");

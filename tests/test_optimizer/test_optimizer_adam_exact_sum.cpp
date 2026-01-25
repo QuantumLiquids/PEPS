@@ -209,7 +209,7 @@ struct TrivialHeisenbergAdamTools : public MPITest {
 };
 
 TEST_F(TrivialHeisenbergAdamTools, ExactSumGradientOptWithAdam) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;

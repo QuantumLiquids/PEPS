@@ -46,8 +46,9 @@ namespace qlpeps {
  *
  * @note The exchange term only contributes when the two sites have different spins.
  */
-class HeisenbergSquarePBC : public ModelEnergySolver<HeisenbergSquarePBC>,
-                            public ModelMeasurementSolver<HeisenbergSquarePBC> {
+class [[deprecated("Use SquareSpinOneHalfJ1J2XXZModelPBC with J2=0 instead.")]] HeisenbergSquarePBC
+    : public ModelEnergySolver<HeisenbergSquarePBC>,
+      public ModelMeasurementSolver<HeisenbergSquarePBC> {
  public:
   HeisenbergSquarePBC(void) = delete;
 
@@ -209,7 +210,7 @@ class HeisenbergSquarePBC : public ModelEnergySolver<HeisenbergSquarePBC>,
   }
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    // NOTE: Compared to OBC NN solvers (e.g., SquareSpinOneHalfXXZModel),
+    // NOTE: Compared to OBC NN solvers (e.g., SquareSpinOneHalfXXZModelOBC),
     // spin-correlation observables like SzSz_all2all/SmSp_row are not implemented for PBC/TRG.
     return {
         {"energy", "Total energy (scalar)", {}, {}},

@@ -434,7 +434,7 @@ struct Test2x2MCPEPSFermion : MPITest {
 
 // Test Heisenberg model
 TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
 
   double J = 1.0;
   double energy_exact = Calculate2x2HeisenbergEnergy(J);

@@ -59,7 +59,7 @@ MyExecutor executor(params, tps, comm, solver);
 ### 内置能量求解器
 
 我们提供了一系列针对标准物理模型的内置求解器：
-- `SquareSpinOneHalfXXZModel`
+- `SquareSpinOneHalfXXZModelOBC`
 - `SpinOneHalfTriangleHeisenbergSquarePEPS`
 - `SpinOneHalfTriangleHeisenbergJ1J2SquarePEPS`
 - `SquaretJModel`
@@ -119,7 +119,7 @@ using QNT = qlten::QNZ2;
 
 // 1. 选择你的三种策略
 using MonteCarloUpdater = MCUpdateSquareNNExchange;
-using EnergySolver = SquareSpinOneHalfXXZModel;
+using EnergySolver = SquareSpinOneHalfXXZModelOBC;
 
 // 2. 配置参数
 OptimizerParams opt_params = /* 参见优化器指南 */;

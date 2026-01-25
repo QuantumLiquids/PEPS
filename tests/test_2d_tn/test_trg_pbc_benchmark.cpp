@@ -23,7 +23,7 @@
 #include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/heisenberg_square_pbc.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_j1j2_xxz_pbc.h"
 
 using namespace qlten;
 using namespace qlpeps;
@@ -364,7 +364,7 @@ TEST(TRGPBCBenchmark, EnergyCalculation_4x4) {
   constexpr size_t D = 4;
   constexpr size_t REPEAT = 2;
 
-  PrintBenchmarkHeader("Energy Calculation (HeisenbergSquarePBC)", n, D);
+  PrintBenchmarkHeader("Energy Calculation (J1-J2 XXZ PBC, J2=0)", n, D);
 
   auto sitps = BuildSyntheticSITPS(n, D);
 
@@ -379,7 +379,7 @@ TEST(TRGPBCBenchmark, EnergyCalculation_4x4) {
   TRGTruncateParams<RealT> trunc_params(/*d_min=*/1, /*d_max=*/D, /*trunc_error=*/1e-10);
   TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, TRGContractor> comp(sitps, config, trunc_params);
 
-  HeisenbergSquarePBC model(1.0);  // J = 1.0
+  SquareSpinOneHalfJ1J2XXZModelPBC model(1.0, 1.0, 0.0, 0.0, 0.0);
 
   std::cout << "Energy Calculation (CalEnergyAndHoles):\n";
 
@@ -450,7 +450,7 @@ TEST(TRGPBCBenchmark, IterationCostEstimate_4x4) {
   TPSWaveFunctionComponent<TenElemT, QNT, qlpeps::NoDress, TRGContractor> comp(sitps, config, trunc_params);
 
   MCUpdateSquareNNExchangePBC updater;
-  HeisenbergSquarePBC model(1.0);
+  SquareSpinOneHalfJ1J2XXZModelPBC model(1.0, 1.0, 0.0, 0.0, 0.0);
 
   std::cout << "Simulating " << NUM_SAMPLES << " MC samples...\n\n";
 

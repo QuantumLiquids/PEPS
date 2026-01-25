@@ -212,7 +212,7 @@ VMCOptimizePara optimize_para(
 );
 
 // Create executor with lattice dimensions
-using Model = SquareSpinOneHalfXXZModel;
+using Model = SquareSpinOneHalfXXZModelOBC;
 using MCUpdater = MCUpdateSquareNNExchange;
 Model model;
 
@@ -254,7 +254,7 @@ opt_params.cg_params = ConjugateGradientParams(1e-6, 1000, 1e-8);
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "./"); // tps_dump_path
 
 // Create executor - Option A: from file path (ly, lx auto-inferred from initial_config)
-using Model = SquareSpinOneHalfXXZModel;
+using Model = SquareSpinOneHalfXXZModelOBC;
 using MCUpdater = MCUpdateSquareNNExchange;
 Model model;
 

@@ -2,6 +2,7 @@
 
 # usage: python tests/tools/pbc_benchmarks.py --model heisenberg --lx 3 --ly 4
 # usage: python tests/tools/pbc_benchmarks.py --model ising --lx 4 --ly 4 --param 3.0
+# usage: python tests/tools/pbc_benchmarks.py --model j1j2_xxz --lx 4 --ly 3 --jz1 0.5 --jxy1 1.0 --jz2 -0.2 --jxy2 -0.3
 import argparse
 import numpy as np
 from quspin.operators import hamiltonian
@@ -27,6 +28,22 @@ def get_pbc_couplings(Lx, Ly, J):
             y_down = (y + 1) % Ly
             j_down = site_index(x, y_down, Ly)
             couplings.append([J, i, j_down])
+    return couplings
+
+def get_pbc_nnn_couplings(Lx, Ly, J):
+    # Returns list of [J, i, j] for NNN (diagonal) bonds on torus.
+    # We connect each site to down-right and down-left to avoid double counting.
+    couplings = []
+    for x in range(Lx):
+        for y in range(Ly):
+            i = site_index(x, y, Ly)
+            x_dr = (x + 1) % Lx
+            y_down = (y + 1) % Ly
+            j_dr = site_index(x_dr, y_down, Ly)
+            couplings.append([J, i, j_dr])
+            x_dl = (x - 1 + Lx) % Lx
+            j_dl = site_index(x_dl, y_down, Ly)
+            couplings.append([J, i, j_dl])
     return couplings
 
 def run_heisenberg(Lx, Ly, J=1.0):
@@ -77,12 +94,40 @@ def run_transverse_ising(Lx, Ly, h_val, J=1.0):
     E0 = H.eigsh(k=1, which="SA", return_eigenvectors=False)[0]
     return E0
 
+def run_j1j2_xxz(Lx, Ly, jz1, jxy1, jz2, jxy2):
+    # H = sum_NN (jz1 SzSz + jxy1 (SxSx + SySy)) + sum_NNN (jz2 SzSz + jxy2 (SxSx + SySy))
+    N = Lx * Ly
+    basis = spin_basis_general(N, S="1/2", pauli=False)
+
+    nn_couplings_z = get_pbc_couplings(Lx, Ly, jz1)
+    nn_couplings_xy = get_pbc_couplings(Lx, Ly, jxy1)
+    nnn_couplings_z = get_pbc_nnn_couplings(Lx, Ly, jz2)
+    nnn_couplings_xy = get_pbc_nnn_couplings(Lx, Ly, jxy2)
+
+    static = [
+        ["xx", nn_couplings_xy],
+        ["yy", nn_couplings_xy],
+        ["zz", nn_couplings_z],
+        ["xx", nnn_couplings_xy],
+        ["yy", nnn_couplings_xy],
+        ["zz", nnn_couplings_z],
+    ]
+    dynamic = []
+
+    H = hamiltonian(static, dynamic, basis=basis, dtype=np.float64, check_symm=False)
+    E0 = H.eigsh(k=1, which="SA", return_eigenvectors=False)[0]
+    return E0
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", choices=["heisenberg", "ising"], required=True)
+    parser.add_argument("--model", choices=["heisenberg", "ising", "j1j2_xxz"], required=True)
     parser.add_argument("--lx", type=int, required=True)
     parser.add_argument("--ly", type=int, required=True)
     parser.add_argument("--param", type=float, default=0.0, help="h for Ising")
+    parser.add_argument("--jz1", type=float, default=1.0)
+    parser.add_argument("--jxy1", type=float, default=1.0)
+    parser.add_argument("--jz2", type=float, default=0.0)
+    parser.add_argument("--jxy2", type=float, default=0.0)
     args = parser.parse_args()
     
     if args.model == "heisenberg":
@@ -91,3 +136,9 @@ if __name__ == "__main__":
     elif args.model == "ising":
         e0 = run_transverse_ising(args.lx, args.ly, args.param)
         print(f"Ising {args.lx}x{args.ly} PBC (h={args.param}) E0 = {e0}")
+    elif args.model == "j1j2_xxz":
+        e0 = run_j1j2_xxz(args.lx, args.ly, args.jz1, args.jxy1, args.jz2, args.jxy2)
+        print(
+            f"J1-J2 XXZ {args.lx}x{args.ly} PBC "
+            f"(jz1={args.jz1}, jxy1={args.jxy1}, jz2={args.jz2}, jxy2={args.jxy2}) E0 = {e0}"
+        )

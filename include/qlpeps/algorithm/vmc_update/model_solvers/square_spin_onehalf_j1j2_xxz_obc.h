@@ -5,10 +5,10 @@
 * Description: QuantumLiquids/PEPS project. Model Energy Solver for spin-1/2 J1-J2 Heisenberg model in square lattice
 */
 
-#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_SQUAREJ1J2_H
-#define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_SQUAREJ1J2_H
+#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_SQUAREJ1J2_OBC_H
+#define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_SQUAREJ1J2_OBC_H
 
-#include "square_spin_onehalf_xxz_model.h"          // SquareSpinOneHalfXXZModelMixIn
+#include "square_spin_onehalf_xxz_obc.h"          // SquareSpinOneHalfXXZModelMixIn
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_model_measurement_solver.h"
 
@@ -31,24 +31,24 @@ using namespace qlten;
  * - For J_z = 0: reduces to planar XY limit
  * - Supports competing interactions and magnetic frustration effects
  */
-class SquareSpinOneHalfJ1J2XXZModel : public SquareNNNModelEnergySolver<SquareSpinOneHalfJ1J2XXZModel>,
-                                      public SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>,
+class SquareSpinOneHalfJ1J2XXZModelOBC : public SquareNNNModelEnergySolver<SquareSpinOneHalfJ1J2XXZModelOBC>,
+                                      public SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModelOBC>,
                                       public SquareSpinOneHalfXXZModelMixIn {
  public:
-  using SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::EvaluateObservables;
-  using SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::DescribeObservables;
+  using SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModelOBC>::EvaluateObservables;
+  using SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModelOBC>::DescribeObservables;
 
-  SquareSpinOneHalfJ1J2XXZModel(void) = delete;
+  SquareSpinOneHalfJ1J2XXZModelOBC(void) = delete;
 
   ///< J1-J2 Heisenberg model
-  SquareSpinOneHalfJ1J2XXZModel(double j2) :
+  SquareSpinOneHalfJ1J2XXZModelOBC(double j2) :
       SquareSpinOneHalfXXZModelMixIn(1, 1, j2, j2, 0) {}
   ///< Generic construction
-  SquareSpinOneHalfJ1J2XXZModel(double jz, double jxy, double jz2, double jxy2, double pinning_field00) :
+  SquareSpinOneHalfJ1J2XXZModelOBC(double jz, double jxy, double jz2, double jxy2, double pinning_field00) :
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, jz2, jxy2, pinning_field00) {}
 
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = this->SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModel>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModelOBC>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
         meta.shape = {ly, lx};
@@ -73,9 +73,12 @@ class SquareSpinOneHalfJ1J2XXZModel : public SquareNNNModelEnergySolver<SquareSp
     }
     return base;
   }
-};//SquareSpinOneHalfJ1J2XXZModel
+};//SquareSpinOneHalfJ1J2XXZModelOBC
+
+using SquareSpinOneHalfJ1J2XXZModel [[deprecated("Use SquareSpinOneHalfJ1J2XXZModelOBC instead.")]] =
+    SquareSpinOneHalfJ1J2XXZModelOBC;
 
 }//qlpeps
 
 
-#endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_SQUAREJ1J2_H
+#endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_SQUAREJ1J2_OBC_H

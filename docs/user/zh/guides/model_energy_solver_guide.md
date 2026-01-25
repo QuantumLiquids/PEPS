@@ -126,13 +126,14 @@ psi_list
 ### 自旋/玻色子模型
 
 #### 1. 方格XXZ模型
-**头文件**：`#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"`
+**头文件**：`#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_obc.h"`
+> 说明：OBC 头文件已改为 `_obc` 后缀，旧文件名不再保留；类名仍提供兼容别名，但会产生弃用警告。
 
-**类名**：`SquareSpinOneHalfXXZModel`
+**类名**：`SquareSpinOneHalfXXZModelOBC`
 
 **构造函数**：
-- `SquareSpinOneHalfXXZModel()` - 各向同性海森堡模型，J=1，无外场
-- `SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning00)`
+- `SquareSpinOneHalfXXZModelOBC()` - 各向同性海森堡模型，J=1，无外场
+- `SquareSpinOneHalfXXZModelOBC(double jz, double jxy, double pinning00)`
   - `jz`：Ising相互作用强度，控制 $S^z_i S^z_j$ 项
   - `jxy`：XY相互作用强度，控制 $(S^x_i S^x_j + S^y_i S^y_j)$ 项  
   - `pinning00`：角落磁场强度，作用于 $(0,0)$ 位置
@@ -140,13 +141,14 @@ psi_list
 **哈密顿量**：$$H = \sum_{\langle i,j \rangle} (J_z S^z_i S^z_j + J_{xy} (S^x_i S^x_j + S^y_i S^y_j)) - h_{00} S^z_{00}$$
 
 #### 2. 方格J1-J2 XXZ模型
-**头文件**：`#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_j1j2_xxz_model.h"`
+**头文件**：`#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_j1j2_xxz_obc.h"`
+> 说明：OBC 头文件已改为 `_obc` 后缀，旧文件名不再保留；类名仍提供兼容别名，但会产生弃用警告。
 
-**类名**：`SquareSpinOneHalfJ1J2XXZModel`
+**类名**：`SquareSpinOneHalfJ1J2XXZModelOBC`
 
 **构造函数**：
-- `SquareSpinOneHalfJ1J2XXZModel(double j2)` - J1-J2海森堡模型，J1=1
-- `SquareSpinOneHalfJ1J2XXZModel(double jz, double jxy, double jz2, double jxy2, double pinning_field00)`
+- `SquareSpinOneHalfJ1J2XXZModelOBC(double j2)` - J1-J2海森堡模型，J1=1
+- `SquareSpinOneHalfJ1J2XXZModelOBC(double jz, double jxy, double jz2, double jxy2, double pinning_field00)`
   - `jz`, `jxy`：最近邻Ising和XY相互作用强度
   - `jz2`, `jxy2`：次近邻Ising和XY相互作用强度
   - `pinning_field00`：角落磁场强度

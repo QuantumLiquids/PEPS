@@ -151,8 +151,10 @@ Located in: `include/qlpeps/algorithm/vmc_update/model_solvers/`
 
 #### 1. Square Lattice XXZ Models
 ```cpp
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
-using SolverType = SquareSpinOneHalfXXZModel;
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_obc.h"
+// Note: OBC headers were renamed with an _obc suffix. Old filenames are not kept.
+// Class aliases remain for backward compatibility, but will emit deprecation warnings.
+using SolverType = SquareSpinOneHalfXXZModelOBC;
 ```
 
 **Hamiltonian**: H = J_z ∑⟨i,j⟩ S^z_i S^z_j + J_{xy} ∑⟨i,j⟩ (S^x_i S^x_j + S^y_i S^y_j)
@@ -257,7 +259,7 @@ using QNT = qlten::QNZ2;
 
 // 1. Choose your three strategies
 using MonteCarloUpdater = MCUpdateSquareNNExchange;
-using EnergySolver = SquareSpinOneHalfXXZModel;
+using EnergySolver = SquareSpinOneHalfXXZModelOBC;
 
 // 2. Configure parameters
 OptimizerParams opt_params = /* See Optimizer Guide */;

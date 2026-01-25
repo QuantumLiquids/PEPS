@@ -5,8 +5,8 @@
 * Description: QuantumLiquids/PEPS project. Model Energy Solver for spin-1/2 AFM Heisenberg model in square lattice
 */
 
-#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_HEISENBERG_SQUARE_H
-#define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_HEISENBERG_SQUARE_H
+#ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_HEISENBERG_SQUARE_OBC_H
+#define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_HEISENBERG_SQUARE_OBC_H
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
@@ -171,19 +171,19 @@ class SquareSpinOneHalfXXZModelMixIn {
  * This class supports structure factor measurement via the StructureFactorMeasurementMixin.
  * Enable with `SetEnableStructureFactor(true)` before calling EvaluateObservables.
  */
-class SquareSpinOneHalfXXZModel
-    : public SquareNNModelEnergySolver<SquareSpinOneHalfXXZModel>,
-      public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>,
+class SquareSpinOneHalfXXZModelOBC
+    : public SquareNNModelEnergySolver<SquareSpinOneHalfXXZModelOBC>,
+      public SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModelOBC>,
       public SquareSpinOneHalfXXZModelMixIn,
-      public StructureFactorMeasurementMixin<SquareSpinOneHalfXXZModel> {
+      public StructureFactorMeasurementMixin<SquareSpinOneHalfXXZModelOBC> {
  public:
-  using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::EvaluateObservables;
-  using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables;
+  using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModelOBC>::EvaluateObservables;
+  using SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModelOBC>::DescribeObservables;
 
   /// Isotropic Heisenberg model with J = 1 and no pinning field
-  SquareSpinOneHalfXXZModel(void) : SquareSpinOneHalfXXZModelMixIn(1.0, 1.0, 0.0, 0.0, 0.0) {}
+  SquareSpinOneHalfXXZModelOBC(void) : SquareSpinOneHalfXXZModelMixIn(1.0, 1.0, 0.0, 0.0, 0.0) {}
 
-  SquareSpinOneHalfXXZModel(double jz, double jxy, double pinning00) :
+  SquareSpinOneHalfXXZModelOBC(double jz, double jxy, double pinning00) :
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, 0.0, 0.0, pinning00) {}
 
   /**
@@ -219,7 +219,7 @@ class SquareSpinOneHalfXXZModel
     // Use the generic registry traversal (consistent with other square-lattice models).
     // This also enables the unified row-hook EvaluateOffDiagOrderInRow().
     ObservableMap<TenElemT> out =
-        this->SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::EvaluateObservables(split_index_tps, tps_sample);
+        this->SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModelOBC>::EvaluateObservables(split_index_tps, tps_sample);
 
     const auto &config = tps_sample->config;
     // Optional: SzSz_all2all packed upper triangular (i<=j)
@@ -294,7 +294,7 @@ class SquareSpinOneHalfXXZModel
    * @return Vector of observable metadata.
    */
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
-    auto base = this->SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModel>::DescribeObservables(ly, lx);
+    auto base = this->SquareNNModelMeasurementSolver<SquareSpinOneHalfXXZModelOBC>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
       if (meta.key == "spin_z" || meta.key == "charge") {
         meta.shape = {ly, lx};
@@ -327,9 +327,12 @@ class SquareSpinOneHalfXXZModel
   }
 };
 
+using SquareSpinOneHalfXXZModel [[deprecated("Use SquareSpinOneHalfXXZModelOBC instead.")]] =
+    SquareSpinOneHalfXXZModelOBC;
+
 }//qlpeps
 
 
 
 
-#endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_HEISENBERG_SQUARE_H
+#endif //QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SPIN_ONEHALF_HEISENBERG_SQUARE_OBC_H

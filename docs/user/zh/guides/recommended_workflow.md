@@ -52,7 +52,7 @@ MPI 契约（开发者文档内容）：
 极简骨架：
 ```cpp
 using Updater    = MCUpdateSquareNNExchange<TenElemT, QNT>; // 示例更新器
-using EnergySolv = SquareSpinOneHalfXXZModel;               // 示例模型
+using EnergySolv = SquareSpinOneHalfXXZModelOBC;               // 示例模型
 
 OptimizerParams opt = /* OptimizerFactory 或 Builder 生成 */;
 MonteCarloParams mc = /* 样本、预热、步进、初始配置 */;

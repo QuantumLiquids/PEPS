@@ -428,7 +428,7 @@ struct TrivialHeisenbergTools : public MPITest {
 TEST_F(TrivialHeisenbergTools, ExactSumGradientOptWithVMCOptimizer) {
   auto trun_para =
       BMPSTruncateParams<qlten::QLTEN_Double>::SVD(1, 8, 1e-16);
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using TenElemT = TEN_ELEM_TYPE;
   using QNT = TrivialRepQN;
   using SITPST = SplitIndexTPS<TenElemT, QNT>;

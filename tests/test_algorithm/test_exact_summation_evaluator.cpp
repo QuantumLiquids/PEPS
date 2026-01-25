@@ -433,9 +433,9 @@ TEST_F(TrivialHeisenbergTest, LowestState) {
   auto trun_para = BMPSTruncateParams<RealT>::SVD(1, 8, 1e-16);
   
   auto energy_gs_exact = Calculate2x2HeisenbergEnergy(J);  // Exact analytical calculation
-  SquareSpinOneHalfXXZModel model(J, J, 0); // XY model
+  SquareSpinOneHalfXXZModelOBC model(J, J, 0); // XY model
   
-  bool success = RunExactSummationTest<SquareSpinOneHalfXXZModel, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
+  bool success = RunExactSummationTest<SquareSpinOneHalfXXZModelOBC, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
       model,
       split_index_tps_lowest,
       all_configs,
@@ -457,9 +457,9 @@ TEST_F(TrivialHeisenbergTest, SimpleUpdateState) {
   
   // Actual computed value from single process run using Simple Update TPS data
   double energy_simple_update_expect = -1.99521278793;  // computed from simple_update TPS
-  SquareSpinOneHalfXXZModel model(J, J, 0); // XY model
+  SquareSpinOneHalfXXZModelOBC model(J, J, 0); // XY model
   
-  bool success = RunExactSummationTest<SquareSpinOneHalfXXZModel, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
+  bool success = RunExactSummationTest<SquareSpinOneHalfXXZModelOBC, TEN_ELEM_TYPE, TrivialRepQN, SITPST>(
       model,
       split_index_tps_simple_update,
       all_configs,

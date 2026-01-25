@@ -2,9 +2,9 @@
  * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
  * Creation Date: 2026-01-03
  *
- * Description: Regression tests for SquareSpinOneHalfXXZModel Measurer.
+ * Description: Regression tests for SquareSpinOneHalfXXZModelOBC Measurer.
  * 
- * This file contains regression tests for MCPEPSMeasurer with SquareSpinOneHalfXXZModel,
+ * This file contains regression tests for MCPEPSMeasurer with SquareSpinOneHalfXXZModelOBC,
  * covering energy, local observables, and structure factor measurements.
  * 
  * Test strategy:
@@ -18,7 +18,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_obc.h"
 
 #include "../test_mpi_env.h"
 #include <filesystem>
@@ -31,7 +31,7 @@ using TenElemT = QLTEN_Double;
 using QNT = special_qn::TrivialRepQN;
 
 /**
- * @brief Fixture for SquareSpinOneHalfXXZModel Measurer regression testing.
+ * @brief Fixture for SquareSpinOneHalfXXZModelOBC Measurer regression testing.
  * 
  * Uses 4x4 Heisenberg TPS data from slow_tests/test_data.
  * All tests use fixed random seed and deterministic configuration for reproducibility.
@@ -89,7 +89,7 @@ class SquareXXZMeasurerTest : public MPITest {
  * 3. Output structure is correct (multiples of 5: y1, x1, y2, x2, val)
  */
 TEST_F(SquareXXZMeasurerTest, StructureFactorSmoke) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
   
   auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);
@@ -200,7 +200,7 @@ TEST_F(SquareXXZMeasurerTest, StructureFactorSmoke) {
  *   - = 16 * 6 = 96 pairs, each with 5 values = 480 elements
  */
 TEST_F(SquareXXZMeasurerTest, StructureFactorRegression) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
   using MCUpdater = MCUpdateSquareNNExchange;
   
   auto sitps = SplitIndexTPS<TenElemT, QNT>(Ly, Lx);

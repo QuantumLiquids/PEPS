@@ -24,7 +24,7 @@
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
-#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_model.h"
+#include "qlpeps/algorithm/vmc_update/model_solvers/square_spin_onehalf_xxz_obc.h"
 #include "qlmps/case_params_parser.h"
 #include "../test_mpi_env.h"
 using namespace qlten;
@@ -71,7 +71,7 @@ struct SqrHeiMCPEPS : MPITest {
 };
 
 TEST_F(SqrHeiMCPEPS, MeasureHeisenberg) {
-  using Model = SquareSpinOneHalfXXZModel;
+  using Model = SquareSpinOneHalfXXZModelOBC;
 
   if (rank == hp_numeric::kMPIMasterRank) {
     std::cout << "Starting Monte Carlo measurement test on 4 by 4 Heisenberg Model (expected time: ~5 minutes)..." << std::endl;

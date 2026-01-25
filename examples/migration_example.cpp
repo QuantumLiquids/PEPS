@@ -95,7 +95,7 @@ void new_modern_approach() {
     VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
     
     // NEW: Create executor with modern parameters
-    using Model = SquareSpinOneHalfXXZModel;
+    using Model = SquareSpinOneHalfXXZModelOBC;
     using MCUpdater = MCUpdateSquareNNExchange;
     Model model;
     
