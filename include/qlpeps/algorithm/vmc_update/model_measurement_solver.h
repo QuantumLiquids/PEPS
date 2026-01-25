@@ -100,10 +100,10 @@ class ModelMeasurementSolver {
     double psi_rel_err;  ///< radius_rel = max_i |psi_i - mean| / |mean|
   };
 
-  template<typename TenElemT, typename QNT>
+  template<typename TenElemT, typename QNT, typename ComponentT>
   PsiSummary<TenElemT> EvaluatePsiSummary(
       const SplitIndexTPS<TenElemT, QNT> *sitps,
-      TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample
+      ComponentT *tps_sample
   ) const {
     // Fast path: use cached summary from the last EvaluateObservables call
     if (last_psi_valid_) {
@@ -121,10 +121,10 @@ class ModelMeasurementSolver {
   }
 
  protected:
-  template<typename TenElemT, typename QNT>
+  template<typename TenElemT, typename QNT, typename ComponentT>
   std::vector<TenElemT> BuildPsiList(
       const SplitIndexTPS<TenElemT, QNT> * /*sitps*/,
-      TPSWaveFunctionComponent<TenElemT, QNT> * /*tps_sample*/
+      ComponentT * /*tps_sample*/
   ) const { return {}; }
 
   /**

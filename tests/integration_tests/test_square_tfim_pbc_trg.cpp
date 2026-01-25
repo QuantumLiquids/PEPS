@@ -3,9 +3,6 @@
  * Description: Integration test for TFIM PBC (4x4) using TRG + VMC optimization.
  * Workflow matches other integration tests: simple update (master) -> VMC optimization.
  * 
- * Note: MCPEPSMeasurerPBC cannot be used because TransverseFieldIsingSquarePBC
- * does not implement EvaluateObservables for TRGContractor. Energy validation
- * is done via the VMC optimizer's output.
  */
 
 #define QLTEN_COUNT_FLOPS 1
@@ -21,6 +18,8 @@
 #include "qlpeps/api/conversions.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
+#include <cmath>
+#include <filesystem>
 
 using namespace qlten;
 using namespace qlpeps;
@@ -67,6 +66,7 @@ struct SquareTFIMPBCSystem : public MPITest {
                        Configuration(Ly, Lx, 2),  // Physical dimension 2, random init
                        false),
       PEPSParams());
+  MCMeasurementParams measure_para;
 
   void SetUp() override {
     MPITest::SetUp();
@@ -83,6 +83,13 @@ struct SquareTFIMPBCSystem : public MPITest {
 
     // Set TRG params for VMC
     vmc_peps_para.peps_params.trg_truncate_para = trg_trunc_para;
+
+    // Measurement parameters (TRG + PBC)
+    auto measure_mc = MonteCarloParams(
+        40, 40, 1, Configuration(Ly, Lx, 2), false);
+    measure_para = MCMeasurementParams(
+        measure_mc, PEPSParams(trg_trunc_para),
+        GetTestOutputPath("integration_tfim_pbc_trg", "measurement"));
   }
 };
 
@@ -168,6 +175,61 @@ TEST_F(SquareTFIMPBCSystem, StochasticReconfigurationOpt) {
 
   // Save optimized TPS
   tps.Dump(tps_path);
+}
+
+TEST_F(SquareTFIMPBCSystem, MeasurementPBC) {
+  MPI_Barrier(comm);
+
+  SITPST tps(Ly, Lx);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    ASSERT_TRUE(tps.Load(tps_path));
+  }
+  qlpeps::MPI_Bcast(tps, comm);
+
+  TransverseFieldIsingSquarePBC model(h);
+  auto executor = new MCPEPSMeasurerPBC<TenElemT, QNT,
+                                        MCUpdateSquareNNFullSpaceUpdatePBC,
+                                        TransverseFieldIsingSquarePBC>(
+      tps, measure_para, comm, model);
+
+  executor->Execute();
+
+  if (rank == hp_numeric::kMPIMasterRank) {
+    auto [energy, en_err] = executor->OutputEnergy();
+    (void)en_err;
+    EXPECT_NEAR(std::real(energy), energy_ed, 2.0);
+
+    const auto &registry = executor->ObservableRegistry();
+    EXPECT_NE(registry.find("energy"), registry.end());
+    EXPECT_NE(registry.find("spin_z"), registry.end());
+    EXPECT_NE(registry.find("sigma_x"), registry.end());
+    EXPECT_NE(registry.find("SzSz_row"), registry.end());
+    if (registry.find("spin_z") != registry.end()) {
+      EXPECT_EQ(registry.at("spin_z").first.size(), Ly * Lx);
+    }
+    if (registry.find("sigma_x") != registry.end()) {
+      EXPECT_EQ(registry.at("sigma_x").first.size(), Ly * Lx);
+    }
+    if (registry.find("SzSz_row") != registry.end()) {
+      EXPECT_EQ(registry.at("SzSz_row").first.size(), Lx / 2);
+    }
+    if (registry.find("energy") != registry.end() && !registry.at("energy").first.empty()) {
+      EXPECT_TRUE(std::isfinite(std::real(registry.at("energy").first.front())));
+    }
+
+    const std::filesystem::path stats_dir =
+        std::filesystem::path(measure_para.measurement_data_dump_path) / "stats";
+    ASSERT_TRUE(std::filesystem::exists(stats_dir));
+    ASSERT_TRUE(std::filesystem::is_directory(stats_dir));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "energy.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "spin_z_mean.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "spin_z_stderr.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "sigma_x_mean.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "sigma_x_stderr.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "SzSz_row.csv"));
+  }
+
+  delete executor;
 }
 
 int main(int argc, char *argv[]) {

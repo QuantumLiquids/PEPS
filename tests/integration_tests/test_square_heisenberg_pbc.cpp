@@ -20,6 +20,8 @@
 #include "qlpeps/api/conversions.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
+#include <cmath>
+#include <filesystem>
 
 using namespace qlten;
 using namespace qlpeps;
@@ -69,6 +71,7 @@ struct SquareHeisenbergPBCSystem : public MPITest {
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),  // Sz = 0
                        false),
       PEPSParams(trg_trunc_para));
+  MCMeasurementParams measure_para;
 
   void SetUp() override {
     MPITest::SetUp();
@@ -89,6 +92,15 @@ struct SquareHeisenbergPBCSystem : public MPITest {
     // S^+_i S^-_j |↓↑> = |↑↓>, S^-_i S^+_j |↑↓> = |↓↑>
     ham_nn({0, 1, 1, 0}) = TenElemT(J * 0.5);  // |↓↑> -> |↑↓>
     ham_nn({1, 0, 0, 1}) = TenElemT(J * 0.5);  // |↑↓> -> |↓↑>
+
+    // Measurement parameters (TRG + PBC)
+    auto measure_mc = MonteCarloParams(
+        40, 40, 1,
+        Configuration(Ly, Lx, OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
+        false);
+    measure_para = MCMeasurementParams(
+        measure_mc, PEPSParams(trg_trunc_para),
+        GetTestOutputPath("integration_heisenberg_pbc_trg", "measurement"));
   }
 };
 
@@ -177,6 +189,62 @@ TEST_F(SquareHeisenbergPBCSystem, StochasticReconfigurationOpt) {
 
   // Save optimized TPS
   tps.Dump(tps_path);
+}
+
+TEST_F(SquareHeisenbergPBCSystem, MeasurementPBC) {
+  MPI_Barrier(comm);
+
+  SITPST tps(Ly, Lx);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    ASSERT_TRUE(tps.Load(tps_path));
+  }
+  qlpeps::MPI_Bcast(tps, comm);
+
+  HeisenbergSquarePBC model(J);
+  auto executor = new MCPEPSMeasurerPBC<TenElemT, QNT,
+                                        MCUpdateSquareNNExchangePBC,
+                                        HeisenbergSquarePBC>(
+      tps, measure_para, comm, model);
+
+  executor->Execute();
+
+  if (rank == hp_numeric::kMPIMasterRank) {
+    auto [energy, en_err] = executor->OutputEnergy();
+    (void)en_err;
+    EXPECT_NEAR(std::real(energy), energy_ed, 2.0);
+
+    const auto &registry = executor->ObservableRegistry();
+    EXPECT_NE(registry.find("energy"), registry.end());
+    EXPECT_NE(registry.find("spin_z"), registry.end());
+    EXPECT_NE(registry.find("bond_energy_h"), registry.end());
+    EXPECT_NE(registry.find("bond_energy_v"), registry.end());
+    if (registry.find("spin_z") != registry.end()) {
+      EXPECT_EQ(registry.at("spin_z").first.size(), Ly * Lx);
+    }
+    if (registry.find("bond_energy_h") != registry.end()) {
+      EXPECT_EQ(registry.at("bond_energy_h").first.size(), Ly * Lx);
+    }
+    if (registry.find("bond_energy_v") != registry.end()) {
+      EXPECT_EQ(registry.at("bond_energy_v").first.size(), Ly * Lx);
+    }
+    if (registry.find("energy") != registry.end() && !registry.at("energy").first.empty()) {
+      EXPECT_TRUE(std::isfinite(std::real(registry.at("energy").first.front())));
+    }
+
+    const std::filesystem::path stats_dir =
+        std::filesystem::path(measure_para.measurement_data_dump_path) / "stats";
+    ASSERT_TRUE(std::filesystem::exists(stats_dir));
+    ASSERT_TRUE(std::filesystem::is_directory(stats_dir));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "energy.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "spin_z_mean.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "spin_z_stderr.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "bond_energy_h_mean.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "bond_energy_h_stderr.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "bond_energy_v_mean.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "bond_energy_v_stderr.csv"));
+  }
+
+  delete executor;
 }
 
 int main(int argc, char *argv[]) {

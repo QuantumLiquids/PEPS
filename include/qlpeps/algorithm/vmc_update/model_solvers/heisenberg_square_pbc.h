@@ -15,6 +15,7 @@
 
 #include "qlpeps/algorithm/vmc_update/model_energy_solver.h"      // ModelEnergySolver
 #include "qlpeps/algorithm/vmc_update/model_measurement_solver.h" // ModelMeasurementSolver
+#include "qlpeps/utility/observable_matrix.h"                     // ObservableMatrix
 #include "qlpeps/utility/helpers.h"                               // ComplexConjugate
 #include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"    // TRGContractor
 
@@ -130,6 +131,96 @@ class HeisenbergSquarePBC : public ModelEnergySolver<HeisenbergSquarePBC>,
     }
 
     return energy;
+  }
+
+  template<typename TenElemT, typename QNT, typename ComponentT>
+  ObservableMap<TenElemT> EvaluateObservables(
+      const SplitIndexTPS<TenElemT, QNT> *sitps,
+      ComponentT *tps_sample
+  ) {
+    ObservableMap<TenElemT> out;
+
+    auto &tn = tps_sample->tn;
+    auto &contractor = tps_sample->contractor;
+    const auto &config = tps_sample->config;
+    const auto &trunc_para = tps_sample->trun_para;
+    const size_t lx = tn.cols();
+    const size_t ly = tn.rows();
+
+    if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) {
+      throw std::invalid_argument("HeisenbergSquarePBC: requires periodic TensorNetwork2D.");
+    }
+
+    contractor.SetTruncateParams(trunc_para);
+
+    const TenElemT psi = contractor.Trace(tn);
+    const TenElemT inv_psi = TenElemT(1.0) / psi;
+
+    std::vector<TenElemT> psi_list;
+    psi_list.reserve(1);
+    psi_list.push_back(psi);
+
+    // Local spin Sz
+    std::vector<TenElemT> spin_z;
+    spin_z.reserve(config.size());
+    for (auto &s : config) {
+      spin_z.push_back(static_cast<double>(s) - 0.5);
+    }
+
+    ObservableMatrix<TenElemT> e_h;
+    ObservableMatrix<TenElemT> e_v;
+    if (ly > 0 && lx > 0) {
+      e_h.Resize(ly, lx);
+      e_v.Resize(ly, lx);
+    }
+
+    TenElemT energy(0);
+    for (size_t row = 0; row < ly; ++row) {
+      for (size_t col = 0; col < lx; ++col) {
+        const SiteIdx site1{row, col};
+
+        const SiteIdx site_right{row, (col + 1) % lx};
+        TenElemT eb_h = EvaluateBondEnergy_<TenElemT, QNT>(
+            site1, site_right, config, *sitps, contractor, inv_psi);
+        if (e_h.size() != 0) {
+          e_h(site1.row(), site1.col()) = eb_h;
+        }
+        energy += eb_h;
+
+        const SiteIdx site_down{(row + 1) % ly, col};
+        TenElemT eb_v = EvaluateBondEnergy_<TenElemT, QNT>(
+            site1, site_down, config, *sitps, contractor, inv_psi);
+        if (e_v.size() != 0) {
+          e_v(site1.row(), site1.col()) = eb_v;
+        }
+        energy += eb_v;
+      }
+    }
+
+    out["energy"] = {energy};
+    out["spin_z"] = std::move(spin_z);
+    if (e_h.size() != 0) out["bond_energy_h"] = e_h.Extract();
+    if (e_v.size() != 0) out["bond_energy_v"] = e_v.Extract();
+
+    auto psi_summary = this->template ComputePsiSummary<TenElemT>(psi_list);
+    this->template SetLastPsiSummary<TenElemT>(psi_summary.psi_mean, psi_summary.psi_rel_err);
+
+    return out;
+  }
+
+  std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
+    // NOTE: Compared to OBC NN solvers (e.g., SquareSpinOneHalfXXZModel),
+    // spin-correlation observables like SzSz_all2all/SmSp_row are not implemented for PBC/TRG.
+    return {
+        {"energy", "Total energy (scalar)", {}, {}},
+        {"spin_z", "Local spin Sz per site (Ly,Lx)", {ly, lx}, {"y", "x"}},
+        {"bond_energy_h",
+         "Bond energy on horizontal NN bonds (periodic wrap included)",
+         {ly, lx}, {"bond_y", "bond_x"}},
+        {"bond_energy_v",
+         "Bond energy on vertical NN bonds (periodic wrap included)",
+         {ly, lx}, {"bond_y", "bond_x"}},
+    };
   }
 
  private:
