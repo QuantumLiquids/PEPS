@@ -132,7 +132,7 @@ TEST_F(HeisenbergSystem, SGDWithZeroLR) {
   }
   qlpeps::MPI_Bcast(tps, comm);
   auto init_tps = tps;
-  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
+  auto result = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
       vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModelOBC());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
@@ -142,7 +142,7 @@ TEST_F(HeisenbergSystem, SGDWithZeroLR) {
   double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "flop = " << end_flop - start_flop << std::endl;
   std::cout << "Gflops = " << Gflops << std::endl;
-  SplitIndexTPS<TenElemT, QNT> result_sitps = executor_ptr->GetState();
+  SplitIndexTPS<TenElemT, QNT> result_sitps = result.state;
   init_tps.NormalizeAllSite();
   result_sitps.NormalizeAllSite();
   auto diff = init_tps + (-result_sitps);
@@ -160,7 +160,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   qlpeps::MPI_Bcast(tps, comm);
 
   //VMC
-  auto executor_ptr = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
+  auto result = VmcOptimize<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
       vmc_peps_para, tps, comm, SquareSpinOneHalfXXZModelOBC());
   size_t start_flop = flop;
   Timer vmc_timer("vmc");
@@ -172,11 +172,10 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "Gflops = " << Gflops / elapsed_time << std::endl;
 
-  tps = executor_ptr->GetState();
-  // unique_ptr auto cleanup
+  tps = result.state;
 
   //Measure
-  auto measure_exe_ptr = MonteCarloMeasure<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
+  auto measure_result = MonteCarloMeasure<TenElemT, QNT, MCUpdateSquareNNExchange, SquareSpinOneHalfXXZModelOBC>(
       tps, measure_para, comm, SquareSpinOneHalfXXZModelOBC());
   start_flop = flop;
 
@@ -187,7 +186,7 @@ TEST_F(HeisenbergSystem, StochasticReconfigurationOpt) {
   Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "Gflops = " << Gflops / elapsed_time << std::endl;
 
-  auto [energy, en_err] = measure_exe_ptr->OutputEnergy();
+  auto [energy, en_err] = measure_result.energy;
   EXPECT_NEAR(std::real(energy), energy_ed, 0.001);
 }
 

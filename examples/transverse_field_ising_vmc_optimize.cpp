@@ -102,13 +102,14 @@ int main(int argc, char* argv[]) {
     }
 
     // 5) One-call optimization (type-deduced): returns executor pointer, already executed
-    auto executor = VmcOptimize(
+    auto result = VmcOptimize(
         params, sitps, MPI_COMM_WORLD, model, MCUpdateSquareNNFullSpaceUpdate{});
 
     if (rank == 0) {
       std::cout << "[TFI-VMC] Finished. Dumping optimized TPS..." << std::endl;
     }
-    executor->DumpData(/*release_mem=*/false);
+    // Dump optimized state (energy trajectories can be dumped manually if needed).
+    result.state.Dump(params.tps_dump_path);
 
     if (rank == 0) {
       std::cout << "[TFI-VMC] Done." << std::endl;

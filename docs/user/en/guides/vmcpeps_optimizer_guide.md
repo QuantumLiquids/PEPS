@@ -265,6 +265,8 @@ using EnergySolver = SquareSpinOneHalfXXZModelOBC;
 OptimizerParams opt_params = /* See Optimizer Guide */;
 MonteCarloParams mc_params = /* See Monte Carlo API Guide */;
 PEPSParams peps_params = /* See VMC Data Persistence Guide */;
+// PEPSParams now stores either BMPS (OBC) or TRG (PBC) truncation params.
+// VmcOptimize/MonteCarloMeasure infer OBC vs PBC from this choice.
 
 VMCPEPSOptimizerParams vmc_params{opt_params, mc_params, peps_params, "output"};
 

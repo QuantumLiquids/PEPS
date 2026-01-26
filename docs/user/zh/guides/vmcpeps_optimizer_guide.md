@@ -125,6 +125,8 @@ using EnergySolver = SquareSpinOneHalfXXZModelOBC;
 OptimizerParams opt_params = /* 参见优化器指南 */;
 MonteCarloParams mc_params = /* 参见蒙特卡洛API指南 */;
 PEPSParams peps_params = /* 参见VMC数据持久化指南 */;
+// PEPSParams 现在存储 BMPS(OBC) 或 TRG(PBC) 的截断参数；
+// VmcOptimize/MonteCarloMeasure 会据此自动推断边界条件。
 
 VMCPEPSOptimizerParams vmc_params{opt_params, mc_params, peps_params, "output"};
 
@@ -311,7 +313,7 @@ MonteCarloParams mc_params(8000, 2000, 5, initial_config, false, "");
 // PEPS参数
 PEPSParams peps_params;
 peps_params.bond_dim = bond_dim;
-peps_params.truncate_para = BMPSTruncatePara(/*...*/);
+peps_params.SetBMPSParams(BMPSTruncatePara(/*...*/));
 
 // 创建执行器
 VMCPEPSOptimizerParams vmc_params{sr_params, mc_params, peps_params, "heisenberg_4x4"};

@@ -144,7 +144,7 @@ TEST_F(SmokeEvaluator2x2, EvaluateTFIMPBC_TRG_8x8_Smoke) {
   MonteCarloParams mc_params(/*samples=*/5, /*warmup_sweeps=*/2, /*sweeps_between=*/1, config, false);
 
   PEPSParams peps_params;
-  peps_params.trg_truncate_para = TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0);
+  peps_params.SetTRGParams(TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/4, /*trunc_error=*/0.0));
 
   MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNFullSpaceUpdatePBC, TRGContractor> engine(
       sitps, mc_params, peps_params, comm);
@@ -166,5 +166,4 @@ int main(int argc, char *argv[]) {
   ::testing::AddGlobalTestEnvironment(new MPIEnvironment);
   return RUN_ALL_TESTS();
 }
-
 

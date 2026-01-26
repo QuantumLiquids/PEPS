@@ -148,7 +148,7 @@ using EnergySolver          = ExactSummationEnergyEvaluator;            // or a 
 // 适当填充参数
 OptimizerParams opt_params;             // step_lengths, update_scheme, cg_params, ...
 MonteCarloParams mc_params;             // num_samples, warmup, sweeps_between_samples, init config
-PEPSParams peps_params;                 // BMPS truncate_para, wavefunction_path
+PEPSParams peps_params;                 // BMPS 或 TRG 截断参数（用于选择 OBC/PBC）
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 
 // 初始状态

@@ -230,10 +230,6 @@ class VMCPEPSOptimizer : public qlten::Executor {
       energy_grad_evaluator_;
 };
 
-// Explicit PBC/TRG alias for clarity at call sites.
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver>
-using VMCPEPSOptimizerPBC = VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, TRGContractor>;
-
 } // namespace qlpeps
 
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_impl.h"

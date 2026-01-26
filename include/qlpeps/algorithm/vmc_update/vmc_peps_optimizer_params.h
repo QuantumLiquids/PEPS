@@ -41,8 +41,8 @@ struct VMCPEPSOptimizerParams {
   }
 
   // Explicit accessors - no implicit conversions
-  auto GetTruncatePara() const { return peps_params.truncate_para; }
-  auto GetTRGTruncatePara() const { return peps_params.trg_truncate_para; }
+  auto GetTruncatePara() const { return peps_params.GetBMPSParams(); }
+  auto GetTRGTruncatePara() const { return peps_params.GetTRGParams(); }
   const MonteCarloParams& GetMCParams() const { return mc_params; }
   const PEPSParams& GetPEPSParams() const { return peps_params; }
   const OptimizerParams& GetOptimizerParams() const { return optimizer_params; }

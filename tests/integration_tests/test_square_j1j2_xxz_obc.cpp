@@ -129,21 +129,18 @@ protected:
     SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto executor = VmcOptimize<TenElemT, QNT, MCUpdaterT, ModelT>(
-        params, tps, comm, model, MCUpdaterT{}).release();
-    
     size_t start_flop = flop;
     Timer vmc_timer("vmc");
-    
-    executor->Execute();
-    
+
+    auto result = VmcOptimize<TenElemT, QNT, MCUpdaterT, ModelT>(
+        params, tps, comm, model, MCUpdaterT{});
+
     size_t end_flop = flop;
     double elapsed_time = vmc_timer.PrintElapsed();
     double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
     std::cout << "VMC Gflops = " << Gflops / elapsed_time << std::endl;
 
-    tps = executor->GetState();
-    delete executor;
+    tps = result.state;
     
     // Save optimized TPS
     tps.Dump(tps_path);
@@ -156,23 +153,19 @@ protected:
     SplitIndexTPS<TenElemT, QNT> tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto measure_exe = MonteCarloMeasure<TenElemT, QNT, MCUpdaterT, ModelT>(
-        tps, measure_para, comm, model, MCUpdaterT{}).release();
-    
     size_t start_flop = flop;
     Timer mc_timer("mc");
-    
-    measure_exe->Execute();
-    
+
+    auto measure_result = MonteCarloMeasure<TenElemT, QNT, MCUpdaterT, ModelT>(
+        tps, measure_para, comm, model, MCUpdaterT{});
+
     size_t end_flop = flop;
     double elapsed_time = mc_timer.PrintElapsed();
     double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
     std::cout << "MC Gflops = " << Gflops / elapsed_time << std::endl;
 
-    auto [energy, en_err] = measure_exe->OutputEnergy();
+    auto [energy, en_err] = measure_result.energy;
     std::cout << "Measured energy: " << std::real(energy) << " ± " << en_err << std::endl;
-    
-    delete measure_exe;
     
     // Verify energy is close to expected
     EXPECT_NEAR(std::real(energy), energy_ed, 0.01);

@@ -160,9 +160,10 @@ TEST_F(SquareHeisenbergPBCSystem, StochasticReconfigurationOpt) {
 
   // VMC optimization using PBC optimizer (TRGContractor)
   // Use exchange update to preserve total Sz symmetry
-  auto executor = new VMCPEPSOptimizerPBC<TenElemT, QNT,
+  auto executor = new VMCPEPSOptimizer<TenElemT, QNT,
                                           MCUpdateSquareNNExchangePBC,
-                                          SquareSpinOneHalfJ1J2XXZModelPBC>(
+                                          SquareSpinOneHalfJ1J2XXZModelPBC,
+                                          TRGContractor>(
       vmc_peps_para, tps, comm, model);
 
   size_t start_flop = flop;
@@ -201,9 +202,10 @@ TEST_F(SquareHeisenbergPBCSystem, MeasurementPBC) {
   qlpeps::MPI_Bcast(tps, comm);
 
   SquareSpinOneHalfJ1J2XXZModelPBC model(J, J, 0.0, 0.0, 0.0);
-  auto executor = new MCPEPSMeasurerPBC<TenElemT, QNT,
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT,
                                         MCUpdateSquareNNExchangePBC,
-                                        SquareSpinOneHalfJ1J2XXZModelPBC>(
+                                        SquareSpinOneHalfJ1J2XXZModelPBC,
+                                        TRGContractor>(
       tps, measure_para, comm, model);
 
   executor->Execute();

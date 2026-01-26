@@ -47,8 +47,10 @@ class HubbardU1U1UpdaterTest : public MPITest {
   using Tensor = QLTensor<TenElemT, QNT>;
 
   // Small system for fast testing
+  // Use an even number of sites so the alternating (up/down) product state has
+  // even fermion parity. BMPS requires even fermion parity on the boundary index.
   static constexpr size_t Lx = 3;
-  static constexpr size_t Ly = 3;
+  static constexpr size_t Ly = 2;
   static constexpr size_t Dmax = 4;
 
   // Hubbard parameters (U=0 for exact free-fermion reference)
@@ -370,4 +372,3 @@ int main(int argc, char *argv[]) {
   MPI_Finalize();
   return test_err;
 }
-

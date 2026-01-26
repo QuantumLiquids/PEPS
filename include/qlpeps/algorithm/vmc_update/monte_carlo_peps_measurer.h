@@ -360,11 +360,6 @@ class MCPEPSMeasurer : public qlten::Executor {
   }
 };//MCPEPSMeasurer
 
-// Explicit PBC/TRG alias for clarity at call sites.
-template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver>
-using MCPEPSMeasurerPBC = MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, TRGContractor>;
-
-
 }//qlpeps
 
 // Include implementation

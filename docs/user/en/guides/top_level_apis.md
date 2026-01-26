@@ -148,7 +148,7 @@ using EnergySolver          = ExactSummationEnergyEvaluator;            // or a 
 // Fill params appropriately
 OptimizerParams opt_params;             // step_lengths, update_scheme, cg_params, ...
 MonteCarloParams mc_params;             // num_samples, warmup, sweeps_between_samples, init config
-PEPSParams peps_params;                 // BMPS truncate_para, wavefunction_path
+PEPSParams peps_params;                 // BMPS or TRG truncation params (selects OBC/PBC)
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 
 // Initial state
@@ -278,5 +278,4 @@ auto sitps2 = qlpeps::ToSplitIndexTPS<double, U1QN>(peps);
 
 Notes:
 - Legacy interfaces `SquareLatticePEPS::operator TPS()` and `SplitIndexTPS(const TPS&)` are kept but marked deprecated. Prefer the explicit APIs above.
-
 

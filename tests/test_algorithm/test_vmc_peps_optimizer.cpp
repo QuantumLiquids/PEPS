@@ -494,14 +494,14 @@ TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncateParams) {
 
   // Test different BMPSTruncateParams configurations
   VMCPEPSOptimizerParams para = optimize_para;
-  para.peps_params.truncate_para = BMPSTruncateParams<qlten::QLTEN_Double>::Variational1Site(2, 4, 1e-10, 1e-9, 5);
+  para.peps_params.SetBMPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::Variational1Site(2, 4, 1e-10, 1e-9, 5));
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
       para, valid_test_tps, comm, model);
 
-  EXPECT_EQ(executor->GetParams().peps_params.truncate_para.D_min, 2);
-  EXPECT_EQ(executor->GetParams().peps_params.truncate_para.D_max, 4);
-  EXPECT_EQ(executor->GetParams().peps_params.truncate_para.compress_scheme,
+  EXPECT_EQ(executor->GetParams().peps_params.GetBMPSParams().D_min, 2);
+  EXPECT_EQ(executor->GetParams().peps_params.GetBMPSParams().D_max, 4);
+  EXPECT_EQ(executor->GetParams().peps_params.GetBMPSParams().compress_scheme,
             CompressMPSScheme::VARIATION1Site);
 
   delete executor;

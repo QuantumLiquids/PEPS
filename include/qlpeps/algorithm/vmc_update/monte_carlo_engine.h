@@ -84,7 +84,9 @@ class MonteCarloEngine {
       : split_index_tps_(sitps),
         lx_(sitps.cols()),
         ly_(sitps.rows()),
-        tps_sample_(sitps.rows(), sitps.cols(), SelectTruncateParams_(peps_params)),
+        // Select truncate params in a BC/contractor-aware way so we throw a stable
+        // std::invalid_argument for mismatched OBC/PBC backends before any variant access throws.
+        tps_sample_(sitps.rows(), sitps.cols(), SelectTruncateParams_(sitps, peps_params)),
         comm_(comm),
         mc_sweep_updater_(std::move(mc_updater)),
         u_double_(0, 1),
@@ -420,11 +422,24 @@ class MonteCarloEngine {
     return (n == 1) || (n == 3);
   }
 
-  static TruncateParamsT SelectTruncateParams_(const PEPSParams &peps_params) {
+  static TruncateParamsT SelectTruncateParams_(const SITPST &sitps, const PEPSParams &peps_params) {
+    const BoundaryCondition bc = sitps.GetBoundaryCondition();
     if constexpr (std::is_same_v<ContractorT<TenElemT, QNT>, TRGContractor<TenElemT, QNT>>) {
-      return peps_params.trg_truncate_para;
+      if (bc != BoundaryCondition::Periodic) {
+        throw std::invalid_argument("MonteCarloEngine: TRGContractor requires BoundaryCondition::Periodic.");
+      }
+      if (!peps_params.IsPBC()) {
+        throw std::invalid_argument("MonteCarloEngine: TRGContractor requires TRGTruncateParams in PEPSParams.");
+      }
+      return peps_params.GetTRGParams();
     } else {
-      return peps_params.truncate_para;
+      if (bc == BoundaryCondition::Periodic) {
+        throw std::invalid_argument("MonteCarloEngine: PBC requires TRGContractor in the current implementation.");
+      }
+      if (!peps_params.IsOBC()) {
+        throw std::invalid_argument("MonteCarloEngine: BMPSContractor requires BMPSTruncateParams in PEPSParams.");
+      }
+      return peps_params.GetBMPSParams();
     }
   }
 
@@ -469,5 +484,3 @@ class MonteCarloEngine {
 } // namespace qlpeps
 
 #endif // QLPEPS_ALGORITHM_VMC_UPDATE_MONTE_CARLO_ENGINE_H
-
-

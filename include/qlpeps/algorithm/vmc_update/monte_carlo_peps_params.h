@@ -12,6 +12,7 @@
 
 #include <string>                                    // std::string
 #include <stdexcept>                                // std::runtime_error
+#include <variant>                                  // std::variant
 #include "qlpeps/vmc_basic/configuration.h"       // Configuration
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"  // TRGTruncateParams
@@ -91,21 +92,44 @@ struct MonteCarloParams {
  * Use the appropriate constructor based on boundary condition:
  * - OBC: PEPSParams(BMPSTruncateParams) for BMPS contraction
  * - PBC: PEPSParams(TRGTruncateParams) for TRG contraction
+ *
+ * The stored variant is used to infer OBC vs PBC in higher-level APIs.
  */
 struct PEPSParams {
-  BMPSTruncateParams<qlten::QLTEN_Double> truncate_para;
-  TRGTruncateParams<qlten::QLTEN_Double> trg_truncate_para;
+  using BMPSParams = BMPSTruncateParams<qlten::QLTEN_Double>;
+  using TRGParams = TRGTruncateParams<qlten::QLTEN_Double>;
+  std::variant<BMPSParams, TRGParams> trunc_params;
 
-  PEPSParams() = default;
+  PEPSParams() : trunc_params(BMPSParams()) {}
 
   /// OBC: BMPS contraction parameters
-  explicit PEPSParams(const BMPSTruncateParams<qlten::QLTEN_Double> &trunc_para)
-    : truncate_para(trunc_para) {
+  explicit PEPSParams(const BMPSParams &trunc_para)
+    : trunc_params(trunc_para) {
   }
 
   /// PBC: TRG contraction parameters
-  explicit PEPSParams(const TRGTruncateParams<qlten::QLTEN_Double> &trg_para)
-    : trg_truncate_para(trg_para) {
+  explicit PEPSParams(const TRGParams &trg_para)
+    : trunc_params(trg_para) {
+  }
+
+  bool IsOBC() const { return std::holds_alternative<BMPSParams>(trunc_params); }
+  bool IsPBC() const { return std::holds_alternative<TRGParams>(trunc_params); }
+
+  void SetBMPSParams(const BMPSParams &trunc_para) { trunc_params = trunc_para; }
+  void SetTRGParams(const TRGParams &trg_para) { trunc_params = trg_para; }
+
+  const BMPSParams &GetBMPSParams() const {
+    if (!IsOBC()) {
+      throw std::runtime_error("PEPSParams: requested BMPS params but TRG params are set.");
+    }
+    return std::get<BMPSParams>(trunc_params);
+  }
+
+  const TRGParams &GetTRGParams() const {
+    if (!IsPBC()) {
+      throw std::runtime_error("PEPSParams: requested TRG params but BMPS params are set.");
+    }
+    return std::get<TRGParams>(trunc_params);
   }
 };
 
@@ -140,10 +164,10 @@ struct MCMeasurementParams {
 
   // Explicit accessors - no implicit conversions
   BMPSTruncateParams<qlten::QLTEN_Double> GetTruncatePara() const {
-    return peps_params.truncate_para;
+    return peps_params.GetBMPSParams();
   }
   TRGTruncateParams<qlten::QLTEN_Double> GetTRGTruncatePara() const {
-    return peps_params.trg_truncate_para;
+    return peps_params.GetTRGParams();
   }
   const MonteCarloParams& GetMCParams() const {
     return mc_params;

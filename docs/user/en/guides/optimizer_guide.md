@@ -599,13 +599,13 @@ void OptimizeHeisenbergModel() {
   // 2. Set PEPS parameters  
   PEPSParams peps_params;
   peps_params.bond_dim = 4;           // moderate bond dimension
-  peps_params.truncate_para = BMPSTruncatePara(
+  peps_params.SetBMPSParams(BMPSTruncatePara(
     peps_params.bond_dim,
     peps_params.bond_dim * 20,  // cutoff
     1e-10,                      // trunc_err
     QLTensor<TenElemT, QNT>::GetQNSectorSet().GetQNSctNum(),
     &world
-  );
+  ));
   
   // 3. Set Stochastic Reconfiguration optimizer
   ConjugateGradientParams cg_params{
@@ -695,11 +695,11 @@ int main(int argc, char* argv[]) {
     // PEPS parameters
     PEPSParams peps_params;
     peps_params.bond_dim = bond_dim;
-    peps_params.truncate_para = BMPSTruncatePara(
+    peps_params.SetBMPSParams(BMPSTruncatePara(
       bond_dim, bond_dim * 20, 1e-10, 
       QLTensor<qlten::QLTEN_Complex, qlten::QNZ2>::GetQNSectorSet().GetQNSctNum(),
       &MPI_COMM_WORLD
-    );
+    ));
     
     // Optimizer parameters (Stochastic Reconfiguration)
     ConjugateGradientParams cg_params{100, 1e-5, 20, 0.001};

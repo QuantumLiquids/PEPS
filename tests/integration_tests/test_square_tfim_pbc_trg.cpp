@@ -82,7 +82,7 @@ struct SquareTFIMPBCSystem : public MPITest {
     ham_onsite({1, 0}) = TenElemT(-h);
 
     // Set TRG params for VMC
-    vmc_peps_para.peps_params.trg_truncate_para = trg_trunc_para;
+    vmc_peps_para.peps_params.SetTRGParams(trg_trunc_para);
 
     // Measurement parameters (TRG + PBC)
     auto measure_mc = MonteCarloParams(
@@ -146,9 +146,10 @@ TEST_F(SquareTFIMPBCSystem, StochasticReconfigurationOpt) {
   TransverseFieldIsingSquarePBC model(h);
 
   // VMC optimization using PBC optimizer (TRGContractor)
-  auto executor = new VMCPEPSOptimizerPBC<TenElemT, QNT,
+  auto executor = new VMCPEPSOptimizer<TenElemT, QNT,
                                           MCUpdateSquareNNFullSpaceUpdatePBC,
-                                          TransverseFieldIsingSquarePBC>(
+                                          TransverseFieldIsingSquarePBC,
+                                          TRGContractor>(
       vmc_peps_para, tps, comm, model);
 
   size_t start_flop = flop;
@@ -187,9 +188,10 @@ TEST_F(SquareTFIMPBCSystem, MeasurementPBC) {
   qlpeps::MPI_Bcast(tps, comm);
 
   TransverseFieldIsingSquarePBC model(h);
-  auto executor = new MCPEPSMeasurerPBC<TenElemT, QNT,
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT,
                                         MCUpdateSquareNNFullSpaceUpdatePBC,
-                                        TransverseFieldIsingSquarePBC>(
+                                        TransverseFieldIsingSquarePBC,
+                                        TRGContractor>(
       tps, measure_para, comm, model);
 
   executor->Execute();

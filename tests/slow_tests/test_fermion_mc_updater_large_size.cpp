@@ -164,7 +164,7 @@ size_t CountNumOfHole(const Configuration &config) {
 }
 
 TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
-  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.mc_params.initial_config, mc_measurement_para.peps_params.truncate_para);
+  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.mc_params.initial_config, mc_measurement_para.peps_params.GetBMPSParams());
   std::vector<double> accept_rate(1);
   for (size_t i = 0; i < 10; i++) {
     MCUpdateSquareNNExchange tnn_flip_updater;
@@ -176,7 +176,7 @@ TEST_F(Z2tJModelTools, MonteCarlo2SiteUpdate) {
 }
 
 TEST_F(Z2tJModelTools, MonteCarlo3SiteUpdate) {
-  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.mc_params.initial_config, mc_measurement_para.peps_params.truncate_para);
+  TPSWaveFunctionComponent<QLTEN_Double, fZ2QN> tps_sample(split_idx_tps, mc_measurement_para.mc_params.initial_config, mc_measurement_para.peps_params.GetBMPSParams());
   std::vector<double> accept_rate(1);
   for (size_t i = 0; i < 10; i++) {
     MCUpdateSquareTNN3SiteExchange tnn_flip_updater;

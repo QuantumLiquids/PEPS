@@ -94,7 +94,7 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
       vmc_params, sitps, comm, model, MCUpdateSquareNNFullSpaceUpdate{});
 
   if (rank == hp_numeric::kMPIMasterRank) {
-    const auto &traj = opt->GetEnergyTrajectory();
+    const auto &traj = opt.energy_trajectory;
     ASSERT_FALSE(traj.empty());
     EXPECT_NEAR(std::real(traj.back()), ClassicalIsing2x2OBC_GroundEnergy(), 0.2);
   }
@@ -102,9 +102,9 @@ TEST_F(APISmoke2x2, OptimizeThenMeasure_h0) {
   auto meas = MonteCarloMeasure<TenElemT, QNT,
                                 MCUpdateSquareNNFullSpaceUpdate,
                                 TransverseFieldIsingSquareOBC>(
-      opt->GetState(), MCMeasurementParams(mc_params, peps_params), comm, model, MCUpdateSquareNNFullSpaceUpdate{});
+      opt.state, MCMeasurementParams(mc_params, peps_params), comm, model, MCUpdateSquareNNFullSpaceUpdate{});
 
-  auto [energy, en_err] = meas->OutputEnergy();
+  auto [energy, en_err] = meas.energy;
   if (rank == hp_numeric::kMPIMasterRank) {
     EXPECT_NEAR(std::real(energy), ClassicalIsing2x2OBC_GroundEnergy(), 0.1);
   }
@@ -117,5 +117,4 @@ int main(int argc, char *argv[]) {
   MPI_Finalize();
   return test_err;
 }
-
 

@@ -146,9 +146,10 @@ TEST_F(SquareJ1J2XXZPBCSystem, StochasticReconfigurationOpt) {
 
   SquareSpinOneHalfJ1J2XXZModelPBC model(jz1, jxy1, jz2, jxy2, 0.0);
 
-  auto executor = new VMCPEPSOptimizerPBC<TenElemT, QNT,
+  auto executor = new VMCPEPSOptimizer<TenElemT, QNT,
                                           MCUpdateSquareNNExchangePBC,
-                                          SquareSpinOneHalfJ1J2XXZModelPBC>(
+                                          SquareSpinOneHalfJ1J2XXZModelPBC,
+                                          TRGContractor>(
       vmc_peps_para, tps, comm, model);
 
   size_t start_flop = flop;
@@ -182,9 +183,10 @@ TEST_F(SquareJ1J2XXZPBCSystem, MeasurementPBC) {
   qlpeps::MPI_Bcast(tps, comm);
 
   SquareSpinOneHalfJ1J2XXZModelPBC model(jz1, jxy1, jz2, jxy2, 0.0);
-  auto executor = new MCPEPSMeasurerPBC<TenElemT, QNT,
+  auto executor = new MCPEPSMeasurer<TenElemT, QNT,
                                         MCUpdateSquareNNExchangePBC,
-                                        SquareSpinOneHalfJ1J2XXZModelPBC>(
+                                        SquareSpinOneHalfJ1J2XXZModelPBC,
+                                        TRGContractor>(
       tps, measure_para, comm, model);
 
   executor->Execute();

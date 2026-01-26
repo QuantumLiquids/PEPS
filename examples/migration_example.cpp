@@ -81,8 +81,7 @@ void new_modern_approach() {
     
     // 2. PEPS parameters
     PEPSParams peps_params(
-        BMPSTruncateParams<qlten::QLTEN_Double>(8, 1e-12, 1000),  // truncation parameters
-        "wavefunction_data"  // wavefunction_path
+        BMPSTruncateParams<qlten::QLTEN_Double>(8, 1e-12, 1000)  // truncation parameters
     );
     
     // 3. Optimizer parameters
@@ -127,7 +126,7 @@ VMCPEPSOptimizerParams create_modern_parameters() {
     
     // Create PEPS parameters
     BMPSTruncateParams<qlten::QLTEN_Double> truncate_para(8, 1e-12, 1000);
-    PEPSParams peps_params(truncate_para, 4, 4, "wavefunction_data");
+    PEPSParams peps_params(truncate_para);
     
     // Create optimizer parameters using factory method
     ConjugateGradientParams cg_params(1000, 1e-6, 20, 1e-8);

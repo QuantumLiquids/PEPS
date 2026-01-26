@@ -49,8 +49,8 @@ TEST(MonteCarloEngineGuards, PBCRequiresTRGContractor) {
   Configuration init_cfg(2, 2);
   MonteCarloParams mc_params(/*samples=*/1, /*warmup_sweeps=*/0, /*sweeps_between=*/1, init_cfg, /*is_warmed_up=*/true);
   PEPSParams peps_params;
-  peps_params.trg_truncate_para =
-      TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/2, /*trunc_error=*/0.0);
+  peps_params.SetTRGParams(
+      TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/2, /*trunc_error=*/0.0));
 
   EXPECT_THROW((MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange>(
                     sitps, mc_params, peps_params, MPI_COMM_WORLD)),
@@ -451,7 +451,7 @@ TEST_F(TestConfigurationRescueSum, VerifyAmplitudeMagnitudes) {
   // Test Neel configuration amplitude (should be O(1))
   {
     Configuration neel_config = CreateNeelConfig();
-    TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, neel_config, peps_params.truncate_para);
+    TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, neel_config, peps_params.GetBMPSParams());
     double amp_mag = std::abs(wfc.amplitude);
     
     if (rank == 0) {
@@ -464,7 +464,7 @@ TEST_F(TestConfigurationRescueSum, VerifyAmplitudeMagnitudes) {
   // Test anti-Neel configuration amplitude (should be ~beta)
   {
     Configuration anti_neel_config = CreateAntiNeelConfig();
-    TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, anti_neel_config, peps_params.truncate_para);
+    TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, anti_neel_config, peps_params.GetBMPSParams());
     double amp_mag = std::abs(wfc.amplitude);
     
     if (rank == 0) {
@@ -478,7 +478,7 @@ TEST_F(TestConfigurationRescueSum, VerifyAmplitudeMagnitudes) {
   {
     Configuration third_config = CreateThirdSz0Config();
     auto throw_third = [&]() {
-      TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, third_config, peps_params.truncate_para);
+      TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, third_config, peps_params.GetBMPSParams());
     };
     EXPECT_THROW(throw_third(), std::runtime_error) 
         << "Third config should throw exception (outside wavefunction support)";
@@ -492,7 +492,7 @@ TEST_F(TestConfigurationRescueSum, VerifyAmplitudeMagnitudes) {
   {
     Configuration fourth_config = CreateFourthSz0Config();
     auto throw_fourth = [&]() {
-      TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, fourth_config, peps_params.truncate_para);
+      TPSWaveFunctionComponent<TenElemT, QNT> wfc(sitps, fourth_config, peps_params.GetBMPSParams());
     };
     EXPECT_THROW(throw_fourth(), std::runtime_error) 
         << "Fourth config should throw exception (outside wavefunction support)";
