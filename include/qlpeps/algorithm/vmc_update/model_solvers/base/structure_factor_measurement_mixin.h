@@ -91,13 +91,13 @@ class StructureFactorMeasurementMixin {
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       const BMPSContractor<TenElemT, QNT>& contractor,
       const Configuration& config,
-      ObservableMap<TenElemT>& out,
-      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type>& trunc_para) {
+      ObservableMap<TenElemT>& out) {
     
     if (!enable_structure_factor_measurement_) return;
 
     using Tensor = qlten::QLTensor<TenElemT, QNT>;
     using TransferMPO = std::vector<Tensor *>;
+    const auto& trunc_params = contractor.GetTruncateParams();
 
     const size_t Ly = tn.rows();
     const size_t Lx = tn.cols();
@@ -117,7 +117,7 @@ class StructureFactorMeasurementMixin {
     // Create main_walker from the VACUUM state (up_stack[0]), not from stack.back()!
     // This way we start from the top of the lattice and can evolve row by row.
     auto main_walker = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
-        tn, up_stack[0], UP, 1);
+        tn, up_stack[0], UP, 1, trunc_params);
 
     // Iterate over all source sites (y1, x1) and target sites (y2, x2) with y2 > y1
     // Record ALL pairs including zeros for consistent vector length across samples
@@ -139,7 +139,7 @@ class StructureFactorMeasurementMixin {
         // We still evolve to maintain consistent loop structure
         
         // Absorb the excited row y1
-        excited_walker.Evolve(excited_mpo_ptrs, trunc_para);
+        excited_walker.Evolve(excited_mpo_ptrs);
         
         // Propagate to target rows y2 > y1
         for (size_t y2 = y1 + 1; y2 < Ly; ++y2) {
@@ -209,14 +209,14 @@ class StructureFactorMeasurementMixin {
           
           // Absorb row y2 with standard MPO for next y2 iteration
           if (y2 < Ly - 1) {
-            excited_walker.Evolve(standard_mpo, trunc_para);
+            excited_walker.Evolve(standard_mpo);
           }
         }
       }
       
       // Advance main_walker by absorbing row y1
       TransferMPO standard_mpo = tn.get_row(y1);
-      main_walker.Evolve(standard_mpo, trunc_para);
+      main_walker.Evolve(standard_mpo);
     }
     
     if (!spsm_cross.empty()) {

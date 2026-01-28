@@ -18,6 +18,7 @@
 #include "qlpeps/api/conversions.h"
 #include "../test_mpi_env.h"
 #include "../utilities.h"
+#include <optional>
 #include <cmath>
 #include <filesystem>
 
@@ -65,8 +66,8 @@ struct SquareTFIMPBCSystem : public MPITest {
       MonteCarloParams(100, 100, 1,
                        Configuration(Ly, Lx, 2),  // Physical dimension 2, random init
                        false),
-      PEPSParams());
-  MCMeasurementParams measure_para;
+      PEPSParams(trg_trunc_para));
+  std::optional<MCMeasurementParams> measure_para;
 
   void SetUp() override {
     MPITest::SetUp();
@@ -81,13 +82,10 @@ struct SquareTFIMPBCSystem : public MPITest {
     ham_onsite({0, 1}) = TenElemT(-h);
     ham_onsite({1, 0}) = TenElemT(-h);
 
-    // Set TRG params for VMC
-    vmc_peps_para.peps_params.SetTRGParams(trg_trunc_para);
-
     // Measurement parameters (TRG + PBC)
     auto measure_mc = MonteCarloParams(
         40, 40, 1, Configuration(Ly, Lx, 2), false);
-    measure_para = MCMeasurementParams(
+    measure_para.emplace(
         measure_mc, PEPSParams(trg_trunc_para),
         GetTestOutputPath("integration_tfim_pbc_trg", "measurement"));
   }
@@ -192,7 +190,7 @@ TEST_F(SquareTFIMPBCSystem, MeasurementPBC) {
                                         MCUpdateSquareNNFullSpaceUpdatePBC,
                                         TransverseFieldIsingSquarePBC,
                                         TRGContractor>(
-      tps, measure_para, comm, model);
+      tps, *measure_para, comm, model);
 
   executor->Execute();
 
@@ -220,7 +218,7 @@ TEST_F(SquareTFIMPBCSystem, MeasurementPBC) {
     }
 
     const std::filesystem::path stats_dir =
-        std::filesystem::path(measure_para.measurement_data_dump_path) / "stats";
+        std::filesystem::path(measure_para->measurement_data_dump_path) / "stats";
     ASSERT_TRUE(std::filesystem::exists(stats_dir));
     ASSERT_TRUE(std::filesystem::is_directory(stats_dir));
     ASSERT_TRUE(std::filesystem::exists(stats_dir / "energy.csv"));

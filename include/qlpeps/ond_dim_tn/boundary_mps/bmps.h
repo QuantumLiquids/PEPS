@@ -8,6 +8,7 @@
 #ifndef QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H
 #define QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H
 
+#include <limits>                               // std::numeric_limits
 #include <optional>                             //std::optional<T>
 #include "qlten/qlten.h"
 #include "qlmps/one_dim_tn/framework/ten_vec.h"
@@ -46,12 +47,13 @@ std::string CompressMPSSchemeString(CompressMPSScheme scheme) {
 template<typename TenElemT>
 struct BMPSTruncateParams {
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-  size_t D_min;
-  size_t D_max;
-  RealT trunc_err;
-  CompressMPSScheme compress_scheme;
-  std::optional<RealT> convergence_tol;
-  std::optional<size_t> iter_max;
+  // Defaults mirror TRGTruncateParams: safe to default-construct and yields "no truncation".
+  size_t D_min = 1;
+  size_t D_max = std::numeric_limits<size_t>::max();
+  RealT trunc_err = RealT(0);
+  CompressMPSScheme compress_scheme = CompressMPSScheme::SVD_COMPRESS;
+  std::optional<RealT> convergence_tol = std::nullopt;
+  std::optional<size_t> iter_max = std::nullopt;
 
   BMPSTruncateParams(void) = default;
 

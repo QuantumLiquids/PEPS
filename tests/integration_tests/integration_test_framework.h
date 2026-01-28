@@ -17,6 +17,7 @@
 #include "../utilities.h"
 
 #include <type_traits>
+#include <optional>
 #include <utility>
 
 using namespace qlten;
@@ -49,11 +50,11 @@ protected:
   // Expected energy for validation
   double energy_ed;
   
-  // VMC optimization parameters
-  VMCPEPSOptimizerParams optimize_para;
-  
-  // Monte Carlo measurement parameters
-  MCMeasurementParams measure_para;
+	  // VMC optimization parameters
+	  std::optional<VMCPEPSOptimizerParams> optimize_para;
+	  
+	  // Monte Carlo measurement parameters
+	  std::optional<MCMeasurementParams> measure_para;
 
   virtual void SetUpIndices() = 0;
   virtual void SetUpHamiltonians() = 0;
@@ -105,8 +106,8 @@ protected:
     SplitIndexTPST tps(Ly, Lx);
     tps.Load(tps_path);
 
-    auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(
-        optimize_para, tps, comm, model);
+	    auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(
+	        *optimize_para, tps, comm, model);
     
     size_t start_flop = flop;
     Timer vmc_timer("vmc");
@@ -132,7 +133,7 @@ protected:
     tps.Load(tps_path);
 
     auto measure_exe = new MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT>(
-        tps, measure_para, comm, model);
+        tps, *measure_para, comm, model);
     
     size_t start_flop = flop;
     Timer measure_timer("measurement");
@@ -159,14 +160,14 @@ protected:
   template<typename ModelT, typename MCUpdaterT>
   void RunZeroUpdateTest(const ModelT& model) {
     MPI_Barrier(comm);
-    optimize_para.optimizer_params.base_params.learning_rate = 0.0;
+    optimize_para->optimizer_params.base_params.learning_rate = 0.0;
     
     SplitIndexTPST tps(Ly, Lx);
     tps.Load(tps_path);
     auto init_tps = tps;
     
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(
-        optimize_para, tps, comm, model);
+        *optimize_para, tps, comm, model);
     
     size_t start_flop = flop;
     Timer vmc_timer("vmc");

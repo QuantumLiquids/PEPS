@@ -41,6 +41,7 @@ class SquareNNNModelMeasurementSolver
     const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t ly = tn.rows();
     const size_t lx = tn.cols();
+    tps_sample->contractor.SetTruncateParams(trunc_para);
 
     constexpr bool kHasSCFlag = requires { ModelType::enable_sc_measurement; };
 
@@ -183,11 +184,11 @@ class SquareNNNModelMeasurementSolver
     psi_list.reserve(ly + lx);
 
     if constexpr (has_nnn_interaction) {
-      BondTraversalMixin::TraverseAllBonds(tn, tps_sample->contractor, trunc_para, bond_measure_func, nnn_link_measure_func,
+      BondTraversalMixin::TraverseAllBonds(tn, tps_sample->contractor, bond_measure_func, nnn_link_measure_func,
                                            off_diag_long_range_measure_func, psi_list);
     } else {
       // Pass nullptr to skip NNN traversal
-      BondTraversalMixin::TraverseAllBonds(tn, tps_sample->contractor, trunc_para, bond_measure_func, nullptr,
+      BondTraversalMixin::TraverseAllBonds(tn, tps_sample->contractor, bond_measure_func, nullptr,
                                            off_diag_long_range_measure_func, psi_list);
     }
 

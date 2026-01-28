@@ -33,7 +33,8 @@ class MCUpdateSquareNNUpdateBaseOBC : public MonteCarloSweepUpdaterBase<WaveFunc
     size_t flip_accept_num = 0;
     auto &tn = tps_component.tn;
     auto &contractor = tps_component.contractor;
-    contractor.GenerateBMPSApproach(tn, UP, tps_component.trun_para);
+    contractor.SetTruncateParams(tps_component.trun_para);
+    contractor.GenerateBMPSApproach(tn, UP);
     for (size_t row = 0; row < tn.rows(); row++) {
       contractor.InitBTen(tn, LEFT, row);
       contractor.GrowFullBTen(tn, RIGHT, row, 2, true);
@@ -48,14 +49,14 @@ class MCUpdateSquareNNUpdateBaseOBC : public MonteCarloSweepUpdaterBase<WaveFunc
         }
       }
       if (row < tn.rows() - 1) {
-        contractor.ShiftBMPSWindow(tn, DOWN, tps_component.trun_para);
+        contractor.ShiftBMPSWindow(tn, DOWN);
       }
     }
 
     contractor.DeleteInnerBMPS(LEFT);
     contractor.DeleteInnerBMPS(RIGHT);
 
-    contractor.GenerateBMPSApproach(tn, LEFT, tps_component.trun_para);
+    contractor.GenerateBMPSApproach(tn, LEFT);
     for (size_t col = 0; col < tn.cols(); col++) {
       contractor.InitBTen(tn, UP, col);
       contractor.GrowFullBTen(tn, DOWN, col, 2, true);
@@ -70,7 +71,7 @@ class MCUpdateSquareNNUpdateBaseOBC : public MonteCarloSweepUpdaterBase<WaveFunc
         }
       }
       if (col < tn.cols() - 1) {
-        contractor.ShiftBMPSWindow(tn, RIGHT, tps_component.trun_para);
+        contractor.ShiftBMPSWindow(tn, RIGHT);
       }
     }
 

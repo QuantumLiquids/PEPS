@@ -52,12 +52,13 @@ MCPEPSMeasurer<TenElemT,
                                                measurement_params.mc_params,
                                                measurement_params.peps_params,
                                                comm,
-                                               std::move(mc_updater)) {
+                                               std::move(mc_updater),
+                                               measurement_params.runtime_params.config_rescue) {
   ReserveSamplesData_();
-  PrintExecutorInfo_();
   qlpeps::MPISignalGuard::Register();
   // Load observable metadata from solver
   observables_meta_ = measurement_solver_.DescribeObservables(engine_.Ly(), engine_.Lx());
+  PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
 }
 
@@ -336,6 +337,19 @@ void MCPEPSMeasurer<TenElemT,
                     MeasurementSolver,
                     ContractorT>::PrintExecutorInfo_(void) {
   engine_.PrintCommonInfo("MONTE-CARLO MEASUREMENT PROGRAM FOR PEPS");
+  if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+    const size_t indent = 40;
+    std::cout << std::left;
+    std::cout << std::setw(indent) << "Measurement dump path:" << mc_measure_params.measurement_data_dump_path << "\n";
+    std::cout << std::setw(indent) << "Registered observables:" << observables_meta_.size() << "\n";
+
+    const auto &psi = mc_measure_params.runtime_params.psi_consistency;
+    std::cout << std::setw(indent) << "psi_consistency warnings:" << (psi.enabled ? "enabled" : "disabled") << "\n";
+    std::cout << std::setw(indent) << "psi_consistency master_only:" << (psi.master_only ? "true" : "false") << "\n";
+    std::cout << std::setw(indent) << "psi_consistency threshold:" << psi.threshold << "\n";
+    std::cout << std::setw(indent) << "psi_consistency max warnings:" << psi.max_warnings << "\n";
+    std::cout << std::setw(indent) << "psi_consistency max print elems:" << psi.max_print_elems << "\n";
+  }
   engine_.PrintTechInfo();
 }
 

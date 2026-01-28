@@ -112,7 +112,8 @@ CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_in
   TensorNetwork2D<TenElemT, QNT> &tn = tps_sample->tn;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
-  tps_sample->contractor.GenerateBMPSApproach(tn, UP, trunc_para);
+  tps_sample->contractor.SetTruncateParams(trunc_para);
+  tps_sample->contractor.GenerateBMPSApproach(tn, UP);
   psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     this->template CalHorizontalBondEnergyAndHolesSweepRowImpl<TenElemT, QNT, calchols>(row,
@@ -122,7 +123,7 @@ CalHorizontalBondEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_in
                                                                                         bond_energy_set,
                                                                                         psi_list);
     if (row < tn.rows() - 1) {
-      tps_sample->contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
+      tps_sample->contractor.ShiftBMPSWindow(tn, DOWN);
     }
   }
 }
@@ -267,10 +268,10 @@ CalVerticalBondEnergyImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
                           std::vector<TenElemT> &bond_energy_set,
                           std::vector<TenElemT> &psi_list) {
   const Configuration &config = tps_sample->config;
+  tps_sample->contractor.SetTruncateParams(tps_sample->trun_para);
   BondTraversalMixin::TraverseVerticalBonds(
       tps_sample->tn,
       tps_sample->contractor,
-      tps_sample->trun_para,
       [&, split_index_tps](const SiteIdx &site1,
                            const SiteIdx &site2,
                            const BondOrientation bond_orient,

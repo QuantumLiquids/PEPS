@@ -29,7 +29,7 @@ struct VMCPEPSOptimizerParams {
   // psi(S) consistency warning controls (per-rank). Applied by the optimizer/evaluator.
   RuntimeParams runtime_params;
 
-  VMCPEPSOptimizerParams() : tps_dump_base_name(kTpsPathBase), tps_dump_path("./") {}
+  VMCPEPSOptimizerParams() = delete;
 
   VMCPEPSOptimizerParams(const OptimizerParams &opt_params,
                          const MonteCarloParams &mc_params,

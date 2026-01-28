@@ -281,8 +281,7 @@ class SingletPairCorrelationMixin {
       const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
       const BMPSContractor<TenElemT, QNT>& contractor,
       const Configuration& config,
-      ObservableMap<TenElemT>& out,
-      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type>& trunc_para) {
+      ObservableMap<TenElemT>& out) {
     
     // FIXME: Fermion sign is NOT correctly handled.
     // The current implementation traces out parity indices during contraction,
@@ -300,6 +299,7 @@ class SingletPairCorrelationMixin {
 
     using Tensor = qlten::QLTensor<TenElemT, QNT>;
     using TransferMPO = std::vector<Tensor *>;
+    const auto& trunc_para = contractor.GetTruncateParams();
 
     const size_t Ly = tn.rows();
     const size_t Lx = tn.cols();
@@ -343,7 +343,7 @@ class SingletPairCorrelationMixin {
           "MeasureSingletPairCorrelation: UP BMPS stack insufficient. "
           "Need depth " + std::to_string(max_ref_y + 1) + 
           ", got " + std::to_string(up_stack.size()) + 
-          ". Call contractor.GrowFullBMPS(tn, UP, trunc_para) before measurement.");
+          ". Call contractor.GrowFullBMPS(tn, UP) after setting truncation params before measurement.");
     }
 
     // Enumerate horizontal reference bonds
@@ -386,17 +386,17 @@ class SingletPairCorrelationMixin {
         // Fork walkers directly from contractor's pre-computed BMPS at row y1
         // up_stack[y1] = boundary state after absorbing rows [0, y1-1]
         auto excited_walker_up_down = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
-            tn, up_stack[y1], UP, y1);
+            tn, up_stack[y1], UP, y1, trunc_para);
         auto excited_walker_down_up = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
-            tn, up_stack[y1], UP, y1);
+            tn, up_stack[y1], UP, y1, trunc_para);
         auto original_walker = typename BMPSContractor<TenElemT, QNT>::BMPSWalker(
-            tn, up_stack[y1], UP, y1);
+            tn, up_stack[y1], UP, y1, trunc_para);
         
         // Evolve walkers with their respective MPOs at ref row
         TransferMPO original_mpo_y1 = tn.get_row(y1);  // Original config (ref=empty)
-        excited_walker_up_down.Evolve(excited_mpo_up_down, trunc_para);
-        excited_walker_down_up.Evolve(excited_mpo_down_up, trunc_para);
-        original_walker.Evolve(original_mpo_y1, trunc_para);
+        excited_walker_up_down.Evolve(excited_mpo_up_down);
+        excited_walker_down_up.Evolve(excited_mpo_down_up);
+        original_walker.Evolve(original_mpo_y1);
         
         // Track how many rows walkers have absorbed
         // After Evolve(mpo_y1), they have absorbed rows [0, y1]
@@ -413,7 +413,7 @@ class SingletPairCorrelationMixin {
                 "MeasureSingletPairCorrelation: DOWN BMPS stack insufficient. "
                 "Need depth " + std::to_string(down_stack_idx + 1) + 
                 ", got " + std::to_string(down_stack.size()) + 
-                ". Call contractor.GrowFullBMPS(tn, DOWN, trunc_para) before measurement.");
+                ". Call contractor.GrowFullBMPS(tn, DOWN) after setting truncation params before measurement.");
           }
           const auto& bottom_env = down_stack[down_stack_idx];
           
@@ -422,13 +422,13 @@ class SingletPairCorrelationMixin {
           // InitBTenLeft requires: walker absorbed [0, y2-1], MPO is row y2, bottom_env is [y2+1, Ly-1]
           while (excited_absorbed_rows < y2) {
             TransferMPO evolve_mpo = tn.get_row(excited_absorbed_rows);
-            excited_walker_up_down.Evolve(evolve_mpo, trunc_para);
-            excited_walker_down_up.Evolve(evolve_mpo, trunc_para);
+            excited_walker_up_down.Evolve(evolve_mpo);
+            excited_walker_down_up.Evolve(evolve_mpo);
             excited_absorbed_rows++;
           }
           while (original_absorbed_rows < y2) {
             TransferMPO evolve_mpo = tn.get_row(original_absorbed_rows);
-            original_walker.Evolve(evolve_mpo, trunc_para);
+            original_walker.Evolve(evolve_mpo);
             original_absorbed_rows++;
           }
           
@@ -559,4 +559,3 @@ class SingletPairCorrelationMixin {
 } // namespace qlpeps
 
 #endif // QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_BASE_SINGLET_PAIR_CORRELATION_MEASUREMENT_MIXIN_H
-

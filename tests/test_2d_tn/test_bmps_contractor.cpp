@@ -277,10 +277,11 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
 ) {
   BMPSContractor<TenElemT, QNT> contractor(tn2d.rows(), tn2d.cols());
   contractor.Init(tn2d);
+  contractor.SetTruncateParams(trunc_para);
 
   std::vector<TenElemT> amplitudes;
   amplitudes.reserve(26);
-  contractor.GrowBMPSForRow(tn2d, 2, trunc_para);
+  contractor.GrowBMPSForRow(tn2d, 2);
   contractor.InitBTen(tn2d, BTenPOSITION::LEFT, 2);
   contractor.GrowFullBTen(tn2d, BTenPOSITION::RIGHT, 2, 2, true);
   amplitudes.push_back(contractor.Trace(tn2d, {2, 0}, HORIZONTAL));
@@ -297,7 +298,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
                                                 tn2d({2, 2}),
                                                 tn2d({2, 3})));
 
-  contractor.GrowBMPSForCol(tn2d, 1, trunc_para);
+  contractor.GrowBMPSForCol(tn2d, 1);
   contractor.InitBTen(tn2d, BTenPOSITION::DOWN, 1);
   contractor.GrowFullBTen(tn2d, BTenPOSITION::UP, 1, 2, true);
   amplitudes.push_back(contractor.Trace(tn2d, {tn2d.rows() - 2, 1}, VERTICAL));
@@ -310,7 +311,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
                                                 tn2d({tn2d.rows() - 1, 1})));
 
   /***** HORIZONTAL MPS *****/
-  contractor.GrowBMPSForRow(tn2d, 1, trunc_para);
+  contractor.GrowBMPSForRow(tn2d, 1);
   contractor.InitBTen2(tn2d, BTenPOSITION::LEFT, 1);
   contractor.GrowFullBTen2(tn2d, BTenPOSITION::RIGHT, 1, 2, true);
 
@@ -364,7 +365,7 @@ std::vector<TenElemT> Contract2DTNUsingBMPSContractor(
                                                          tn2d({2, 3}))); // trace original tn
 
   /***** VERTICAL MPS *****/
-  contractor.GrowBMPSForCol(tn2d, 1, trunc_para);
+  contractor.GrowBMPSForCol(tn2d, 1);
   contractor.GrowFullBTen2(tn2d, BTenPOSITION::DOWN, 1, 2, true);
   contractor.GrowFullBTen2(tn2d, BTenPOSITION::UP, 1, 2, true);
   amplitudes.push_back(contractor.ReplaceNNNSiteTrace(tn2d, {2, 1},
@@ -410,8 +411,9 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, TestDynamicUpdateAndPunchHole) {
   // 1. Initial calculation
   // Use a small bond dimension for speed
   auto trunc_para = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(4, 10, 1e-10);
+  contractor.SetTruncateParams(trunc_para);
   
-  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, 2);
   // Build BOTH left/right boundary tensors for this row slice.
   // PunchHole(HORIZONTAL) needs bten_set_[LEFT][col] and bten_set_[RIGHT][cols-col-1].
   contractor.GrowFullBTen(dtn2d, BTenPOSITION::LEFT, 2, 2, true);
@@ -454,7 +456,7 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, TestDynamicUpdateAndPunchHole) {
   // But InitBTen clears BTen.
   
   // Re-grow row BMPS (it will pick up from where it was cut)
-  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, 2);
   
   // Rebuild BOTH left/right boundary tensors for this row slice.
   contractor.GrowFullBTen(dtn2d, BTenPOSITION::LEFT, 2, 2, true);
@@ -889,10 +891,12 @@ TEST_F(ProjectedtJTensorNetwork, BMPSWalkerFermionicBTenTest) {
   // Initialize contractor
   ContractorT contractor(dtn2d.rows(), dtn2d.cols());
   contractor.Init(dtn2d);
+  contractor.SetTruncateParams(trunc_para);
+  contractor.SetTruncateParams(trunc_para);
 
   // Grow BMPS environments for a middle row
   const size_t test_row = Ly / 2;
-  contractor.GrowBMPSForRow(dtn2d, test_row, trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, test_row);
 
   // Get walker from UP direction
   WalkerT walker = contractor.GetWalker(dtn2d, UP);
@@ -1073,10 +1077,11 @@ TEST_F(ProjectedSpinTenNet, BMPSWalkerBasicTest) {
   // Initialize contractor with row environments
   ContractorT contractor(tn2d.rows(), tn2d.cols());
   contractor.Init(tn2d);
+  contractor.SetTruncateParams(trunc_para);
 
   // Grow BMPS from top (UP direction) to row 1
   // After this, UP stack has absorbed row 0
-  contractor.GrowBMPSForRow(tn2d, 1, trunc_para);
+  contractor.GrowBMPSForRow(tn2d, 1);
 
   // Get a walker forked from UP direction
   WalkerT walker = contractor.GetWalker(tn2d, UP);
@@ -1091,14 +1096,14 @@ TEST_F(ProjectedSpinTenNet, BMPSWalkerBasicTest) {
   size_t original_stack_size = walker.GetStackSize();
 
   // Evolve the walker by one step (should absorb the next row)
-  walker.EvolveStep(trunc_para);
+  walker.EvolveStep();
   EXPECT_EQ(walker.GetStackSize(), original_stack_size + 1);
 
   // Verify that contractor's stack is unchanged (walker is independent)
   EXPECT_EQ(contractor.GetBMPS(UP).size(), original_stack_size);
 
   // Evolve walker one more step
-  walker.EvolveStep(trunc_para);
+  walker.EvolveStep();
   EXPECT_EQ(walker.GetStackSize(), original_stack_size + 2);
 
   // Contractor still unchanged
@@ -1109,7 +1114,7 @@ TEST_F(ProjectedSpinTenNet, BMPSWalkerBasicTest) {
   EXPECT_EQ(walker2.GetStackSize(), original_stack_size);  // Fresh copy from contractor
 
   // Evolve walker2 - should not affect walker1
-  walker2.EvolveStep(trunc_para);
+  walker2.EvolveStep();
   EXPECT_EQ(walker2.GetStackSize(), original_stack_size + 1);
   EXPECT_EQ(walker.GetStackSize(), original_stack_size + 2);  // walker1 unchanged
 }
@@ -1130,10 +1135,11 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerContractRowTest) {
 
   ContractorT contractor(dtn2d.rows(), dtn2d.cols());
   contractor.Init(dtn2d);
+  contractor.SetTruncateParams(trunc_para);
 
   // Build environments for a middle row (e.g., row 2)
   // UP environment: absorb rows 0, 1
-  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, 2);
   
   // Get UP walker (has absorbed rows 0, 1)
   // GrowBMPSForRow(row=2) means UP stack contains: vacuum, row0, row1
@@ -1204,7 +1210,8 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerBTenCacheTest) {
   contractor.Init(dtn2d);
   
   BMPSTruncateParams<double> trunc_para(1, 20, 1e-14, CompressMPSScheme::SVD_COMPRESS);
-  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  contractor.SetTruncateParams(trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, 2);
   
   // Get walker
   WalkerT walker = contractor.GetWalker(dtn2d, UP);
@@ -1296,7 +1303,8 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerShiftBTenWindowTest) {
   contractor.Init(dtn2d);
   
   BMPSTruncateParams<double> trunc_para(1, 20, 1e-14, CompressMPSScheme::SVD_COMPRESS);
-  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  contractor.SetTruncateParams(trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, 2);
   
   // Get walker
   WalkerT walker = contractor.GetWalker(dtn2d, UP);
@@ -1369,7 +1377,8 @@ TEST_F(OBCIsing2DTenNetWithoutZ2, BMPSWalkerTraceWithTwoSiteBTenTest) {
   contractor.Init(dtn2d);
   
   BMPSTruncateParams<double> trunc_para(1, 20, 1e-14, CompressMPSScheme::SVD_COMPRESS);
-  contractor.GrowBMPSForRow(dtn2d, 2, trunc_para);
+  contractor.SetTruncateParams(trunc_para);
+  contractor.GrowBMPSForRow(dtn2d, 2);
   
   // Get walker
   WalkerT walker = contractor.GetWalker(dtn2d, UP);

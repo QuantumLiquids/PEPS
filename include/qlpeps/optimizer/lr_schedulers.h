@@ -10,7 +10,10 @@
 #ifndef QLPEPS_OPTIMIZER_LR_SCHEDULERS_H
 #define QLPEPS_OPTIMIZER_LR_SCHEDULERS_H
 
+#include <iomanip>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -29,6 +32,8 @@ public:
   virtual double GetLearningRate(size_t iteration, double current_energy = 0.0) const = 0;
   virtual void Step() {}
   virtual std::unique_ptr<LearningRateScheduler> Clone() const = 0;
+  virtual std::string Name() const = 0;
+  virtual std::string Describe() const = 0;
 };
 
 // Constant LR
@@ -39,6 +44,14 @@ public:
   explicit ConstantLR(double lr) : learning_rate_(lr) {}
   double GetLearningRate(size_t, double) const override { return learning_rate_; }
   std::unique_ptr<LearningRateScheduler> Clone() const override { return std::make_unique<ConstantLR>(learning_rate_); }
+  std::string Name() const override { return "ConstantLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "lr=" << learning_rate_;
+    return oss.str();
+  }
 };
 
 // Exponential decay (smooth per-iteration): lr = initial_lr * decay_rate^(iteration/decay_steps)
@@ -56,6 +69,14 @@ public:
   std::unique_ptr<LearningRateScheduler> Clone() const override {
     return std::make_unique<ExponentialDecayLR>(initial_lr_, decay_rate_, decay_steps_);
   }
+  std::string Name() const override { return "ExponentialDecayLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "initial_lr=" << initial_lr_ << ", decay_rate=" << decay_rate_ << ", decay_steps=" << decay_steps_;
+    return oss.str();
+  }
 };
 
 // Step decay (discrete): lr = initial_lr * gamma^(floor(iteration/step_size))
@@ -72,6 +93,14 @@ public:
   }
   std::unique_ptr<LearningRateScheduler> Clone() const override {
     return std::make_unique<StepLR>(initial_lr_, step_size_, gamma_);
+  }
+  std::string Name() const override { return "StepLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "initial_lr=" << initial_lr_ << ", step_size=" << step_size_ << ", gamma=" << gamma_;
+    return oss.str();
   }
 };
 
@@ -108,6 +137,15 @@ public:
     clone->patience_counter_ = patience_counter_;
     return clone;
   }
+  std::string Name() const override { return "PlateauLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "current_lr=" << current_lr_ << ", factor=" << factor_
+        << ", patience=" << patience_ << ", threshold=" << threshold_;
+    return oss.str();
+  }
 };
 
 // Cosine annealing: lr = eta_min + 0.5*(eta_max-eta_min)*(1+cos(pi * t/T))
@@ -127,6 +165,14 @@ public:
   }
   std::unique_ptr<LearningRateScheduler> Clone() const override {
     return std::make_unique<CosineAnnealingLR>(eta_max_, T_max_, eta_min_);
+  }
+  std::string Name() const override { return "CosineAnnealingLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "eta_max=" << eta_max_ << ", T_max=" << T_max_ << ", eta_min=" << eta_min_;
+    return oss.str();
   }
 };
 
@@ -149,6 +195,14 @@ public:
   std::unique_ptr<LearningRateScheduler> Clone() const override {
     return std::make_unique<WarmupLR>(base_lr_, warmup_steps_, start_lr_);
   }
+  std::string Name() const override { return "WarmupLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "base_lr=" << base_lr_ << ", warmup_steps=" << warmup_steps_ << ", start_lr=" << start_lr_;
+    return oss.str();
+  }
 };
 
 // MultiStep decay with milestones
@@ -170,10 +224,22 @@ public:
   std::unique_ptr<LearningRateScheduler> Clone() const override {
     return std::make_unique<MultiStepLR>(initial_lr_, milestones_, gamma_);
   }
+  std::string Name() const override { return "MultiStepLR"; }
+  std::string Describe() const override {
+    std::ostringstream oss;
+    oss.setf(std::ios::scientific, std::ios::floatfield);
+    oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+    oss << "initial_lr=" << initial_lr_ << ", gamma=" << gamma_ << ", milestones=[";
+    for (size_t i = 0; i < milestones_.size(); ++i) {
+      if (i) { oss << ","; }
+      oss << milestones_[i];
+    }
+    oss << "]";
+    return oss.str();
+  }
 };
 
 } // namespace qlpeps
 
 #endif // QLPEPS_OPTIMIZER_LR_SCHEDULERS_H
-
 

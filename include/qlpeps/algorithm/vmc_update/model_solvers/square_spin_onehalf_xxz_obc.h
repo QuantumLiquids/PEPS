@@ -238,13 +238,13 @@ class SquareSpinOneHalfXXZModelOBC
     // Measure structure factor if enabled
     if (this->IsStructureFactorEnabled()) {
       const auto& trunc_para = tps_sample->trun_para;
+      tps_sample->contractor.SetTruncateParams(trunc_para);
       this->MeasureStructureFactor(
           tps_sample->tn,
           split_index_tps,
           tps_sample->contractor,
           config,
-          out,
-          trunc_para);
+          out);
     }
 
     return out;

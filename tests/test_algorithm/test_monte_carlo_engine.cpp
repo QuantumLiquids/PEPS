@@ -48,8 +48,7 @@ TEST(MonteCarloEngineGuards, PBCRequiresTRGContractor) {
   SITPST sitps(2, 2, BoundaryCondition::Periodic);
   Configuration init_cfg(2, 2);
   MonteCarloParams mc_params(/*samples=*/1, /*warmup_sweeps=*/0, /*sweeps_between=*/1, init_cfg, /*is_warmed_up=*/true);
-  PEPSParams peps_params;
-  peps_params.SetTRGParams(
+  PEPSParams peps_params(
       TRGTruncateParams<qlten::QLTEN_Double>::SVD(/*d_min=*/1, /*d_max=*/2, /*trunc_error=*/0.0));
 
   EXPECT_THROW((MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange>(

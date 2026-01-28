@@ -99,13 +99,13 @@ protected:
     ConjugateGradientParams cg_params(100, 1e-5, 20, 0.001);
     auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(100, cg_params, 0.1);
     
-    optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params);
+    optimize_para.emplace(opt_params, mc_params, peps_params);
     
     // Monte Carlo measurement parameters
     Configuration measure_config(Ly, Lx, OccupancyNum({num_up, num_down, hole_num}));
     MonteCarloParams measure_mc_params(1000, 1000, 1, measure_config, false);
     PEPSParams measure_peps_params(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, Dpeps * 2, 1e-15));
-    measure_para = MCMeasurementParams(measure_mc_params, measure_peps_params);
+    measure_para.emplace(measure_mc_params, measure_peps_params);
   }
 
  public:

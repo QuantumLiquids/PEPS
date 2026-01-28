@@ -26,7 +26,6 @@ class BondTraversalMixin {
    * 
    * @param tn The tensor network to traverse
    * @param contractor The BMPS contractor
-   * @param trunc_para The truncation parameters for BMPS
    * @param bond_measure_func functor to measure bond energy or order parameters
    * @param off_diag_long_range_measure_func functor to measure off-diagonal long-range order parameters along horizontal direction. Set to nullptr if not needed.
    */
@@ -34,17 +33,16 @@ class BondTraversalMixin {
   static void TraverseAllBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
       BMPSContractor<TenElemT, QNT> &contractor,
-      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       BondMeasureFunc &&bond_measure_func,
       NNNLinkMeasureFunc &&nnn_link_measure_func,
       OffDiagLongRangeMeasureFunc &&off_diag_long_range_measure_func,
       std::vector<TenElemT> &psi_list // gather the wave function amplitudes
   ) {
     psi_list.reserve(tn.rows() + tn.cols());
-    TraverseHorizontalBonds(tn, contractor, trunc_para, std::forward<BondMeasureFunc>(bond_measure_func),
+    TraverseHorizontalBonds(tn, contractor, std::forward<BondMeasureFunc>(bond_measure_func),
                             std::forward<NNNLinkMeasureFunc>(nnn_link_measure_func),
                             std::forward<OffDiagLongRangeMeasureFunc>(off_diag_long_range_measure_func), psi_list);
-    TraverseVerticalBonds(tn, contractor, trunc_para, std::forward<BondMeasureFunc>(bond_measure_func), psi_list);
+    TraverseVerticalBonds(tn, contractor, std::forward<BondMeasureFunc>(bond_measure_func), psi_list);
   }
 
   /**
@@ -57,13 +55,12 @@ class BondTraversalMixin {
   static void TraverseHorizontalBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
       BMPSContractor<TenElemT, QNT> &contractor,
-      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       BondMeasureFunc &&bond_measure_func,
       NNNLinkMeasureFunc &&nnn_link_measure_func,
       OffDiagLongRangeMeasureFunc &&off_diag_long_range_measure_func,
       std::vector<TenElemT> &psi_list // gather the wave function amplitudes
   ) {
-    contractor.GenerateBMPSApproach(tn, UP, trunc_para);
+    contractor.GenerateBMPSApproach(tn, UP);
     for (size_t row = 0; row < tn.rows(); ++row) {
       contractor.InitBTen(tn, LEFT, row);
       contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
@@ -102,7 +99,7 @@ class BondTraversalMixin {
         off_diag_long_range_measure_func(row, inv_psi);
       }
       if (row < tn.rows() - 1) {
-        contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
+        contractor.ShiftBMPSWindow(tn, DOWN);
       }
     }
   }
@@ -116,11 +113,10 @@ class BondTraversalMixin {
   static void TraverseVerticalBonds(
       TensorNetwork2D<TenElemT, QNT> &tn,
       BMPSContractor<TenElemT, QNT> &contractor,
-      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       BondMeasureFunc &&bond_measure_func,
       std::vector<TenElemT> &psi_list // gather the wave function amplitudes
   ) {
-    contractor.GenerateBMPSApproach(tn, LEFT, trunc_para);
+    contractor.GenerateBMPSApproach(tn, LEFT);
     for (size_t col = 0; col < tn.cols(); col++) {
       contractor.InitBTen(tn, UP, col);
       contractor.GrowFullBTen(tn, DOWN, col, 2, true);
@@ -141,7 +137,7 @@ class BondTraversalMixin {
         }
       }
       if (col < tn.cols() - 1) {
-        contractor.ShiftBMPSWindow(tn, RIGHT, trunc_para);
+        contractor.ShiftBMPSWindow(tn, RIGHT);
       }
     }
   }

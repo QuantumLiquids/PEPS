@@ -10,17 +10,17 @@
 namespace qlpeps {
 
 template<typename TenElemT, typename QNT>
-void BMPSContractor<TenElemT, QNT>::BMPSWalker::Evolve(const TransferMPO& mpo, const BMPSTruncateParams<RealT> &trunc_para) {
+void BMPSContractor<TenElemT, QNT>::BMPSWalker::Evolve(const TransferMPO& mpo) {
   // MultiplyMPO requires non-const ref due to internal alignment logic; make a local copy
   TransferMPO mpo_copy = mpo;
-  bmps_ = bmps_.MultiplyMPO(mpo_copy, trunc_para.compress_scheme,
-                            trunc_para.D_min, trunc_para.D_max, trunc_para.trunc_err,
-                            trunc_para.convergence_tol,
-                            trunc_para.iter_max);
+  bmps_ = bmps_.MultiplyMPO(mpo_copy, trunc_params_.compress_scheme,
+                            trunc_params_.D_min, trunc_params_.D_max, trunc_params_.trunc_err,
+                            trunc_params_.convergence_tol,
+                            trunc_params_.iter_max);
 }
 
 template<typename TenElemT, typename QNT>
-void BMPSContractor<TenElemT, QNT>::BMPSWalker::EvolveStep(const BMPSTruncateParams<RealT> &trunc_para) {
+void BMPSContractor<TenElemT, QNT>::BMPSWalker::EvolveStep() {
   assert(stack_size_ > 0);
   size_t mpo_num;
   if (pos_ == UP || pos_ == LEFT) {
@@ -40,7 +40,7 @@ void BMPSContractor<TenElemT, QNT>::BMPSWalker::EvolveStep(const BMPSTruncatePar
   // For DOWN and RIGHT, index goes 0..N-1, so check underflow/bounds if size_t wasn't unsigned
   
   const TransferMPO &mpo = tn_.get_slice(mpo_num, Rotate(Orientation(pos_)));
-  Evolve(mpo, trunc_para);
+  Evolve(mpo);
   stack_size_++;
 }
 
@@ -50,7 +50,7 @@ BMPSContractor<TenElemT, QNT>::GetWalker(const TensorNetwork2D<TenElemT, QNT>& t
   const auto& stack = bmps_set_.at(position);
   assert(!stack.empty() && "Cannot create Walker from empty BMPS stack");
   // Copy the top BMPS
-  return BMPSWalker(tn, stack.back(), position, stack.size());
+  return BMPSWalker(tn, stack.back(), position, stack.size(), GetTruncateParams());
 }
 
 template<typename TenElemT, typename QNT>
@@ -463,4 +463,3 @@ TenElemT BMPSContractor<TenElemT, QNT>::BMPSWalker::TraceWithTwoSiteBTen(
 } // namespace qlpeps
 
 #endif // QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_IMPL_BMPS_WALKER_H
-

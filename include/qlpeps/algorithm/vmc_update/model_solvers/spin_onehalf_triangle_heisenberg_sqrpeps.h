@@ -116,7 +116,8 @@ class SpinOneHalfTriHeisenbergSqrPEPS :
         );
     
     // Expensive S+S- Structure Factor (controlled by flag)
-    this->MeasureStructureFactor(tps_sample->tn, split_index_tps, tps_sample->contractor, tps_sample->config, out, tps_sample->trun_para);
+    tps_sample->contractor.SetTruncateParams(tps_sample->trun_para);
+    this->MeasureStructureFactor(tps_sample->tn, split_index_tps, tps_sample->contractor, tps_sample->config, out);
 
     // Keep legacy public API: this model historically exposed only the interacting diagonal as bond_energy_ur.
     out.erase("bond_energy_dr");

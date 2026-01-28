@@ -480,14 +480,14 @@ class SquaretJNNModel : public SquareNNModelEnergySolver<SquaretJNNModel>,
     if (this->IsSingletPairCorrelationEnabled()) {
       const auto& trunc_para = tps_sample->trun_para;
       // Grow DOWN BMPS stack to cover all target rows
-      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN, trunc_para);
+      tps_sample->contractor.SetTruncateParams(trunc_para);
+      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN);
       this->MeasureSingletPairCorrelation(
           tps_sample->tn,
           split_index_tps,
           tps_sample->contractor,
           tps_sample->config,
-          out,
-          trunc_para);
+          out);
     }
 
     return out;
@@ -553,14 +553,14 @@ class SquaretJNNNModel : public SquareNNNModelEnergySolver<SquaretJNNNModel>,
     if (this->IsSingletPairCorrelationEnabled()) {
       const auto& trunc_para = tps_sample->trun_para;
       // Grow DOWN BMPS stack to cover all target rows
-      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN, trunc_para);
+      tps_sample->contractor.SetTruncateParams(trunc_para);
+      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN);
       this->MeasureSingletPairCorrelation(
           tps_sample->tn,
           split_index_tps,
           tps_sample->contractor,
           tps_sample->config,
-          out,
-          trunc_para);
+          out);
     }
 
     return out;
@@ -638,14 +638,14 @@ class SquaretJVModel : public SquareNNNModelEnergySolver<SquaretJVModel>,
     if (this->IsSingletPairCorrelationEnabled()) {
       const auto& trunc_para = tps_sample->trun_para;
       // Grow DOWN BMPS stack to cover all target rows
-      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN, trunc_para);
+      tps_sample->contractor.SetTruncateParams(trunc_para);
+      tps_sample->contractor.GrowFullBMPS(tps_sample->tn, DOWN);
       this->MeasureSingletPairCorrelation(
           tps_sample->tn,
           split_index_tps,
           tps_sample->contractor,
           tps_sample->config,
-          out,
-          trunc_para);
+          out);
     }
 
     return out;

@@ -23,8 +23,8 @@ namespace qlpeps {
 
 namespace detail {
 template <class Contractor, class TenElemT, class QNT>
-concept HasBMPSWorkflow = requires(Contractor c, TensorNetwork2D<TenElemT, QNT>& tn, BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> tp) {
-  c.GrowBMPSForRow(tn, 0, tp);
+concept HasBMPSWorkflow = requires(Contractor c, TensorNetwork2D<TenElemT, QNT>& tn) {
+  c.GrowBMPSForRow(tn, 0);
   c.GrowFullBTen(tn, RIGHT, 0, 2, true);
   c.InitBTen(tn, LEFT, 0);
   c.Trace(tn, SiteIdx{0, 0}, HORIZONTAL);
@@ -194,7 +194,7 @@ struct TPSWaveFunctionComponent {
     }
 
     if constexpr (detail::HasBMPSWorkflow<Contractor, TenElemT, QNT>) {
-      contractor.GrowBMPSForRow(tn, 0, this->trun_para);
+      contractor.GrowBMPSForRow(tn, 0);
       contractor.GrowFullBTen(tn, RIGHT, 0, 2, true);
       contractor.InitBTen(tn, LEFT, 0);
       this->amplitude = contractor.Trace(tn, {0, 0}, HORIZONTAL);

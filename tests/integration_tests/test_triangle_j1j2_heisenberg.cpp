@@ -97,7 +97,7 @@ class TriangleJ1J2HeisenbergSystem
       model_name = "triangle_j1j2_heisenberg";
       energy_ed = -8.5; // Approximate expected energy for triangle J1-J2 lattice
 
-      optimize_para = VMCPEPSOptimizerParams(
+      optimize_para.emplace(
           OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
           MonteCarloParams(100, 100, 1,
                            Configuration(Ly, Lx, 
@@ -114,7 +114,7 @@ class TriangleJ1J2HeisenbergSystem
                                                       CompressMPSScheme::SVD_COMPRESS,
                                                       std::make_optional<double>(1e-14),
                                                       std::make_optional<size_t>(10))};
-      measure_para = MCMeasurementParams{measure_mc_params, measure_peps_params};
+      measure_para.emplace(measure_mc_params, measure_peps_params);
   }
 };
 
@@ -164,7 +164,7 @@ TEST_F(TriangleJ1J2HeisenbergSystem, StochasticGradientOpt) {
   Model trianglej1j2_hei_solver(j2);
 
   // Change to stochastic gradient
-  optimize_para.optimizer_params = OptimizerFactory::CreateSGDWithDecay(40, 0.1, 1.0, 1000);
+  optimize_para->optimizer_params = OptimizerFactory::CreateSGDWithDecay(40, 0.1, 1.0, 1000);
 
   // VMC optimization
   RunVMCOptimization<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);
@@ -178,7 +178,7 @@ TEST_F(TriangleJ1J2HeisenbergSystem, NaturalGradientLineSearch) {
   Model trianglej1j2_hei_solver(j2);
 
   // Change to natural gradient line search (using L-BFGS as approximation)
-  optimize_para.optimizer_params = OptimizerFactory::CreateLBFGS(40, 0.01);
+  optimize_para->optimizer_params = OptimizerFactory::CreateLBFGS(40, 0.01);
 
   // VMC optimization
   RunVMCOptimization<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);

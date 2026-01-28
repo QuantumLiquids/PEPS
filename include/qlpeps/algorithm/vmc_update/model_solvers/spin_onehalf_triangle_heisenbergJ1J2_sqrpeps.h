@@ -78,6 +78,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
     const size_t ly = tn.rows();
     const size_t lx = tn.cols();
+    contractor.SetTruncateParams(trunc_para);
 
     // site-local: spin_z per site
     {
@@ -97,7 +98,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
     TenElemT energy_j2_total(0); // accumulate J2 only, added with factor j2_
 
     // Horizontal scan (J1) + middle row correlations
-    contractor.GenerateBMPSApproach(tn, UP, trunc_para);
+    contractor.GenerateBMPSApproach(tn, UP);
     for (size_t row = 0; row < ly; ++row) {
       contractor.InitBTen(tn, LEFT, row);
       contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
@@ -202,12 +203,12 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
           }
         }
-        contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
+        contractor.ShiftBMPSWindow(tn, DOWN);
       }
     }
 
     // Vertical scan (J1)
-    contractor.GenerateBMPSApproach(tn, LEFT, trunc_para);
+    contractor.GenerateBMPSApproach(tn, LEFT);
     for (size_t col = 0; col < lx; ++col) {
       contractor.InitBTen(tn, UP, col);
       contractor.GrowFullBTen(tn, DOWN, col, 2, true);
@@ -251,7 +252,7 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
           if (row + 3 < ly) contractor.ShiftBTen2Window(tn, DOWN, col);
         }
       }
-      if (col + 1 < lx) contractor.ShiftBMPSWindow(tn, RIGHT, trunc_para);
+      if (col + 1 < lx) contractor.ShiftBMPSWindow(tn, RIGHT);
     }
 
     out["energy"] = {energy_total + j2_ * energy_j2_total};
@@ -315,7 +316,8 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
   const Configuration &config = tps_sample->config;
   const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
   TenElemT inv_psi = 1.0 / (tps_sample->amplitude);
-  contractor.GenerateBMPSApproach(tn, UP, trunc_para);
+  contractor.SetTruncateParams(trunc_para);
+  contractor.GenerateBMPSApproach(tn, UP);
   psi_list.reserve(tn.rows() + tn.cols());
   for (size_t row = 0; row < tn.rows(); row++) {
     contractor.InitBTen(tn, LEFT, row);
@@ -391,11 +393,11 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
         }
         contractor.ShiftBTen2Window(tn, RIGHT, row);
       }
-      contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
+      contractor.ShiftBMPSWindow(tn, DOWN);
     }
   }
 
-  contractor.GenerateBMPSApproach(tn, LEFT, trunc_para);
+  contractor.GenerateBMPSApproach(tn, LEFT);
   for (size_t col = 0; col < tn.cols(); col++) {
     contractor.InitBTen(tn, UP, col);
     contractor.GrowFullBTen(tn, DOWN, col, 2, true);
@@ -439,7 +441,7 @@ CalEnergyAndHolesImpl(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
           contractor.ShiftBTen2Window(tn, DOWN, col);
         }
       }
-      contractor.ShiftBMPSWindow(tn, RIGHT, trunc_para);
+      contractor.ShiftBMPSWindow(tn, RIGHT);
     }
   }
   return e1 + j2_ * e2;

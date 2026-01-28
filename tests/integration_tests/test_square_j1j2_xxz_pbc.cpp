@@ -21,6 +21,7 @@
 #include "../utilities.h"
 #include <cmath>
 #include <filesystem>
+#include <optional>
 
 using namespace qlten;
 using namespace qlpeps;
@@ -68,7 +69,7 @@ struct SquareJ1J2XXZPBCSystem : public MPITest {
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),  // Sz = 0
                        false),
       PEPSParams(trg_trunc_para));
-  MCMeasurementParams measure_para;
+  std::optional<MCMeasurementParams> measure_para;
 
   void SetUp() override {
     MPITest::SetUp();
@@ -91,7 +92,7 @@ struct SquareJ1J2XXZPBCSystem : public MPITest {
         40, 40, 1,
         Configuration(Ly, Lx, OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
         false);
-    measure_para = MCMeasurementParams(
+    measure_para.emplace(
         measure_mc, PEPSParams(trg_trunc_para),
         GetTestOutputPath("integration_j1j2_xxz_pbc_trg", "measurement"));
   }
@@ -187,7 +188,7 @@ TEST_F(SquareJ1J2XXZPBCSystem, MeasurementPBC) {
                                         MCUpdateSquareNNExchangePBC,
                                         SquareSpinOneHalfJ1J2XXZModelPBC,
                                         TRGContractor>(
-      tps, measure_para, comm, model);
+      tps, *measure_para, comm, model);
 
   executor->Execute();
 
@@ -223,7 +224,7 @@ TEST_F(SquareJ1J2XXZPBCSystem, MeasurementPBC) {
     }
 
     const std::filesystem::path stats_dir =
-        std::filesystem::path(measure_para.measurement_data_dump_path) / "stats";
+        std::filesystem::path(measure_para->measurement_data_dump_path) / "stats";
     ASSERT_TRUE(std::filesystem::exists(stats_dir));
     ASSERT_TRUE(std::filesystem::is_directory(stats_dir));
     ASSERT_TRUE(std::filesystem::exists(stats_dir / "energy.csv"));

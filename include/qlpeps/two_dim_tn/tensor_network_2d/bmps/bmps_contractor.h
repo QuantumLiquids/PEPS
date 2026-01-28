@@ -11,6 +11,8 @@
 #define QLPEPS_TWO_DIM_TN_TENSOR_NETWORK_2D_BMPS_CONTRACTOR_H
 
 #include <map>
+#include <optional>
+#include <stdexcept>
 #include <vector>
 #include "qlten/qlten.h"
 #include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
@@ -205,6 +207,24 @@ class BMPSContractor {
    */
   void Init(const TensorNetwork2D<TenElemT, QNT>& tn);
 
+  /**
+   * @brief Set truncation parameters for BMPS growth/compression.
+   *
+   * BMPSContractor is stateful w.r.t truncation parameters, mirroring TRGContractor.
+   * This avoids threading truncation params through every low-level API.
+   */
+  void SetTruncateParams(const TruncateParams& trunc_params) { trunc_params_ = trunc_params; }
+
+  /**
+   * @brief Get truncation parameters (must have been set).
+   */
+  const TruncateParams& GetTruncateParams() const {
+    if (!trunc_params_.has_value()) {
+      throw std::logic_error("BMPSContractor::GetTruncateParams: truncation params are not set.");
+    }
+    return *trunc_params_;
+  }
+
   // Accessors
   const std::vector<BMPS<TenElemT, QNT>>& GetBMPS(BMPSPOSITION position) const {
     return bmps_set_.at(position);
@@ -220,11 +240,10 @@ class BMPSContractor {
    *
    * @param tn The tensor network.
    * @param post The target position/direction where the BMPS should converge or be available.
-   * @param trunc_para Parameters controlling the truncation of the boundary MPS bond dimension.
    * @return A const reference to the map of all BMPS vectors maintained by the contractor.
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GenerateBMPSApproach(const TensorNetwork2D<TenElemT, QNT>& tn, BMPSPOSITION post, const BMPSTruncateParams<RealT> &trunc_para);
+  GenerateBMPSApproach(const TensorNetwork2D<TenElemT, QNT>& tn, BMPSPOSITION post);
 
   /**
    * @brief Grows the boundary MPS from top/bottom to reach the specified row.
@@ -234,11 +253,10 @@ class BMPSContractor {
    * 
    * @param tn The tensor network.
    * @param row The target row index (0-indexed).
-   * @param trunc_para Truncation parameters.
    * @return A const reference to the internal map of BMPS vectors.
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForRow(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t row, const BMPSTruncateParams<RealT> &trunc_para);
+  GrowBMPSForRow(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t row);
 
   /**
    * @brief Retrieves the pair of BMPS (Top and Bottom environments) surrounding a specific row.
@@ -248,10 +266,9 @@ class BMPSContractor {
    * 
    * @param tn The tensor network.
    * @param row The target row index.
-   * @param trunc_para Truncation parameters.
    * @return A pair of BMPS: {UP_BMPS, DOWN_BMPS} effectively enclosing the row.
    */
-  const std::pair<BMPST, BMPST> GetBMPSForRow(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t row, const BMPSTruncateParams<RealT> &trunc_para);
+  const std::pair<BMPST, BMPST> GetBMPSForRow(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t row);
 
   /**
    * @brief Grows the boundary MPS from left/right to reach the specified column.
@@ -260,21 +277,19 @@ class BMPSContractor {
    * 
    * @param tn The tensor network.
    * @param col The target column index.
-   * @param trunc_para Truncation parameters.
    * @return A const reference to the internal map of BMPS vectors.
    */
   const std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> &
-  GrowBMPSForCol(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t col, const BMPSTruncateParams<RealT> &trunc_para);
+  GrowBMPSForCol(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t col);
 
   /**
    * @brief Retrieves the pair of BMPS (Left and Right environments) surrounding a specific column.
    * 
    * @param tn The tensor network.
    * @param col The target column index.
-   * @param trunc_para Truncation parameters.
    * @return A pair of BMPS: {LEFT_BMPS, RIGHT_BMPS} effectively enclosing the column.
    */
-  const std::pair<BMPST, BMPST> GetBMPSForCol(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t col, const BMPSTruncateParams<RealT> &trunc_para);
+  const std::pair<BMPST, BMPST> GetBMPSForCol(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t col);
 
   /**
    * @brief Shifts the BMPS environment window by one slice.
@@ -284,15 +299,8 @@ class BMPSContractor {
    * 
    * @param tn The tensor network.
    * @param position The boundary position (UP, DOWN, LEFT, RIGHT) to shift toward.
-   * @param trunc_para Truncation parameters for the bond compression after absorption.
    */
-  void ShiftBMPSWindow(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para);
-
-  /// @deprecated Use ShiftBMPSWindow instead
-  [[deprecated("Use ShiftBMPSWindow instead")]]
-  void BMPSMoveStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para) {
-    ShiftBMPSWindow(tn, position, trunc_para);
-  }
+  void ShiftBMPSWindow(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position);
 
   /**
    * @brief Fully grows the BMPS from the boundary at `position` across the entire network.
@@ -301,9 +309,8 @@ class BMPSContractor {
    * 
    * @param tn The tensor network.
    * @param position The starting boundary position.
-   * @param trunc_para Truncation parameters.
    */
-  void GrowFullBMPS(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &trunc_para);
+  void GrowFullBMPS(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position);
 
   /**
    * @brief Removes inner BMPS layers to save memory, keeping only the boundary.
@@ -360,8 +367,13 @@ class BMPSContractor {
     BMPSWalker(const TensorNetwork2D<TenElemT, QNT>& tn,
                BMPS<TenElemT, QNT> bmps,
                BMPSPOSITION pos,
-               size_t current_stack_size)
-        : tn_(tn), bmps_(std::move(bmps)), pos_(pos), stack_size_(current_stack_size) {}
+               size_t current_stack_size,
+               TruncateParams trunc_params)
+        : tn_(tn),
+          bmps_(std::move(bmps)),
+          pos_(pos),
+          stack_size_(current_stack_size),
+          trunc_params_(std::move(trunc_params)) {}
 
     /**
      * @brief Evolve the walker by one step according to the lattice structure.
@@ -369,9 +381,8 @@ class BMPSContractor {
      * Automatically determines the next row/column MPO to absorb based on current position
      * and stack size. Increments the internal stack size counter.
      *
-     * @param trunc_para Truncation parameters.
      */
-    void EvolveStep(const BMPSTruncateParams<RealT> &trunc_para);
+    void EvolveStep();
 
     /**
      * @brief Evolve using a manually provided MPO.
@@ -383,9 +394,8 @@ class BMPSContractor {
      * to a physical lattice layer, you might want to manually track that or use EvolveStep instead.
      *
      * @param mpo The MPO to absorb.
-     * @param trunc_para Truncation parameters.
      */
-    void Evolve(const TransferMPO& mpo, const BMPSTruncateParams<RealT> &trunc_para);
+    void Evolve(const TransferMPO& mpo);
 
     /**
      * @brief Access the current Boundary MPS state.
@@ -615,6 +625,7 @@ class BMPSContractor {
     BMPS<TenElemT, QNT> bmps_;
     BMPSPOSITION pos_;
     size_t stack_size_;
+    TruncateParams trunc_params_;
 
     // BTen cache for efficient multi-site trace calculations
     // bten_left_[i] represents the environment from col=0 to col=i (inclusive)
@@ -960,9 +971,9 @@ class BMPSContractor {
 
   void InitBMPS(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION post);
 
-  size_t GrowBMPSStep(const BMPSPOSITION position, TransferMPO, const BMPSTruncateParams<RealT> &);
+  size_t GrowBMPSStep(const BMPSPOSITION position, TransferMPO);
 
-  size_t GrowBMPSStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position, const BMPSTruncateParams<RealT> &);
+  size_t GrowBMPSStep(const TensorNetwork2D<TenElemT, QNT>& tn, const BMPSPOSITION position);
 
   void GrowBTen2Step(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION post, const size_t slice_num1);
 
@@ -973,6 +984,7 @@ class BMPSContractor {
   
   size_t rows_;
   size_t cols_;
+  std::optional<TruncateParams> trunc_params_;
 };
 
 } // namespace qlpeps

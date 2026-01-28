@@ -37,7 +37,8 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contractor
     const EnergySolver &solver,
     MonteCarloSweepUpdater mc_updater)
     : qlten::Executor(),
-      monte_carlo_engine_(sitpst_init, params.mc_params, params.peps_params, comm, std::move(mc_updater)),
+      monte_carlo_engine_(sitpst_init, params.mc_params, params.peps_params, comm, std::move(mc_updater),
+                          params.runtime_params.config_rescue),
       params_(params),
       energy_solver_(solver),
       optimizer_(params.optimizer_params, comm, monte_carlo_engine_.Rank(), monte_carlo_engine_.MpiSize()),
@@ -259,12 +260,12 @@ template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typen
 void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::PrintExecutorInfo_(void) {
   monte_carlo_engine_.PrintCommonInfo("VMC PEPS OPTIMIZER EXECUTOR");
   if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-    size_t indent = 40;
-    std::cout << std::setw(indent) << "PEPS update times:" << params_.optimizer_params.base_params.max_iterations
-              << "\n";
+    const size_t indent = 40;
+    const auto &base = params_.optimizer_params.base_params;
+    std::cout << std::setw(indent) << "PEPS update times:" << base.max_iterations << "\n";
+
     std::cout << std::setw(indent) << "PEPS update strategy:";
-    // Get algorithm name from variant
-    std::visit([](const auto& algo_params) {
+    std::visit([&](const auto &algo_params) {
       using T = std::decay_t<decltype(algo_params)>;
       if constexpr (std::is_same_v<T, SGDParams>) {
         std::cout << "StochasticGradient";
@@ -281,11 +282,70 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
       }
     }, params_.optimizer_params.algorithm_params);
     std::cout << "\n";
-    if (stochastic_reconfiguration_update_class_) {
-      const auto& sr_params = params_.optimizer_params.GetAlgorithmParams<StochasticReconfigurationParams>();
-      std::cout << std::setw(indent) << "Conjugate gradient diagonal shift:"
-                << sr_params.cg_params.diag_shift
-                << "\n";
+
+    std::cout << std::setw(indent) << "Energy tolerance:" << base.energy_tolerance << "\n";
+    std::cout << std::setw(indent) << "Gradient tolerance:" << base.gradient_tolerance << "\n";
+    std::cout << std::setw(indent) << "Plateau patience:" << base.plateau_patience << "\n";
+    std::cout << std::setw(indent) << "Learning rate:" << base.learning_rate << "\n";
+    if (base.lr_scheduler) {
+      std::cout << std::setw(indent) << "LR scheduler:"
+                << base.lr_scheduler->Name() << " (" << base.lr_scheduler->Describe() << ")\n";
+    } else {
+      std::cout << std::setw(indent) << "LR scheduler:" << "None" << "\n";
+    }
+    if (base.clip_value.has_value()) {
+      std::cout << std::setw(indent) << "Gradient clip (per-element |g|):" << *base.clip_value << "\n";
+    }
+    if (base.clip_norm.has_value()) {
+      std::cout << std::setw(indent) << "Gradient clip (global L2 norm):" << *base.clip_norm << "\n";
+    }
+
+    // Algorithm-specific parameters
+    std::visit([&](const auto &algo_params) {
+      using T = std::decay_t<decltype(algo_params)>;
+      if constexpr (std::is_same_v<T, SGDParams>) {
+        std::cout << std::setw(indent) << "SGD momentum:" << algo_params.momentum << "\n";
+        std::cout << std::setw(indent) << "SGD nesterov:" << (algo_params.nesterov ? "true" : "false") << "\n";
+        std::cout << std::setw(indent) << "SGD weight decay:" << algo_params.weight_decay << "\n";
+      } else if constexpr (std::is_same_v<T, AdamParams>) {
+        std::cout << std::setw(indent) << "Adam beta1:" << algo_params.beta1 << "\n";
+        std::cout << std::setw(indent) << "Adam beta2:" << algo_params.beta2 << "\n";
+        std::cout << std::setw(indent) << "Adam epsilon:" << algo_params.epsilon << "\n";
+        std::cout << std::setw(indent) << "Adam weight decay:" << algo_params.weight_decay << "\n";
+      } else if constexpr (std::is_same_v<T, AdaGradParams>) {
+        std::cout << std::setw(indent) << "AdaGrad epsilon:" << algo_params.epsilon << "\n";
+        std::cout << std::setw(indent) << "AdaGrad init accumulator:" << algo_params.initial_accumulator_value << "\n";
+      } else if constexpr (std::is_same_v<T, LBFGSParams>) {
+        std::cout << std::setw(indent) << "LBFGS history size:" << algo_params.history_size << "\n";
+        std::cout << std::setw(indent) << "LBFGS tol_grad:" << algo_params.tolerance_grad << "\n";
+        std::cout << std::setw(indent) << "LBFGS tol_change:" << algo_params.tolerance_change << "\n";
+        std::cout << std::setw(indent) << "LBFGS max_eval/step:" << algo_params.max_eval << "\n";
+      } else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
+        std::cout << std::setw(indent) << "SR normalize update:"
+                  << (algo_params.normalize_update ? "true" : "false") << "\n";
+        std::cout << std::setw(indent) << "SR adaptive diag shift:" << algo_params.adaptive_diagonal_shift << "\n";
+        std::cout << std::setw(indent) << "CG max iter:" << algo_params.cg_params.max_iter << "\n";
+        std::cout << std::setw(indent) << "CG tolerance:" << algo_params.cg_params.tolerance << "\n";
+        std::cout << std::setw(indent) << "CG residue restart step:" << algo_params.cg_params.residue_restart_step
+                  << "\n";
+        std::cout << std::setw(indent) << "CG diagonal shift:" << algo_params.cg_params.diag_shift << "\n";
+      }
+    }, params_.optimizer_params.algorithm_params);
+
+    // Runtime warning controls
+    const auto &psi = params_.runtime_params.psi_consistency;
+    std::cout << std::setw(indent) << "psi_consistency warnings:"
+              << (psi.enabled ? "enabled" : "disabled") << "\n";
+    std::cout << std::setw(indent) << "psi_consistency master_only:" << (psi.master_only ? "true" : "false") << "\n";
+    std::cout << std::setw(indent) << "psi_consistency threshold:" << psi.threshold << "\n";
+    std::cout << std::setw(indent) << "psi_consistency max warnings:" << psi.max_warnings << "\n";
+    std::cout << std::setw(indent) << "psi_consistency max print elems:" << psi.max_print_elems << "\n";
+
+    if (!params_.tps_dump_base_name.empty()) {
+      std::cout << std::setw(indent) << "TPS dump base name:" << params_.tps_dump_base_name << "\n";
+    }
+    if (!params_.tps_dump_path.empty()) {
+      std::cout << std::setw(indent) << "TPS dump path:" << params_.tps_dump_path << "\n";
     }
   }
   monte_carlo_engine_.PrintTechInfo();

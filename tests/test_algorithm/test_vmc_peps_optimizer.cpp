@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 #include <mpi.h>
 #include <filesystem>
+#include <optional>
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_params.h"
@@ -109,7 +110,7 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
   IndexT pb_out;
   IndexT pb_in;
 
-  VMCPEPSOptimizerParams optimize_para;
+  std::optional<VMCPEPSOptimizerParams> optimize_para;
   std::string test_data_path;
   SITPST valid_test_tps;  // Pre-loaded valid TPS for testing
 
@@ -169,7 +170,7 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
                                             CompressMPSScheme::SVD_COMPRESS,
                                             std::make_optional<double>(1e-14),
                                             std::make_optional<size_t>(10)));  // Only needs BMPSTruncateParams
-    optimize_para = VMCPEPSOptimizerParams(opt_params, mc_params, peps_params, output_tps_path);  // TPS output path
+    optimize_para.emplace(opt_params, mc_params, peps_params, output_tps_path);  // TPS output path
   }
 };
 
@@ -188,7 +189,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPS) {
 
   // Test constructor with TPS in memory
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, test_tps, comm, model);
+      *optimize_para, test_tps, comm, model);
 
   EXPECT_EQ(executor->GetParams().mc_params.initial_config.rows(), Ly);
   EXPECT_EQ(executor->GetParams().mc_params.initial_config.cols(), Lx);
@@ -213,7 +214,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ConstructorWithTPSFromFile) {
 
   // Test constructor with TPS loaded from file
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, test_tps, comm, model);
+      *optimize_para, test_tps, comm, model);
 
   EXPECT_EQ(executor->GetParams().mc_params.initial_config.rows(), Ly);
   EXPECT_EQ(executor->GetParams().mc_params.initial_config.cols(), Lx);
@@ -235,7 +236,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, ParameterValidation) {
   InitializeTPSWithOBC(test_tps, Ly, Lx);
 
   // Test with invalid parameters - negative learning rate should be handled gracefully
-  VMCPEPSOptimizerParams invalid_para = optimize_para;
+  VMCPEPSOptimizerParams invalid_para = *optimize_para;
   invalid_para.optimizer_params.base_params.learning_rate = -1.0;  // Invalid negative learning rate
 
   // The constructor should handle invalid learning rate gracefully, not throw
@@ -258,7 +259,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
   // Test with various invalid parameters (migrated from legacy step_lens validation)
   {
     // Test zero samples - This SHOULD throw an exception as MC samples = 0 is physically meaningless
-    VMCPEPSOptimizerParams invalid_para = optimize_para;
+    VMCPEPSOptimizerParams invalid_para = *optimize_para;
     invalid_para.mc_params.num_samples = 0;  // Invalid zero samples
     
     // The constructor should throw std::invalid_argument for zero samples
@@ -269,7 +270,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
 
   {
     // Test zero sweeps between samples - This is technically valid (continuous sampling)
-    VMCPEPSOptimizerParams valid_para = optimize_para;
+    VMCPEPSOptimizerParams valid_para = *optimize_para;
     valid_para.mc_params.sweeps_between_samples = 0;  // Zero sweeps = continuous sampling
     
     // The constructor should handle zero sweeps between samples (continuous sampling mode)
@@ -280,7 +281,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
 
   {
     // Test extreme learning rate values - Large but not invalid, may cause numerical issues
-    VMCPEPSOptimizerParams extreme_para = optimize_para;
+    VMCPEPSOptimizerParams extreme_para = *optimize_para;
     extreme_para.optimizer_params.base_params.learning_rate = 1e10;  // Very large learning rate
     
     // The constructor should handle extreme learning rates gracefully (no validation at construction)
@@ -298,7 +299,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, StateManagement) {
   Model model;
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, valid_test_tps, comm, model);
+      *optimize_para, valid_test_tps, comm, model);
 
   // Test initial energy
   auto initial_energy = executor->GetCurrentEnergy();
@@ -326,7 +327,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
   };
 
   for (const auto& name : algorithm_names) {
-    VMCPEPSOptimizerParams scheme_para = optimize_para;
+    VMCPEPSOptimizerParams scheme_para = *optimize_para;
     
     // Update optimizer params for each algorithm type
     if (name == "StochasticReconfiguration") {
@@ -406,7 +407,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
   };
 
   for (const auto& scheme : legacy_schemes) {
-    VMCPEPSOptimizerParams scheme_para = optimize_para;
+    VMCPEPSOptimizerParams scheme_para = *optimize_para;
     scheme_para.optimizer_params = scheme.create_params();
 
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
@@ -431,7 +432,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
     Model model;
 
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, valid_test_tps, comm, model);
+        *optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 
@@ -440,7 +441,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentModels) {
     Model model(1.0, 1.0, 0.2, 0.2, 0.0);
 
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, valid_test_tps, comm, model);
+        *optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 }
@@ -454,14 +455,14 @@ TEST_F(VMCPEPSOptimizerUnitTest, DifferentMCUpdaters) {
   {
     using MCUpdater = MCUpdateSquareNNExchange;
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, valid_test_tps, comm, model);
+        *optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 
   {
     using MCUpdater = MCUpdateSquareNNFullSpaceUpdate;
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-        optimize_para, valid_test_tps, comm, model);
+        *optimize_para, valid_test_tps, comm, model);
     delete executor;
   }
 }
@@ -474,7 +475,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, DataDumping) {
   Model model;
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, valid_test_tps, comm, model);
+      *optimize_para, valid_test_tps, comm, model);
 
   // Test DumpData without path
   EXPECT_NO_THROW(executor->DumpData(false));
@@ -493,7 +494,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, BMPSTruncateParams) {
   Model model;
 
   // Test different BMPSTruncateParams configurations
-  VMCPEPSOptimizerParams para = optimize_para;
+  VMCPEPSOptimizerParams para = *optimize_para;
   para.peps_params.SetBMPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::Variational1Site(2, 4, 1e-10, 1e-9, 5));
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
@@ -515,7 +516,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, InterfaceCompatibility) {
   Model model;
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, valid_test_tps, comm, model);
+      *optimize_para, valid_test_tps, comm, model);
 
   // Test that all interface methods exist and work
   EXPECT_NO_THROW(executor->GetState());
@@ -537,7 +538,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, CallbackSystem) {
   Model model;
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, valid_test_tps, comm, model);
+      *optimize_para, valid_test_tps, comm, model);
 
   // Test callback setting
   typename VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>::OptimizerT::OptimizationCallback callback;
@@ -558,7 +559,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, CustomEnergyEvaluator) {
   Model model;
 
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-      optimize_para, valid_test_tps, comm, model);
+      *optimize_para, valid_test_tps, comm, model);
 
   // Test custom energy evaluator setting
   auto custom_evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
@@ -585,7 +586,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, InputValidation) {
   // This should throw std::invalid_argument with a clear error message
   EXPECT_THROW(
       (void) (new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
-          optimize_para, empty_tps, comm, model)), 
+          *optimize_para, empty_tps, comm, model)), 
       std::invalid_argument);
 }
 

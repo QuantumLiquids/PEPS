@@ -100,7 +100,7 @@ struct PEPSParams {
   using TRGParams = TRGTruncateParams<qlten::QLTEN_Double>;
   std::variant<BMPSParams, TRGParams> trunc_params;
 
-  PEPSParams() : trunc_params(BMPSParams()) {}
+  PEPSParams() = delete;
 
   /// OBC: BMPS contraction parameters
   explicit PEPSParams(const BMPSParams &trunc_para)
@@ -148,10 +148,7 @@ struct MCMeasurementParams {
   std::string measurement_data_dump_path;  ///< Path for dumping measurement results (empty = current dir)
   RuntimeParams runtime_params; ///< Applied by MCPEPSMeasurer
 
-  MCMeasurementParams() : measurement_data_dump_path("./") {
-    // Preserve historical default for measurement warnings.
-    runtime_params.psi_consistency.threshold = 1e-4;
-  }
+  MCMeasurementParams() = delete;
 
   MCMeasurementParams(const MonteCarloParams &mc_params,
                       const PEPSParams &peps_params,

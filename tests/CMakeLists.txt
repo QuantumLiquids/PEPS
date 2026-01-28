@@ -38,6 +38,9 @@ endif ()
 
 macro(add_unittest
         TEST_NAME TEST_SRC MATH_HEADER LINK_LIBS LINK_LIB_FLAGS INPUT_ARGS)
+    # NOTE: This macro links GTest::Main (gtest_main). If your TEST_SRC defines its own main(),
+    # don't use this macro (or remove GTest::Main), otherwise you can get duplicate-main link errors
+    # depending on how gtest_main is built/linked.
     add_executable(${TEST_NAME}
             ${TEST_SRC})
 
@@ -410,6 +413,42 @@ add_mpi_unittest(test_monte_carlo_engine
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "4"
         ""
 )
+
+# MPI “death test” (ctest-level): verify MCPEPSMeasurer forwards config_rescue into MonteCarloEngine.
+# Expected behavior: MPI_Abort (non-zero exit) AND prints the failure header.
+add_executable(test_mcpeps_measurer_config_rescue_wiring_death
+        "test_algorithm/test_mcpeps_measurer_config_rescue_wiring_death_mpi.cpp")
+target_include_directories(test_mcpeps_measurer_config_rescue_wiring_death
+        PRIVATE ${BLAS_INCLUDE_DIRS}
+        PRIVATE ${QLPEPS_HEADER_PATH}
+        PRIVATE ${hptt_INCLUDE_DIR}
+        PRIVATE ${QLTENSOR_HEADER_PATH}
+        PRIVATE ${QLMPS_HEADER_PATH}
+        PRIVATE ${MPI_CXX_HEADER_DIR})
+target_link_libraries(test_mcpeps_measurer_config_rescue_wiring_death
+        # This test defines its own main() (MPI/GTest init), so don't link GTest::Main (gtest_main).
+        GTest::GTest
+        ${hptt_LIBRARY}
+        MPI::MPI_CXX
+        OpenMP::OpenMP_CXX
+        ${MATH_LIB_LINK_FLAGS}
+)
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
+    add_test(NAME test_mcpeps_measurer_config_rescue_wiring_death_mpi
+            COMMAND ${CMAKE_COMMAND}
+            -DMPIEXEC=${MPIEXEC_EXECUTABLE}
+            -DMPIEXEC_NUMPROC_FLAG=${MPIEXEC_NUMPROC_FLAG}
+            -DNPROCS=2
+            -DEXECUTABLE=$<TARGET_FILE:test_mcpeps_measurer_config_rescue_wiring_death>
+            -DEXPECT_REGEX_1=CONFIGURATION.*FAILURE
+            -DEXPECT_REGEX_2=Configuration.*rescue.*DISABLED
+            -P ${CMAKE_CURRENT_LIST_DIR}/tools/ctest_expect_mpi_abort.cmake
+            WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+    set_tests_properties(test_mcpeps_measurer_config_rescue_wiring_death_mpi
+            PROPERTIES TIMEOUT 20)
+else()
+    message(STATUS "Skipping MPI death test test_mcpeps_measurer_config_rescue_wiring_death_mpi: requires 2 processes, but only ${MPIEXEC_MAX_NUMPROCS} available")
+endif()
 
 
 ## Test utility

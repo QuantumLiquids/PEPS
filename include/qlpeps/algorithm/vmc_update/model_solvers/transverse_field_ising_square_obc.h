@@ -47,11 +47,11 @@ class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIs
     BMPSContractor<TenElemT, QNT> &contractor = tps_sample->contractor;
     const Configuration &sample_config = tps_sample->config;
     const BMPSTruncateParams<RealT> &trunc_para = tps_sample->trun_para;
+    contractor.SetTruncateParams(trunc_para);
     return this->template CalEnergyAndHolesImplParsed<TenElemT, QNT, calchols>(split_index_tps,
                                                                                sample_config,
                                                                                sample_tn,
                                                                                contractor,
-                                                                               trunc_para,
                                                                                hole_res,
                                                                                psi_list);
   }
@@ -76,7 +76,8 @@ class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIs
     const size_t ly = tn.rows();
 
     // Prepare environment
-    contractor.GenerateBMPSApproach(tn, UP, trunc_para);
+    contractor.SetTruncateParams(trunc_para);
+    contractor.GenerateBMPSApproach(tn, UP);
 
     // Accumulators
     TenElemT energy_ex(0); // off-diagonal part
@@ -112,7 +113,7 @@ class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIs
         }
       }
       if (row < ly - 1) {
-        contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
+        contractor.ShiftBMPSWindow(tn, DOWN);
       }
     }
 
@@ -151,7 +152,6 @@ class TransverseFieldIsingSquareOBC : public ModelEnergySolver<TransverseFieldIs
       const Configuration &sample_config,
       TensorNetwork2D<TenElemT, QNT> &sample_tn,
       BMPSContractor<TenElemT, QNT> &contractor,
-      const BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
       TensorNetwork2D<TenElemT, QNT> &hole_res,
       std::vector<TenElemT> &psi_list
   );
@@ -213,12 +213,11 @@ TenElemT TransverseFieldIsingSquareOBC::CalEnergyAndHolesImplParsed(const SplitI
                                                             const qlpeps::Configuration &config,
                                                             TensorNetwork2D<TenElemT, QNT> &tn,
                                                             BMPSContractor<TenElemT, QNT> &contractor,
-                                                            const qlpeps::BMPSTruncateParams<typename qlten::RealTypeTrait<TenElemT>::type> &trunc_para,
                                                             TensorNetwork2D<TenElemT, QNT> &hole_res,
                                                             std::vector<TenElemT> &psi_list) {
   TenElemT energy(0);
   psi_list.reserve(tn.rows() + tn.cols());
-  contractor.GenerateBMPSApproach(tn, UP, trunc_para);
+  contractor.GenerateBMPSApproach(tn, UP);
   for (size_t row = 0; row < tn.rows(); row++) {
     contractor.InitBTen(tn, LEFT, row);
     contractor.GrowFullBTen(tn, RIGHT, row, 1, true);
@@ -239,7 +238,7 @@ TenElemT TransverseFieldIsingSquareOBC::CalEnergyAndHolesImplParsed(const SplitI
       }
     }
     if (row < tn.rows() - 1) {
-      contractor.ShiftBMPSWindow(tn, DOWN, trunc_para);
+      contractor.ShiftBMPSWindow(tn, DOWN);
     }
   }
   energy += CalDiagTermEnergy<TenElemT>(config);

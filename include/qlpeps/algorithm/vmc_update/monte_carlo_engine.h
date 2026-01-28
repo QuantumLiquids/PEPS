@@ -279,8 +279,20 @@ class MonteCarloEngine {
                   << static_cast<int>(tps_sample_.trun_para.compress_scheme) << "\n";
       }
       std::cout << std::setw(indent) << "Sampling numbers:" << monte_carlo_params_.num_samples << "\n";
+      std::cout << std::setw(indent) << "Warm-up sweeps:" << monte_carlo_params_.num_warmup_sweeps << "\n";
+      std::cout << std::setw(indent) << "Initial config warmed up:" << (monte_carlo_params_.is_warmed_up ? "yes" : "no")
+                << "\n";
       std::cout << std::setw(indent) << "Monte Carlo sweep repeat times:" << monte_carlo_params_.sweeps_between_samples
                 << "\n";
+      if (!monte_carlo_params_.config_dump_path.empty()) {
+        std::cout << std::setw(indent) << "Config dump path:" << monte_carlo_params_.config_dump_path << "\n";
+      }
+      std::cout << std::setw(indent) << "Configuration rescue:"
+                << (config_rescue_.enabled ? "enabled" : "disabled") << "\n";
+      if (config_rescue_.enabled) {
+        std::cout << std::setw(indent) << "Rescue amplitude min/max:"
+                  << config_rescue_.amplitude_min_threshold << " / " << config_rescue_.amplitude_max_threshold << "\n";
+      }
     }
   }
 
