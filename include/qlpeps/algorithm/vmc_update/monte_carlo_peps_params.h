@@ -14,7 +14,7 @@
 #include <stdexcept>                                // std::runtime_error
 #include <variant>                                  // std::variant
 #include "qlpeps/vmc_basic/configuration.h"       // Configuration
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams
+#include "qlpeps/one_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"  // TRGTruncateParams
 #include "qlpeps/algorithm/vmc_update/psi_consistency.h"
 

@@ -12,7 +12,7 @@
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/vmc_basic/wave_function_component.h"
 #include "qlpeps/two_dim_tn/tensor_network_2d/tensor_network_2d.h"
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
+#include "qlpeps/one_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/utility/helpers.h" // ComplexConjugate
 #include <mpi.h>
 #include <numeric>  // for std::accumulate

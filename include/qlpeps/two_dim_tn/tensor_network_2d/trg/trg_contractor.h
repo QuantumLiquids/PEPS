@@ -337,10 +337,22 @@ class TRGContractor {
    * - Only affected nodes are stored for each scale, so this is much smaller than cloning
    *   the whole multi-scale cache.
    */
+  struct TrialSplitData {
+    uint8_t type;  // 0 = Type0, 1 = Type1 (matches ScaleCache::SplitType underlying type)
+    Tensor U;
+    Tensor Vt;
+    qlten::QLTensor<RealT, QNT> S_inv_sqrt;
+    Tensor P;
+    Tensor Q;
+  };
+
   struct Trial {
     TenElemT amplitude{};
     // layer_updates[s] stores the tensors that would change at scale s (node_id -> tensor).
     std::vector<std::map<uint32_t, Tensor>> layer_updates;
+    // layer_splits[s] stores split data for dirty nodes at scale s.
+    // Key: node_id -> array of 2 optional TrialSplitData (one per parent-slot).
+    std::vector<std::map<uint32_t, std::array<std::optional<TrialSplitData>, 2>>> layer_splits;
   };
 
   /**
@@ -671,6 +683,14 @@ class TRGContractor {
   // SVD Splitters
   SplitARes SplitType0_(const Tensor& T_in) const;
   SplitBRes SplitType1_(const Tensor& T_in) const;
+
+  // Full SVD splitters returning complete isometry data for caching.
+  // Used by BeginTrialWithReplacement to avoid double SVD in CommitTrial.
+  TrialSplitData SplitType0Full_(const Tensor& T_in) const;
+  TrialSplitData SplitType1Full_(const Tensor& T_in) const;
+
+  // Determine split type for a child given its role and scale.
+  typename ScaleCache::SplitType ChildSplitType_(size_t scale, uint32_t child_id, int role) const;
 
   // Core contraction logic
   // Returns: tmp2.Transpose({3, 2, 1, 0})

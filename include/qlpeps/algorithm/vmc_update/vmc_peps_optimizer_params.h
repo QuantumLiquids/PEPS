@@ -13,7 +13,7 @@
 #include <string>
 #include "monte_carlo_peps_params.h"               // MonteCarloParams, PEPSParams  
 #include "qlpeps/optimizer/optimizer_params.h"
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
+#include "qlpeps/one_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/vmc_basic/configuration.h"
 #include "qlpeps/consts.h"                          // kTpsPathBase
 #include "qlpeps/algorithm/vmc_update/psi_consistency.h"

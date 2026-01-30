@@ -15,7 +15,7 @@
 #include <stdexcept>
 #include <vector>
 #include "qlten/qlten.h"
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps.h"
+#include "qlpeps/one_dim_tn/boundary_mps/bmps.h"
 #include "qlpeps/two_dim_tn/framework/site_idx.h"
 #include "qlpeps/basic.h"
 #include "qlpeps/two_dim_tn/common/boundary_condition.h"

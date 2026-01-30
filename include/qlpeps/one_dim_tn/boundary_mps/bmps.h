@@ -327,6 +327,6 @@ const Index<QNT> BMPS<TenElemT, QNT>::index0_out_ = Index<QNT>({QNSector(qn0_, 1
 
 }//qlpeps
 
-#include "qlpeps/ond_dim_tn/boundary_mps/bmps_impl.h"
+#include "qlpeps/one_dim_tn/boundary_mps/bmps_impl.h"
 
 #endif //QLPEPS_OND_DIM_TN_BOUNDARY_MPS_BMPS_H

@@ -52,5 +52,8 @@ external/gqten/
 docs/PEPS.tag
 
 Testing/
-AGENT.md
+AGENTS.md
 QWEN.md
+/.claude
+/.codex
+CLAUDE.md

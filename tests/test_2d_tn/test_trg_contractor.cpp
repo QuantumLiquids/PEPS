@@ -374,6 +374,53 @@ TEST(TRGContractorPBC, TrialReplacementSingleBond4x4) {
   EXPECT_NEAR(Z_after, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
 }
 
+// Verify EvaluateReplacement returns the exact same amplitude as BeginTrialWithReplacement.
+// These must agree: both compute the amplitude under the same replacements, just one is read-only.
+TEST(TRGContractorPBC, EvaluateReplacementMatchesTrial4x4) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+  using Contractor = qlpeps::TRGContractor<TenElemT, QNT>;
+  using TensorT = typename Contractor::Tensor;
+
+  const size_t n = 4;
+  const double K0 = 0.3;
+  const size_t r0 = 1;
+  const size_t c0 = 2;
+  const double K1 = 0.37;
+
+  auto Kx0 = [&](size_t, size_t) { return K0; };
+  auto Ky0 = [&](size_t, size_t) { return K0; };
+  const auto tn0 = BuildZ2IsingTorusTN(n, Kx0, Ky0);
+
+  auto Kx1 = [&](size_t r, size_t c) -> double { return (r == r0 && c == c0) ? K1 : K0; };
+  auto Ky1 = [&](size_t, size_t) -> double { return K0; };
+
+  Contractor trg(n, n);
+  trg.SetTruncateParams(Contractor::TruncateParams::SVD(2, 16, 0.0));
+  trg.Init(tn0);
+  trg.Trace(tn0);
+
+  const SiteIdx sL{r0, c0};
+  const SiteIdx sR{r0, (c0 + 1) % n};
+  const TensorT tL = MakeZ2IsingSiteTensorAt(n, sL.row(), sL.col(), Kx1, Ky1);
+  const TensorT tR = MakeZ2IsingSiteTensorAt(n, sR.row(), sR.col(), Kx1, Ky1);
+  const std::vector<std::pair<SiteIdx, TensorT>> repl{{sL, tL}, {sR, tR}};
+
+  // BeginTrialWithReplacement uses exact SVD.
+  auto trial = trg.BeginTrialWithReplacement(repl);
+  const double Z_trial = trial.amplitude;
+
+  // EvaluateReplacement must return the same value.
+  const double Z_eval = trg.EvaluateReplacement(repl);
+
+  EXPECT_NEAR(Z_eval, Z_trial, 1e-10 * std::max(1.0, std::abs(Z_trial)))
+      << "EvaluateReplacement disagrees with BeginTrialWithReplacement";
+
+  // Also verify against the transfer-matrix reference.
+  constexpr double Z_tm_ref = 3.68441965476735204e+05;
+  EXPECT_NEAR(Z_eval, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
+}
+
 TEST(TRGContractorPBC, PunchHole2x2U1Random) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::U1QN;
