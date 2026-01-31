@@ -461,6 +461,12 @@ ElementWiseSquare(const SplitIndexTPS<TenElemT, QNT> &tps) {
 
 template<typename TenElemT, typename QNT>
 SplitIndexTPS<TenElemT, QNT>
+ElementWiseSquaredNorm(const SplitIndexTPS<TenElemT, QNT> &tps) {
+  return tps.ElementWiseSquaredNorm();
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
 ElementWiseSqrt(const SplitIndexTPS<TenElemT, QNT> &tps) {
   return tps.ElementWiseSqrt();
 }
@@ -485,6 +491,26 @@ SplitIndexTPS<TenElemT, QNT>::ElementWiseSquare() const {
         if (!src.IsDefault()) {
           result({row, col})[i] = src;
           result({row, col})[i].ElementWiseSquare();
+        }
+      }
+    }
+  }
+  return result;
+}
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+SplitIndexTPS<TenElemT, QNT>::ElementWiseSquaredNorm() const {
+  SplitIndexTPS result = CreateInitializedResult_();
+  const size_t phy_dim = PhysicalDim();
+  for (size_t row = 0; row < this->rows(); ++row) {
+    for (size_t col = 0; col < this->cols(); ++col) {
+      result({row, col}) = std::vector<Tensor>(phy_dim);
+      for (size_t i = 0; i < phy_dim; ++i) {
+        const Tensor &src = (*this)({row, col})[i];
+        if (!src.IsDefault()) {
+          result({row, col})[i] = src;
+          result({row, col})[i].ElementWiseSquaredNorm();
         }
       }
     }
@@ -553,6 +579,13 @@ template<typename TenElemT, typename QNT>
 void SplitIndexTPS<TenElemT, QNT>::ElementWiseSquareInPlace() {
   ForEachValidTensor_([](size_t, size_t, size_t, Tensor &ten) {
     ten.ElementWiseSquare();
+  });
+}
+
+template<typename TenElemT, typename QNT>
+void SplitIndexTPS<TenElemT, QNT>::ElementWiseSquaredNormInPlace() {
+  ForEachValidTensor_([](size_t, size_t, size_t, Tensor &ten) {
+    ten.ElementWiseSquaredNorm();
   });
 }
 

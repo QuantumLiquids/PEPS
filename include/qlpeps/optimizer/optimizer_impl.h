@@ -763,8 +763,8 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
       // Non-master ranks never initialize or access accumulated_gradients_
     }
 
-    // Update accumulated gradients: G_k = G_{k-1} + (gradient)^2
-    SITPST squared_gradient = ElementWiseSquare(gradient);
+    // Update accumulated gradients: G_k = G_{k-1} + |gradient|^2
+    SITPST squared_gradient = ElementWiseSquaredNorm(gradient);
     accumulated_gradients_ += squared_gradient;
 
     // Compute adaptive learning rates: 1/sqrt(G_k) for |G_k| > epsilon
@@ -847,8 +847,8 @@ Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
     // Update biased first moment estimate: m_t = β₁ m_{t-1} + (1-β₁) g_t
     first_moment_ = params.beta1 * first_moment_ + (1.0 - params.beta1) * gradient;
     
-    // Update biased second moment estimate: v_t = β₂ v_{t-1} + (1-β₂) g_t²
-    SITPST squared_gradient = ElementWiseSquare(gradient);
+    // Update biased second moment estimate: v_t = β₂ v_{t-1} + (1-β₂) |g_t|²
+    SITPST squared_gradient = ElementWiseSquaredNorm(gradient);
     second_moment_ = params.beta2 * second_moment_ + (1.0 - params.beta2) * squared_gradient;
     
     // Compute bias correction factors

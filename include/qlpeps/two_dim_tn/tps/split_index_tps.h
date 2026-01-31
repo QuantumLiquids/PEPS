@@ -456,6 +456,18 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   SplitIndexTPS ElementWiseSquare() const;
 
   /**
+   * @brief Return a SplitIndexTPS with element-wise squared norm applied
+   *
+   * Applies for every site (r,c) and component i the transform
+   * \( T_{r,c}^{(i)} \leftarrow |T_{r,c}^{(i)}|^2 \),
+   * where each element is replaced by its squared magnitude.
+   * For real types this is identical to ElementWiseSquare();
+   * for complex types it computes \( |z|^2 = z \bar{z} \) instead of \( z^2 \).
+   * Delegates to `QLTensor::ElementWiseSquaredNorm()`.
+   */
+  SplitIndexTPS ElementWiseSquaredNorm() const;
+
+  /**
    * @brief Return a SplitIndexTPS with element-wise square root applied
    *
    * Applies for every site (r,c) and component i the transform
@@ -502,6 +514,13 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * @brief In-place element-wise square on all non-default tensors
    */
   void ElementWiseSquareInPlace();
+
+  /**
+   * @brief In-place element-wise squared norm on all non-default tensors
+   *
+   * Replaces each element with its squared magnitude (|z|^2 for complex).
+   */
+  void ElementWiseSquaredNormInPlace();
 
   /**
    * @brief In-place element-wise square root on all non-default tensors
@@ -586,6 +605,10 @@ private:
 template<typename TenElemT, typename QNT>
 SplitIndexTPS<TenElemT, QNT>
 ElementWiseSquare(const SplitIndexTPS<TenElemT, QNT> &tps);
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT>
+ElementWiseSquaredNorm(const SplitIndexTPS<TenElemT, QNT> &tps);
 
 template<typename TenElemT, typename QNT>
 SplitIndexTPS<TenElemT, QNT>
