@@ -1,7 +1,7 @@
 title: VMC/PEPS 能量优化中的 spike 处理与 Checkpoint 方案（自动识别、重采样、回退）
 author: Hao-Xin Wang
 date: 2025-09-01
-status: proposal
+status: implemented
 
 ### 背景与目标
 VMC/PEPS 优化过程中，偶发的 Monte Carlo 估计失稳或线性代数病态会导致“spike”（能量或梯度相关统计量的异常跳变）。本 RFC 旨在：
@@ -222,7 +222,7 @@ MPI 语义：检测仅 master 计算；将触发类型、重试/回退决策广�
 测试与文档：
 - 单元测试：构造受控噪声触发 S1–S4；验证“重采样降低方差”“S4 回退后轨迹恢复”；MPI 多进程一致性。
 - 集成测试：在典型模型上启/禁用自动处置；比对能量曲线与收敛迭代数。
-- 用户文档：`docs/user/zh/guides/optimizer_guide.md` 增补章节，说明默认行为与可调阈值。
+- 用户文档：`docs/user/zh/explanation/optimizer_algorithms.md` 增补章节，说明默认行为与可调阈值。
 
 ---
 
@@ -251,7 +251,21 @@ MPI 语义：检测仅 master 计算；将触发类型、重试/回退决策广�
 【Linus式方案】
 1) 先把数据结构简化：EMA 统计独立、触发枚举统一；
 2) 消除特殊情况：S1–S3 同一动作（重采样），S4 单一策略（回退）；
-3) 用最笨但清晰的方法：重采样重做，不去“修样本”；
+3) 用最笨但清晰的方法：重采样重做，不去"修样本"；
 4) 确保零破坏性：默认只重采样，回退关闭；checkpoint 默认关闭。
 
+---
+
+### 实施状态
+
+已实施（v0.0.4-dev）。所有三个阶段（Checkpoint、S1-S3 重采样、S4 回退）均已合入 `optimizer_impl.h` 主循环。
+
+### 已知限制
+
+1. **AdaGrad/Adam 与 S3 重采样的交互**：S3 检测位于算法 dispatch 之后（dispatch 已更新 accumulator），若对非 SR 算法启用 S3，
+   重采样会导致 accumulator 被 double-update。当前实现通过 `is_sr` 守卫避免此问题（S3 仅对 SR 生效），
+   但如果未来将 S3 扩展到其他算法，需在 dispatch 前检测或保存/恢复 accumulator 快照。
+
+2. **S4 回退仅在 master rank 恢复 `current_state`**：非 master rank 的 `current_state` 在回退后过期，
+   依赖 `energy_evaluator` 在下次调用时从 master 广播最新状态。这是设计上的不变量，非缺陷。
 

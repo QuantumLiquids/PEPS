@@ -20,17 +20,14 @@ for two-dimensional quantum many-body problems. It is under active development.
 The PEPS project provides comprehensive documentation organized into several categories:
 
 - **📚 API Reference (Doxygen)**: run `./docs/build_docs.sh`, then open `docs/build/html/index.html`
-- **📖 User Guides (EN)**: `docs/user/en/guides/`
-- **📖 User Guides (ZH)**: `docs/user/zh/guides/`
-- **🧰 Installation (ZH)**: `docs/user/zh/installation.md`
-- **🚀 Getting Started (ZH)**: `docs/user/zh/getting_started.md`
+- **📖 User Docs (EN/ZH, GitHub-first)**: `docs/user/README.md`
 - **🛠️ Development**: `docs/dev/`
 - **💻 Examples**: `examples/`
 
 ### Quick Start
 
 1. **Build API Docs**: `./docs/build_docs.sh` (from project root), then open `docs/build/html/index.html`
-2. **Read Guides**: `docs/user/en/guides/` or `docs/user/zh/guides/`
+2. **Read User Docs**: `docs/user/README.md` (tutorials/how-to/explanations/reference)
 3. **Run Examples**: Build and run from the `examples/` directory
 
 ---
@@ -97,4 +94,3 @@ We would like to express our gratitude to the following individuals for their co
 - Zhen-Cheng Gu, my postdoc advisor, one of the pioneers in the field of tensor network.
 
 Their expertise and support have been invaluable in the development of QuantumLiquids/PEPS.
-

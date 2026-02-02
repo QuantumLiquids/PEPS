@@ -62,6 +62,18 @@ target_link_libraries(transverse_field_ising_vmc_optimize
 )
 target_compile_options(transverse_field_ising_vmc_optimize PRIVATE )
 
+# Add transverse field Ising Monte Carlo measurement example
+add_executable(transverse_field_ising_mc_measure transverse_field_ising_mc_measure.cpp)
+target_include_directories(transverse_field_ising_mc_measure PRIVATE ${BLAS_INCLUDE_DIRS} ${hptt_INCLUDE_DIR})
+target_link_libraries(transverse_field_ising_mc_measure
+    ${hptt_LIBRARY}
+    BLAS::BLAS
+    LAPACK::LAPACK
+    OpenMP::OpenMP_CXX
+    MPI::MPI_CXX
+)
+target_compile_options(transverse_field_ising_mc_measure PRIVATE )
+
 # Install targets
 # install(TARGETS migration_example transverse_field_ising_simple_update
 #     RUNTIME DESTINATION bin)

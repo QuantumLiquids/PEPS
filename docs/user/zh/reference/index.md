@@ -1,4 +1,6 @@
-# API 参考（Doxygen）
+# 参考（Reference）
 
-- 打开生成的 Doxygen HTML： [API 文档入口](../../../build/html/index.html)
-- 文档由 `docs/build_docs.sh` 生成；若 HTML 缺失，请先运行该脚本。
+- API 参考（Doxygen）：`../../../build/html/index.html`
+- [内置模型可观测量 key（registry）](model_observables_registry.md)
+- [术语表](glossary.md)
+- [历史记录（API 重构）](history/index.md)

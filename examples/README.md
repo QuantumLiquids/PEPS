@@ -27,4 +27,4 @@ make
 
 ## Documentation
 
-For more detailed information about the examples, see the [tutorial documentation](../docs/tutorial/).
+For more detailed information about the examples, see `docs/user/README.md`.
