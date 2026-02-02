@@ -15,6 +15,7 @@
 #include <functional>
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
+#include "qlpeps/optimizer/spike_detection.h"
 #include "qlpeps/utility/conjugate_gradient_solver.h"
 #include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
 
@@ -121,6 +122,7 @@ class Optimizer {
     std::vector<double> gradient_norms;
     size_t total_iterations;
     bool converged;
+    SpikeStatistics spike_stats;   ///< Spike detection statistics for the run
   };
 
   struct OptimizationCallback {
@@ -301,6 +303,11 @@ class Optimizer {
   // Legacy enum-based helper methods removed - use OptimizerParams.IsAlgorithm<T>() instead
 
   /**
+   * @brief Get spike detection statistics from the last optimization run.
+   */
+  const SpikeStatistics &GetSpikeStats() const { return spike_stats_; }
+
+  /**
    * @brief Check if optimization should stop based on convergence criteria
    * 
    * @param current_energy Current energy value
@@ -348,10 +355,36 @@ class Optimizer {
   size_t adam_timestep_;            // t: iteration counter for bias correction
   bool adam_initialized_;
 
-  // Helper methods (none needed - keep it simple)
-  void LogOptimizationStep(size_t iteration, 
-                          double energy, 
-                          double energy_error, 
+  // Spike detection state (master rank ONLY)
+  EMATracker ema_energy_;
+  EMATracker ema_error_;
+  EMATracker ema_grad_norm_;
+  EMATracker ema_ngrad_norm_;
+  double prev_energy_ = 0.0;
+  SpikeStatistics spike_stats_;
+
+  // S4 rollback state (master rank ONLY, allocated only when enable_rollback)
+  WaveFunctionT prev_accepted_state_;
+  bool has_prev_state_ = false;
+
+  // Spike detection and recovery methods (master rank evaluates, then broadcasts)
+  SpikeSignal DetectS1S2_(double error, double grad_norm) const;
+  SpikeSignal DetectS3_(double ngrad_norm, size_t sr_iters) const;
+  SpikeSignal DetectS4_(double energy) const;
+  SpikeAction DecideAction_(SpikeSignal signal, size_t attempts, size_t step) const;
+  SpikeAction BroadcastAction_(SpikeAction action);
+  void LogSpikeEvent_(size_t step, size_t attempt, SpikeSignal signal,
+                      SpikeAction action, double value, double threshold);
+
+  // Checkpoint
+  void SaveCheckpoint_(const WaveFunctionT& state, size_t step,
+                       const std::vector<TenElemT>& energy_traj,
+                       const std::vector<double>& error_traj);
+
+  // Helper methods
+  void LogOptimizationStep(size_t iteration,
+                          double energy,
+                          double energy_error,
                           double gradient_norm,
                           double step_length = 0.0,
                           const std::vector<double>& accept_rates = {},

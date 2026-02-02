@@ -57,4 +57,83 @@ TEST(OptimizerParamsTest, BuilderClipSettersRequireBaseParams) {
   EXPECT_DOUBLE_EQ(*params.base_params.clip_norm, 2.0);
 }
 
+// --- CheckpointParams tests ---
+TEST(CheckpointParamsTest, DefaultIsDisabled) {
+  CheckpointParams ckpt;
+  EXPECT_EQ(ckpt.every_n_steps, 0u);
+  EXPECT_TRUE(ckpt.base_path.empty());
+  EXPECT_FALSE(ckpt.IsEnabled());
+}
 
+TEST(CheckpointParamsTest, EnabledWhenConfigured) {
+  CheckpointParams ckpt{10, "/tmp/ckpt"};
+  EXPECT_TRUE(ckpt.IsEnabled());
+}
+
+TEST(CheckpointParamsTest, DisabledWithZeroSteps) {
+  CheckpointParams ckpt{0, "/tmp/ckpt"};
+  EXPECT_FALSE(ckpt.IsEnabled());
+}
+
+TEST(CheckpointParamsTest, DisabledWithEmptyPath) {
+  CheckpointParams ckpt{10, ""};
+  EXPECT_FALSE(ckpt.IsEnabled());
+}
+
+// --- SpikeRecoveryParams tests ---
+TEST(SpikeRecoveryParamsTest, DefaultValues) {
+  SpikeRecoveryParams spike;
+  EXPECT_TRUE(spike.enable_auto_recover);
+  EXPECT_FALSE(spike.enable_rollback);
+  EXPECT_EQ(spike.redo_mc_max_retries, 2u);
+  EXPECT_DOUBLE_EQ(spike.factor_err, 100.0);
+  EXPECT_DOUBLE_EQ(spike.factor_grad, 1e10);
+  EXPECT_DOUBLE_EQ(spike.factor_ngrad, 10.0);
+  EXPECT_EQ(spike.sr_min_iters_suspicious, 1u);
+  EXPECT_EQ(spike.ema_window, 50u);
+  EXPECT_DOUBLE_EQ(spike.sigma_k, 10.0);
+  EXPECT_TRUE(spike.log_trigger_csv_path.empty());
+}
+
+// --- Builder checkpoint/spike tests ---
+TEST(OptimizerParamsBuilderTest, SetCheckpointPersists) {
+  OptimizerParamsBuilder builder;
+  builder.SetMaxIterations(5).SetLearningRate(0.1).WithSGD();
+  builder.SetCheckpoint(20, "/tmp/test_ckpt");
+  OptimizerParams params = builder.Build();
+  EXPECT_TRUE(params.checkpoint_params.IsEnabled());
+  EXPECT_EQ(params.checkpoint_params.every_n_steps, 20u);
+  EXPECT_EQ(params.checkpoint_params.base_path, "/tmp/test_ckpt");
+}
+
+TEST(OptimizerParamsBuilderTest, SetSpikeRecoveryPersists) {
+  SpikeRecoveryParams custom;
+  custom.enable_auto_recover = false;
+  custom.factor_err = 50.0;
+
+  OptimizerParamsBuilder builder;
+  builder.SetMaxIterations(5).SetLearningRate(0.1).WithSGD();
+  builder.SetSpikeRecovery(custom);
+  OptimizerParams params = builder.Build();
+  EXPECT_FALSE(params.spike_recovery_params.enable_auto_recover);
+  EXPECT_DOUBLE_EQ(params.spike_recovery_params.factor_err, 50.0);
+}
+
+TEST(OptimizerParamsBuilderTest, DisableSpikeRecoveryWorks) {
+  OptimizerParamsBuilder builder;
+  builder.SetMaxIterations(5).SetLearningRate(0.1).WithSGD();
+  builder.DisableSpikeRecovery();
+  OptimizerParams params = builder.Build();
+  EXPECT_FALSE(params.spike_recovery_params.enable_auto_recover);
+  EXPECT_FALSE(params.spike_recovery_params.enable_rollback);
+}
+
+// --- Factory default spike/checkpoint tests ---
+TEST(OptimizerFactoryTest, FactoryCreatedParamsHaveSpikeDefaults) {
+  auto params = OptimizerFactory::CreateAdaGrad(100, 0.01, 1e-8, 0.0);
+  // Spike recovery defaults: S1-S3 on, S4 off
+  EXPECT_TRUE(params.spike_recovery_params.enable_auto_recover);
+  EXPECT_FALSE(params.spike_recovery_params.enable_rollback);
+  // Checkpoint defaults: disabled
+  EXPECT_FALSE(params.checkpoint_params.IsEnabled());
+}

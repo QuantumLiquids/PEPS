@@ -42,8 +42,11 @@
 #include <iomanip>
 #include <algorithm>
 #include <complex>
+#include <filesystem>
+#include <fstream>
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/utility/helpers.h"
+#include "qlpeps/utility/filesystem_utils.h"
 #include "qlten/utility/timer.h"
 
 namespace qlpeps {
@@ -58,7 +61,13 @@ Optimizer<TenElemT, QNT>::Optimizer(const OptimizerParams &params,
       adagrad_initialized_(false),
       sgd_momentum_initialized_(false),
       adam_timestep_(0),
-      adam_initialized_(false) {
+      adam_initialized_(false),
+      ema_energy_(params.spike_recovery_params.ema_window),
+      ema_error_(params.spike_recovery_params.ema_window),
+      ema_grad_norm_(params.spike_recovery_params.ema_window),
+      ema_ngrad_norm_(params.spike_recovery_params.ema_window),
+      prev_energy_(0.0),
+      has_prev_state_(false) {
 }
 
 template<typename TenElemT, typename QNT>
@@ -376,170 +385,285 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   double previous_energy = std::numeric_limits<double>::max();
   size_t iterations_without_improvement = 0;  // plateau counter
 
+  // Spike recovery config aliases
+  const auto &spike_cfg = params_.spike_recovery_params;
+  const auto &ckpt_cfg = params_.checkpoint_params;
+  const bool is_sr = params_.IsAlgorithm<StochasticReconfigurationParams>();
+
   size_t total_iterations_performed = 0;
-  for (size_t iter = 0; iter < params_.base_params.max_iterations; ++iter) {
-    // Start timer for energy evaluation (the dominant computational cost)
-    Timer energy_eval_timer("energy_evaluation");
-    
-    // Evaluate energy and gradient at current state
-    auto [current_energy, current_gradient, current_error] = energy_evaluator(current_state);
-    result.energy_trajectory.push_back(current_energy);
+  bool done = false;
+  for (size_t iter = 0; iter < params_.base_params.max_iterations && !done; ++iter) {
+    bool step_accepted = false;
+    size_t attempts = 0;
 
-    // Get elapsed time for energy evaluation
-    double energy_eval_time = energy_eval_timer.Elapsed();
+    while (!step_accepted) {
+      // === A: Evaluate energy and gradient ===
+      Timer energy_eval_timer("energy_evaluation");
+      auto [current_energy, current_gradient, current_error] = energy_evaluator(current_state);
+      double energy_eval_time = energy_eval_timer.Elapsed();
 
-    // Store energy error and gradient norm only on master rank
-    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-      result.energy_error_trajectory.push_back(current_error);
-      result.gradient_norms.push_back(std::sqrt(current_gradient.NormSquare()));
-    }
-
-    total_iterations_performed = iter + 1;
-
-    // Update best state if energy improved
-    bool energy_improved = false;
-    if (std::real(current_energy) < best_energy) {
-      best_energy = std::real(current_energy);
-      best_state = current_state;
-      result.min_energy = best_energy;
-      energy_improved = true;
-      iterations_without_improvement = 0;
-
-      if (callback.on_best_state_found) {
-        callback.on_best_state_found(best_state, best_energy);
+      double grad_norm = 0.0;
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        grad_norm = std::sqrt(current_gradient.NormSquare());
       }
-    } else {
-      iterations_without_improvement++;
-    }
 
-    // Determine learning rate after we have energy info
-    // Use previous iteration energy for scheduler when iter>0; otherwise use current energy
-    double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
-
-    // Advanced stopping criteria checks (skip for first iteration)
-    if (iter > 0) {
-      double current_energy_real = std::real(current_energy);
-      double gradient_norm = std::sqrt(current_gradient.NormSquare());
-
-      // EFFICIENT APPROACH: Only master rank evaluates stopping criteria, then broadcasts the decision.
-      bool should_stop = ShouldStop(current_energy_real, previous_energy, gradient_norm, iterations_without_improvement);
-      
-      if (should_stop) {
-        // Log the final iteration before stopping (only on master rank)
+      // === B: S1/S2 detection (before any trajectory or state update) ===
+      // Guard uses iter > 0 (not ema_.IsInitialized()) so ALL ranks enter together for MPI_Bcast.
+      if (spike_cfg.enable_auto_recover && iter > 0) {
+        SpikeSignal signal = SpikeSignal::kNone;
+        SpikeAction action = SpikeAction::kAccept;
         if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-          LogOptimizationStep(iter,
-                             current_energy_real,
-                             current_error,
-                             gradient_norm,
-                             learning_rate,
-                             {},
-                             0, // sr_iterations
-                             0.0, // sr_natural_grad_norm
-                             energy_eval_time,
-                             0.0); // update_time
-        result.converged = true;
+          signal = DetectS1S2_(current_error, grad_norm);
+          if (signal != SpikeSignal::kNone) {
+            action = DecideAction_(signal, attempts, iter);
+          }
         }
-        
-        break;  // All ranks will break together now
-      }
-
-      previous_energy = current_energy_real;
-    } else {
-      // For first iteration, just record the energy for next comparison
-      previous_energy = std::real(current_energy);
-    }
-
-    // Start timer for optimization update step
-    Timer update_timer("optimization_update");
-
-    // Apply gradient preprocessing (clipping) for first-order methods only (master rank only)
-    SITPST preprocessed_gradient = current_gradient;
-    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-      // Only apply to first-order optimizers: SGD, AdaGrad, Adam
-      if (params_.IsFirstOrder()) {
-        if (params_.base_params.clip_value && *(params_.base_params.clip_value) > 0.0) {
-          preprocessed_gradient.ElementWiseClipTo(*(params_.base_params.clip_value));
+        action = BroadcastAction_(action);
+        if (action == SpikeAction::kResample || action == SpikeAction::kRollback) {
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            double thresh = (signal == SpikeSignal::kS1_ErrorbarSpike)
+                ? spike_cfg.factor_err * ema_error_.Mean()
+                : spike_cfg.factor_grad * ema_grad_norm_.Mean();
+            double val = (signal == SpikeSignal::kS1_ErrorbarSpike) ? current_error : grad_norm;
+            LogSpikeEvent_(iter, attempts, signal, action, val, thresh);
+            if (action == SpikeAction::kRollback && has_prev_state_) {
+              // MPI invariant: only master rank holds the authoritative current_state.
+              // Non-master ranks' current_state is stale but harmless — the energy_evaluator
+              // broadcasts the master's state at the start of each evaluation call.
+              current_state = prev_accepted_state_;
+              has_prev_state_ = false;
+            }
+          }
+          if (action == SpikeAction::kResample) { attempts++; }
+          else { attempts = 0; }
+          continue;
         }
-        if (params_.base_params.clip_norm && *(params_.base_params.clip_norm) > 0.0) {
-          preprocessed_gradient.ClipByGlobalNorm(*(params_.base_params.clip_norm));
+        if (action == SpikeAction::kAcceptWithWarning && rank_ == qlten::hp_numeric::kMPIMasterRank) {
+          double thresh = (signal == SpikeSignal::kS1_ErrorbarSpike)
+              ? spike_cfg.factor_err * ema_error_.Mean()
+              : spike_cfg.factor_grad * ema_grad_norm_.Mean();
+          double val = (signal == SpikeSignal::kS1_ErrorbarSpike) ? current_error : grad_norm;
+          LogSpikeEvent_(iter, attempts, signal, action, val, thresh);
         }
       }
-    }
 
-    // Apply optimization update based on algorithm type
-    SITPST updated_state;
-    size_t sr_iterations = 0;
-    double sr_natural_grad_norm = 0.0;
+      // === C: Compute learning rate and optimization update ===
+      double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
 
-    // Use std::visit for type-safe algorithm dispatch
-    std::visit([&](const auto& algo_params) {
-      using T = std::decay_t<decltype(algo_params)>;
-      
-      if constexpr (std::is_same_v<T, SGDParams>) {
-        // SGD with momentum and Nesterov acceleration support
-        updated_state = SGDUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
+      Timer update_timer("optimization_update");
+
+      // Gradient preprocessing (clipping) for first-order methods
+      SITPST preprocessed_gradient = current_gradient;
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        if (params_.IsFirstOrder()) {
+          if (params_.base_params.clip_value && *(params_.base_params.clip_value) > 0.0) {
+            preprocessed_gradient.ElementWiseClipTo(*(params_.base_params.clip_value));
+          }
+          if (params_.base_params.clip_norm && *(params_.base_params.clip_norm) > 0.0) {
+            preprocessed_gradient.ClipByGlobalNorm(*(params_.base_params.clip_norm));
+          }
+        }
       }
-      else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
-        // Stochastic Reconfiguration variants
-        // Fix Intel icpx compiler crash: avoid structured binding in lambda
-        auto sr_result = StochasticReconfigurationUpdate(
-            current_state, current_gradient,
-            Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
-            Ostar_mean ? *Ostar_mean : SITPST{},
-            learning_rate, sr_init_guess, algo_params.normalize_update);
-        updated_state = std::get<0>(sr_result);
-        sr_natural_grad_norm = std::get<1>(sr_result);
-        sr_iterations = std::get<2>(sr_result);
-        sr_init_guess = std::get<0>(sr_result); // Use as initial guess for next iteration
+
+      SITPST updated_state;
+      size_t sr_iterations = 0;
+      double sr_natural_grad_norm = 0.0;
+
+      // Single algorithm dispatch with correct learning rate
+      std::visit([&](const auto& algo_params) {
+        using T = std::decay_t<decltype(algo_params)>;
+
+        if constexpr (std::is_same_v<T, SGDParams>) {
+          updated_state = SGDUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
+        }
+        else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
+          // Fix Intel icpx compiler crash: avoid structured binding in lambda
+          auto sr_result = StochasticReconfigurationUpdate(
+              current_state, current_gradient,
+              Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
+              Ostar_mean ? *Ostar_mean : SITPST{},
+              learning_rate, sr_init_guess, algo_params.normalize_update);
+          updated_state = std::get<0>(sr_result);
+          sr_natural_grad_norm = std::get<1>(sr_result);
+          sr_iterations = std::get<2>(sr_result);
+          sr_init_guess = std::get<0>(sr_result);
+        }
+        else if constexpr (std::is_same_v<T, AdaGradParams>) {
+          updated_state = AdaGradUpdate(current_state, preprocessed_gradient, learning_rate);
+        }
+        else if constexpr (std::is_same_v<T, AdamParams>) {
+          updated_state = AdamUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
+        }
+        else if constexpr (std::is_same_v<T, LBFGSParams>) {
+          throw std::runtime_error("L-BFGS algorithm not yet implemented");
+        }
+        else {
+          throw std::runtime_error("Unsupported algorithm type for iterative optimization");
+        }
+      }, params_.algorithm_params);
+
+      double update_time = update_timer.Elapsed();
+
+      // === D: S3 detection (SR-only, after CG solve) ===
+      // Known limitation: if this were extended to non-SR algorithms (AdaGrad/Adam),
+      // a RESAMPLE here would cause the algorithm's accumulator state (e.g., AdaGrad's
+      // sum-of-squared-gradients, Adam's moment estimates) to be double-updated, since
+      // algorithm dispatch (section C) already ran. Currently safe because S3 is gated
+      // on is_sr, and SR's CG solver has no persistent accumulator state.
+      // See RFC 2025-09-01 "Known Limitations" section.
+      // Guard uses iter > 0 (not ema_.IsInitialized()) so ALL ranks enter together for MPI_Bcast.
+      if (is_sr && spike_cfg.enable_auto_recover && iter > 0) {
+        SpikeSignal signal = SpikeSignal::kNone;
+        SpikeAction action = SpikeAction::kAccept;
+        if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+          signal = DetectS3_(sr_natural_grad_norm, sr_iterations);
+          if (signal != SpikeSignal::kNone) {
+            action = DecideAction_(signal, attempts, iter);
+          }
+        }
+        action = BroadcastAction_(action);
+        if (action == SpikeAction::kResample || action == SpikeAction::kRollback) {
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            LogSpikeEvent_(iter, attempts, signal, action, sr_natural_grad_norm,
+                           spike_cfg.factor_ngrad * ema_ngrad_norm_.Mean());
+            if (action == SpikeAction::kRollback && has_prev_state_) {
+              current_state = prev_accepted_state_;
+              has_prev_state_ = false;
+            }
+          }
+          if (action == SpikeAction::kResample) { attempts++; }
+          else { attempts = 0; }
+          continue;
+        }
+        if (action == SpikeAction::kAcceptWithWarning && rank_ == qlten::hp_numeric::kMPIMasterRank) {
+          LogSpikeEvent_(iter, attempts, signal, action, sr_natural_grad_norm,
+                         spike_cfg.factor_ngrad * ema_ngrad_norm_.Mean());
+        }
       }
-      else if constexpr (std::is_same_v<T, AdaGradParams>) {
-        updated_state = AdaGradUpdate(current_state, preprocessed_gradient, learning_rate);
+
+      // === D2: S4 detection (rollback, opt-in) ===
+      // Guard uses iter > 0 (not ema_.IsInitialized()) so ALL ranks enter together for MPI_Bcast.
+      if (spike_cfg.enable_rollback && iter > 0) {
+        SpikeSignal signal = SpikeSignal::kNone;
+        SpikeAction action = SpikeAction::kAccept;
+        if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+          signal = DetectS4_(std::real(current_energy));
+          if (signal != SpikeSignal::kNone) {
+            action = SpikeAction::kRollback;
+          }
+        }
+        action = BroadcastAction_(action);
+        if (action == SpikeAction::kRollback) {
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            LogSpikeEvent_(iter, attempts, signal, action,
+                           std::real(current_energy),
+                           ema_energy_.Mean() + spike_cfg.sigma_k * ema_energy_.Std());
+            if (has_prev_state_) {
+              // MPI invariant: only master rank holds the authoritative current_state.
+              // Non-master ranks' current_state is stale but harmless — the energy_evaluator
+              // broadcasts the master's state at the start of each evaluation call.
+              current_state = prev_accepted_state_;
+              has_prev_state_ = false;
+            }
+          }
+          attempts = 0;
+          continue;
+        }
       }
-      else if constexpr (std::is_same_v<T, AdamParams>) {
-        updated_state = AdamUpdate(current_state, preprocessed_gradient, 
-                                   learning_rate, algo_params);
+
+      // === E: ACCEPT — update EMA trackers (only on accepted steps) ===
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        ema_energy_.Update(std::real(current_energy));
+        ema_error_.Update(current_error);
+        ema_grad_norm_.Update(grad_norm);
+        if (is_sr) {
+          ema_ngrad_norm_.Update(sr_natural_grad_norm);
+        }
+        prev_energy_ = std::real(current_energy);
       }
-      else if constexpr (std::is_same_v<T, LBFGSParams>) {
-        // TODO: Implement L-BFGS when needed
-        throw std::runtime_error("L-BFGS algorithm not yet implemented");
+
+      // === F: Trajectories, best-state, stopping, state update, log, callback ===
+      result.energy_trajectory.push_back(current_energy);
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        result.energy_error_trajectory.push_back(current_error);
+        result.gradient_norms.push_back(grad_norm);
       }
-      else {
-        throw std::runtime_error("Unsupported algorithm type for iterative optimization");
+
+      total_iterations_performed = iter + 1;
+
+      // Update best state
+      if (std::real(current_energy) < best_energy) {
+        best_energy = std::real(current_energy);
+        best_state = current_state;
+        result.min_energy = best_energy;
+        iterations_without_improvement = 0;
+        if (callback.on_best_state_found) {
+          callback.on_best_state_found(best_state, best_energy);
+        }
+      } else {
+        iterations_without_improvement++;
       }
-    }, params_.algorithm_params);
 
-    current_state = updated_state;
+      // Advanced stopping criteria (skip first iteration)
+      if (iter > 0) {
+        double current_energy_real = std::real(current_energy);
+        bool should_stop = ShouldStop(current_energy_real, previous_energy, grad_norm, iterations_without_improvement);
+        if (should_stop) {
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            LogOptimizationStep(iter, current_energy_real, current_error, grad_norm,
+                               learning_rate, {}, sr_iterations, sr_natural_grad_norm,
+                               energy_eval_time, update_time);
+            result.converged = true;
+          }
+          step_accepted = true;
+          done = true;
+          break;
+        }
+        previous_energy = current_energy_real;
+      } else {
+        previous_energy = std::real(current_energy);
+      }
 
-    // Get elapsed time for optimization update step
-    double update_time = update_timer.Elapsed();
+      // Save prev state for S4 rollback BEFORE applying update
+      if (spike_cfg.enable_rollback && rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        prev_accepted_state_ = current_state;
+        has_prev_state_ = true;
+      }
 
-    // Calculate total iteration time
-    double total_iteration_time = energy_eval_time + update_time;
+      // Apply the state update.
+      // Note: updated_state is only meaningful on master rank (algorithm dispatch
+      // computes on master). Non-master ranks rely on energy_evaluator to receive
+      // the updated state via MPI broadcast on the next evaluation call.
+      current_state = updated_state;
 
-    // Log progress
-    LogOptimizationStep(iter,
-                        std::real(current_energy),
-                        current_error,
-                        std::sqrt(current_gradient.NormSquare()),
-                        learning_rate,
-                        {},
-                        sr_iterations,
-                        sr_natural_grad_norm,
-                        energy_eval_time,
-                        update_time);
+      // Log progress
+      LogOptimizationStep(iter, std::real(current_energy), current_error, grad_norm,
+                          learning_rate, {}, sr_iterations, sr_natural_grad_norm,
+                          energy_eval_time, update_time);
 
-    if (callback.on_iteration) {
-      callback.on_iteration(iter, std::real(current_energy), current_error, std::sqrt(current_gradient.NormSquare()));
-    }
+      if (callback.on_iteration) {
+        callback.on_iteration(iter, std::real(current_energy), current_error, grad_norm);
+      }
 
-    if (callback.should_stop && callback.should_stop(iter, std::real(current_energy), current_error)) {
-      break;
-    }
-  }
+      if (callback.should_stop && callback.should_stop(iter, std::real(current_energy), current_error)) {
+        step_accepted = true;
+        done = true;
+        break;
+      }
+
+      // === G: Checkpoint ===
+      if (ckpt_cfg.IsEnabled() && iter > 0 && (iter % ckpt_cfg.every_n_steps == 0)) {
+        SaveCheckpoint_(current_state, iter, result.energy_trajectory, result.energy_error_trajectory);
+      }
+
+      step_accepted = true;
+    } // end while (!step_accepted)
+  } // end for
 
   result.optimized_state = best_state;
   result.final_energy = best_energy;
   result.total_iterations = total_iterations_performed;
+  result.spike_stats = spike_stats_;
 
   // Ensure the final state is valid
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
@@ -976,13 +1100,13 @@ template<typename TenElemT, typename QNT>
 void Optimizer<TenElemT, QNT>::ClearUp() {
   // Clear AdaGrad state
   if (adagrad_initialized_) {
-    accumulated_gradients_ = SITPST(); // Clear the tensor
+    accumulated_gradients_ = SITPST();
     adagrad_initialized_ = false;
   }
-  
+
   // Clear SGD momentum state
   if (sgd_momentum_initialized_) {
-    velocity_ = SITPST(); // Clear the velocity tensor
+    velocity_ = SITPST();
     sgd_momentum_initialized_ = false;
   }
 
@@ -994,10 +1118,196 @@ void Optimizer<TenElemT, QNT>::ClearUp() {
     adam_initialized_ = false;
   }
 
-  // RNG state removed from Optimizer; nothing to reset here.
+  // Clear spike detection state
+  ema_energy_.Reset();
+  ema_error_.Reset();
+  ema_grad_norm_.Reset();
+  ema_ngrad_norm_.Reset();
+  prev_energy_ = 0.0;
 
-  // Clear any cached data or temporary storage
-  // This ensures memory is freed and the optimizer is ready for the next run
+  // Write CSV trigger log if configured
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    const auto &csv_path = params_.spike_recovery_params.log_trigger_csv_path;
+    if (!csv_path.empty() && !spike_stats_.event_log.empty()) {
+      std::ofstream csv(csv_path);
+      if (csv) {
+        csv << "step,attempt,signal,action,value,threshold\n";
+        for (const auto &ev : spike_stats_.event_log) {
+          csv << ev.step << "," << ev.attempt << ","
+              << SignalName(ev.signal) << "," << ActionName(ev.action) << ","
+              << std::scientific << std::setprecision(6) << ev.value << ","
+              << ev.threshold << "\n";
+        }
+      }
+    }
+  }
+
+  // Clear spike statistics (after CSV has been written above)
+  spike_stats_ = SpikeStatistics{};
+
+  // Clear rollback state
+  prev_accepted_state_ = WaveFunctionT();
+  has_prev_state_ = false;
+}
+
+// =============================================================================
+// Spike detection methods
+// =============================================================================
+
+template<typename TenElemT, typename QNT>
+SpikeSignal Optimizer<TenElemT, QNT>::DetectS1S2_(double error, double grad_norm) const {
+  const auto &cfg = params_.spike_recovery_params;
+  // S1: error bar spike
+  if (ema_error_.IsInitialized() && ema_error_.Mean() > 0.0) {
+    if (error > cfg.factor_err * ema_error_.Mean()) {
+      return SpikeSignal::kS1_ErrorbarSpike;
+    }
+  }
+  // S2: gradient norm spike
+  if (ema_grad_norm_.IsInitialized() && ema_grad_norm_.Mean() > 0.0) {
+    if (grad_norm > cfg.factor_grad * ema_grad_norm_.Mean()) {
+      return SpikeSignal::kS2_GradientNormSpike;
+    }
+  }
+  return SpikeSignal::kNone;
+}
+
+template<typename TenElemT, typename QNT>
+SpikeSignal Optimizer<TenElemT, QNT>::DetectS3_(double ngrad_norm, size_t sr_iters) const {
+  const auto &cfg = params_.spike_recovery_params;
+  // Check natural gradient norm anomaly against EMA
+  if (ema_ngrad_norm_.IsInitialized() && ema_ngrad_norm_.Mean() > 0.0) {
+    if (ngrad_norm > cfg.factor_ngrad * ema_ngrad_norm_.Mean()) {
+      return SpikeSignal::kS3_NaturalGradientAnomaly;
+    }
+  }
+  // Suspiciously few CG iterations — independent trigger (no ngrad threshold).
+  // When CG converges in very few iterations the solver may have "succeeded"
+  // trivially on a near-singular system, so this alone signals trouble.
+  if (sr_iters <= cfg.sr_min_iters_suspicious) {
+    return SpikeSignal::kS3_NaturalGradientAnomaly;
+  }
+  return SpikeSignal::kNone;
+}
+
+template<typename TenElemT, typename QNT>
+SpikeSignal Optimizer<TenElemT, QNT>::DetectS4_(double energy) const {
+  const auto &cfg = params_.spike_recovery_params;
+  if (!ema_energy_.IsInitialized()) return SpikeSignal::kNone;
+  // Only trigger on upward spikes: energy increased AND exceeds EMA + k*sigma
+  double delta = energy - ema_energy_.Mean();
+  if (delta > 0.0 && ema_energy_.Std() > 0.0) {
+    if (delta > cfg.sigma_k * ema_energy_.Std()) {
+      return SpikeSignal::kS4_EMAEnergySpikeUpward;
+    }
+  }
+  return SpikeSignal::kNone;
+}
+
+template<typename TenElemT, typename QNT>
+SpikeAction Optimizer<TenElemT, QNT>::DecideAction_(SpikeSignal signal, size_t attempts, size_t step) const {
+  if (signal == SpikeSignal::kNone) return SpikeAction::kAccept;
+
+  const auto &cfg = params_.spike_recovery_params;
+
+  // For S4, always rollback (caller decides to invoke this)
+  if (signal == SpikeSignal::kS4_EMAEnergySpikeUpward) {
+    return SpikeAction::kRollback;
+  }
+
+  // S1/S2/S3: try resample if under retry limit
+  if (attempts < cfg.redo_mc_max_retries) {
+    return SpikeAction::kResample;
+  }
+
+  // Retries exhausted: try rollback if enabled and we have a prev state
+  if (cfg.enable_rollback && has_prev_state_ && step > 0) {
+    return SpikeAction::kRollback;
+  }
+
+  // Last resort: accept with warning
+  return SpikeAction::kAcceptWithWarning;
+}
+
+template<typename TenElemT, typename QNT>
+SpikeAction Optimizer<TenElemT, QNT>::BroadcastAction_(SpikeAction action) {
+  if (mpi_size_ == 1) return action;
+
+  int action_int = static_cast<int>(action);
+  HANDLE_MPI_ERROR(::MPI_Bcast(&action_int, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_));
+  return static_cast<SpikeAction>(action_int);
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::LogSpikeEvent_(
+    size_t step, size_t attempt, SpikeSignal signal,
+    SpikeAction action, double value, double threshold) {
+  // Console log (master rank only — caller guarantees this)
+  std::cout << "[SPIKE] Step " << step << " attempt " << attempt
+            << " | " << SignalName(signal)
+            << " | value=" << std::scientific << std::setprecision(3) << value
+            << " threshold=" << std::scientific << std::setprecision(3) << threshold
+            << " | -> " << ActionName(action) << std::endl;
+
+  // Update statistics
+  if (action == SpikeAction::kResample) spike_stats_.total_resamples++;
+  else if (action == SpikeAction::kRollback) spike_stats_.total_rollbacks++;
+  else if (action == SpikeAction::kAcceptWithWarning) spike_stats_.total_forced_accepts++;
+
+  // Record event for optional CSV output
+  spike_stats_.event_log.push_back({step, attempt, signal, action, value, threshold});
+}
+
+// =============================================================================
+// Checkpoint
+// =============================================================================
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::SaveCheckpoint_(
+    const WaveFunctionT &state, size_t step,
+    const std::vector<TenElemT> &energy_traj,
+    const std::vector<double> &error_traj) {
+  const auto &cfg = params_.checkpoint_params;
+  if (!cfg.IsEnabled()) return;
+
+  std::string dir = cfg.base_path + "/step_" + std::to_string(step);
+
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    EnsureDirectoryExists(dir);
+    // Save TPS (Dump is non-const due to optional release_mem; const_cast is safe here)
+    const_cast<WaveFunctionT &>(state).Dump(dir);
+
+    // Write metadata
+    std::string meta_path = dir + "/checkpoint_meta.txt";
+    std::ofstream meta(meta_path);
+    if (meta) {
+      meta << "step " << step << "\n";
+      if (!energy_traj.empty()) {
+        meta << "energy " << std::setprecision(17) << std::real(energy_traj.back()) << "\n";
+      }
+      if (!error_traj.empty()) {
+        meta << "error " << std::setprecision(17) << error_traj.back() << "\n";
+      }
+    }
+
+    // Snapshot trajectory CSV
+    std::string csv_path = dir + "/trajectory_snapshot.csv";
+    std::ofstream csv(csv_path);
+    if (csv) {
+      csv << "iteration,energy,energy_error\n";
+      for (size_t i = 0; i < energy_traj.size(); ++i) {
+        csv << i << "," << std::setprecision(17) << std::real(energy_traj[i]) << ","
+            << (i < error_traj.size() ? error_traj[i] : 0.0) << "\n";
+      }
+    }
+
+    std::cout << "[CHECKPOINT] Saved step " << step << " to " << dir << std::endl;
+  }
+
+  // All ranks wait for master I/O to complete
+  if (mpi_size_ > 1) {
+    HANDLE_MPI_ERROR(::MPI_Barrier(comm_));
+  }
 }
 
 } // namespace qlpeps

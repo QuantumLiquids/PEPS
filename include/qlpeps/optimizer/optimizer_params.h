@@ -128,6 +128,55 @@ struct AdaGradParams {
 };
 
 // =============================================================================
+// CHECKPOINT PARAMETERS
+// =============================================================================
+
+/**
+ * @struct CheckpointParams
+ * @brief Parameters for periodic TPS checkpointing during optimization.
+ *
+ * When enabled, the optimizer saves the current TPS state every N steps
+ * to base_path/step_{k}/. Resume is manual: load the TPS and pass it
+ * to VmcOptimize() as the initial state.
+ */
+struct CheckpointParams {
+  size_t every_n_steps = 0;   ///< 0 = disabled
+  std::string base_path;      ///< base_path/step_{k}/
+
+  bool IsEnabled() const { return every_n_steps > 0 && !base_path.empty(); }
+};
+
+// =============================================================================
+// SPIKE RECOVERY PARAMETERS
+// =============================================================================
+
+/**
+ * @struct SpikeRecoveryParams
+ * @brief Parameters controlling automatic spike detection and recovery in VMC optimization.
+ *
+ * S1-S3 detect anomalous energy errors, gradient norms, and natural gradient anomalies
+ * and trigger MC resampling. S4 (opt-in) detects upward energy spikes for state rollback.
+ *
+ * Detection thresholds are expressed as multiplicative factors relative to EMA statistics.
+ * For example, S1 triggers when error > factor_err * EMA(error).
+ */
+struct SpikeRecoveryParams {
+  bool enable_auto_recover = true;       ///< S1-S3 resample master switch
+  size_t redo_mc_max_retries = 2;        ///< max resample attempts per step
+  double factor_err = 100.0;             ///< S1: error > factor * EMA(error)
+  double factor_grad = 1e10;             ///< S2: grad_norm > factor * EMA(grad_norm)
+  double factor_ngrad = 10.0;            ///< S3: ngrad_norm > factor * EMA(ngrad_norm)
+  size_t sr_min_iters_suspicious = 1;    ///< CG iters <= this is suspicious (S3)
+  /// S4 master switch (default OFF).
+  /// Note: rollback restores the wavefunction state only; optimizer-internal
+  /// accumulators (momentum/Adam/AdaGrad) are not restored.
+  bool enable_rollback = false;
+  size_t ema_window = 50;               ///< EMA window size for all trackers
+  double sigma_k = 10.0;                ///< S4: E - EMA(E) > sigma_k * EMA_std(E)
+  std::string log_trigger_csv_path;     ///< optional CSV log path (empty = no CSV)
+};
+
+// =============================================================================
 // TYPE-SAFE ALGORITHM PARAMETER VARIANT
 // =============================================================================
 
@@ -227,16 +276,24 @@ struct OptimizerParams {
 
   BaseParams base_params;
   AlgorithmParams algorithm_params;
-  
+  CheckpointParams checkpoint_params;           ///< default: disabled
+  SpikeRecoveryParams spike_recovery_params;    ///< default: S1-S3 on, S4 off
+
   // ⚠️ TESTING-ONLY DEFAULT CONSTRUCTOR - DO NOT USE IN PRODUCTION! ⚠️
   // Uses obviously invalid values to make misuse immediately obvious
-  OptimizerParams() 
+  OptimizerParams()
     : base_params(1, 999.0, 999.0, 1, 999.0),  // Obviously wrong values
       algorithm_params(SGDParams()) {}
 
   // Constructor requires explicit parameters (no defaults)
   OptimizerParams(const BaseParams& base_params, const AlgorithmParams& algo_params)
     : base_params(base_params), algorithm_params(algo_params) {}
+
+  // Constructor with checkpoint and spike recovery params
+  OptimizerParams(const BaseParams& base_params, const AlgorithmParams& algo_params,
+                  const CheckpointParams& ckpt, const SpikeRecoveryParams& spike)
+    : base_params(base_params), algorithm_params(algo_params),
+      checkpoint_params(ckpt), spike_recovery_params(spike) {}
 
   // Legacy compatibility fields removed - use new variant-based API instead
 
@@ -462,7 +519,9 @@ class OptimizerParamsBuilder {
 private:
   std::optional<OptimizerParams::BaseParams> base_params_;
   std::optional<AlgorithmParams> algorithm_params_;
-  
+  std::optional<CheckpointParams> checkpoint_params_;
+  std::optional<SpikeRecoveryParams> spike_recovery_params_;
+
 public:
   /**
    * @brief Set maximum iterations
@@ -606,7 +665,36 @@ public:
     base_params_->clip_norm = clip_norm;
     return *this;
   }
-  
+
+  /**
+   * @brief Set checkpoint parameters for periodic TPS saving.
+   * @param every_n_steps Save every N optimization steps (0 = disabled)
+   * @param base_path Directory base path; checkpoints go to base_path/step_{k}/
+   */
+  OptimizerParamsBuilder& SetCheckpoint(size_t every_n_steps, const std::string& base_path) {
+    checkpoint_params_ = CheckpointParams{every_n_steps, base_path};
+    return *this;
+  }
+
+  /**
+   * @brief Set spike recovery parameters for automatic anomaly handling.
+   */
+  OptimizerParamsBuilder& SetSpikeRecovery(const SpikeRecoveryParams& params) {
+    spike_recovery_params_ = params;
+    return *this;
+  }
+
+  /**
+   * @brief Disable all spike recovery (S1-S3 resample and S4 rollback).
+   */
+  OptimizerParamsBuilder& DisableSpikeRecovery() {
+    SpikeRecoveryParams disabled;
+    disabled.enable_auto_recover = false;
+    disabled.enable_rollback = false;
+    spike_recovery_params_ = disabled;
+    return *this;
+  }
+
   /**
    * @brief Build the final OptimizerParams object
    */
@@ -614,7 +702,14 @@ public:
     if (!base_params_ || !algorithm_params_) {
       throw std::invalid_argument("Both base parameters and algorithm parameters must be specified");
     }
-    return OptimizerParams(*base_params_, *algorithm_params_);
+    OptimizerParams result(*base_params_, *algorithm_params_);
+    if (checkpoint_params_) {
+      result.checkpoint_params = *checkpoint_params_;
+    }
+    if (spike_recovery_params_) {
+      result.spike_recovery_params = *spike_recovery_params_;
+    }
+    return result;
   }
 };
 

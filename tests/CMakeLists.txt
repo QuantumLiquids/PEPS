@@ -349,6 +349,13 @@ add_unittest(test_optimizer_params
         ""
 )
 
+# Spike detection / EMA tracker unit tests (header-only, no extra libs)
+add_unittest(test_spike_detection
+        "test_optimizer/test_spike_detection.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
 # Optimizer gradient preprocessing integration (single-rank)
 add_unittest(test_optimizer_gradient_preprocessing
         "test_optimizer/test_optimizer_gradient_preprocessing.cpp"

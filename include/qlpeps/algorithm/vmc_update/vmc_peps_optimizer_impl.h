@@ -146,6 +146,9 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
     result = optimizer_.IterativeOptimize(monte_carlo_engine_.State(), energy_evaluator, optimization_callback_);
   }
 
+  // Cache spike stats from the result before the optimizer's internal copy is cleared
+  spike_stats_ = result.spike_stats;
+
   // CRITICAL: Update final state and synchronize across all ranks
   if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     // Validate the final state to prevent segmentation faults
@@ -331,6 +334,36 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
         std::cout << std::setw(indent) << "CG diagonal shift:" << algo_params.cg_params.diag_shift << "\n";
       }
     }, params_.optimizer_params.algorithm_params);
+
+    // Checkpoint configuration
+    const auto &ckpt = params_.optimizer_params.checkpoint_params;
+    if (ckpt.IsEnabled()) {
+      std::cout << std::setw(indent) << "Checkpoint every:" << ckpt.every_n_steps << " steps\n";
+      std::cout << std::setw(indent) << "Checkpoint base path:" << ckpt.base_path << "\n";
+    } else {
+      std::cout << std::setw(indent) << "Checkpoint:" << "disabled\n";
+    }
+
+    // Spike recovery configuration
+    const auto &spike = params_.optimizer_params.spike_recovery_params;
+    std::cout << std::setw(indent) << "Spike auto-recover:"
+              << (spike.enable_auto_recover ? "enabled" : "disabled") << "\n";
+    if (spike.enable_auto_recover) {
+      std::cout << std::setw(indent) << "Spike max MC retries:" << spike.redo_mc_max_retries << "\n";
+      std::cout << std::setw(indent) << "Spike S1 factor:" << spike.factor_err << "\n";
+      std::cout << std::setw(indent) << "Spike S2 factor:" << spike.factor_grad << "\n";
+      std::cout << std::setw(indent) << "Spike S3 factor:" << spike.factor_ngrad << "\n";
+      std::cout << std::setw(indent) << "Spike SR min iters:" << spike.sr_min_iters_suspicious << "\n";
+    }
+    std::cout << std::setw(indent) << "Spike S4 rollback:"
+              << (spike.enable_rollback ? "enabled" : "disabled") << "\n";
+    if (spike.enable_rollback) {
+      std::cout << std::setw(indent) << "Spike EMA window:" << spike.ema_window << "\n";
+      std::cout << std::setw(indent) << "Spike S4 sigma_k:" << spike.sigma_k << "\n";
+    }
+    if (!spike.log_trigger_csv_path.empty()) {
+      std::cout << std::setw(indent) << "Spike CSV log:" << spike.log_trigger_csv_path << "\n";
+    }
 
     // Runtime warning controls
     const auto &psi = params_.runtime_params.psi_consistency;

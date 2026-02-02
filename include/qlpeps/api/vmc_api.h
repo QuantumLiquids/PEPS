@@ -24,6 +24,7 @@
 
 #include <mpi.h>
 #include "qlten/qlten.h"
+#include "qlpeps/optimizer/spike_detection.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer_params.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_peps_measurer.h"
@@ -40,6 +41,7 @@ struct VmcOptimizeResult {
   std::vector<TenElemT> energy_trajectory;
   std::vector<double> energy_error_trajectory;
   std::vector<double> gradient_norms;
+  SpikeStatistics spike_stats;   ///< Spike detection statistics for the run
 };
 
 template <typename TenElemT>
@@ -100,6 +102,7 @@ VmcOptimize(const VMCPEPSOptimizerParams &params,
       out.energy_trajectory = executor->GetEnergyTrajectory();
       out.energy_error_trajectory = executor->GetEnergyErrorTrajectory();
       out.gradient_norms = executor->GetGradientNorms();
+      out.spike_stats = executor->GetSpikeStatistics();
       return out;
     } else {
       throw std::invalid_argument("VmcOptimize: PBC requested but template args do not support TRG/PBC.");
@@ -116,6 +119,7 @@ VmcOptimize(const VMCPEPSOptimizerParams &params,
       out.energy_trajectory = executor->GetEnergyTrajectory();
       out.energy_error_trajectory = executor->GetEnergyErrorTrajectory();
       out.gradient_norms = executor->GetGradientNorms();
+      out.spike_stats = executor->GetSpikeStatistics();
       return out;
     } else {
       throw std::invalid_argument("VmcOptimize: OBC requested but template args do not support BMPS/OBC.");

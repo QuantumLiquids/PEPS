@@ -124,6 +124,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
   const std::vector<TenElemT> &GetEnergyTrajectory() const { return energy_trajectory_; }
   const std::vector<double> &GetEnergyErrorTrajectory() const { return energy_error_traj_; }
   const std::vector<double> &GetGradientNorms() const { return grad_norm_; }
+  const SpikeStatistics &GetSpikeStatistics() const { return spike_stats_; }
 
   const VMCPEPSOptimizerParams &GetParams() const noexcept { return params_; }
 
@@ -210,6 +211,9 @@ class VMCPEPSOptimizer : public qlten::Executor {
    */
   std::vector<SITPST> Ostar_samples_;
   bool stochastic_reconfiguration_update_class_;
+
+  // Spike stats cached from OptimizationResult (optimizer clears its copy in ClearUp)
+  SpikeStatistics spike_stats_;
 
   // Current energy error for optimizer access
   double current_energy_error_;
