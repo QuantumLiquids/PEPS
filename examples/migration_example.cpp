@@ -72,7 +72,7 @@ void new_modern_approach() {
     
     // 1. Monte Carlo parameters
     MonteCarloParams mc_params(
-        1000,  // num_samples
+        1000,  // total_samples
         100,   // num_warmup_sweeps
         10,    // sweeps_between_samples
         "config_path",  // config_path
@@ -103,7 +103,7 @@ void new_modern_approach() {
     //     params, 4, 4, MPI_COMM_WORLD, model);
     
     std::cout << "Modern parameter structure created successfully" << std::endl;
-    std::cout << "  - MC samples: " << mc_params.num_samples << std::endl;
+    std::cout << "  - MC total samples: " << mc_params.total_samples << std::endl;
     std::cout << "  - Step lengths: " << opt_params.core_params.step_lengths.size() << " steps" << std::endl;
     std::cout << "  - Update scheme: " << opt_params.update_scheme << std::endl;
 }
@@ -118,7 +118,7 @@ VMCPEPSOptimizerParams create_modern_parameters() {
     
     // Create Monte Carlo parameters
     MonteCarloParams mc_params(
-        1000,  // num_samples
+        1000,  // total_samples
         100,   // num_warmup_sweeps
         10,    // sweeps_between_samples
         {1, 1, 1, 1}  // occupancy configuration

@@ -70,7 +70,7 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contractor
   ReserveSamplesDataSpace_();
   // Hint evaluator for buffer reservation (coarse-grained)
   if (energy_grad_evaluator_) {
-    energy_grad_evaluator_->ReserveBuffers(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx(), params_.mc_params.num_samples);
+    energy_grad_evaluator_->ReserveBuffers(monte_carlo_engine_.Ly(), monte_carlo_engine_.Lx(), monte_carlo_engine_.SamplesPerRank());
   }
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
@@ -215,7 +215,7 @@ VMCPEPSOptimizer<TenElemT,
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
          template<typename, typename> class ContractorT>
 void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::ReserveSamplesDataSpace_(void) {
-  const size_t mc_samples = params_.mc_params.num_samples;
+  const size_t mc_samples = monte_carlo_engine_.SamplesPerRank();
   if (mc_samples == 0) {
     throw std::invalid_argument("Monte Carlo samples cannot be zero");
   }

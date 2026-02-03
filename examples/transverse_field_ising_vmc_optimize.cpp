@@ -67,7 +67,7 @@ int main(int argc, char* argv[]) {
     std::vector<size_t> occupancy = {Ly * Lx / 2, Ly * Lx / 2};
     init_config.Random(occupancy);
     MonteCarloParams mc_params(
-        /*num_samples=*/500,
+        /*total_samples=*/500,
         /*num_warmup_sweeps=*/200,
         /*sweeps_between_samples=*/2,
         /*initial_config=*/init_config,
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
 
     if (rank == 0) {
       std::cout << "[TFI-VMC] Start VMC optimize: 4x4, SR, h=" << h
-                << ", samples=" << params.mc_params.num_samples
+                << ", total_samples=" << params.mc_params.total_samples
                 << ", warmup=" << params.mc_params.num_warmup_sweeps
                 << ", sweeps_between=" << params.mc_params.sweeps_between_samples
                 << ", max_iter=" << params.optimizer_params.base_params.max_iterations

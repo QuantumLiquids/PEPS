@@ -110,7 +110,7 @@ class MCEnergyGradEvaluator {
    * Semantics:
    * - Master rank assigns state (if different), broadcasts to all ranks.
    * - Engine rebuilds the wavefunction component; no normalization is performed here.
-   * - Performs MC sampling for engine.MCParams().num_samples samples.
+   * - Performs MC sampling for engine.SamplesPerRank() samples per rank.
    * - Reduces energy and gradient across MPI; returns Result.
    *
    * Per-sample computation (migrated from VMCPEPSOptimizer):
@@ -164,7 +164,7 @@ class MCEnergyGradEvaluator {
     // Local accumulators
     const size_t ly = engine_.Ly();
     const size_t lx = engine_.Lx();
-    const size_t sample_num = engine_.MCParams().num_samples;
+    const size_t sample_num = engine_.SamplesPerRank();
 
     std::vector<TenElemT> energy_samples;
     energy_samples.reserve(std::max(sample_num, reserved_samples_));

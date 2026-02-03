@@ -47,13 +47,13 @@ struct HeisenbergSystem : public MPITest {
 
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
-      MonteCarloParams(100, 100, 1,
+      MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
                        false), // Sz = 0, not warmed up initially
       PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(6, 12, 1e-15)));
 
-  MonteCarloParams measure_mc_params{1000, 1000, 1,
+  MonteCarloParams measure_mc_params{50000, 1000, 1,
                                       Configuration(Ly, Lx,
                                                     OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Random generate configuration with Sz = 0
                                       false}; // not warmed up initially

@@ -55,7 +55,7 @@ struct SqrHeiMCPEPS : MPITest {
   double E0_ED = -9.189207065192933;
   double e0_state = -9.18912;
   Configuration config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, N / 2))};
-  MonteCarloParams mc_params{1000, 1000, 1, config, false}; // not warmed up initially
+  MonteCarloParams mc_params{50000, 1000, 1, config, false}; // not warmed up initially
   PEPSParams peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                           CompressMPSScheme::SVD_COMPRESS,
                                           std::make_optional<double>(1e-14),

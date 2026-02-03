@@ -45,7 +45,7 @@ struct Z2tJModelTools : public testing::Test {
   size_t Db_min = 4;
   size_t Db_max = 16;
 
-  size_t MC_samples = 100;
+  size_t MC_samples = 5000;
   size_t WarmUp = 100;
   std::string tps_path = "tps_from_ipeps_tJ_doping" + std::to_string(doping) + "_D4";
   Configuration measurement_config{Ly, Lx, OccupancyNum({(N - hole_num) / 2, (N - hole_num) / 2, hole_num})};

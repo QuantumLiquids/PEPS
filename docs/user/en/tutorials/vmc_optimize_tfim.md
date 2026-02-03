@@ -93,7 +93,7 @@ Expected output:
 
 ## Notes on parameters (quick intuition)
 
-- `MonteCarloParams.num_samples`: samples per rank per evaluation; total samples scale with MPI ranks.
+- `MonteCarloParams.total_samples`: total Monte Carlo samples across all MPI ranks per evaluation; the engine computes per-rank samples as `ceil(total_samples / mpi_size)`.
 - `num_warmup_sweeps`: warm up the Markov chain before collecting samples.
 - `sweeps_between_samples`: decorrelation between samples.
 
@@ -108,7 +108,7 @@ Monte Carlo parameters:
 
 | Field | Meaning |
 |---|---|
-| `num_samples` | number of samples per rank per evaluation |
+| `total_samples` | total number of samples across all ranks per evaluation |
 | `num_warmup_sweeps` | warm-up sweeps before sampling |
 | `sweeps_between_samples` | sweeps between collected samples |
 | `initial_config` | initial configuration (random half-up/half-down for TFIM example) |

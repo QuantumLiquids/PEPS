@@ -23,7 +23,8 @@ namespace qlpeps {
  * @struct MonteCarloParams
  * @brief Parameters for Monte Carlo sampling.
  *
- * - num_samples: Number of Monte Carlo samples (\f$N_{MC}\f$).
+ * - total_samples: Total number of Monte Carlo samples across all MPI ranks.
+ *   The engine computes per-rank samples as `ceil(total_samples / mpi_size)`.
  * - num_warmup_sweeps: Number of warm-up sweeps before sampling.
  * - sweeps_between_samples: Number of sweeps between successive samples.
  * - initial_config: User-provided initial configuration.
@@ -33,7 +34,7 @@ namespace qlpeps {
  *                     This is useful because the final configuration can be used as the warmed-up initial configuration for the next measurement.
  */
 struct MonteCarloParams {
-  size_t num_samples; // Number of Monte Carlo samples
+  size_t total_samples; ///< Total Monte Carlo samples across all MPI ranks
   size_t num_warmup_sweeps; // Warm-up sweeps before sampling starts
   size_t sweeps_between_samples; // Sweeps between successive samples
   Configuration initial_config; // User-provided initial configuration
@@ -42,38 +43,38 @@ struct MonteCarloParams {
 
   MonteCarloParams() = default;
 
-  MonteCarloParams(size_t samples,
+  MonteCarloParams(size_t total_samples,
                    size_t warmup_sweeps,
                    size_t sweeps_between,
                    const Configuration &config,
                    bool is_warmed_up,
                    const std::string &config_dump_path = "")
-    : num_samples(samples), num_warmup_sweeps(warmup_sweeps),
+    : total_samples(total_samples), num_warmup_sweeps(warmup_sweeps),
       sweeps_between_samples(sweeps_between), initial_config(config),
       is_warmed_up(is_warmed_up), config_dump_path(config_dump_path) {
   }
 
   /**
    * @brief Construct MonteCarloParams by loading configuration from file
-   * 
+   *
    * Convenience constructor that loads configuration from file.
    * By default assumes loaded configs are warmed up (typical use case).
-   * 
-   * @param samples Number of Monte Carlo samples
-   * @param warmup_sweeps Number of warm-up sweeps  
+   *
+   * @param total_samples Total Monte Carlo samples across all MPI ranks
+   * @param warmup_sweeps Number of warm-up sweeps
    * @param sweeps_between Sweeps between successive samples
    * @param config_file_path Path to configuration file to load
    * @param warmed_up Whether to treat loaded config as warmed up (default: true)
    * @param config_dump_path Path for dumping final configuration
    * @throws std::runtime_error if file doesn't exist or cannot be loaded
    */
-  MonteCarloParams(size_t samples,
+  MonteCarloParams(size_t total_samples,
                    size_t warmup_sweeps,
                    size_t sweeps_between,
                    const std::string &config_file_path,
                    bool warmed_up = true,
                    const std::string &config_dump_path = "")
-    : num_samples(samples), num_warmup_sweeps(warmup_sweeps),
+    : total_samples(total_samples), num_warmup_sweeps(warmup_sweeps),
       sweeps_between_samples(sweeps_between), is_warmed_up(warmed_up),
       config_dump_path(config_dump_path) {
     bool success = initial_config.Load(config_file_path, 0);
@@ -81,6 +82,12 @@ struct MonteCarloParams {
       throw std::runtime_error("Failed to load configuration from: " + config_file_path);
     }
   }
+
+  /// @deprecated Use total_samples directly. The old num_samples was per-rank;
+  /// total_samples is the total across all ranks.
+  [[deprecated("num_samples renamed to total_samples (now total across all ranks, not per-rank). "
+               "Multiply your old per-rank value by mpi_size.")]]
+  size_t num_samples() const { return total_samples; }
 };
 
 /**

@@ -95,10 +95,10 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, Co
 ) {
   SynchronizeConfiguration_();
   std::vector<double> overlaps;
-  overlaps.reserve(mc_measure_params.mc_params.num_samples);
+  overlaps.reserve(engine_.SamplesPerRank());
   //  std::cout << "Random number from worker " << rank_ << " : " << u_double_(random_engine) << std::endl;
   std::vector<double> accept_rates_accum;
-  for (size_t sweep = 0; sweep < mc_measure_params.mc_params.num_samples; sweep++) {
+  for (size_t sweep = 0; sweep < engine_.SamplesPerRank(); sweep++) {
     std::vector<double> accept_rates = engine_.StepSweep();
     if (sweep == 0) {
       accept_rates_accum = accept_rates;
@@ -123,9 +123,9 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, Co
 
     // calculate overlap
     overlaps.push_back(overlap_func(engine_.WavefuncComp().config, config2));
-    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && (sweep + 1) % (mc_measure_params.mc_params.num_samples /
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && (sweep + 1) % (engine_.SamplesPerRank() /
       10) == 0) {
-      PrintProgressBar((sweep + 1), mc_measure_params.mc_params.num_samples);
+      PrintProgressBar((sweep + 1), engine_.SamplesPerRank());
 
       auto accept_rates_avg = accept_rates_accum;
       for (double &rates : accept_rates_avg) {
@@ -169,7 +169,7 @@ void MCPEPSMeasurer<TenElemT,
                     MeasurementSolver,
                     ContractorT>::ReserveSamplesData_(
   void) {
-  sample_data_.Reserve(mc_measure_params.mc_params.num_samples);
+  sample_data_.Reserve(engine_.SamplesPerRank());
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
@@ -382,10 +382,10 @@ template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typen
          template<typename, typename> class ContractorT>
 void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::Measure_(void) {
   std::vector<double> accept_rates_accum;
-  const size_t print_bar_length = (mc_measure_params.mc_params.num_samples / 10) > 0
-                                    ? (mc_measure_params.mc_params.num_samples / 10)
+  const size_t print_bar_length = (engine_.SamplesPerRank() / 10) > 0
+                                    ? (engine_.SamplesPerRank() / 10)
                                     : 1;
-  for (size_t sweep = 0; sweep < mc_measure_params.mc_params.num_samples; sweep++) {
+  for (size_t sweep = 0; sweep < engine_.SamplesPerRank(); sweep++) {
     // Emergency stop check (MPI-aware)
     if (qlpeps::MPISignalGuard::EmergencyStopRequested(engine_.Comm())) {
       if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
@@ -405,12 +405,12 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, Co
     }
     MeasureSample_();
     if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank && (sweep + 1) % print_bar_length == 0) {
-      PrintProgressBar((sweep + 1), mc_measure_params.mc_params.num_samples);
+      PrintProgressBar((sweep + 1), engine_.SamplesPerRank());
     }
   }
   std::vector<double> accept_rates_avg = accept_rates_accum;
   for (double &rates : accept_rates_avg) {
-    rates /= double(mc_measure_params.mc_params.num_samples);
+    rates /= double(engine_.SamplesPerRank());
   }
   std::cout << "Accept rate = [";
   for (double &rate : accept_rates_avg) {

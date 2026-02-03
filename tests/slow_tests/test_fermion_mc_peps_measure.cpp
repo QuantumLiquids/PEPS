@@ -29,7 +29,7 @@ struct FileParams {
   size_t D = 4;
   size_t Db_min = 4;
   size_t Db_max = 4;
-  size_t MC_samples = 100;
+  size_t MC_samples = 5000;
   size_t WarmUp = 100;
   double Tau0 = 0.1;
   size_t Steps = 100;

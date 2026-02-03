@@ -63,7 +63,7 @@ struct SquareTFIMPBCSystem : public MPITest {
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(
           40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.03),
-      MonteCarloParams(100, 100, 1,
+      MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx, 2),  // Physical dimension 2, random init
                        false),
       PEPSParams(trg_trunc_para));
@@ -84,7 +84,7 @@ struct SquareTFIMPBCSystem : public MPITest {
 
     // Measurement parameters (TRG + PBC)
     auto measure_mc = MonteCarloParams(
-        40, 40, 1, Configuration(Ly, Lx, 2), false);
+        2000, 40, 1, Configuration(Ly, Lx, 2), false);
     measure_para.emplace(
         measure_mc, PEPSParams(trg_trunc_para),
         GetTestOutputPath("integration_tfim_pbc_trg", "measurement"));

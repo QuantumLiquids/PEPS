@@ -94,6 +94,8 @@ class MonteCarloEngine {
         warm_up_(monte_carlo_params.is_warmed_up),
         config_rescue_(config_rescue) {
     MPI_SetUp_();
+    samples_per_rank_ = (monte_carlo_params_.total_samples + static_cast<size_t>(mpi_size_) - 1)
+                        / static_cast<size_t>(mpi_size_);
     Initialize_();
   }
 
@@ -110,6 +112,10 @@ class MonteCarloEngine {
   int Rank() const { return rank_; }
   int MpiSize() const { return mpi_size_; }
   const MonteCarloParams &MCParams() const { return monte_carlo_params_; }
+  /// Samples per MPI rank: ceil(total_samples / mpi_size)
+  size_t SamplesPerRank() const { return samples_per_rank_; }
+  /// Total samples across all MPI ranks (from params)
+  size_t TotalSamples() const { return monte_carlo_params_.total_samples; }
   /** @} */
 
   /**
@@ -278,7 +284,10 @@ class MonteCarloEngine {
         std::cout << std::setw(indent) << "BMPS Truncate Scheme:"
                   << static_cast<int>(tps_sample_.trun_para.compress_scheme) << "\n";
       }
-      std::cout << std::setw(indent) << "Sampling numbers:" << monte_carlo_params_.num_samples << "\n";
+      std::cout << std::setw(indent) << "Total samples:" << monte_carlo_params_.total_samples << "\n";
+      std::cout << std::setw(indent) << "Samples per rank (ceil "
+                << monte_carlo_params_.total_samples << " / " << mpi_size_ << " ranks):"
+                << SamplesPerRank() << "\n";
       std::cout << std::setw(indent) << "Warm-up sweeps:" << monte_carlo_params_.num_warmup_sweeps << "\n";
       std::cout << std::setw(indent) << "Initial config warmed up:" << (monte_carlo_params_.is_warmed_up ? "yes" : "no")
                 << "\n";
@@ -488,6 +497,7 @@ class MonteCarloEngine {
   MonteCarloSweepUpdater mc_sweep_updater_;
   std::uniform_real_distribution<double> u_double_;
   MonteCarloParams monte_carlo_params_;
+  size_t samples_per_rank_;  ///< ceil(total_samples / mpi_size)
   bool warm_up_;
   ConfigurationRescueParams config_rescue_;
   bool init_valid_ = true;  ///< Whether initial WaveFunctionComponent construction succeeded

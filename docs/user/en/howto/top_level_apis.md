@@ -51,7 +51,7 @@ using QNT = qlten::special_qn::TrivialRepQN;
 // solver: a model energy solver instance (e.g. TransverseFieldIsingSquareOBC(h))
 
 MonteCarloParams mc_params(
-    /*num_samples=*/500,
+    /*total_samples=*/500,
     /*num_warmup_sweeps=*/200,
     /*sweeps_between_samples=*/2,
     /*initial_config=*/Configuration(/*Ly=*/4, /*Lx=*/4),

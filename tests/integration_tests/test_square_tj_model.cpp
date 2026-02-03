@@ -93,7 +93,7 @@ protected:
     BMPSTruncateParams<qlten::QLTEN_Double> truncate_para = BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, Dpeps * 2, 1e-15);
     
     Configuration initial_config(Ly, Lx, OccupancyNum({num_up, num_down, hole_num}));
-    MonteCarloParams mc_params(100, 100, 1, initial_config, false);
+    MonteCarloParams mc_params(5000, 100, 1, initial_config, false);
     PEPSParams peps_params(truncate_para);
     
     ConjugateGradientParams cg_params(100, 1e-5, 20, 0.001);
@@ -103,7 +103,7 @@ protected:
     
     // Monte Carlo measurement parameters
     Configuration measure_config(Ly, Lx, OccupancyNum({num_up, num_down, hole_num}));
-    MonteCarloParams measure_mc_params(1000, 1000, 1, measure_config, false);
+    MonteCarloParams measure_mc_params(50000, 1000, 1, measure_config, false);
     PEPSParams measure_peps_params(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, Dpeps * 2, 1e-15));
     measure_para.emplace(measure_mc_params, measure_peps_params);
   }

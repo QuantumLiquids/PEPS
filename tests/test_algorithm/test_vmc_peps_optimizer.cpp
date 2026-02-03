@@ -260,7 +260,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, EnhancedParameterValidation) {
   {
     // Test zero samples - This SHOULD throw an exception as MC samples = 0 is physically meaningless
     VMCPEPSOptimizerParams invalid_para = *optimize_para;
-    invalid_para.mc_params.num_samples = 0;  // Invalid zero samples
+    invalid_para.mc_params.total_samples = 0;  // Invalid zero samples
     
     // The constructor should throw std::invalid_argument for zero samples
     EXPECT_THROW(

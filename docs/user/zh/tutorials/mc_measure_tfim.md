@@ -77,5 +77,5 @@ mpirun -n 4 ./transverse_field_ising_mc_measure /path/to/your/sitps_dir
 ## 常见坑
 
 - **格点尺寸必须匹配**：`Configuration(Ly,Lx)` 必须和加载到的 TPS 尺寸一致。
-- **预热/样本数不够**：观测量噪声很大时，增大 `num_warmup_sweeps` 和/或 `num_samples`。
+- **预热/样本数不够**：观测量噪声很大时，增大 `num_warmup_sweeps` 和/或 `total_samples`。
 - **输出位置**：聚合后的统计结果在 `mc_measure_output/stats/`（一般由 master rank 写出）。

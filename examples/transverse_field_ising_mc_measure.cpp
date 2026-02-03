@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
     init_config.Random(OccupancyNum{Ly * Lx / 2, Ly * Lx / 2}); // TFIM: local dim=2
 
     MonteCarloParams mc_params(
-        /*num_samples=*/2000,
+        /*total_samples=*/2000,
         /*num_warmup_sweeps=*/200,
         /*sweeps_between_samples=*/2,
         /*initial_config=*/init_config,
@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
     if (rank == 0) {
       std::cout << "[TFI-MEAS] Start Monte Carlo measurement: Ly=" << Ly << ", Lx=" << Lx
                 << ", h=" << h
-                << ", samples=" << mc_params.num_samples
+                << ", total_samples=" << mc_params.total_samples
                 << ", warmup=" << mc_params.num_warmup_sweeps
                 << ", sweeps_between=" << mc_params.sweeps_between_samples
                 << ", dump=" << meas_params.measurement_data_dump_path

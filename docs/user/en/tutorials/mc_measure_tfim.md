@@ -77,5 +77,5 @@ mpirun -n 4 ./transverse_field_ising_mc_measure /path/to/your/sitps_dir
 ## Notes / pitfalls
 
 - **Lattice size must match**: `Configuration(Ly,Lx)` must match the loaded TPS dimensions.
-- **Warmup matters**: if you see unstable observables, increase `num_warmup_sweeps` and/or `num_samples`.
+- **Warmup matters**: if you see unstable observables, increase `num_warmup_sweeps` and/or `total_samples`.
 - **Output location**: look under `mc_measure_output/stats/` (master rank writes the aggregated stats).

@@ -64,7 +64,7 @@ struct SquareJ1J2XXZPBCSystem : public MPITest {
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(
           100, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.1),
-      MonteCarloParams(100, 100, 1,
+      MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),  // Sz = 0
                        false),
@@ -89,7 +89,7 @@ struct SquareJ1J2XXZPBCSystem : public MPITest {
     ham_nnn({1, 0, 0, 1}) = TenElemT(jxy2 * 0.5);
 
     auto measure_mc = MonteCarloParams(
-        40, 40, 1,
+        2000, 40, 1,
         Configuration(Ly, Lx, OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
         false);
     measure_para.emplace(

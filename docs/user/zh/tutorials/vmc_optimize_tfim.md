@@ -93,7 +93,7 @@ mpirun -n 4 ./transverse_field_ising_vmc_optimize
 
 ## 参数直觉（快速理解）
 
-- `MonteCarloParams.num_samples`：每次评估、每个 rank 的样本数量；总样本数随 MPI rank 数线性增长。
+- `MonteCarloParams.total_samples`：所有 MPI rank 的总样本数；引擎内部按 `ceil(total_samples / mpi_size)` 计算每个 rank 的样本数。
 - `num_warmup_sweeps`：正式采样前的预热 sweep。
 - `sweeps_between_samples`：采样点之间的去相关 sweep 间隔。
 
@@ -108,7 +108,7 @@ mpirun -n 4 ./transverse_field_ising_vmc_optimize
 
 | 字段 | 含义 |
 |---|---|
-| `num_samples` | 每次评估、每个 rank 的样本数 |
+| `total_samples` | 所有 rank 的总样本数 |
 | `num_warmup_sweeps` | 预热 sweep 数 |
 | `sweeps_between_samples` | 两次采样之间的间隔 sweep 数 |
 | `initial_config` | 初始组态（本示例为“半上半下”的随机 Ising 组态） |

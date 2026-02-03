@@ -99,8 +99,8 @@ class TriangleJ1J2HeisenbergSystem
 
       optimize_para.emplace(
           OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
-          MonteCarloParams(100, 100, 1,
-                           Configuration(Ly, Lx, 
+          MonteCarloParams(5000, 100, 1,
+                           Configuration(Ly, Lx,
                                          OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
                            false), // Sz = 0, not warmed up initially
           PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>(6, 12, 1e-15,
@@ -109,7 +109,7 @@ class TriangleJ1J2HeisenbergSystem
                                       std::make_optional<size_t>(10))));
 
       Configuration measure_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2))};
-      MonteCarloParams measure_mc_params{1000, 1000, 1, measure_config, false}; // not warmed up initially
+      MonteCarloParams measure_mc_params{50000, 1000, 1, measure_config, false}; // not warmed up initially
       PEPSParams measure_peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                                       CompressMPSScheme::SVD_COMPRESS,
                                                       std::make_optional<double>(1e-14),

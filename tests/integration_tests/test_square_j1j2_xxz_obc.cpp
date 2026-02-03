@@ -56,13 +56,13 @@ protected:
           .SetLearningRate(0.1)
           .WithSGD()
           .Build(),
-      MonteCarloParams(100, 100, 1,
+      MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
                        false), // not warmed up initially
       PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(6, 12, 1e-15)));
 
-  MonteCarloParams measure_mc_params{1000, 1000, 1,
+  MonteCarloParams measure_mc_params{50000, 1000, 1,
                                      Configuration(Ly, Lx,
                                                    OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})), // Sz = 0
                                      false}; // not warmed up initially

@@ -97,8 +97,8 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
 
   VMCPEPSOptimizerParams optimize_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(60, ConjugateGradientParams(100, 1e-4, 20, 0.01), 0.2),
-      MonteCarloParams(100, 100, 1,
-                       Configuration(Ly, Lx, 
+      MonteCarloParams(5000, 100, 1,
+                       Configuration(Ly, Lx,
                                      OccupancyNum({4, 8})),
                        false), // not warmed up initially
       PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, Dpeps * 3,
@@ -107,7 +107,7 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
                                   std::make_optional<size_t>(10))));
 
   Configuration measure_config{Ly, Lx, OccupancyNum(std::vector<size_t>(2, Lx * Ly / 2))};
-  MonteCarloParams measure_mc_params{1000, 1000, 1, measure_config, false}; // not warmed up initially
+  MonteCarloParams measure_mc_params{50000, 1000, 1, measure_config, false}; // not warmed up initially
   PEPSParams measure_peps_params{BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 3 * Dpeps, 1e-15,
                                                   CompressMPSScheme::SVD_COMPRESS,
                                                   std::make_optional<double>(1e-14),
