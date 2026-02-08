@@ -69,7 +69,8 @@
 
 从这里开始：
 
-- 算法与调参：`optimizer_algorithms.md`
+- 算法与数学：`optimizer_algorithms.md`
+- 参数设置：`../howto/set_optimizer_parameter.md`
 
 ## MPI 语义（需要知道的事）
 

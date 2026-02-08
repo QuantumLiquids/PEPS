@@ -1,4 +1,4 @@
-# Energy solver overview
+# Energy and measurement solver overview
 
 Use this page to understand how “energy solvers” and “measurement solvers” fit into the VMC + measurement pipeline.
 
@@ -29,6 +29,6 @@ It is passed to `MCPEPSMeasurer` / `MonteCarloMeasure(...)`.
 
 ## Related
 
-- Math and conventions (complex gradients): `../explanation/model_energy_solver_math.md`
-- Write a custom energy solver: `write_custom_energy_solver.md`
+- Math and conventions (complex gradients): `model_energy_solver_math.md`
+- Write a custom energy solver: `../howto/write_custom_energy_solver.md`
 - Registry keys (reference): `../reference/model_observables_registry.md`

@@ -285,3 +285,6 @@ psi_list
 - **中级用法**：次近邻(NNN)模型开发  
 - **进阶用法**：完全自定义模型开发
 - **完整代码示例**和最佳实践
+
+相关页面：
+- 能量与测量求解器概览：`energy_measurement_solver_overview.md`

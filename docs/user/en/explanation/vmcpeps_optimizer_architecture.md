@@ -69,7 +69,8 @@ The optimizer is selected by `OptimizerParams` (SR / Adam / SGD / AdaGrad / L-BF
 
 Start here:
 
-- Algorithms and tuning: `optimizer_algorithms.md`
+- Algorithms and math: `optimizer_algorithms.md`
+- Parameter setup: `../howto/set_optimizer_parameter.md`
 
 ## MPI semantics (what to expect)
 

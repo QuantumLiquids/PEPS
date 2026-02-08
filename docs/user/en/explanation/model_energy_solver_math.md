@@ -242,5 +242,5 @@ For NN/NNN square-lattice models, start from the base classes and follow the hoo
 
 ## Related
 
-- Energy solver overview: `../howto/energy_solver_overview.md`
+- Energy and measurement solver overview: `energy_measurement_solver_overview.md`
 - Write a custom solver (NN/NNN bases): `../howto/write_custom_energy_solver.md`
