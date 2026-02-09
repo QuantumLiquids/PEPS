@@ -338,17 +338,38 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
   }
 
   /**
-   * @brief Inner product operator
-   * 
-   * Computes the inner product between this SplitIndexTPS and another one.
-   * The result is equivalent to Dag(*this) * right, summing over all
-   * tensor components and lattice sites.
-   * 
-   * @param right The SplitIndexTPS to compute inner product with
-   * @return The complex/real valued inner product
-   * 
-   * @note For fermionic tensors, proper fermion parity operations are applied
-   * @note Only non-default tensor components contribute to the result
+   * @brief (positive-definite) inner product in parameter space.
+   *
+   * This operator contracts each pair of corresponding local tensors and sums
+   * over all lattice sites and physical components:
+   * \f[
+   *   \langle A, B \rangle_{\mathrm{quasi}}
+   *   = \sum_{r,c,i} \sum_{\alpha}
+   *     \overline{A^{(i)}_{r,c}(\alpha)}\, B^{(i)}_{r,c}(\alpha),
+   * \f]
+   * i.e. the Euclidean inner product of all stored tensor entries after
+   * flattening them into a single vector.
+   *
+   * - Bosonic case: the scalar is obtained by fully contracting \f$A^\dagger\f$
+   *   with \f$B\f$ over all virtual indices.
+   * - Fermionic case: `qlten::Contract` follows graded algebra, and the naive
+   *   scalar `Contract(Dag(A), B)` corresponds to an indefinite graded pairing
+   *   with block-dependent signs determined by index directions. To obtain a
+   *   conventional positive-definite inner product, we apply `ActFermionPOps()`
+   *   to the daggered tensor before contraction, which cancels the additional
+   *   \f$(-1)\f$ factors associated with contracting IN legs.
+   *
+   * Consequently, for `A == B` the result reduces to
+   * \f$\sum_{r,c,i}\|A^{(i)}_{r,c}\|_{2,\mathrm{quasi}}^2 = \sum |a|^2\f$,
+   * consistent with `QLTensor::GetQuasi2Norm()`.
+   *
+   * @warning This is NOT the physical wave-function overlap of the TPS/PEPS
+   *          state; it is an inner product on the stored tensor parameters.
+   *
+   * @param right The SplitIndexTPS to compute the inner product with.
+   * @return The complex/real-valued quasi inner product.
+   *
+   * @note Only non-default tensor components contribute.
    */
   TenElemT operator*(const SplitIndexTPS &right) const {
     TenElemT res(0);
