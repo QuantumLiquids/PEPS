@@ -388,11 +388,10 @@ TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
           }
       },
       {
-          "NaturalGradientLineSearch",
+          "LBFGS",
           []() {
-            // NaturalGradientLineSearch can be approximated with StochasticReconfiguration + line search
-            ConjugateGradientParams cg_params(10, 1e-4, 5, 0.01);
-            return OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
+            // Legacy alias path is now mapped to explicit L-BFGS.
+            return OptimizerFactory::CreateLBFGS(10, 0.1, 5);
           }
       },
       {

@@ -192,7 +192,7 @@ TEST_F(J1J2XXZSystem, LBFGSLineSearch) {
   using Model = SquareSpinOneHalfJ1J2XXZModelOBC;
   Model j1j2_model(jz1, jxy1, jz2, jxy2, 0);
   
-  // VMC optimization with L-BFGS (replaces NaturalGradientLineSearch)
+  // VMC optimization with L-BFGS
   RunVMCOptimization<Model, MCUpdateSquareTNN3SiteExchange>(j1j2_model, vmc_lbfgs_params);
   
   // Monte Carlo measurement  

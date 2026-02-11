@@ -169,12 +169,11 @@ TEST_F(TriangleHeisenbergSystem, StochasticGradientOpt) {
   RunMCMeasurement<Model, MCUpdateSquareNNExchange>(triangle_hei_solver);
 }
 
-TEST_F(TriangleHeisenbergSystem, NaturalGradientLineSearch) {
+TEST_F(TriangleHeisenbergSystem, LBFGSOptimization) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS;
   Model triangle_hei_solver;
   
-  // Change to natural gradient line search
-  // Update to Line Search with Natural Gradient (using L-BFGS as approximation)
+  // L-BFGS update (iterative optimizer path; not LineSearchOptimize).
   optimize_para->optimizer_params = OptimizerFactory::CreateLBFGS(40, 0.01);
   
   // VMC optimization

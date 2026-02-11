@@ -138,21 +138,45 @@ $$
 
 ### 4. L-BFGS (limited-memory BFGS)
 
-**Update rule (conceptual)**:
+**Update rule**:
 
 $$
-H_k \approx \nabla^2 f(x_k)
-$$
-$$
-d_k = -H_k^{-1} \nabla f(x_k)
+d_k = -H_k g_k
 $$
 $$
 x_{k+1} = x_k + \alpha_k d_k
 $$
 
+Here \(H_k\) is built from limited history pairs \((s_i, y_i)\) via two-loop recursion.
+In this codebase, curvature uses the parameter-space inner product
+\(\mathrm{Re}\langle s_i, y_i \rangle\), with damping/skip guards for low-curvature pairs.
+
+**Step mode in implementation**:
+- `LBFGSStepMode::kStrongWolfe`: recommended for deterministic / exact-sum runs.
+- `LBFGSStepMode::kFixed`: recommended for MC runs with noisy gradients.
+
+Strong-Wolfe conditions (used when `kStrongWolfe`):
+
+$$
+\phi(\alpha) \le \phi(0) + c_1 \alpha \phi'(0)
+$$
+$$
+|\phi'(\alpha)| \le \max\!\left(c_2 |\phi'(0)|,\ \texttt{tol\_grad}\right),\quad 0 < c_1 < c_2 < 1
+$$
+
+Failure policy:
+- Default: throw (fail fast).
+- Fixed-step fallback is opt-in only (`allow_fallback_to_fixed_step=true`).
+- `tol_change` is the bracket/step-interval termination tolerance in strong-Wolfe line search; smaller values typically require more evaluations.
+
+Implementation path:
+- L-BFGS is implemented in `Optimizer::IterativeOptimize`.
+- `LineSearchOptimize` is not part of the L-BFGS production path.
+
 **Properties**:
 - Uses limited history to approximate inverse Hessian.
-- Requires line search and is sensitive to noisy gradients.
+- `kStrongWolfe` provides robust deterministic step control.
+- `kFixed` avoids unstable line-search behavior under MC noise.
 
 ### 5. Stochastic Reconfiguration (natural gradient)
 

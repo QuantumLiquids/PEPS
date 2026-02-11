@@ -138,21 +138,45 @@ $$
 
 ### 4. L-BFGS（有限内存 BFGS）
 
-**更新式（概念性）**：
+**更新式**：
 
 $$
-H_k \approx \nabla^2 f(x_k)
-$$
-$$
-d_k = -H_k^{-1} \nabla f(x_k)
+d_k = -H_k g_k
 $$
 $$
 x_{k+1} = x_k + \alpha_k d_k
 $$
 
+其中 \(H_k\) 由有限历史对 \((s_i, y_i)\) 通过 two-loop recursion 构造。
+本代码中曲率标量使用参数空间内积 \(\mathrm{Re}\langle s_i, y_i \rangle\)，
+并对低曲率对做 damping/skip 保护。
+
+**实现中的步长模式**：
+- `LBFGSStepMode::kStrongWolfe`：推荐 deterministic / exact-sum 场景。
+- `LBFGSStepMode::kFixed`：推荐 MC 场景（含采样噪声）。
+
+`kStrongWolfe` 使用强 Wolfe 条件：
+
+$$
+\phi(\alpha) \le \phi(0) + c_1 \alpha \phi'(0)
+$$
+$$
+|\phi'(\alpha)| \le \max\!\left(c_2 |\phi'(0)|,\ \texttt{tol\_grad}\right),\quad 0 < c_1 < c_2 < 1
+$$
+
+失败策略：
+- 默认：直接报错（fail-fast）。
+- 仅在显式开启 `allow_fallback_to_fixed_step=true` 时才允许降级固定步长。
+- `tol_change` 是 strong-Wolfe 线搜索中 bracket/步长区间的终止阈值；取值越小通常需要更多评估次数。
+
+实现路径：
+- L-BFGS 走 `Optimizer::IterativeOptimize` 主链路。
+- `LineSearchOptimize` 不属于当前 L-BFGS 生产路径。
+
 **性质**：
 - 用有限历史近似逆 Hessian。
-- 依赖线搜索，对噪声梯度敏感。
+- `kStrongWolfe` 适合 deterministic 步长控制。
+- `kFixed` 能避免 MC 噪声下线搜索不稳定。
 
 ### 5. 随机重构（SR，自然梯度）
 

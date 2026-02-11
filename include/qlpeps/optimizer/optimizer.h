@@ -13,6 +13,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <deque>
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/optimizer/spike_detection.h"
@@ -36,7 +37,7 @@ using qlten::QLTensor;
  * 3. Stochastic reconfiguration (natural gradient)
  * 4. Bounded gradient element update
  * 5. Adam (with AdamW-style decoupled weight decay)
- * 6. L-BFGS (planned)
+ * 6. L-BFGS (fixed-step and strong-Wolfe modes)
  * 
  * ⚠️ CRITICAL MPI RESPONSIBILITY SEPARATION:
  * 
@@ -334,6 +335,25 @@ class Optimizer {
   void ClearUp();
 
  private:
+  struct LBFGSHistoryPair {
+    WaveFunctionT s;
+    WaveFunctionT y;
+    double rho = 0.0;  // 1 / Re(<s, y>)
+  };
+
+  struct LBFGSSnapshot {
+    bool valid = false;
+    std::deque<LBFGSHistoryPair> history;
+    WaveFunctionT anchor_state;
+    WaveFunctionT anchor_gradient;
+    bool has_anchor = false;
+  };
+
+  enum class WolfeStepStatus {
+    kAccepted = 0,
+    kFailed = 1
+  };
+
   OptimizerParams params_;
   MPI_Comm comm_;
   int rank_;
@@ -354,6 +374,16 @@ class Optimizer {
   WaveFunctionT second_moment_;     // v_t: second moment estimate
   size_t adam_timestep_;            // t: iteration counter for bias correction
   bool adam_initialized_;
+
+  // L-BFGS state (master rank ONLY)
+  std::deque<LBFGSHistoryPair> lbfgs_history_;
+  WaveFunctionT lbfgs_anchor_state_;
+  WaveFunctionT lbfgs_anchor_gradient_;
+  bool lbfgs_has_anchor_ = false;
+  size_t lbfgs_skip_curvature_count_ = 0;
+  size_t lbfgs_damping_count_ = 0;
+  size_t lbfgs_descent_reset_count_ = 0;
+  LBFGSSnapshot lbfgs_prev_snapshot_;
 
   // Spike detection state (master rank ONLY)
   EMATracker ema_energy_;
@@ -380,6 +410,28 @@ class Optimizer {
   void SaveCheckpoint_(const WaveFunctionT& state, size_t step,
                        const std::vector<TenElemT>& energy_traj,
                        const std::vector<double>& error_traj);
+
+  // L-BFGS helpers
+  double RealInnerProduct_(const WaveFunctionT& lhs, const WaveFunctionT& rhs) const;
+  void ResetLBFGSState_();
+  void SaveLBFGSSnapshot_();
+  void RestoreLBFGSSnapshot_();
+  void UpdateLBFGSHistoryFromAnchor_(const WaveFunctionT& current_state,
+                                     const WaveFunctionT& current_gradient,
+                                     const LBFGSParams& params);
+  WaveFunctionT ComputeLBFGSSearchDirection_(const WaveFunctionT& gradient,
+                                             const LBFGSParams& params);
+  std::pair<WaveFunctionT, double> ApplyFixedLBFGSStep_(const WaveFunctionT& current_state,
+                                                         const WaveFunctionT& search_direction,
+                                                         double learning_rate);
+  std::tuple<WolfeStepStatus, WaveFunctionT, double> StrongWolfeLBFGSStep_(
+      const WaveFunctionT& current_state,
+      const WaveFunctionT& search_direction,
+      const std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT&)>& energy_evaluator,
+      double learning_rate,
+      const LBFGSParams& params,
+      double phi0,
+      double dphi0);
 
   // Helper methods
   void LogOptimizationStep(size_t iteration,

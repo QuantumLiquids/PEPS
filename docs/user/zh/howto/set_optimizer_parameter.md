@@ -82,6 +82,44 @@ auto opt_params = qlpeps::OptimizerFactory::CreateLBFGS(
     /*history_size=*/10);
 ```
 
+`CreateLBFGS(...)` 保持向后兼容，默认使用固定步长模式：
+- `step_mode = LBFGSStepMode::kFixed`
+- 推荐用于 MC 场景（对噪声更稳健）。
+
+deterministic / exact-sum 场景建议显式配置 strong-Wolfe：
+
+```cpp
+qlpeps::LBFGSParams lbfgs(
+    /*history_size=*/10,
+    /*tol_grad=*/1e-8,
+    /*tol_change=*/1e-12,
+    /*max_eval=*/32,
+    /*step_mode=*/qlpeps::LBFGSStepMode::kStrongWolfe,
+    /*wolfe_c1=*/1e-4,
+    /*wolfe_c2=*/0.9,
+    /*min_step=*/1e-8,
+    /*max_step=*/1.0,
+    /*min_curvature=*/1e-12,
+    /*use_damping=*/true,
+    /*max_direction_norm=*/1e3,
+    /*allow_fallback_to_fixed_step=*/false,
+    /*fallback_fixed_step_scale=*/0.2);
+
+auto opt_params = qlpeps::OptimizerFactory::CreateLBFGSAdvanced(
+    /*max_iterations=*/300,
+    /*energy_tolerance=*/1e-15,
+    /*gradient_tolerance=*/1e-30,
+    /*plateau_patience=*/100,
+    /*learning_rate=*/0.05,
+    lbfgs);
+```
+
+strong-Wolfe 失败策略：
+- 默认：直接报错（fail-fast）。
+- 仅在显式开启 `allow_fallback_to_fixed_step=true` 时才允许降级为固定步长。
+- `tol_change` 控制线搜索 bracket/步长区间的终止阈值；取值越小通常会增加线搜索评估次数。
+- `tol_grad` 是曲率条件中的绝对下限（`|phi'(alpha)| <= max(c2*|phi'(0)|, tol_grad)`）。
+
 ### 随机重构（SR）
 
 ```cpp
@@ -195,6 +233,10 @@ qlpeps::VMCPEPSOptimizerParams vmc_params(
     peps_params,
     /*tps_dump_path=*/"./optimized_tps");
 ```
+
+实现路径说明：
+- 本仓库中的 L-BFGS 走 `Optimizer::IterativeOptimize` 主链路。
+- `LineSearchOptimize` 不属于当前 L-BFGS 生产路径。
 
 ## 相关阅读
 

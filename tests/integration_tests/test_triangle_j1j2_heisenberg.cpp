@@ -173,11 +173,11 @@ TEST_F(TriangleJ1J2HeisenbergSystem, StochasticGradientOpt) {
   RunMCMeasurement<Model, MCUpdateSquareNNExchange>(trianglej1j2_hei_solver);
 }
 
-TEST_F(TriangleJ1J2HeisenbergSystem, NaturalGradientLineSearch) {
+TEST_F(TriangleJ1J2HeisenbergSystem, LBFGSOptimization) {
   using Model = SpinOneHalfTriJ1J2HeisenbergSqrPEPS;
   Model trianglej1j2_hei_solver(j2);
 
-  // Change to natural gradient line search (using L-BFGS as approximation)
+  // L-BFGS update (iterative optimizer path; not LineSearchOptimize).
   optimize_para->optimizer_params = OptimizerFactory::CreateLBFGS(40, 0.01);
 
   // VMC optimization

@@ -333,6 +333,14 @@ add_two_type_unittest(test_optimizer_adam_exact_sum
 add_mpi_unittest_run(test_optimizer_adam_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_adam_exact_sum_complex "4" " ")
 
+## Optimizer exact-sum L-BFGS strong-Wolfe test (pure optimizer, deterministic gradients)
+add_two_type_unittest(test_optimizer_lbfgs_exact_sum
+        "test_optimizer/test_optimizer_lbfgs_exact_sum.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+add_mpi_unittest_run(test_optimizer_lbfgs_exact_sum_double "4" " ")
+add_mpi_unittest_run(test_optimizer_lbfgs_exact_sum_complex "4" " ")
+
 # Golden regression (integration): fermionic exact-summation + optimizer signatures
 add_two_type_unittest(test_fermion_exact_optimizer_integration_golden
         "test_optimizer/test_fermion_exact_optimizer_integration_golden.cpp"
@@ -367,6 +375,19 @@ add_unittest(test_optimizer_gradient_preprocessing
         "test_optimizer/test_optimizer_gradient_preprocessing.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
+)
+
+# L-BFGS recovery policy unit tests (single-rank)
+add_unittest(test_optimizer_lbfgs_recovery_policy
+        "test_optimizer/test_optimizer_lbfgs_recovery_policy.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
+# L-BFGS fixed-step MC regression tests (boson + fermion, 2x2 systems)
+add_two_type_unittest(test_optimizer_lbfgs_mc_regression
+        "test_optimizer/test_optimizer_lbfgs_mc_regression.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
 
 # Fast tests (2x2 systems, quick execution)

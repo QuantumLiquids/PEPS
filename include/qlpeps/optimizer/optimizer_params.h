@@ -98,19 +98,51 @@ struct StochasticReconfigurationParams {
 };
 
 /**
+ * @enum LBFGSStepMode
+ * @brief Step-length policy for L-BFGS updates.
+ */
+enum class LBFGSStepMode {
+  kFixed = 0,       ///< Fixed step length from base learning rate.
+  kStrongWolfe = 1  ///< Strong Wolfe line search (deterministic use recommended).
+};
+
+/**
  * @struct LBFGSParams
  * @brief Parameters for L-BFGS optimization algorithm
  */
 struct LBFGSParams {
   size_t history_size;         // Limited memory size (typically 5-20)
-  double tolerance_grad;       // Gradient tolerance for line search
-  double tolerance_change;     // Parameter change tolerance  
-  size_t max_eval;            // Max function evaluations per step
-  
+  double tolerance_grad;       // Absolute floor for |phi'(alpha)| in strong-Wolfe curvature check
+  double tolerance_change;     // Line-search interval/step tolerance
+  size_t max_eval;             // Max objective evaluations per step/line-search
+  LBFGSStepMode step_mode;     // Fixed-step or strong-Wolfe
+  double wolfe_c1;             // Armijo constant (0,1)
+  double wolfe_c2;             // Curvature constant (c1,1)
+  double min_step;             // Minimal admissible step length
+  double max_step;             // Maximal admissible step length
+  double min_curvature;        // Minimal Re(<s,y>) to accept a history pair
+  bool use_damping;            // Apply simple damping before dropping low-curvature pairs
+  double max_direction_norm;   // Cap search direction norm for robustness
+  bool allow_fallback_to_fixed_step;  // Explicit opt-in fallback if strong-Wolfe fails
+  double fallback_fixed_step_scale;   // alpha = scale * learning_rate for fallback
+
   LBFGSParams(size_t hist = 10, double tol_grad = 1e-5,
-              double tol_change = 1e-9, size_t max_eval = 20)
+              double tol_change = 1e-9, size_t max_eval = 20,
+              LBFGSStepMode step_mode = LBFGSStepMode::kFixed,
+              double wolfe_c1 = 1e-4, double wolfe_c2 = 0.9,
+              double min_step = 1e-8, double max_step = 1.0,
+              double min_curvature = 1e-12, bool use_damping = true,
+              double max_direction_norm = 1e3,
+              bool allow_fallback_to_fixed_step = false,
+              double fallback_fixed_step_scale = 0.2)
     : history_size(hist), tolerance_grad(tol_grad),
-      tolerance_change(tol_change), max_eval(max_eval) {}
+      tolerance_change(tol_change), max_eval(max_eval),
+      step_mode(step_mode), wolfe_c1(wolfe_c1), wolfe_c2(wolfe_c2),
+      min_step(min_step), max_step(max_step),
+      min_curvature(min_curvature), use_damping(use_damping),
+      max_direction_norm(max_direction_norm),
+      allow_fallback_to_fixed_step(allow_fallback_to_fixed_step),
+      fallback_fixed_step_scale(fallback_fixed_step_scale) {}
 };
 
 /**
@@ -482,7 +514,7 @@ public:
     
     // Set tolerances to 0 to disable advanced stopping
     OptimizerParams::BaseParams base_params(max_iterations, 0.0, 0.0, max_iterations, learning_rate);
-    LBFGSParams lbfgs_params(history_size);
+    LBFGSParams lbfgs_params(history_size, 1e-5, 1e-9, 20, LBFGSStepMode::kFixed);
     return OptimizerParams(base_params, lbfgs_params);
   }
 
@@ -500,7 +532,24 @@ public:
     
     OptimizerParams::BaseParams base_params(max_iterations, energy_tolerance, gradient_tolerance, plateau_patience, 
                           learning_rate, std::move(scheduler));
-    LBFGSParams lbfgs_params(history_size);
+    LBFGSParams lbfgs_params(history_size, 1e-5, 1e-9, 20, LBFGSStepMode::kFixed);
+    return OptimizerParams(base_params, lbfgs_params);
+  }
+
+  /**
+   * @brief Create L-BFGS optimizer - Full version with explicit LBFGS options
+   */
+  static OptimizerParams CreateLBFGSAdvanced(
+      size_t max_iterations,
+      double energy_tolerance,
+      double gradient_tolerance,
+      size_t plateau_patience,
+      double learning_rate,
+      const LBFGSParams& lbfgs_params,
+      std::unique_ptr<LearningRateScheduler> scheduler = nullptr) {
+
+    OptimizerParams::BaseParams base_params(max_iterations, energy_tolerance, gradient_tolerance, plateau_patience,
+                                            learning_rate, std::move(scheduler));
     return OptimizerParams(base_params, lbfgs_params);
   }
 };

@@ -8,9 +8,33 @@
 */
 
 #include "gtest/gtest.h"
+#include "qlten/qlten.h"
+#include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 
 using namespace qlpeps;
+
+namespace {
+
+template<typename TenElemT, typename QNT>
+SplitIndexTPS<TenElemT, QNT> CreateScalarState(double value) {
+  SplitIndexTPS<TenElemT, QNT> s(1, 1, 1);
+  qlten::Index<QNT> v_out({qlten::QNSector<QNT>(QNT(), 1)}, qlten::TenIndexDirType::OUT);
+  qlten::Index<QNT> v_in = qlten::InverseIndex(v_out);
+  s({0, 0})[0] = qlten::QLTensor<TenElemT, QNT>({v_in, v_out, v_out, v_in});
+  s({0, 0})[0].Fill(QNT(), value);
+  return s;
+}
+
+template<typename TenElemT, typename QNT>
+std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> QuadraticEval(
+    const SplitIndexTPS<TenElemT, QNT> &state) {
+  SplitIndexTPS<TenElemT, QNT> grad = state;
+  grad({0, 0})[0].Fill(QNT(), 1.0);
+  return {TenElemT(1.0), std::move(grad), 0.0};
+}
+
+}  // namespace
 
 TEST(OptimizerParamsTest, IsFirstOrderDetectsAlgorithms) {
   OptimizerParams::BaseParams base_params(10, 0.0, 0.0, 5, 0.1);
@@ -136,4 +160,105 @@ TEST(OptimizerFactoryTest, FactoryCreatedParamsHaveSpikeDefaults) {
   EXPECT_FALSE(params.spike_recovery_params.enable_rollback);
   // Checkpoint defaults: disabled
   EXPECT_FALSE(params.checkpoint_params.IsEnabled());
+}
+
+TEST(OptimizerFactoryTest, CreateLBFGSDefaultsToFixedStep) {
+  auto params = OptimizerFactory::CreateLBFGS(100, 0.5, 7);
+  ASSERT_TRUE(params.IsAlgorithm<LBFGSParams>());
+  const auto &lbfgs = params.GetAlgorithmParams<LBFGSParams>();
+  EXPECT_EQ(lbfgs.history_size, 7u);
+  EXPECT_EQ(lbfgs.step_mode, LBFGSStepMode::kFixed);
+  EXPECT_FALSE(lbfgs.allow_fallback_to_fixed_step);
+}
+
+TEST(OptimizerFactoryTest, CreateLBFGSAdvancedAcceptsExplicitLBFGSOptions) {
+  LBFGSParams lbfgs(/*hist=*/11,
+                    /*tol_grad=*/1e-6,
+                    /*tol_change=*/1e-10,
+                    /*max_eval=*/31,
+                    /*step_mode=*/LBFGSStepMode::kStrongWolfe,
+                    /*wolfe_c1=*/1e-4,
+                    /*wolfe_c2=*/0.8,
+                    /*min_step=*/1e-7,
+                    /*max_step=*/2.0,
+                    /*min_curvature=*/1e-10,
+                    /*use_damping=*/true,
+                    /*max_direction_norm=*/55.0,
+                    /*allow_fallback_to_fixed_step=*/true,
+                    /*fallback_fixed_step_scale=*/0.35);
+  auto params = OptimizerFactory::CreateLBFGSAdvanced(
+      /*max_iterations=*/200,
+      /*energy_tolerance=*/1e-8,
+      /*gradient_tolerance=*/1e-8,
+      /*plateau_patience=*/20,
+      /*learning_rate=*/0.7,
+      lbfgs);
+  const auto &got = params.GetAlgorithmParams<LBFGSParams>();
+  EXPECT_EQ(got.history_size, 11u);
+  EXPECT_EQ(got.max_eval, 31u);
+  EXPECT_EQ(got.step_mode, LBFGSStepMode::kStrongWolfe);
+  EXPECT_DOUBLE_EQ(got.max_step, 2.0);
+  EXPECT_TRUE(got.allow_fallback_to_fixed_step);
+  EXPECT_DOUBLE_EQ(got.fallback_fixed_step_scale, 0.35);
+}
+
+TEST(OptimizerFactoryTest, LBFGSRejectsZeroHistorySizeFailFast) {
+  using TenElemT = qlten::QLTEN_Double;
+  using QNT = qlten::special_qn::TrivialRepQN;
+  using SITPST = SplitIndexTPS<TenElemT, QNT>;
+
+  LBFGSParams lbfgs(/*hist=*/0, /*tol_grad=*/1e-8, /*tol_change=*/1e-12, /*max_eval=*/20,
+                    /*step_mode=*/LBFGSStepMode::kFixed);
+  auto params = OptimizerFactory::CreateLBFGSAdvanced(
+      /*max_iterations=*/1, /*energy_tolerance=*/0.0, /*gradient_tolerance=*/0.0,
+      /*plateau_patience=*/1, /*learning_rate=*/0.1, lbfgs);
+  Optimizer<TenElemT, QNT> opt(params, MPI_COMM_SELF, 0, 1);
+
+  SITPST init = CreateScalarState<TenElemT, QNT>(1.0);
+  typename Optimizer<TenElemT, QNT>::OptimizationCallback cb;
+  EXPECT_THROW((void)opt.IterativeOptimize(init, QuadraticEval<TenElemT, QNT>, cb), std::invalid_argument);
+}
+
+TEST(OptimizerFactoryTest, LBFGSRejectsInvalidStrongWolfeConstantsFailFast) {
+  using TenElemT = qlten::QLTEN_Double;
+  using QNT = qlten::special_qn::TrivialRepQN;
+  using SITPST = SplitIndexTPS<TenElemT, QNT>;
+
+  LBFGSParams lbfgs(/*hist=*/5,
+                    /*tol_grad=*/1e-8,
+                    /*tol_change=*/1e-12,
+                    /*max_eval=*/20,
+                    /*step_mode=*/LBFGSStepMode::kStrongWolfe,
+                    /*wolfe_c1=*/0.9,
+                    /*wolfe_c2=*/0.8);  // invalid: c2 <= c1
+  auto params = OptimizerFactory::CreateLBFGSAdvanced(
+      /*max_iterations=*/1, /*energy_tolerance=*/0.0, /*gradient_tolerance=*/0.0,
+      /*plateau_patience=*/1, /*learning_rate=*/0.1, lbfgs);
+  Optimizer<TenElemT, QNT> opt(params, MPI_COMM_SELF, 0, 1);
+
+  SITPST init = CreateScalarState<TenElemT, QNT>(1.0);
+  typename Optimizer<TenElemT, QNT>::OptimizationCallback cb;
+  EXPECT_THROW((void)opt.IterativeOptimize(init, QuadraticEval<TenElemT, QNT>, cb), std::invalid_argument);
+}
+
+TEST(OptimizerFactoryTest, LBFGSRejectsNegativeToleranceGradFailFast) {
+  using TenElemT = qlten::QLTEN_Double;
+  using QNT = qlten::special_qn::TrivialRepQN;
+  using SITPST = SplitIndexTPS<TenElemT, QNT>;
+
+  LBFGSParams lbfgs(/*hist=*/5,
+                    /*tol_grad=*/-1e-8,
+                    /*tol_change=*/1e-12,
+                    /*max_eval=*/20,
+                    /*step_mode=*/LBFGSStepMode::kStrongWolfe,
+                    /*wolfe_c1=*/1e-4,
+                    /*wolfe_c2=*/0.9);
+  auto params = OptimizerFactory::CreateLBFGSAdvanced(
+      /*max_iterations=*/1, /*energy_tolerance=*/0.0, /*gradient_tolerance=*/0.0,
+      /*plateau_patience=*/1, /*learning_rate=*/0.1, lbfgs);
+  Optimizer<TenElemT, QNT> opt(params, MPI_COMM_SELF, 0, 1);
+
+  SITPST init = CreateScalarState<TenElemT, QNT>(1.0);
+  typename Optimizer<TenElemT, QNT>::OptimizationCallback cb;
+  EXPECT_THROW((void)opt.IterativeOptimize(init, QuadraticEval<TenElemT, QNT>, cb), std::invalid_argument);
 }

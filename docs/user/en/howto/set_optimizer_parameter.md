@@ -80,6 +80,44 @@ auto opt_params = qlpeps::OptimizerFactory::CreateLBFGS(
     /*history_size=*/10);
 ```
 
+`CreateLBFGS(...)` is backward-compatible and defaults to fixed-step mode:
+- `step_mode = LBFGSStepMode::kFixed`
+- Recommended for MC runs (noise-robust baseline).
+
+For deterministic/exact-sum runs, use strong-Wolfe explicitly:
+
+```cpp
+qlpeps::LBFGSParams lbfgs(
+    /*history_size=*/10,
+    /*tol_grad=*/1e-8,
+    /*tol_change=*/1e-12,
+    /*max_eval=*/32,
+    /*step_mode=*/qlpeps::LBFGSStepMode::kStrongWolfe,
+    /*wolfe_c1=*/1e-4,
+    /*wolfe_c2=*/0.9,
+    /*min_step=*/1e-8,
+    /*max_step=*/1.0,
+    /*min_curvature=*/1e-12,
+    /*use_damping=*/true,
+    /*max_direction_norm=*/1e3,
+    /*allow_fallback_to_fixed_step=*/false,
+    /*fallback_fixed_step_scale=*/0.2);
+
+auto opt_params = qlpeps::OptimizerFactory::CreateLBFGSAdvanced(
+    /*max_iterations=*/300,
+    /*energy_tolerance=*/1e-15,
+    /*gradient_tolerance=*/1e-30,
+    /*plateau_patience=*/100,
+    /*learning_rate=*/0.05,
+    lbfgs);
+```
+
+Strong-Wolfe failure policy:
+- Default: throw (fail fast).
+- Fallback to fixed-step is opt-in only (`allow_fallback_to_fixed_step=true`).
+- `tol_change` controls the line-search bracket/step-interval termination tolerance; smaller values usually increase line-search evaluations.
+- `tol_grad` is an absolute floor in the curvature check (`|phi'(alpha)| <= max(c2*|phi'(0)|, tol_grad)`).
+
 ### Stochastic Reconfiguration (SR)
 
 ```cpp
@@ -194,6 +232,10 @@ qlpeps::VMCPEPSOptimizerParams vmc_params(
     peps_params,
     /*tps_dump_path=*/"./optimized_tps");
 ```
+
+Implementation path note:
+- L-BFGS in this repo is implemented in `Optimizer::IterativeOptimize`.
+- `LineSearchOptimize` is not part of the L-BFGS production path.
 
 ## Related
 

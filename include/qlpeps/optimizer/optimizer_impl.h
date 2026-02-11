@@ -389,12 +389,40 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   const auto &spike_cfg = params_.spike_recovery_params;
   const auto &ckpt_cfg = params_.checkpoint_params;
   const bool is_sr = params_.IsAlgorithm<StochasticReconfigurationParams>();
+  const bool is_lbfgs = params_.IsAlgorithm<LBFGSParams>();
+
+  if (is_lbfgs && rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    ResetLBFGSState_();
+  }
 
   size_t total_iterations_performed = 0;
   bool done = false;
   for (size_t iter = 0; iter < params_.base_params.max_iterations && !done; ++iter) {
     bool step_accepted = false;
     size_t attempts = 0;
+    bool lbfgs_history_updated_this_iter = false;
+    std::deque<LBFGSHistoryPair> lbfgs_iter_start_history;
+    WaveFunctionT lbfgs_iter_start_anchor_state;
+    WaveFunctionT lbfgs_iter_start_anchor_gradient;
+    bool lbfgs_iter_start_has_anchor = false;
+
+    if (is_lbfgs && rank_ == qlten::hp_numeric::kMPIMasterRank) {
+      lbfgs_iter_start_history = lbfgs_history_;
+      lbfgs_iter_start_anchor_state = lbfgs_anchor_state_;
+      lbfgs_iter_start_anchor_gradient = lbfgs_anchor_gradient_;
+      lbfgs_iter_start_has_anchor = lbfgs_has_anchor_;
+    }
+
+    auto restore_lbfgs_iter_start_snapshot = [&]() {
+      if (!(is_lbfgs && rank_ == qlten::hp_numeric::kMPIMasterRank)) {
+        return;
+      }
+      lbfgs_history_ = lbfgs_iter_start_history;
+      lbfgs_anchor_state_ = lbfgs_iter_start_anchor_state;
+      lbfgs_anchor_gradient_ = lbfgs_iter_start_anchor_gradient;
+      lbfgs_has_anchor_ = lbfgs_iter_start_has_anchor;
+      lbfgs_history_updated_this_iter = false;
+    };
 
     while (!step_accepted) {
       // === A: Evaluate energy and gradient ===
@@ -405,6 +433,13 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       double grad_norm = 0.0;
       if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         grad_norm = std::sqrt(current_gradient.NormSquare());
+      }
+
+      if (is_lbfgs && !lbfgs_history_updated_this_iter &&
+          rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        const auto &lbfgs_params = params_.GetAlgorithmParams<LBFGSParams>();
+        UpdateLBFGSHistoryFromAnchor_(current_state, current_gradient, lbfgs_params);
+        lbfgs_history_updated_this_iter = true;
       }
 
       // === B: S1/S2 detection (before any trajectory or state update) ===
@@ -432,10 +467,18 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
               // broadcasts the master's state at the start of each evaluation call.
               current_state = prev_accepted_state_;
               has_prev_state_ = false;
+              if (is_lbfgs) {
+                RestoreLBFGSSnapshot_();
+                lbfgs_history_updated_this_iter = false;
+              }
             }
           }
-          if (action == SpikeAction::kResample) { attempts++; }
-          else { attempts = 0; }
+          if (action == SpikeAction::kResample) {
+            restore_lbfgs_iter_start_snapshot();
+            attempts++;
+          } else {
+            attempts = 0;
+          }
           continue;
         }
         if (action == SpikeAction::kAcceptWithWarning && rank_ == qlten::hp_numeric::kMPIMasterRank) {
@@ -449,6 +492,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // === C: Compute learning rate and optimization update ===
       double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
+      double effective_step_length = learning_rate;
 
       Timer update_timer("optimization_update");
 
@@ -495,7 +539,61 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           updated_state = AdamUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
         }
         else if constexpr (std::is_same_v<T, LBFGSParams>) {
-          throw std::runtime_error("L-BFGS algorithm not yet implemented");
+          WaveFunctionT search_direction = ComputeLBFGSSearchDirection_(current_gradient, algo_params);
+
+          double dphi0 = 0.0;
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            dphi0 = RealInnerProduct_(current_gradient, search_direction);
+          }
+          if (mpi_size_ > 1) {
+            HANDLE_MPI_ERROR(::MPI_Bcast(&dphi0, 1, MPI_DOUBLE,
+                                         qlten::hp_numeric::kMPIMasterRank, comm_));
+          }
+          if (dphi0 >= 0.0) {
+            if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+              ++lbfgs_descent_reset_count_;
+              ResetLBFGSState_();
+              search_direction = (-1.0) * current_gradient;
+              dphi0 = RealInnerProduct_(current_gradient, search_direction);
+            }
+            if (mpi_size_ > 1) {
+              HANDLE_MPI_ERROR(::MPI_Bcast(&dphi0, 1, MPI_DOUBLE,
+                                           qlten::hp_numeric::kMPIMasterRank, comm_));
+            }
+          }
+
+          if (algo_params.step_mode == LBFGSStepMode::kFixed) {
+            auto [next_state, used_step] = ApplyFixedLBFGSStep_(current_state, search_direction, learning_rate);
+            updated_state = std::move(next_state);
+            effective_step_length = used_step;
+          } else {
+            if (mpi_size_ > 1) {
+              qlpeps::MPI_Bcast(search_direction, comm_, qlten::hp_numeric::kMPIMasterRank);
+            }
+            auto [wolfe_status, next_state, used_step] = StrongWolfeLBFGSStep_(
+                current_state, search_direction, energy_evaluator, learning_rate, algo_params,
+                std::real(current_energy), dphi0);
+            if (wolfe_status == WolfeStepStatus::kAccepted) {
+              updated_state = std::move(next_state);
+              effective_step_length = used_step;
+            } else if (algo_params.allow_fallback_to_fixed_step) {
+              const double fallback_lr = std::max(algo_params.min_step,
+                                                  learning_rate * algo_params.fallback_fixed_step_scale);
+              auto [fallback_state, used_step] = ApplyFixedLBFGSStep_(current_state, search_direction, fallback_lr);
+              updated_state = std::move(fallback_state);
+              effective_step_length = used_step;
+              if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+                std::cerr << "[LBFGS][WARN] Strong Wolfe failed within max_eval="
+                          << algo_params.max_eval
+                          << ", fallback to fixed step alpha=" << std::scientific
+                          << effective_step_length << std::endl;
+              }
+            } else {
+              throw std::runtime_error(
+                  "L-BFGS strong-Wolfe line search failed. "
+                  "Set allow_fallback_to_fixed_step=true for explicit fixed-step fallback.");
+            }
+          }
         }
         else {
           throw std::runtime_error("Unsupported algorithm type for iterative optimization");
@@ -529,10 +627,18 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             if (action == SpikeAction::kRollback && has_prev_state_) {
               current_state = prev_accepted_state_;
               has_prev_state_ = false;
+              if (is_lbfgs) {
+                RestoreLBFGSSnapshot_();
+                lbfgs_history_updated_this_iter = false;
+              }
             }
           }
-          if (action == SpikeAction::kResample) { attempts++; }
-          else { attempts = 0; }
+          if (action == SpikeAction::kResample) {
+            restore_lbfgs_iter_start_snapshot();
+            attempts++;
+          } else {
+            attempts = 0;
+          }
           continue;
         }
         if (action == SpikeAction::kAcceptWithWarning && rank_ == qlten::hp_numeric::kMPIMasterRank) {
@@ -564,6 +670,10 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
               // broadcasts the master's state at the start of each evaluation call.
               current_state = prev_accepted_state_;
               has_prev_state_ = false;
+              if (is_lbfgs) {
+                RestoreLBFGSSnapshot_();
+                lbfgs_history_updated_this_iter = false;
+              }
             }
           }
           attempts = 0;
@@ -611,7 +721,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         if (should_stop) {
           if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
             LogOptimizationStep(iter, current_energy_real, current_error, grad_norm,
-                               learning_rate, {}, sr_iterations, sr_natural_grad_norm,
+                               effective_step_length, {}, sr_iterations, sr_natural_grad_norm,
                                energy_eval_time, update_time);
             result.converged = true;
           }
@@ -628,6 +738,15 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       if (spike_cfg.enable_rollback && rank_ == qlten::hp_numeric::kMPIMasterRank) {
         prev_accepted_state_ = current_state;
         has_prev_state_ = true;
+        if (is_lbfgs) {
+          SaveLBFGSSnapshot_();
+        }
+      }
+
+      if (is_lbfgs && rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        lbfgs_anchor_state_ = current_state;
+        lbfgs_anchor_gradient_ = current_gradient;
+        lbfgs_has_anchor_ = true;
       }
 
       // Apply the state update.
@@ -638,7 +757,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // Log progress
       LogOptimizationStep(iter, std::real(current_energy), current_error, grad_norm,
-                          learning_rate, {}, sr_iterations, sr_natural_grad_norm,
+                          effective_step_length, {}, sr_iterations, sr_natural_grad_norm,
                           energy_eval_time, update_time);
 
       if (callback.on_iteration) {
@@ -992,6 +1111,272 @@ Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
   return updated_state;
 }
 
+template<typename TenElemT, typename QNT>
+double Optimizer<TenElemT, QNT>::RealInnerProduct_(const WaveFunctionT& lhs, const WaveFunctionT& rhs) const {
+  return std::real(lhs * rhs);
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::ResetLBFGSState_() {
+  lbfgs_history_.clear();
+  lbfgs_anchor_state_ = WaveFunctionT();
+  lbfgs_anchor_gradient_ = WaveFunctionT();
+  lbfgs_has_anchor_ = false;
+  lbfgs_skip_curvature_count_ = 0;
+  lbfgs_damping_count_ = 0;
+  lbfgs_descent_reset_count_ = 0;
+  lbfgs_prev_snapshot_ = LBFGSSnapshot{};
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::SaveLBFGSSnapshot_() {
+  if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
+    return;
+  }
+  lbfgs_prev_snapshot_.valid = true;
+  lbfgs_prev_snapshot_.history = lbfgs_history_;
+  lbfgs_prev_snapshot_.anchor_state = lbfgs_anchor_state_;
+  lbfgs_prev_snapshot_.anchor_gradient = lbfgs_anchor_gradient_;
+  lbfgs_prev_snapshot_.has_anchor = lbfgs_has_anchor_;
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::RestoreLBFGSSnapshot_() {
+  if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
+    return;
+  }
+  if (!lbfgs_prev_snapshot_.valid) {
+    ResetLBFGSState_();
+    return;
+  }
+  lbfgs_history_ = lbfgs_prev_snapshot_.history;
+  lbfgs_anchor_state_ = lbfgs_prev_snapshot_.anchor_state;
+  lbfgs_anchor_gradient_ = lbfgs_prev_snapshot_.anchor_gradient;
+  lbfgs_has_anchor_ = lbfgs_prev_snapshot_.has_anchor;
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::UpdateLBFGSHistoryFromAnchor_(
+    const WaveFunctionT& current_state,
+    const WaveFunctionT& current_gradient,
+    const LBFGSParams& params) {
+  if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
+    return;
+  }
+  if (!lbfgs_has_anchor_) {
+    return;
+  }
+  if (params.history_size == 0) {
+    throw std::invalid_argument("LBFGS history_size must be > 0");
+  }
+
+  WaveFunctionT s = current_state - lbfgs_anchor_state_;
+  WaveFunctionT y = current_gradient - lbfgs_anchor_gradient_;
+
+  double curvature = RealInnerProduct_(s, y);
+  if (curvature <= params.min_curvature && params.use_damping) {
+    const double yy = RealInnerProduct_(y, y);
+    if (yy > std::numeric_limits<double>::epsilon()) {
+      const double delta = params.min_curvature - curvature + 1e-15;
+      // Heuristic curvature lift: this nudges Re(<s, y>) upward but does not
+      // enforce exact equality to min_curvature after one correction.
+      y += (delta / yy) * s;
+      curvature = RealInnerProduct_(s, y);
+      ++lbfgs_damping_count_;
+    }
+  }
+
+  if (curvature <= params.min_curvature) {
+    ++lbfgs_skip_curvature_count_;
+    return;
+  }
+
+  LBFGSHistoryPair pair;
+  pair.s = std::move(s);
+  pair.y = std::move(y);
+  pair.rho = 1.0 / curvature;
+  lbfgs_history_.push_back(std::move(pair));
+  while (lbfgs_history_.size() > params.history_size) {
+    lbfgs_history_.pop_front();
+  }
+}
+
+template<typename TenElemT, typename QNT>
+typename Optimizer<TenElemT, QNT>::WaveFunctionT
+Optimizer<TenElemT, QNT>::ComputeLBFGSSearchDirection_(const WaveFunctionT& gradient,
+                                                       const LBFGSParams& params) {
+  WaveFunctionT search_direction = (-1.0) * gradient;
+  if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
+    return search_direction;
+  }
+  if (params.history_size == 0) {
+    throw std::invalid_argument("LBFGS history_size must be > 0");
+  }
+
+  if (!lbfgs_history_.empty()) {
+    WaveFunctionT q = gradient;
+    std::vector<double> alpha(lbfgs_history_.size(), 0.0);
+    for (size_t i = lbfgs_history_.size(); i-- > 0;) {
+      alpha[i] = lbfgs_history_[i].rho * RealInnerProduct_(lbfgs_history_[i].s, q);
+      q += (-alpha[i]) * lbfgs_history_[i].y;
+    }
+
+    double gamma = 1.0;
+    const auto &last = lbfgs_history_.back();
+    const double yy = RealInnerProduct_(last.y, last.y);
+    const double sy = RealInnerProduct_(last.s, last.y);
+    if (yy > std::numeric_limits<double>::epsilon() && sy > params.min_curvature) {
+      gamma = sy / yy;
+    }
+
+    WaveFunctionT r = gamma * q;
+    for (size_t i = 0; i < lbfgs_history_.size(); ++i) {
+      const double beta = lbfgs_history_[i].rho * RealInnerProduct_(lbfgs_history_[i].y, r);
+      r += (alpha[i] - beta) * lbfgs_history_[i].s;
+    }
+    search_direction = (-1.0) * r;
+  }
+
+  if (params.max_direction_norm > 0.0) {
+    const double norm = std::sqrt(search_direction.NormSquare());
+    if (norm > params.max_direction_norm && norm > 0.0) {
+      search_direction *= (params.max_direction_norm / norm);
+    }
+  }
+
+  return search_direction;
+}
+
+template<typename TenElemT, typename QNT>
+std::pair<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double>
+Optimizer<TenElemT, QNT>::ApplyFixedLBFGSStep_(const WaveFunctionT& current_state,
+                                                const WaveFunctionT& search_direction,
+                                                double learning_rate) {
+  const double alpha = std::max(0.0, learning_rate);
+  WaveFunctionT updated_state = current_state;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    updated_state += alpha * search_direction;
+  }
+  return {std::move(updated_state), alpha};
+}
+
+template<typename TenElemT, typename QNT>
+std::tuple<typename Optimizer<TenElemT, QNT>::WolfeStepStatus,
+           typename Optimizer<TenElemT, QNT>::WaveFunctionT,
+           double>
+Optimizer<TenElemT, QNT>::StrongWolfeLBFGSStep_(
+    const WaveFunctionT& current_state,
+    const WaveFunctionT& search_direction,
+    const std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT&)>& energy_evaluator,
+    double learning_rate,
+    const LBFGSParams& params,
+    double phi0,
+    double dphi0) {
+  if (params.wolfe_c1 <= 0.0 || params.wolfe_c1 >= 1.0 ||
+      params.wolfe_c2 <= params.wolfe_c1 || params.wolfe_c2 >= 1.0) {
+    throw std::invalid_argument("LBFGS strong-Wolfe parameters must satisfy 0 < c1 < c2 < 1");
+  }
+  if (params.max_eval == 0) {
+    throw std::invalid_argument("LBFGS max_eval must be > 0 for strong-Wolfe mode");
+  }
+  if (params.tolerance_grad < 0.0) {
+    throw std::invalid_argument("LBFGS tolerance_grad must be >= 0 for strong-Wolfe mode");
+  }
+  if (dphi0 >= 0.0) {
+    return {WolfeStepStatus::kFailed, current_state, 0.0};
+  }
+  const double curvature_threshold = std::max(-params.wolfe_c2 * dphi0, params.tolerance_grad);
+
+  auto bcast_double = [&](double* value) {
+    if (mpi_size_ > 1) {
+      HANDLE_MPI_ERROR(::MPI_Bcast(value, 1, MPI_DOUBLE, qlten::hp_numeric::kMPIMasterRank, comm_));
+    }
+  };
+
+  size_t eval_count = 0;
+  auto eval_alpha = [&](double alpha, double* phi, double* dphi, WaveFunctionT* trial_state) {
+    *trial_state = current_state;
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+      *trial_state += alpha * search_direction;
+    }
+    auto [energy_trial, grad_trial, err_trial] = energy_evaluator(*trial_state);
+    (void)err_trial;
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+      *phi = std::real(energy_trial);
+      *dphi = RealInnerProduct_(grad_trial, search_direction);
+    }
+    bcast_double(phi);
+    bcast_double(dphi);
+    ++eval_count;
+  };
+
+  auto zoom = [&](double alo,
+                  double phi_alo,
+                  double ahi,
+                  double phi_ahi) -> std::tuple<WolfeStepStatus, WaveFunctionT, double> {
+    (void)phi_ahi;
+    while (eval_count < params.max_eval) {
+      const double alpha = 0.5 * (alo + ahi);
+      WaveFunctionT trial_state;
+      double phi = 0.0;
+      double dphi = 0.0;
+      eval_alpha(alpha, &phi, &dphi, &trial_state);
+
+      if ((phi > phi0 + params.wolfe_c1 * alpha * dphi0) || (phi >= phi_alo)) {
+        ahi = alpha;
+      } else {
+        if (std::abs(dphi) <= curvature_threshold) {
+          return {WolfeStepStatus::kAccepted, std::move(trial_state), alpha};
+        }
+        if (dphi * (ahi - alo) >= 0.0) {
+          ahi = alo;
+        }
+        alo = alpha;
+        phi_alo = phi;
+      }
+
+      if (std::abs(ahi - alo) <= params.tolerance_change) {
+        break;
+      }
+    }
+    return {WolfeStepStatus::kFailed, current_state, 0.0};
+  };
+
+  double alpha_prev = 0.0;
+  double phi_prev = phi0;
+  double alpha = std::clamp(std::max(learning_rate, params.min_step), params.min_step, params.max_step);
+  if (alpha <= 0.0) {
+    alpha = params.min_step;
+  }
+
+  for (size_t outer = 0; eval_count < params.max_eval; ++outer) {
+    WaveFunctionT trial_state;
+    double phi = 0.0;
+    double dphi = 0.0;
+    eval_alpha(alpha, &phi, &dphi, &trial_state);
+
+    if ((phi > phi0 + params.wolfe_c1 * alpha * dphi0) ||
+        (outer > 0 && phi >= phi_prev)) {
+      return zoom(alpha_prev, phi_prev, alpha, phi);
+    }
+    if (std::abs(dphi) <= curvature_threshold) {
+      return {WolfeStepStatus::kAccepted, std::move(trial_state), alpha};
+    }
+    if (dphi >= 0.0) {
+      return zoom(alpha, phi, alpha_prev, phi_prev);
+    }
+
+    alpha_prev = alpha;
+    phi_prev = phi;
+    const double next_alpha = std::min(alpha * 2.0, params.max_step);
+    if (next_alpha - alpha <= params.tolerance_change) {
+      break;
+    }
+    alpha = next_alpha;
+  }
+  return {WolfeStepStatus::kFailed, current_state, 0.0};
+}
+
 // Element-wise helpers are now defined on SplitIndexTPS; Optimizer no longer owns them.
 
 
@@ -1106,6 +1491,12 @@ void Optimizer<TenElemT, QNT>::ClearUp() {
     second_moment_ = SITPST();
     adam_timestep_ = 0;
     adam_initialized_ = false;
+  }
+
+  // Clear L-BFGS state
+  if (params_.IsAlgorithm<LBFGSParams>() &&
+      rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    ResetLBFGSState_();
   }
 
   // Clear spike detection state
