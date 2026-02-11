@@ -155,7 +155,12 @@ CalHorizontalBondEnergyAndHolesSweepRowImpl(const size_t row,
     const SiteIdx site1 = {row, col};
     //Calculate the holes
     if constexpr (calchols) {
-      hole_res(site1) = Dag(contractor.PunchHole(tn, site1, HORIZONTAL)); // natural match to complex number wave-function case.
+      // Hole tensor (complex / Wirtinger convention):
+      //   hole_res(site) ≡ ∂_{T^*} Ψ^*(S) for the active projected site tensor block T_i(S),
+      // where Ψ(S) is the PEPS/TPS amplitude for the current configuration S.
+      // We store Dag(environment) so the returned hole tensor has the same index directions
+      // as the ket tensor block (used by the MC gradient evaluator).
+      hole_res(site1) = Dag(contractor.PunchHole(tn, site1, HORIZONTAL));
     }
     if (col < tn.cols() - 1) {
       //Calculate horizontal bond energy contribution

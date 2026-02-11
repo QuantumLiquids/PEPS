@@ -115,8 +115,10 @@ class MCEnergyGradEvaluator {
    *
    * Per-sample computation (migrated from VMCPEPSOptimizer):
    * - Compute local energy E_loc(S) and holes via solver.
-   * - Define O^*(S) = ∂ ln Ψ^*(S) / ∂θ^*; for bosonic case use
-   *   inverse_amplitude * holes; for fermionic case use CalGTenForFermionicTensors.
+   * - Define O^*(S) = ∂ ln Ψ^*(S) / ∂θ^*:
+   *   - bosonic: O^* = inverse_amplitude * holes
+   *   - fermionic: first build graded-safe R^* via CalGTenForFermionicTensors,
+   *     then map once per sample to O^* = Pi(R^*) via ActFermionPOps().
    * - Accumulate Σ O^* and Σ E_loc^* O^* over samples.
    *
    * Gradient (complex parameters):
@@ -124,7 +126,7 @@ class MCEnergyGradEvaluator {
    * where complex conjugate is applied to E_loc and the mean energy E.
    * We implement this by computing Ostar_mean = Σ O^* / N and
    * grad = Σ E_loc^* O^* / N + (-E)^* · Ostar_mean, and then performing MPI means
-   * per tensor component. Fermionic parity operations are applied to grad at the end.
+   * per tensor component.
    *
    * SR buffers:
    * - When collect_sr_buffers==true, per-sample O^*(S) tensors and their mean are
@@ -238,8 +240,10 @@ class MCEnergyGradEvaluator {
       TenElemT inverse_amplitude = ComplexConjugate(1.0 / engine_.WavefuncComp().GetAmplitude());
       energy_samples.push_back(local_energy);
 
-      // Accumulate O* and E_loc^* O*
-      // O* = d ln(psi*) / d theta*
+      // Accumulate O* and E_loc^* O*.
+      // Fermion path:
+      // - Build graded-safe pre-parity sample R*.
+      // - Convert once per sample to O* = Pi(R*), then reuse for gradient and SR buffers.
       std::optional<SITPST> Ostar_sample_opt;
       if (collect_sr_buffers_) {
         Ostar_sample_opt.emplace(ly, lx, engine_.State().PhysicalDim());
@@ -250,7 +254,10 @@ class MCEnergyGradEvaluator {
 
           Tensor Ostar_tensor;
           if constexpr (Tensor::IsFermionic()) {
-            Ostar_tensor = CalGTenForFermionicTensors<TenElemT, QNT>(holes({row, col}), engine_.WavefuncComp().tn({row, col}));
+            Tensor Rstar_tensor =
+                CalGTenForFermionicTensors<TenElemT, QNT>(holes({row, col}), engine_.WavefuncComp().tn({row, col}));
+            Rstar_tensor.ActFermionPOps();
+            Ostar_tensor = std::move(Rstar_tensor);
           } else {
             Ostar_tensor = inverse_amplitude * holes({row, col});
           }
@@ -295,8 +302,6 @@ class MCEnergyGradEvaluator {
         }
       }
     }
-    grad.ActFermionPOps();
-
     double grad_norm = 0.0;
     if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
       grad_norm = grad.NormSquare();
@@ -399,5 +404,3 @@ class MCEnergyGradEvaluator {
 } // namespace qlpeps
 
 #endif // QLPEPS_ALGORITHM_VMC_UPDATE_MC_ENERGY_GRAD_EVALUATOR_H
-
-

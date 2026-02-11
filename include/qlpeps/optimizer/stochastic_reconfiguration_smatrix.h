@@ -14,10 +14,13 @@
 namespace qlpeps {
 
 /*
- * For the complex number case:
+ * Ostar_samples, Ostar_mean are expected to be in the physical O* representation:
+ *   O^*(S) = Pi(R^*(S))
+ * as prepared by the energy evaluators.
  *
- * Ostar_samples, Ostar_mean ~ ∂_{θ^*} ln Ψ^*
- * SRSMatrix ~ ⟨ O^* O ⟩ − ⟨ O^* ⟩ ⟨ O ⟩ implemented via sample tensors
+ * SRSMatrix implements:
+ *   S = < O^* O > - < O^* >< O >
+ * through sample tensors directly, without applying extra fermion-parity transforms.
  */
 template<typename TenElemT, typename QNT>
 class SRSMatrix {

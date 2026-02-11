@@ -107,7 +107,14 @@ $\texttt{hole\_res}$ 满足：
 实现提示：在代码中 `hole_res(site)` 由 `Dag(tn.PunchHole(site, ...))` 得到，正对应
 $\partial \Psi^*(S)/\partial \theta_i^*$ 的“洞”张量；后续按照上式进行规一化或加权求和。
 
-注：费米子情形由于奇偶算符与符号的参与更为复杂，代码中通过 `EvaluateLocalPsiPartialPsiDag` 与最终的 `gradient.ActFermionPOps()` 处理。本文档此处先给出玻色子精确定义，费米子细节将在专门章节讨论。
+注：费米子情形下，当前实现采用“每个 sample（或每个 exact 配置增量）先构造 \(R^*\)，再映射为 \(O^*=\Pi(R^*)\)”的约定，而不是在梯度末尾统一做一次 `gradient.ActFermionPOps()`。
+可写为：
+\[
+R_i^*(S)=\frac{(\partial_{\theta_i^*}\Psi^*(S))\,\Psi(S)}{|\Psi(S)|^2},
+\qquad
+O_i^*(S)=\Pi(R_i^*(S)).
+\]
+其中 \(\Pi\) 对应 `ActFermionPOps()`。代码路径上，MC 评估器会在每个样本内完成 \(R^*\!\to O^*\) 并用于梯度/SR 累加；exact-summation 路径也在每个配置增量上完成同样映射。
 
 ## 用法
 在VMCPEPSOptimizer中作为最后一个模版参数EnergySolver传入，并在构造函数中，传入其具体的对象。其对象可能包含物理模型的参数。

@@ -49,6 +49,24 @@ where \(O_i = \partial \ln \Psi / \partial \theta_i\) are logarithmic derivative
 
 In practice, the choice of whether to use \(\langle E_{\mathrm{loc}} \rangle\), \(\langle E_{\mathrm{loc}}^* \rangle\), or \(\langle \Re(E_{\mathrm{loc}}) \rangle\) can affect SR numerical stability; this repository uses the conjugated form consistently.
 
+### Fermionic convention (current implementation)
+
+For fermionic (Z2-graded) tensors, the code uses a per-sample/per-configuration mapping:
+
+\[
+R_i^*(S)=\frac{(\partial_{\theta_i^*}\Psi^*(S))\,\Psi(S)}{|\Psi(S)|^2},
+\qquad
+O_i^*(S)=\Pi\!\left(R_i^*(S)\right).
+\]
+
+So the flow is:
+
+1. build graded-safe \(R^*\),
+2. map once to physical \(O^*=\Pi(R^*)\),
+3. accumulate gradients and SR buffers in this physical \(O^*\) representation.
+
+This replaces the old convention of applying `gradient.ActFermionPOps()` only at the end.
+
 ## Solver interface (what you implement)
 
 The CRTP base is:

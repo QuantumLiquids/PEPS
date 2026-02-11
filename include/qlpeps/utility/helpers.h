@@ -19,13 +19,40 @@ double ComplexConjugate(const double &x) { return x; }
 std::complex<double> ComplexConjugate(const std::complex<double> &z) { return std::conj(z); }
 
 /**
- * @brief Calculate gradient tensor for fermionic systems
- * @param hole_ten_dag  Hole tensor (complex conjugated) from CalEnergyAndHoles function
- * @param split_index_tps_ten  Tensor in split index TPS (not complex conjugated)
- * @return Gradient tensor for fermionic systems
- * 
- * This function handles the special case of fermionic tensors where the standard
- * gradient calculation needs to account for fermionic statistics.
+ * @brief Build the per-sample fermionic pre-parity ratio tensor \f$R^*(S)\f$ for one site.
+ *
+ * Math definition (see `docs/dev/design/math/fermion-vmc-math.md`)
+ * - For complex parameters we use the Wirtinger convention and define
+ *   \f[
+ *     R^*(S) \equiv \frac{(\partial_{\theta^*}\Psi^*(S))\,\Psi(S)}{|\Psi(S)|^2}.
+ *   \f]
+ * - The physical log-derivative is then \f$O^*(S)=\Pi(R^*(S))\f$, where \f$\Pi\f$ is
+ *   implemented by `ActFermionPOps()`.
+ *
+ * Why fermions need a special construction? see `docs/dev/design/math/fermion-vmc-math.md`
+ *
+ * This helper computes the **graded-safe pre-parity ratio** \f$R^*(S)\f$ above, where
+ *   \f$\Psi(S)\f$ is reconstructed locally from the same hole/environment tensor.
+ *
+ * Code ↔ math variable mapping (anchors)
+ * - `hole_ten_dag`:
+ *   - In code: `holes(site)` in `mc_energy_grad_evaluator.h`, produced by
+ *     `ModelEnergySolver::CalEnergyAndHoles(...)`.
+ *   - In square-lattice BMPS solvers it is constructed as
+ *     `Dag(contractor.PunchHole(tn, site, ...))` (see `square_nnn_energy_solver.h`).
+ *   - Math: \f$\partial_{\theta^*}\Psi^*(S)\f$ (a tensor with the same index structure as the
+ *     active projected site tensor component).
+ * - `split_index_tps_ten`:
+ *   - In code: `engine_.WavefuncComp().tn(site)` (projected site tensor for the current configuration).
+ *   - Math: the ket tensor \f$T_i(S)\f$ for this site, such that \f$\Psi(S)\f$ is obtained by contracting
+ *     the hole/environment with \f$T_i(S)\f$ (up to 1D parity legs).
+ *
+ * @note This function does NOT apply `ActFermionPOps()`. Callers choose where to map
+ *       \f$R^*\to O^*=\Pi(R^*)\f$ depending on the accumulation path.
+ *
+ * @param hole_ten_dag  Hole tensor \f$\partial_{\theta^*}\Psi^*(S)\f$ (see mapping above).
+ * @param split_index_tps_ten  Projected ket tensor \f$T_i(S)\f$ at this site (not conjugated).
+ * @return Tensor encoding \f$R^*(S)\f$ for this site (same indices as `split_index_tps_ten`).
  */
 template<typename TenElemT, typename QNT>
 qlten::QLTensor<TenElemT, QNT> CalGTenForFermionicTensors(

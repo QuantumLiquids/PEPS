@@ -127,8 +127,8 @@ std::vector<Configuration> GenerateAllPermutationConfigs(
  * \f]
  * Boson vs Fermion:
  * - Boson: \(O^*(S)\) is formed from the amplitude and \(\text{hole\_dag}\) tensors (consistent with \(\Psi^*\)).
- * - Fermion: \(O^*(S)\) is built via EvaluateLocalPsiPartialPsiDag, and \c gradient.ActFermionPOps() is applied once
- *   at the end to enforce parity.
+ * - Fermion: build weighted pre-parity samples via EvaluateLocalPsiPartialPsiDag, then apply
+ *   `ActFermionPOps()` once per sample increment so accumulators are directly in O* representation.
  *
  * Notes:
  * - Mirrors VMCPEPSOptimizer::SampleEnergyAndHoles_: use \(E_{\mathrm{loc}}^*\) when multiplying gradient
@@ -218,9 +218,11 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
 
         // Handle gradient calculation based on particle type
         if constexpr (Index<QNT>::IsFermionic()) {
-          // Fermion system: Use complex tensor contractions
+          // Fermion system:
+          // Evaluate weighted pre-parity sample (|Psi|^2 * R*), then map once to O* representation.
           auto psi_partial_psi_dag = EvaluateLocalPsiPartialPsiDag(holes_dag({row, col}), tps_sample.tn({row, col}));
-          Ostar_weighted_increment({row, col})[basis] = psi_partial_psi_dag;
+          psi_partial_psi_dag.ActFermionPOps();
+          Ostar_weighted_increment({row, col})[basis] = std::move(psi_partial_psi_dag);
         } else {
           // Boson system: |Psi|^2 * \Delta, where \Delta = \partial_{\theta^*} ln(\Psi^*)
           Ostar_weighted_increment({row, col})[basis] = tps_sample.amplitude * holes_dag({row, col});
@@ -289,11 +291,6 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> ExactSumEnergyEvaluat
     // Calculate gradient
     // (S_{EO} − E^* S_O) / W_sum
     SplitIndexTPSType gradient = (ELocConj_Ostar_weighted_sum - ComplexConjugate(energy) * Ostar_weighted_sum) * (RealT(1.0) / RealT(weight_sum));
-
-    // Apply fermion parity operations only for fermion systems
-    if constexpr (Index<QNT>::IsFermionic()) {
-      gradient.ActFermionPOps();
-    }
 
     return {energy, gradient, 0.0}; // Error is 0 for exact summation
     

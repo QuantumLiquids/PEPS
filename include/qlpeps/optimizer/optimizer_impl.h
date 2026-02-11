@@ -777,21 +777,11 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
   SRSMatrix s_matrix(const_cast<std::vector<SITPST> *>(&Ostar_samples), pOstar_mean, mpi_size_);
   s_matrix.diag_shift = cg_params.diag_shift;
 
-  SITPST natural_gradient;
   size_t cg_iterations;
-
-  if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
-    auto signed_gradient = gradient;
-    signed_gradient.ActFermionPOps();
-    natural_gradient = ConjugateGradientSolver(s_matrix, signed_gradient, init_guess,
-                                               cg_params.max_iter, cg_params.tolerance,
-                                               cg_params.residue_restart_step, cg_iterations, comm_);
-    natural_gradient.ActFermionPOps();
-  } else {
-    natural_gradient = ConjugateGradientSolver(s_matrix, gradient, init_guess,
-                                               cg_params.max_iter, cg_params.tolerance,
-                                               cg_params.residue_restart_step, cg_iterations, comm_);
-  }
+  SITPST natural_gradient = ConjugateGradientSolver(
+      s_matrix, gradient, init_guess,
+      cg_params.max_iter, cg_params.tolerance,
+      cg_params.residue_restart_step, cg_iterations, comm_);
 
   return {natural_gradient, cg_iterations};
 }

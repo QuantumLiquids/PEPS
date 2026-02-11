@@ -333,6 +333,12 @@ add_two_type_unittest(test_optimizer_adam_exact_sum
 add_mpi_unittest_run(test_optimizer_adam_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_adam_exact_sum_complex "4" " ")
 
+# Golden regression (integration): fermionic exact-summation + optimizer signatures
+add_two_type_unittest(test_fermion_exact_optimizer_integration_golden
+        "test_optimizer/test_fermion_exact_optimizer_integration_golden.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+
 
 # Learning rate scheduler unit tests (header-only, no extra libs)
 add_unittest(test_lr_schedulers
@@ -412,6 +418,13 @@ add_two_type_unittest(test_mc_energy_grad_evaluator
 
 add_mpi_unittest_run(test_mc_energy_grad_evaluator_double "4" " ")
 add_mpi_unittest_run(test_mc_energy_grad_evaluator_complex "4" " ")
+
+# Golden regression: fermionic MC gradient + SR natural-gradient signatures
+add_two_type_unittest(test_fermion_mc_sr_golden
+        "test_algorithm/test_fermion_mc_sr_golden.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
 
 # MonteCarloEngine tests (configuration rescue, etc.)
 # Tests require 4 MPI ranks to test all configuration rescue scenarios

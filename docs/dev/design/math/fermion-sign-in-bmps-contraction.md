@@ -265,4 +265,5 @@ TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(...);
 - `include/qlpeps/two_dim_tn/tps/split_index_tps.h` - SplitIndexTPS定义
 - `include/qlpeps/two_dim_tn/tensor_network_2d/bmps/bmps_contractor_impl.h` - BMPS收缩实现
 - `docs/user/zh/howto/write_custom_energy_solver.md` - 用户指南中的费米子接口说明
-- `docs/dev/design/math/sr-fermion.md` - 费米子SR算法中的符号处理
+- `docs/dev/design/math/fermion-vmc-math.md` - 费米子VMC数学定义（\(O^*\) 与 \(\Pi\)）
+- `docs/dev/design/math/fermion-vmc-implementation.md` - 当前实现约定与代码映射（含SR路径）
