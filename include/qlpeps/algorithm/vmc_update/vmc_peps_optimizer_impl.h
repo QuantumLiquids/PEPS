@@ -196,6 +196,7 @@ VMCPEPSOptimizer<TenElemT,
                          ContractorT>::DefaultEnergyEvaluator_(const SITPST &state) {
   // Delegate to persistent evaluator which encapsulates state broadcast, sampling and MPI reductions
   auto result = energy_grad_evaluator_->Evaluate(state);
+  optimizer_.SetCurrentAcceptRates(result.accept_rates_avg);
 
   // Wire SR buffers into optimizer-owned storage when SR is enabled
   if (stochastic_reconfiguration_update_class_) {

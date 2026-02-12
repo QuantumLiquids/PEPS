@@ -10,10 +10,10 @@
 * which includes Monte Carlo sampling infrastructure, state normalization, data collection,
 * and file I/O operations - even when using exact summation for energy evaluation.
 * 
-* 🎯 USE CASE: When you need the complete VMC infrastructure (state saving, data collection,
+* USE CASE: When you need the complete VMC infrastructure (state saving, data collection,
 *             acceptance rate monitoring, etc.) but want exact gradient computation for small systems.
 * 
-* 📊 COMPARISON WITH PURE OPTIMIZER TESTS:
+* COMPARISON WITH PURE OPTIMIZER TESTS:
 * - VMCPEPSOptimizer: Full integration with all VMC features
 * - Pure Optimizer tests: Focus only on optimization algorithm correctness
 * 
@@ -98,11 +98,11 @@ void DemonstrateVMCExecutorExactSummation() {
     // Combined VMC parameters
     qlpeps::VMCPEPSOptimizerParams optimize_para(opt_params, mc_params, peps_params);
     
-    // 🎯 KEY FEATURE: VMCPEPSOptimizer with full infrastructure
+    // KEY FEATURE: VMCPEPSOptimizer with full infrastructure
     VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model> executor(
         optimize_para, split_index_tps, MPI_COMM_WORLD, heisenberg_model);
     
-    // 🔧 EXACT SUMMATION INTEGRATION: Replace Monte Carlo with exact computation (unified interface)
+    // EXACT SUMMATION INTEGRATION: Replace Monte Carlo with exact computation (unified interface)
     auto exact_energy_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
         auto [energy, gradient, error] = ExactSumEnergyEvaluatorMPI(
             state, all_configs, trun_para, heisenberg_model, Ly, Lx, MPI_COMM_WORLD, qlten::hp_numeric::kMPIMasterRank, 1);
@@ -123,7 +123,7 @@ void DemonstrateVMCExecutorExactSummation() {
     
     executor.SetEnergyEvaluator(exact_energy_evaluator);
     
-    // 📊 ADVANCED MONITORING: Detailed callback with convergence tracking
+    // ADVANCED MONITORING: Detailed callback with convergence tracking
     typename VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>::OptimizerT::OptimizationCallback callback;
     callback.on_iteration = [&](size_t iteration, double energy, double energy_error, double gradient_norm) {
         std::cout << "VMC-Executor Step " << iteration 
@@ -134,12 +134,12 @@ void DemonstrateVMCExecutorExactSummation() {
                   
         // Convergence check
         if (std::abs(energy - energy_exact) < 1e-10) {
-            std::cout << "🎯 Converged to exact energy!" << std::endl;
+            std::cout << "Converged to exact energy!" << std::endl;
         }
     };
     
     callback.on_completion = [&](const auto& result) {
-        std::cout << "✅ Optimization completed!" << std::endl;
+        std::cout << "Optimization completed!" << std::endl;
         std::cout << "   Final energy: " << result.final_energy << std::endl;
         std::cout << "   Total iterations: " << result.iteration_count << std::endl;
         std::cout << "   Convergence reason: " << 
@@ -148,8 +148,8 @@ void DemonstrateVMCExecutorExactSummation() {
     
     executor.SetOptimizationCallback(callback);
     
-    // 🚀 EXECUTE FULL VMC INTEGRATION with exact summation
-    std::cout << "🔧 Starting VMCPEPSOptimizer with exact summation..." << std::endl;
+    // EXECUTE FULL VMC INTEGRATION with exact summation
+    std::cout << "Starting VMCPEPSOptimizer with exact summation..." << std::endl;
     std::cout << "   System: 2x2 Heisenberg XY model" << std::endl;
     std::cout << "   Exact energy: " << energy_exact << std::endl;
     std::cout << "   Features: State saving, data collection, acceptance monitoring" << std::endl;
@@ -158,10 +158,10 @@ void DemonstrateVMCExecutorExactSummation() {
     
     executor.Execute();
     
-    // 📈 RESULTS ANALYSIS 
+    // RESULTS ANALYSIS 
     double final_energy = executor.GetMinEnergy();
     std::cout << std::endl;
-    std::cout << "🎯 FINAL RESULTS:" << std::endl;
+    std::cout << "FINAL RESULTS:" << std::endl;
     std::cout << "   Final energy: " << std::fixed << std::setprecision(12) << final_energy << std::endl;
     std::cout << "   Exact energy:  " << std::fixed << std::setprecision(12) << energy_exact << std::endl;
     std::cout << "   Error:        " << std::scientific << std::setprecision(3) 
@@ -169,9 +169,9 @@ void DemonstrateVMCExecutorExactSummation() {
     
     // Verify convergence
     if (std::abs(final_energy - energy_exact) < 1e-5) {
-        std::cout << "✅ SUCCESS: Converged to exact energy within tolerance!" << std::endl;
+        std::cout << "SUCCESS: Converged to exact energy within tolerance!" << std::endl;
     } else {
-        std::cout << "❌ WARNING: Did not converge to exact energy!" << std::endl;
+        std::cout << "WARNING: Did not converge to exact energy!" << std::endl;
     }
 }
 
@@ -187,7 +187,7 @@ int main(int argc, char* argv[]) {
     try {
         DemonstrateVMCExecutorExactSummation();
     } catch (const std::exception& e) {
-        std::cerr << "❌ Error: " << e.what() << std::endl;
+        std::cerr << "Error: " << e.what() << std::endl;
         MPI_Finalize();
         return 1;
     }

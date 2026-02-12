@@ -2,7 +2,7 @@
 
 **PEPS** (Projected Entangled Pair States) is a high-performance C++ library for simulating 2D strongly correlated electron systems using tensor network methods. It provides efficient implementations of finite-size PEPS algorithms, variational Monte Carlo optimization, and quantum many-body calculations.
 
-## 📖 Prerequisites knowledge
+## Prerequisites knowledge
 
 - **Quantum many-body physics** background 
 - **PEPS && Variational Monte Carlo methods**, like SR technical
@@ -10,7 +10,7 @@
 - **MPI** for parallel computing
 
 
-## 🚀 Quick Start
+## Quick Start
 
 **New to PEPS? Start here:**
 
@@ -18,7 +18,7 @@
 2. **[Heisenberg Model Full Workflow](tutorials/02_quick_start.html)** - A complete example: J1-J2 Heisenberg Model.
 3. **[PEPS Basics](tutorials/03_peps_basics.html)** - Understanding Data structure
 
-## 📚 User Tutorials
+## User Tutorials
 
 ### Define your model in simple update
 
@@ -28,7 +28,7 @@
 
 
 
-## 🔧 Developer Resources
+## Developer Resources
 
 ### API Reference
 - **[Core API](api/core.html)** - Main PEPS classes and tensor network framework
@@ -41,7 +41,7 @@
 - **[Testing Guide](developer/testing.html)** - How to run tests and contribute code
 - **[Performance Guide](developer/performance.html)** - Optimization and benchmarking
 
-## 🎯 Key Features
+## Key Features
 
 - **Finite-Size PEPS** - Efficient implementation for finite 2D systems
 - **Multiple Update Algorithms** - Simple update, loop update, and variational methods
@@ -51,7 +51,7 @@
 - **MPI Parallelization** - Distributed computing support
 - **Header-Only Design** - Easy integration into existing projects
 
-## 🔗 External Resources
+## External Resources
 
 - **[GitHub Repository](https://github.com/QuantumLiquids/PEPS)**
 - **[Issue Tracker](https://github.com/QuantumLiquids/PEPS/issues)**
@@ -61,5 +61,4 @@
 ---
 
 *Need help? Check the [tutorials](tutorials/index.html) or open an issue on GitHub.*
-
 

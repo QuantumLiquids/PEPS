@@ -541,6 +541,54 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
   delete executor;
 }
 
+TEST_F(Test2x2MCPEPSBoson, J1J2HeisenbergModelPublishesRowCorrelations) {
+  using Model = SquareSpinOneHalfJ1J2XXZModelOBC;
+
+  Configuration compatible_config(2, 2);
+  compatible_config({0, 0}) = 0;
+  compatible_config({0, 1}) = 1;
+  compatible_config({1, 0}) = 1;
+  compatible_config({1, 1}) = 0;
+
+  std::string source_tps_path =
+      (std::filesystem::path(TEST_SOURCE_DIR) / GetTPSDataPath("heisenberg_tps")).string();
+  std::string output_dir =
+      GetTestOutputPath("mc_peps_measure", "j1j2_heisenberg_row_corr_results");
+  std::filesystem::create_directories(output_dir);
+
+  MonteCarloParams mc_params(30, 30, 1, compatible_config, false, output_dir + "/final_config");
+  PEPSParams peps_params(BMPSTruncateParams<qlten::QLTEN_Double>(
+      Dpeps,
+      2 * Dpeps,
+      1e-15,
+      CompressMPSScheme::SVD_COMPRESS,
+      std::make_optional<double>(1e-14),
+      std::make_optional<size_t>(10)));
+  MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");
+
+  Model model(/*j2=*/0.0);
+
+  auto executor = MCPEPSMeasurer<TenElemT, QNT, MCUpdateSquareNNExchange, Model>::CreateByLoadingTPS(
+      source_tps_path, para, comm, model).release();
+
+  executor->Execute();
+  (void)executor->OutputEnergy();
+
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+    const auto stats_dir = StatsDirPath(output_dir);
+    ASSERT_TRUE(std::filesystem::exists(stats_dir));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "SmSp_row.csv"));
+    ASSERT_TRUE(std::filesystem::exists(stats_dir / "SpSm_row.csv"));
+
+    auto smsp_row_stats = LoadFlatStats(stats_dir / "SmSp_row.csv");
+    auto spsm_row_stats = LoadFlatStats(stats_dir / "SpSm_row.csv");
+    ASSERT_EQ(smsp_row_stats.means.size(), Lx / 2);
+    ASSERT_EQ(spsm_row_stats.means.size(), Lx / 2);
+  }
+
+  delete executor;
+}
+
 // Smoke test: triangular Heisenberg mapped onto square PEPS should publish row off-diagonal keys via the unified hook.
 TEST_F(Test2x2MCPEPSBoson, TriangularHeisenbergSqrPEPSModelSmoke) {
   using Model = SpinOneHalfTriHeisenbergSqrPEPS;

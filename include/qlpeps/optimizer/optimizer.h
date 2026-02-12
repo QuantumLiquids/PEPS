@@ -14,6 +14,7 @@
 #include <memory>
 #include <functional>
 #include <deque>
+#include <utility>
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/optimizer/spike_detection.h"
@@ -39,7 +40,7 @@ using qlten::QLTensor;
  * 5. Adam (with AdamW-style decoupled weight decay)
  * 6. L-BFGS (fixed-step and strong-Wolfe modes)
  * 
- * ⚠️ CRITICAL MPI RESPONSIBILITY SEPARATION:
+ * CRITICAL MPI RESPONSIBILITY SEPARATION:
  * 
  * 【CORE PRINCIPLE】: Clear MPI responsibility separation between state distribution and algorithm computation.
  * 
@@ -61,9 +62,9 @@ using qlten::QLTensor;
  * 【RESPONSIBILITY MATRIX】:
  * | Component         | Responsibility              | MPI Behavior                    |
  * |-------------------|----------------------------|---------------------------------|
- * | Optimizer         | Algorithm logic & updates  | ✅ SR/CG solver, ❌ NO state bcast|
- * | Energy Evaluator  | MC sampling coordination   | ✅ Sole state broadcast owner    |
- * | VMC Executor      | High-level orchestration   | ✅ Final state guarantee         |
+ * | Optimizer         | Algorithm logic & updates  | SR/CG solver, no state bcast      |
+ * | Energy Evaluator  | MC sampling coordination   | Sole state broadcast owner         |
+ * | VMC Executor      | High-level orchestration   | Final state guarantee              |
  * 
  * 【MPI DATA DISTRIBUTION】:
  * 
@@ -188,7 +189,7 @@ class Optimizer {
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
    * 
-   * ✅ MPI COMMUNICATION REQUIRED: This function DOES use MPI for distributed CG solving!
+   * MPI COMMUNICATION REQUIRED: This function DOES use MPI for distributed CG solving.
    * 
    * Unlike state update functions, SR natural gradient calculation requires distributed
    * computation across all ranks:
@@ -234,7 +235,7 @@ class Optimizer {
   /**
    * @brief Apply bounded gradient element update
    * 
-   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * MPI RESPONSIBILITY: This function does NOT broadcast the updated state.
    * Energy evaluator handles all state distribution for Monte Carlo sampling.
    * 
    * @param current_state Current TPS state (valid on all ranks)
@@ -249,7 +250,7 @@ class Optimizer {
   /**
    * @brief Apply AdaGrad update with adaptive learning rates
    * 
-   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * MPI RESPONSIBILITY: This function does NOT broadcast the updated state.
    * Energy evaluator handles all state distribution for Monte Carlo sampling.
    * 
    * @param current_state Current TPS state (valid on all ranks)
@@ -307,6 +308,21 @@ class Optimizer {
    * @brief Get spike detection statistics from the last optimization run.
    */
   const SpikeStatistics &GetSpikeStats() const { return spike_stats_; }
+
+  /**
+   * @brief Set per-update-type acceptance rates for the current optimization step log.
+   *
+   * The optimizer itself does not compute acceptance rates; caller (typically
+   * VMC evaluator/executor) injects the latest averages before logging.
+   */
+  void SetCurrentAcceptRates(std::vector<double> accept_rates) {
+    current_accept_rates_ = std::move(accept_rates);
+  }
+
+  /**
+   * @brief Get the currently cached acceptance rates used for logging.
+   */
+  const std::vector<double> &GetCurrentAcceptRates() const { return current_accept_rates_; }
 
   /**
    * @brief Check if optimization should stop based on convergence criteria
@@ -392,6 +408,7 @@ class Optimizer {
   EMATracker ema_ngrad_norm_;
   double prev_energy_ = 0.0;
   SpikeStatistics spike_stats_;
+  std::vector<double> current_accept_rates_;
 
   // S4 rollback state (master rank ONLY, allocated only when enable_rollback)
   WaveFunctionT prev_accepted_state_;
@@ -457,7 +474,7 @@ class Optimizer {
   /**
    * @brief SGD with momentum and Nesterov acceleration support
    * 
-   * 🚫 MPI RESPONSIBILITY: This function does NOT broadcast the updated state!
+   * MPI RESPONSIBILITY: This function does NOT broadcast the updated state.
    * Energy evaluator handles all state distribution for Monte Carlo sampling.
    * 
    * Unified implementation naturally handles all SGD variants:

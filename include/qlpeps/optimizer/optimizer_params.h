@@ -311,7 +311,7 @@ struct OptimizerParams {
   CheckpointParams checkpoint_params;           ///< default: disabled
   SpikeRecoveryParams spike_recovery_params;    ///< default: S1-S3 on, S4 off
 
-  // ⚠️ TESTING-ONLY DEFAULT CONSTRUCTOR - DO NOT USE IN PRODUCTION! ⚠️
+  // WARNING: TESTING-ONLY DEFAULT CONSTRUCTOR - DO NOT USE IN PRODUCTION.
   // Uses obviously invalid values to make misuse immediately obvious
   OptimizerParams()
     : base_params(1, 999.0, 999.0, 1, 999.0),  // Obviously wrong values

@@ -382,6 +382,34 @@ TEST_F(OptimizerTest, TimeLoggingImposeStoppingAdvance) {
   }
 }
 
+TEST_F(OptimizerTest, LogIncludesAcceptRatesWhenProvided) {
+  OptimizerParams::BaseParams base_params(3, 1e-15, 1e-15, 20, 0.1);
+  SGDParams sgd_params(0.0, false);
+  test_params_ = OptimizerParams(base_params, sgd_params);
+
+  OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
+  optimizer.SetCurrentAcceptRates({0.25, 0.50});
+
+  std::stringstream captured_output;
+  std::streambuf *original_cout = nullptr;
+
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    original_cout = std::cout.rdbuf();
+    std::cout.rdbuf(captured_output.rdbuf());
+  }
+
+  auto result = optimizer.IterativeOptimize(
+      test_tps_,
+      [this](const SITPST &state) { return MockEnergyEvaluator(state); });
+
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    std::cout.rdbuf(original_cout);
+    const std::string output = captured_output.str();
+    EXPECT_FALSE(result.energy_trajectory.empty());
+    EXPECT_TRUE(output.find("Accept rate = [") != std::string::npos);
+  }
+}
+
 // Test different optimization algorithms  
 TEST_F(OptimizerTest, DifferentOptimizationAlgorithms) {
   // Test SGD

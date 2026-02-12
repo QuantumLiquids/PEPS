@@ -47,6 +47,41 @@ class SquareSpinOneHalfJ1J2XXZModelOBC : public SquareNNNModelEnergySolver<Squar
   SquareSpinOneHalfJ1J2XXZModelOBC(double jz, double jxy, double jz2, double jxy2, double pinning_field00) :
       SquareSpinOneHalfXXZModelMixIn(jz, jxy, jz2, jxy2, pinning_field00) {}
 
+  // Unified row-hook (registry-based) for off-diagonal observables along a row.
+  // This is invoked by SquareNNNModelMeasurementSolver via BondTraversalMixin.
+  template<typename TenElemT, typename QNT>
+  void EvaluateOffDiagOrderInRow(const SplitIndexTPS<TenElemT, QNT> *split_index_tps,
+                                 TPSWaveFunctionComponent<TenElemT, QNT> *tps_sample,
+                                 const size_t row,
+                                 const TenElemT inv_psi,
+                                 ObservableMap<TenElemT> &out) const {
+    auto &tn = tps_sample->tn;
+    const auto &config = tps_sample->config;
+    const size_t ly = tn.rows();
+    const size_t lx = tn.cols();
+    if (ly == 0 || lx == 0) {
+      return;
+    }
+    if (row != ly / 2) {
+      return;
+    }
+
+    auto &contractor = tps_sample->contractor;
+    std::vector<TenElemT> diag_corr;
+    diag_corr.reserve(lx / 2);
+    MeasureSpinOneHalfOffDiagOrderInRow(split_index_tps, tn, contractor, diag_corr, inv_psi, config, row);
+
+    std::vector<TenElemT> SmSp_row = diag_corr;
+    std::vector<TenElemT> SpSm_row(diag_corr.size(), TenElemT(0));
+    const SiteIdx site1{row, lx / 4};
+    if (config(site1) == 0) {
+      SpSm_row = diag_corr;
+      std::fill(SmSp_row.begin(), SmSp_row.end(), TenElemT(0));
+    }
+    if (!SmSp_row.empty()) out["SmSp_row"] = std::move(SmSp_row);
+    if (!SpSm_row.empty()) out["SpSm_row"] = std::move(SpSm_row);
+  }
+
   std::vector<ObservableMeta> DescribeObservables(size_t ly, size_t lx) const {
     auto base = this->SquareNNNModelMeasurementSolver<SquareSpinOneHalfJ1J2XXZModelOBC>::DescribeObservables(ly, lx);
     for (auto &meta : base) {
@@ -71,6 +106,8 @@ class SquareSpinOneHalfJ1J2XXZModelOBC : public SquareNNNModelEnergySolver<Squar
         meta.index_labels = {"bond_y", "bond_x"};
       }
     }
+    base.push_back({"SmSp_row", "Row Sm(i)Sp(j) along middle row (flat)", {lx / 2}, {"segment"}});
+    base.push_back({"SpSm_row", "Row Sp(i)Sm(j) along middle row (flat)", {lx / 2}, {"segment"}});
     return base;
   }
 };//SquareSpinOneHalfJ1J2XXZModelOBC

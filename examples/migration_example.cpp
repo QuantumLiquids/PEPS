@@ -43,7 +43,7 @@ using SITPST = SplitIndexTPS<TenElemT, QNT>;
 void demonstrate_legacy_problems() {
     std::cout << "=== WHY LEGACY APPROACH WAS PROBLEMATIC ===" << std::endl;
     
-    std::cout << "❌ Legacy VMCPEPSExecutor problems:" << std::endl;
+    std::cout << "Legacy VMCPEPSExecutor problems:" << std::endl;
     std::cout << "  - Monolithic parameter structure (VMCOptimizePara)" << std::endl;
     std::cout << "  - Mixed concerns in single executor class" << std::endl;
     std::cout << "  - Hardcoded optimization algorithms" << std::endl;
@@ -52,7 +52,7 @@ void demonstrate_legacy_problems() {
     std::cout << "  - Legacy enum-based algorithm selection" << std::endl;
     std::cout << "" << std::endl;
     
-    std::cout << "✅ Modern VMCPEPSOptimizer solutions:" << std::endl;
+    std::cout << "Modern VMCPEPSOptimizer solutions:" << std::endl;
     std::cout << "  - Clean separation of parameter types" << std::endl;
     std::cout << "  - Modular Optimizer class design" << std::endl;
     std::cout << "  - Type-safe algorithm selection with std::variant" << std::endl;
@@ -135,7 +135,7 @@ VMCPEPSOptimizerParams create_modern_parameters() {
     
     VMCPEPSOptimizerParams modern_params(opt_params, mc_params, peps_params);
     
-    std::cout << "✅ Successfully created modern parameter structure" << std::endl;
+    std::cout << "Successfully created modern parameter structure" << std::endl;
     return modern_params;
 }
 

@@ -6,7 +6,7 @@
 *
 * Description: QuantumLiquids/PEPS project. Implementation for optimizer.
 *
-* 🚫 CRITICAL MPI ARCHITECTURE: This implementation follows strict responsibility separation
+* CRITICAL MPI ARCHITECTURE: This implementation follows strict responsibility separation
 *
  * 【CORE PRINCIPLE】: "Clear MPI responsibility: Optimizer handles algorithm MPI, Energy evaluator owns STATE distribution."
 *
@@ -184,7 +184,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
                         energy_error,
                         std::sqrt(test_gradient.NormSquare()),
                         cumulative_step,
-                        {},
+                        current_accept_rates_,
                         0,
                         0.0,
                         energy_eval_time,
@@ -311,7 +311,7 @@ Optimizer<TenElemT, QNT>::LineSearchOptimize(
                         test_error,
                         std::sqrt(test_gradient.NormSquare()),
                         cumulative_step,
-                        {},
+                        current_accept_rates_,
                         0,
                         0.0,
                         energy_eval_time,
@@ -721,7 +721,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         if (should_stop) {
           if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
             LogOptimizationStep(iter, current_energy_real, current_error, grad_norm,
-                               effective_step_length, {}, sr_iterations, sr_natural_grad_norm,
+                               effective_step_length, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
                                energy_eval_time, update_time);
             result.converged = true;
           }
@@ -757,7 +757,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // Log progress
       LogOptimizationStep(iter, std::real(current_energy), current_error, grad_norm,
-                          effective_step_length, {}, sr_iterations, sr_natural_grad_norm,
+                          effective_step_length, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
                           energy_eval_time, update_time);
 
       if (callback.on_iteration) {
@@ -834,13 +834,13 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
   
   // MPI VERIFICATION: Only master rank processes gradients and algorithm state
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    // ⚙️ LAZY INITIALIZATION: Initialize velocity on first use (master rank only)
+    // LAZY INITIALIZATION: Initialize velocity on first use (master rank only)
     if (!sgd_momentum_initialized_) {
       velocity_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
       // Default construction gives zero tensors - perfect for initial velocity
       sgd_momentum_initialized_ = true;
       
-      // 🔍 DEBUG: Velocity state exists only on master rank
+      // DEBUG: Velocity state exists only on master rank
       // Non-master ranks never initialize or access velocity_
     }
     
@@ -1525,6 +1525,7 @@ void Optimizer<TenElemT, QNT>::ClearUp() {
 
   // Clear spike statistics (after CSV has been written above)
   spike_stats_ = SpikeStatistics{};
+  current_accept_rates_.clear();
 
   // Clear rollback state
   prev_accepted_state_ = WaveFunctionT();
