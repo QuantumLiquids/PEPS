@@ -619,9 +619,10 @@ TenElemT TRGContractor<TenElemT, QNT>::GetCachedAmplitude_() const {
       return ContractFinal2x2_(t2x2);
     }
     if (scales_.back().tens.size() == 9) {
-      const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                          scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                          scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      const auto& top = scales_.back().tens;
+      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
+                                                  &top[3], &top[4], &top[5],
+                                                  &top[6], &top[7], &top[8]};
       return ContractFinal3x3_(t3x3);
     }
     throw std::logic_error("TRGContractor::GetCachedAmplitude_: invalid final scale size.");
@@ -654,9 +655,10 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
       return ContractFinal2x2_(t2x2);
     }
     if (scales_.back().tens.size() == 9) {
-      const std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                          scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                          scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      const auto& top = scales_.back().tens;
+      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
+                                                  &top[3], &top[4], &top[5],
+                                                  &top[6], &top[7], &top[8]};
       return ContractFinal3x3_(t3x3);
     }
     throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
@@ -825,12 +827,10 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
       }
       trial.amplitude = ContractFinal2x2_(t2x2);
     } else if (scales_.back().tens.size() == 9) {
-      std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                    scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                    scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+      std::array<const Tensor*, 9> t3x3;
       for (uint32_t id = 0; id < 9; ++id) {
         auto it = trial.layer_updates[last].find(id);
-        if (it != trial.layer_updates[last].end()) t3x3[id] = it->second;
+        t3x3[id] = (it != trial.layer_updates[last].end()) ? &it->second : &scales_.back().tens[id];
       }
       trial.amplitude = ContractFinal3x3_(t3x3);
     } else {
@@ -983,12 +983,10 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
     }
     return ContractFinal2x2_(t2x2);
   } else if (scales_.back().tens.size() == 9) {
-    std::array<Tensor, 9> t3x3 = {scales_.back().tens[0], scales_.back().tens[1], scales_.back().tens[2],
-                                  scales_.back().tens[3], scales_.back().tens[4], scales_.back().tens[5],
-                                  scales_.back().tens[6], scales_.back().tens[7], scales_.back().tens[8]};
+    std::array<const Tensor*, 9> t3x3;
     for (uint32_t id = 0; id < 9; ++id) {
       auto it = layer_updates[last].find(id);
-      if (it != layer_updates[last].end()) t3x3[id] = it->second;
+      t3x3[id] = (it != layer_updates[last].end()) ? &it->second : &scales_.back().tens[id];
     }
     return ContractFinal3x3_(t3x3);
   } else {
@@ -1049,9 +1047,8 @@ TenElemT TRGContractor<TenElemT, QNT>::ContractFinal2x2_(const std::array<Tensor
 }
 
 template <typename TenElemT, typename QNT>
-TenElemT TRGContractor<TenElemT, QNT>::ContractFinal3x3_(const std::array<Tensor, 9>& T3x3) const {
+TenElemT TRGContractor<TenElemT, QNT>::ContractFinal3x3_(const std::array<const Tensor*, 9>& T3x3) const {
   using qlten::Contract;
-  using qlten::Eye;
 
   // 3x3 PBC torus on the terminal even lattice.
   //
@@ -1066,45 +1063,36 @@ TenElemT TRGContractor<TenElemT, QNT>::ContractFinal3x3_(const std::array<Tensor
     Tensor t01;
     Contract(&A0, {2}, &A1, {0}, &t01);
 
-    Tensor t012;
-    Contract(&t01, {4}, &A2, {0}, &t012);
-
-    // Close horizontal ring: trace A0.L with A2.R.
-    const auto& idx_r = A2.GetIndex(2);
-    const auto eye_lr = Eye<TenElemT, QNT>(idx_r);
-
-    // t012 axes: [A0.L,A0.D,A0.U, A1.D,A1.U, A2.D,A2.R,A2.U]
+    // Close the row in one contraction:
+    // - A1.R <-> A2.L
+    // - A0.L <-> A2.R
+    // t01 axes: [A0.L,A0.D,A0.U, A1.D,A1.R,A1.U]
     Tensor closed;
-    Contract(&t012, {0, 6}, &eye_lr, {0, 1}, &closed);
+    Contract(&t01, {0, 4}, &A2, {2, 0}, &closed);
     // closed axes: [A0.D,A0.U, A1.D,A1.U, A2.D,A2.U]
     return closed;
   };
 
-  Tensor R0 = row_ring(T3x3[0], T3x3[1], T3x3[2]);
-  Tensor R1 = row_ring(T3x3[3], T3x3[4], T3x3[5]);
-  Tensor R2 = row_ring(T3x3[6], T3x3[7], T3x3[8]);
+  for (const Tensor* t : T3x3) {
+    if (t == nullptr || t->IsDefault()) {
+      throw std::logic_error("TRGContractor::ContractFinal3x3_: default/null terminal tensor.");
+    }
+  }
+
+  Tensor R0 = row_ring(*T3x3[0], *T3x3[1], *T3x3[2]);
+  Tensor R1 = row_ring(*T3x3[3], *T3x3[4], *T3x3[5]);
+  Tensor R2 = row_ring(*T3x3[6], *T3x3[7], *T3x3[8]);
 
   // Contract vertically between rows: connect D (OUT) with U (IN).
   Tensor M01;
   Contract(&R0, {0, 2, 4}, &R1, {1, 3, 5}, &M01);
 
-  Tensor M012;
-  Contract(&M01, {3, 4, 5}, &R2, {1, 3, 5}, &M012);
-
-  // Close vertical PBC: trace (R0.Uc) with (R2.Dc) for c=0,1,2.
-  Tensor tmp = M012;
-  for (int iter = 0; iter < 3; ++iter) {
-    const size_t rank = tmp.Rank();
-    const size_t u_ax = rank / 2 - 1;  // last U
-    const size_t d_ax = rank - 1;      // last D
-    const auto& idx_d = tmp.GetIndex(d_ax);
-    const auto eye_du = Eye<TenElemT, QNT>(idx_d);
-    Tensor out;
-    Contract(&tmp, {d_ax, u_ax}, &eye_du, {1, 0}, &out);
-    tmp = std::move(out);
-  }
-
-  return tmp();
+  // Close vertical PBC in one contraction:
+  // - M01[0,1,2] (R0.U0,U1,U2) <-> R2[0,2,4] (R2.D0,D1,D2)
+  // - M01[3,4,5] (R1.D0,D1,D2) <-> R2[1,3,5] (R2.U0,U1,U2)
+  Tensor out;
+  Contract(&M01, {0, 1, 2, 3, 4, 5}, &R2, {0, 2, 4, 1, 3, 5}, &out);
+  return out();
 }
 
 template <typename TenElemT, typename QNT>
@@ -1162,14 +1150,13 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2
 
 template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3x3,
-                                                const uint32_t removed_id) const {
-    using qlten::Contract;
-  using qlten::Eye;
+TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<const Tensor*, 9>& T3x3,
+                                                 const uint32_t removed_id) const {
+  using qlten::Contract;
 
   if (removed_id >= 9) throw std::invalid_argument("TRGContractor::PunchHoleFinal3x3_: removed_id out of range.");
 
-  auto require_inv = [&](const Tensor& A, size_t axA, const Tensor& B, size_t axB, const char* where) {
+  auto require_inv = [&](const Tensor& A, const size_t axA, const Tensor& B, const size_t axB, const char* where) {
     if (A.IsDefault() || B.IsDefault())
       throw std::logic_error(std::string("TRGContractor::PunchHoleFinal3x3_: default tensor at ") + where);
     const auto& ia = A.GetIndex(axA);
@@ -1178,227 +1165,82 @@ TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<Tensor, 9>& T3
       throw std::logic_error(std::string("TRGContractor::PunchHoleFinal3x3_: index mismatch at ") + where);
   };
 
-  struct BondKey {
-    char kind;      // 'x' horizontal, 'y' vertical
-    uint8_t r, c;   // directed bond origin (r,c)
-    bool operator<(const BondKey& o) const {
-      if (kind != o.kind) return kind < o.kind;
-      if (r != o.r) return r < o.r;
-      return c < o.c;
-    }
-    bool operator==(const BondKey& o) const { return kind == o.kind && r == o.r && c == o.c; }
-  };
-
-  struct LabeledTensor {
-    Tensor ten;
-    std::vector<BondKey> labels; // per-axis bond label
-  };
-
   auto mod3 = [](int x) -> uint8_t { return static_cast<uint8_t>((x % 3 + 3) % 3); };
-  auto id = [](uint8_t r, uint8_t c) -> uint32_t { return uint32_t(r) * 3u + uint32_t(c); };
-  auto rc = [&](uint32_t i) -> std::pair<uint8_t, uint8_t> { return {uint8_t(i / 3u), uint8_t(i % 3u)}; };
-
-  // Directed bonds:
-  // - x(r,c): (r,c).R <-> (r,c+1).L
-  // - y(r,c): (r,c).D <-> (r+1,c).U
-  auto x = [&](uint8_t r, uint8_t c) -> BondKey { return BondKey{'x', r, c}; };
-  auto y = [&](uint8_t r, uint8_t c) -> BondKey { return BondKey{'y', r, c}; };
-
+  auto id = [](const uint8_t r, const uint8_t c) -> uint32_t { return uint32_t(r) * 3u + uint32_t(c); };
+  auto rc = [](const uint32_t i) -> std::pair<uint8_t, uint8_t> { return {uint8_t(i / 3u), uint8_t(i % 3u)}; };
   const auto [rr, cc] = rc(removed_id);
-
-  std::vector<LabeledTensor> comps;
-  comps.reserve(8);
-
-  for (uint8_t r = 0; r < 3; ++r) {
-    for (uint8_t c = 0; c < 3; ++c) {
-      const uint32_t sid = id(r, c);
-      if (sid == removed_id) continue;
-      const Tensor& T = T3x3[sid];
-      if (T.IsDefault())
-        throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor is default.");
-      
-      LabeledTensor lt;
-      lt.ten = T;
-      lt.labels = {
-          x(r, mod3(int(c) - 1)), // L
-          y(r, c),                // D
-          x(r, c),                // R
-          y(mod3(int(r) - 1), c)  // U
-      };
-      comps.push_back(std::move(lt));
-    }
-  }
-
-  auto trace_pair_inplace = [&](LabeledTensor& lt, size_t ax_a, size_t ax_b) {
-    if (ax_a == ax_b) throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: tracing identical axes.");
-    const auto& idx_a = lt.ten.GetIndex(ax_a);
-    const auto& idx_b = lt.ten.GetIndex(ax_b);
-
-    const bool a_is_out = (idx_a.GetDir() == qlten::TenIndexDirType::OUT);
-    const bool b_is_out = (idx_b.GetDir() == qlten::TenIndexDirType::OUT);
-    if (a_is_out == b_is_out)
-      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: bond axes must be opposite directions.");
-
-    const size_t ax_in = a_is_out ? ax_b : ax_a;
-    const size_t ax_out = a_is_out ? ax_a : ax_b;
-    const auto& idx_out = lt.ten.GetIndex(ax_out);
-
-    if (!(lt.ten.GetIndex(ax_in) == InverseIndex(idx_out))) {
-      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: trace legs are not inverse indices.");
-    }
-    const auto eye = Eye<TenElemT, QNT>(idx_out);
-
-    Tensor out;
-    Contract(&lt.ten, {ax_in, ax_out}, &eye, {0, 1}, &out);
-    lt.ten = std::move(out);
-
-    const size_t hi = std::max(ax_in, ax_out);
-    const size_t lo = std::min(ax_in, ax_out);
-    lt.labels.erase(lt.labels.begin() + hi);
-    lt.labels.erase(lt.labels.begin() + lo);
+  auto rel_id = [&](int dr, int dc) -> uint32_t {
+    return id(mod3(int(rr) + dr), mod3(int(cc) + dc));
   };
 
-  for (int safety = 0; safety < 200; ++safety) {
-    if (comps.size() == 1) {
-      std::map<BondKey, size_t> kmap;
-      std::vector<std::pair<size_t, size_t>> self_pairs;
-      for (size_t a = 0; a < comps[0].labels.size(); ++a) {
-        const auto& k = comps[0].labels[a];
-        if (kmap.count(k)) {
-          self_pairs.push_back({kmap[k], a});
-          kmap.erase(k); 
-        } else {
-          kmap[k] = a;
-        }
-      }
-      if (self_pairs.empty()) break; 
-      trace_pair_inplace(comps[0], self_pairs[0].first, self_pairs[0].second);
-      continue;
-    }
-
-    std::map<BondKey, std::pair<size_t, size_t>> open_bonds;
-    std::map<std::pair<size_t, size_t>, std::vector<std::pair<size_t, size_t>>> adj;
-
-    for (size_t i = 0; i < comps.size(); ++i) {
-      for (size_t a = 0; a < comps[i].labels.size(); ++a) {
-        const auto& k = comps[i].labels[a];
-        auto it = open_bonds.find(k);
-        if (it != open_bonds.end()) {
-          size_t j = it->second.first;
-          size_t b = it->second.second;
-          size_t u = std::min(i, j);
-          size_t v = std::max(i, j);
-          size_t ax_u = (i == u) ? a : b;
-          size_t ax_v = (i == u) ? b : a;
-          adj[{u, v}].push_back({ax_u, ax_v});
-        } else {
-          open_bonds[k] = {i, a};
-        }
-      }
-    }
-
-    if (adj.empty()) throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: components disconnected.");
-
-    struct Move {
-      size_t u, v;
-      long cost; 
-    };
-    Move best_move = {0, 0, 999999};
-    bool found_move = false;
-
-    for (const auto& kv : adj) {
-      size_t u = kv.first.first;
-      size_t v = kv.first.second;
-      size_t n_bonds = kv.second.size();
-      
-      long rank_u = static_cast<long>(comps[u].ten.Rank());
-      long rank_v = static_cast<long>(comps[v].ten.Rank());
-      
-      long cost = 0;
-      if (u == v) {
-        cost = rank_u - 2 * static_cast<long>(n_bonds);
-        cost -= 100000; 
-      } else {
-        cost = rank_u + rank_v - 2 * static_cast<long>(n_bonds);
-      }
-
-      if (!found_move || cost < best_move.cost) {
-        best_move = {u, v, cost};
-        found_move = true;
-      }
-    }
-
-    size_t u = best_move.u;
-    size_t v = best_move.v;
-    const auto& bonds = adj[{u, v}];
-
-    if (u == v) {
-      trace_pair_inplace(comps[u], bonds[0].first, bonds[0].second);
-    } else {
-      LabeledTensor A = std::move(comps[u]);
-      LabeledTensor B = std::move(comps[v]);
-      
-      std::vector<size_t> idx_A, idx_B;
-      std::set<size_t> set_A, set_B; 
-      for (const auto& p : bonds) {
-        idx_A.push_back(p.first);
-        idx_B.push_back(p.second);
-        set_A.insert(p.first);
-        set_B.insert(p.second);
-        require_inv(A.ten, p.first, B.ten, p.second, "multi-bond merge");
-      }
-
-      Tensor out;
-      Contract(&A.ten, idx_A, &B.ten, idx_B, &out);
-      
-      std::vector<BondKey> new_labels;
-      new_labels.reserve(A.labels.size() + B.labels.size() - 2 * bonds.size());
-      for (size_t k = 0; k < A.labels.size(); ++k) {
-        if (set_A.find(k) == set_A.end()) new_labels.push_back(A.labels[k]);
-      }
-      for (size_t k = 0; k < B.labels.size(); ++k) {
-        if (set_B.find(k) == set_B.end()) new_labels.push_back(B.labels[k]);
-      }
-      
-      LabeledTensor merged{std::move(out), std::move(new_labels)};
-      
-      comps.erase(comps.begin() + v);
-      comps.erase(comps.begin() + u);
-      comps.push_back(std::move(merged));
+  for (size_t sid = 0; sid < 9; ++sid) {
+    if (sid == removed_id) continue;
+    if (T3x3[sid] == nullptr || T3x3[sid]->IsDefault()) {
+      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor is default/null.");
     }
   }
 
-  if (comps.size() != 1)
-    throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: failed to fully contract components.");
+  const Tensor& T01 = *T3x3[rel_id(0, 1)];
+  const Tensor& T02 = *T3x3[rel_id(0, 2)];
+  const Tensor& T10 = *T3x3[rel_id(1, 0)];
+  const Tensor& T11 = *T3x3[rel_id(1, 1)];
+  const Tensor& T12 = *T3x3[rel_id(1, 2)];
+  const Tensor& T20 = *T3x3[rel_id(2, 0)];
+  const Tensor& T21 = *T3x3[rel_id(2, 1)];
+  const Tensor& T22 = *T3x3[rel_id(2, 2)];
 
-  Tensor hole = std::move(comps[0].ten);
-  auto labels = std::move(comps[0].labels);
-  if (labels.size() != 4)
+  // Contract one periodic row of 3 tensors into a rank-6 tensor with legs [D0,U0,D1,U1,D2,U2].
+  auto row_ring = [&](const Tensor& A0, const Tensor& A1, const Tensor& A2,
+                      const char* where01, const char* where0l2r, const char* where1r2l) -> Tensor {
+    require_inv(A0, 2, A1, 0, where01);
+    Tensor t01;
+    Contract(&A0, {2}, &A1, {0}, &t01);
+
+    // t01 axes: [A0.L, A0.D, A0.U, A1.D, A1.R, A1.U]
+    require_inv(t01, 0, A2, 2, where0l2r);  // A0.L <-> A2.R
+    require_inv(t01, 4, A2, 0, where1r2l);  // A1.R <-> A2.L
+    Tensor row;
+    Contract(&t01, {0, 4}, &A2, {2, 0}, &row);
+    return row;
+  };
+
+  // Row around the hole (right and left neighbors of removed site).
+  require_inv(T01, 2, T02, 0, "R0: T01{2} vs T02{0}");
+  Tensor R0;
+  Contract(&T01, {2}, &T02, {0}, &R0);  // axes: [T01.L,T01.D,T01.U,T02.D,T02.R,T02.U]
+
+  // Middle and bottom rows (each closed horizontally in one contraction).
+  Tensor R1 = row_ring(T10, T11, T12,
+                       "R1: T10{2} vs T11{0}",
+                       "R1: T10.L vs T12.R",
+                       "R1: T11.R vs T12.L");
+  Tensor R2 = row_ring(T20, T21, T22,
+                       "R2: T20{2} vs T21{0}",
+                       "R2: T20.L vs T22.R",
+                       "R2: T21.R vs T22.L");
+
+  // Vertically merge middle and bottom rows:
+  // R1.{D0,D1,D2} <-> R2.{U0,U1,U2}
+  require_inv(R1, 0, R2, 1, "R12: col0");
+  require_inv(R1, 2, R2, 3, "R12: col1");
+  require_inv(R1, 4, R2, 5, "R12: col2");
+  Tensor R12;
+  Contract(&R1, {0, 2, 4}, &R2, {1, 3, 5}, &R12);  // axes: [R1.U0,U1,U2, R2.D0,D1,D2]
+
+  // Final merge with row around hole:
+  // - R0.D01 <-> R12.U11,U12
+  // - R0.U01 <-> R12.D21,D22
+  require_inv(R0, 1, R12, 1, "Hraw: T01.D vs T11.U");
+  require_inv(R0, 3, R12, 2, "Hraw: T02.D vs T12.U");
+  require_inv(R0, 2, R12, 4, "Hraw: T01.U vs T21.D");
+  require_inv(R0, 5, R12, 5, "Hraw: T02.U vs T22.D");
+  Tensor hole;
+  Contract(&R0, {1, 3, 2, 5}, &R12, {1, 2, 4, 5}, &hole);  // axes: [R,L,D,U]
+
+  if (hole.Rank() != 4) {
     throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: final open legs are not rank-4.");
-
-  const std::array<BondKey, 4> want = {
-      x(rr, mod3(int(cc) - 1)), 
-      y(rr, cc),                
-      x(rr, cc),                
-      y(mod3(int(rr) - 1), cc)  
-  };
-
-  std::array<int, 4> perm = {-1, -1, -1, -1};
-  for (int w = 0; w < 4; ++w) {
-    for (int a = 0; a < 4; ++a) {
-      if (labels[static_cast<size_t>(a)] == want[static_cast<size_t>(w)]) {
-        perm[static_cast<size_t>(w)] = a;
-        break;
-      }
-    }
-    if (perm[static_cast<size_t>(w)] < 0)
-      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: missing expected open leg.");
   }
-
-  hole.Transpose({static_cast<size_t>(perm[0]),
-                  static_cast<size_t>(perm[1]),
-                  static_cast<size_t>(perm[2]),
-                  static_cast<size_t>(perm[3])});
+  hole.Transpose({1, 2, 0, 3});  // [R,L,D,U] -> [L,D,R,U]
   return hole;
 }
 
@@ -1628,9 +1470,9 @@ TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) con
   {
     const auto& top = scales_.at(last).tens;
     if (top_size == 9) {
-      const std::array<Tensor, 9> t3x3 = {top[0], top[1], top[2],
-                                          top[3], top[4], top[5],
-                                          top[6], top[7], top[8]};
+      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
+                                                  &top[3], &top[4], &top[5],
+                                                  &top[6], &top[7], &top[8]};
       for (uint32_t id = 0; id < 9; ++id) {
         if (anc[last].count(id) == 0) continue;
         holes_next.emplace(id, PunchHoleFinal3x3_(t3x3, id));
@@ -1692,9 +1534,9 @@ TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn
   }
 
   if (rows_ == 3 && cols_ == 3) {
-    std::array<Tensor, 9> t3x3 = {tn({0, 0}), tn({0, 1}), tn({0, 2}),
-                                  tn({1, 0}), tn({1, 1}), tn({1, 2}),
-                                  tn({2, 0}), tn({2, 1}), tn({2, 2})};
+    const std::array<const Tensor*, 9> t3x3 = {&tn({0, 0}), &tn({0, 1}), &tn({0, 2}),
+                                                &tn({1, 0}), &tn({1, 1}), &tn({1, 2}),
+                                                &tn({2, 0}), &tn({2, 1}), &tn({2, 2})};
     const uint32_t removed_id = NodeId_(site.row(), site.col());
     return PunchHoleFinal3x3_(t3x3, removed_id);
   }
@@ -1729,9 +1571,9 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
   {
     const auto& top = scales_.at(last).tens;
     if (top_size == 9) {
-      const std::array<Tensor, 9> t3x3 = {top[0], top[1], top[2],
-                                          top[3], top[4], top[5],
-                                          top[6], top[7], top[8]};
+      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
+                                                  &top[3], &top[4], &top[5],
+                                                  &top[6], &top[7], &top[8]};
       for (uint32_t id = 0; id < 9; ++id) {
         holes_cur.emplace(id, PunchHoleFinal3x3_(t3x3, id));
       }
@@ -1947,9 +1789,9 @@ TRGContractor<TenElemT, QNT>::PunchAllHoles(const TensorNetwork2D<TenElemT, QNT>
   }
 
   if (rows_ == 3 && cols_ == 3) {
-    std::array<Tensor, 9> t3x3 = {tn({0, 0}), tn({0, 1}), tn({0, 2}),
-                                  tn({1, 0}), tn({1, 1}), tn({1, 2}),
-                                  tn({2, 0}), tn({2, 1}), tn({2, 2})};
+    const std::array<const Tensor*, 9> t3x3 = {&tn({0, 0}), &tn({0, 1}), &tn({0, 2}),
+                                                &tn({1, 0}), &tn({1, 1}), &tn({1, 2}),
+                                                &tn({2, 0}), &tn({2, 1}), &tn({2, 2})};
     TensorNetwork2D<TenElemT, QNT> result(3, 3, BoundaryCondition::Periodic);
     for (size_t r = 0; r < 3; ++r) {
       for (size_t c = 0; c < 3; ++c) {

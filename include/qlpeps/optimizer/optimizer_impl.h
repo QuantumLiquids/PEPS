@@ -27,13 +27,6 @@
  * 5. Distributed Monte Carlo execution                 ← All ranks
  * 6. Energy evaluator gathers gradients to master      ← Standard gather
  * 7. Loop continues...
-*
-* PERFORMANCE IMPACT: 67% reduction in state broadcast overhead per optimization step
-*
-* TODO: Implement Stability Monitoring: Add checks in the code to automatically detect and reject unphysical energy values, reverting to the previous stable
-     state.
-   In cent:/home/gzcgu/haoxinwang/finite-size_PEPS_tJ/run_from_ipeps/InitDoping0.06D8_To12x12Mu1.5/iPEPS12x12D8SRMu1.5.log
-   is quite unstable example.
 */
 
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_OPTIMIZER_IMPL_H
