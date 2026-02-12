@@ -152,6 +152,26 @@ TEST(OptimizerParamsBuilderTest, DisableSpikeRecoveryWorks) {
   EXPECT_FALSE(params.spike_recovery_params.enable_rollback);
 }
 
+TEST(AutoStepSelectorParamsTest, DefaultConfigIsDisabled) {
+  AutoStepSelectorParams selector;
+  EXPECT_FALSE(selector.enabled);
+  EXPECT_EQ(selector.every_n_steps, 10u);
+  EXPECT_DOUBLE_EQ(selector.phase_switch_ratio, 0.3);
+  EXPECT_FALSE(selector.enable_in_deterministic);
+}
+
+TEST(OptimizerParamsBuilderTest, SetAutoStepSelectorPersists) {
+  OptimizerParamsBuilder builder;
+  builder.SetMaxIterations(20).SetLearningRate(0.2).WithSGD();
+  builder.SetAutoStepSelector(true, /*every_n_steps=*/7, /*phase_switch_ratio=*/0.4,
+                              /*enable_in_deterministic=*/true);
+  OptimizerParams params = builder.Build();
+  EXPECT_TRUE(params.base_params.auto_step_selector.enabled);
+  EXPECT_EQ(params.base_params.auto_step_selector.every_n_steps, 7u);
+  EXPECT_DOUBLE_EQ(params.base_params.auto_step_selector.phase_switch_ratio, 0.4);
+  EXPECT_TRUE(params.base_params.auto_step_selector.enable_in_deterministic);
+}
+
 // --- Factory default spike/checkpoint tests ---
 TEST(OptimizerFactoryTest, FactoryCreatedParamsHaveSpikeDefaults) {
   auto params = OptimizerFactory::CreateAdaGrad(100, 0.01, 1e-8, 0.0);

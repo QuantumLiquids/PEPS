@@ -13,6 +13,7 @@
 #include <iostream>
 #include <iomanip>
 #include "qlpeps/optimizer/optimizer.h"
+#include "qlpeps/optimizer/lr_schedulers.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/consts.h"
@@ -794,6 +795,84 @@ TEST_F(OptimizerTest, ActualPlateauDetection) {
   EXPECT_GT(result.total_iterations, test_params_.base_params.plateau_patience);
   EXPECT_FALSE(result.energy_trajectory.empty());
   EXPECT_FALSE(result.gradient_norms.empty());
+}
+
+TEST_F(OptimizerTest, AutoStepSelectorRejectsUnsupportedAlgorithm) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.1);
+  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+                                                          /*phase_switch_ratio=*/0.3,
+                                                          /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, LBFGSParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
+
+  auto evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    return {1.0, std::move(grad), 0.1};
+  };
+  EXPECT_THROW((void)optimizer.IterativeOptimize(test_tps_, evaluator), std::invalid_argument);
+}
+
+TEST_F(OptimizerTest, AutoStepSelectorRejectsSchedulerConflict) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.1,
+                                          std::make_unique<StepLR>(0.1, 1, 0.5));
+  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+                                                          /*phase_switch_ratio=*/0.3,
+                                                          /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, SGDParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
+
+  auto evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    return {1.0, std::move(grad), 0.1};
+  };
+  EXPECT_THROW((void)optimizer.IterativeOptimize(test_tps_, evaluator), std::invalid_argument);
+}
+
+TEST_F(OptimizerTest, AutoStepSelectorRejectsDeterministicByDefault) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.1);
+  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+                                                          /*phase_switch_ratio=*/0.3,
+                                                          /*enable_in_deterministic=*/false};
+  OptimizerParams params(base_params, SGDParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
+
+  auto evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    return {1.0, std::move(grad), 0.0};
+  };
+  EXPECT_THROW((void)optimizer.IterativeOptimize(test_tps_, evaluator), std::invalid_argument);
+}
+
+TEST_F(OptimizerTest, AutoStepSelectorMCIntervalAndMonotonicWriteback) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/6, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/6, /*learning_rate=*/3.0);
+  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/2,
+                                                          /*phase_switch_ratio=*/0.3,
+                                                          /*enable_in_deterministic=*/false};
+  OptimizerParams params(base_params, SGDParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
+
+  auto evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    const double energy = state.NormSquare();
+    return {energy, std::move(grad), 1e-6};
+  };
+
+  auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
+  ASSERT_EQ(result.total_iterations, 6u);
+  ASSERT_EQ(result.step_length_trajectory.size(), result.total_iterations);
+  // iter=0 is a trigger step (every_n_steps=2). For a quadratic objective,
+  // eta=1.5 reaches lower trial energy than eta=3.0, so first writeback is 1.5.
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[0], 1.5);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[1], result.step_length_trajectory[0]);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[2], 0.75);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[3], result.step_length_trajectory[2]);
+  for (size_t i = 1; i < result.step_length_trajectory.size(); ++i) {
+    EXPECT_LE(result.step_length_trajectory[i], result.step_length_trajectory[i - 1]);
+  }
 }
 
 // Test that optimization continues when no stopping criteria are met

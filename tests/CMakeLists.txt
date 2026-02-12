@@ -363,6 +363,13 @@ add_unittest(test_optimizer_params
         ""
 )
 
+# Auto step selector policy unit tests (single-rank)
+add_unittest(test_auto_step_selector_policy
+        "test_optimizer/test_auto_step_selector_policy.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
 # Spike detection / EMA tracker unit tests (header-only, no extra libs)
 add_unittest(test_spike_detection
         "test_optimizer/test_spike_detection.cpp"

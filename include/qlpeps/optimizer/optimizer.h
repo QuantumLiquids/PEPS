@@ -122,6 +122,7 @@ class Optimizer {
     std::vector<TenElemT> energy_trajectory;
     std::vector<double> energy_error_trajectory;
     std::vector<double> gradient_norms;
+    std::vector<double> step_length_trajectory;
     size_t total_iterations;
     bool converged;
     SpikeStatistics spike_stats;   ///< Spike detection statistics for the run
@@ -486,6 +487,12 @@ class Optimizer {
                          const WaveFunctionT& gradient,
                          double step_length,
                          const SGDParams& params);
+
+  // Side-effect-free SGD preview used by auto step-size selector.
+  WaveFunctionT SGDPreviewUpdate_(const WaveFunctionT& current_state,
+                                  const WaveFunctionT& gradient,
+                                  double step_length,
+                                  const SGDParams& params) const;
   
  };
 

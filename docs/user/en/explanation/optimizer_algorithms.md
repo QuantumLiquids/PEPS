@@ -37,7 +37,8 @@ OptimizerParams
 │   ├── gradient_tolerance    // Gradient convergence criterion
 │   ├── plateau_patience      // Plateau patience parameter
 │   ├── learning_rate         // Unified learning rate interface
-│   └── lr_scheduler          // Optional learning rate scheduler
+│   ├── lr_scheduler          // Optional learning rate scheduler
+│   └── auto_step_selector    // Optional MC-oriented auto step-size selector (v1)
 ├── AlgorithmParams (algorithm-specific)
 │   ├── SGDParams            // Stochastic Gradient Descent
 │   ├── AdamParams           // Adam optimizer
@@ -249,6 +250,26 @@ $$
 
 Track the best energy and reduce the learning rate by a factor when the energy
 improves by less than a threshold for a fixed patience window.
+
+## Auto step selector (v1, IterativeOptimize)
+
+This repository also provides an optional auto step-size selector in
+`Optimizer::IterativeOptimize` for MC-noisy runs.
+
+Current v1 scope:
+- Algorithms: SGD and SR only.
+- Candidate set: `{eta, eta/2}`.
+- Trigger: only when the iteration index is divisible by `every_n_steps` (no trigger on non-divisible final iterations).
+- Writeback: selected `eta` is persisted and forced to be non-increasing.
+- Two-phase policy:
+  - Early phase: aggressive mean-energy comparison.
+  - Late phase: halve only if improvement is significant versus error bars.
+
+Compatibility and safety:
+- Default mode assumes MC error bars are available.
+- Deterministic use must be explicitly enabled (`enable_in_deterministic=true`).
+- `lr_scheduler` cannot be combined with auto step selector in v1 (fail fast).
+- L-BFGS remains unchanged and does not use this selector.
 
 ## Monte Carlo noise (shared context)
 

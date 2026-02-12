@@ -389,7 +389,35 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   const auto &spike_cfg = params_.spike_recovery_params;
   const auto &ckpt_cfg = params_.checkpoint_params;
   const bool is_sr = params_.IsAlgorithm<StochasticReconfigurationParams>();
+  const bool is_sgd = params_.IsAlgorithm<SGDParams>();
   const bool is_lbfgs = params_.IsAlgorithm<LBFGSParams>();
+  const auto &selector_cfg = params_.base_params.auto_step_selector;
+  const bool selector_enabled = selector_cfg.enabled;
+  constexpr double kSelectorLateSigma = 1.0;
+
+  if (selector_enabled) {
+    if (!(is_sgd || is_sr)) {
+      throw std::invalid_argument(
+          "Auto step selector only supports SGD and SR in IterativeOptimize");
+    }
+    if (params_.base_params.lr_scheduler) {
+      throw std::invalid_argument(
+          "Auto step selector cannot be used together with lr_scheduler in v1");
+    }
+    if (selector_cfg.every_n_steps == 0) {
+      throw std::invalid_argument("Auto step selector every_n_steps must be > 0");
+    }
+    if (selector_cfg.phase_switch_ratio < 0.0 || selector_cfg.phase_switch_ratio > 1.0) {
+      throw std::invalid_argument(
+          "Auto step selector phase_switch_ratio must be within [0, 1]");
+    }
+    if (params_.base_params.learning_rate <= 0.0) {
+      throw std::invalid_argument(
+          "Auto step selector requires a positive base learning_rate");
+    }
+  }
+
+  double selector_base_eta = params_.base_params.learning_rate;
 
   if (is_lbfgs && rank_ == qlten::hp_numeric::kMPIMasterRank) {
     ResetLBFGSState_();
@@ -491,7 +519,9 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       }
 
       // === C: Compute learning rate and optimization update ===
-      double learning_rate = GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
+      double learning_rate = selector_enabled
+          ? selector_base_eta
+          : GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
       double effective_step_length = learning_rate;
 
       Timer update_timer("optimization_update");
@@ -509,6 +539,126 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         }
       }
 
+      const bool selector_triggered =
+          selector_enabled && (iter % selector_cfg.every_n_steps == 0);
+      bool use_precomputed_sr_direction = false;
+      SITPST sr_precomputed_direction;
+      size_t sr_precomputed_iters = 0;
+      double sr_precomputed_natural_grad_norm = 0.0;
+
+      if (selector_triggered) {
+        if (!selector_cfg.enable_in_deterministic) {
+          int deterministic_error_missing = 0;
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            deterministic_error_missing = (current_error <= 0.0) ? 1 : 0;
+          }
+          if (mpi_size_ > 1) {
+            HANDLE_MPI_ERROR(::MPI_Bcast(&deterministic_error_missing, 1, MPI_INT,
+                                         qlten::hp_numeric::kMPIMasterRank, comm_));
+          }
+          if (deterministic_error_missing == 1) {
+            throw std::invalid_argument(
+                "Auto step selector requires positive energy error in MC mode. "
+                "Set enable_in_deterministic=true to allow deterministic evaluators.");
+          }
+        }
+
+        const double candidate_eta = selector_base_eta;
+        const double candidate_half_eta = selector_base_eta * 0.5;
+        if (candidate_half_eta <= 0.0) {
+          throw std::invalid_argument(
+              "Auto step selector requires positive candidate step sizes");
+        }
+
+        auto evaluate_candidate = [&](const SITPST &trial_state) {
+          // v1 keeps the existing evaluator contract (energy, gradient, error).
+          // Gradient is intentionally ignored for selector trials; consider an
+          // energy-only evaluator path in v2 for expensive MC evaluations.
+          auto [trial_energy, trial_gradient, trial_error] = energy_evaluator(trial_state);
+          (void)trial_gradient;
+          return std::make_pair(std::real(trial_energy), trial_error);
+        };
+
+        double energy_eta = 0.0;
+        double error_eta = 0.0;
+        double energy_half_eta = 0.0;
+        double error_half_eta = 0.0;
+
+        if (is_sgd) {
+          const auto &sgd_params = params_.GetAlgorithmParams<SGDParams>();
+          SITPST trial_eta = SGDPreviewUpdate_(current_state, preprocessed_gradient, candidate_eta, sgd_params);
+          SITPST trial_half_eta = SGDPreviewUpdate_(current_state, preprocessed_gradient, candidate_half_eta, sgd_params);
+          auto [e_eta, err_eta] = evaluate_candidate(trial_eta);
+          auto [e_half, err_half] = evaluate_candidate(trial_half_eta);
+          energy_eta = e_eta;
+          error_eta = err_eta;
+          energy_half_eta = e_half;
+          error_half_eta = err_half;
+        } else if (is_sr) {
+          const auto &sr_params = params_.GetAlgorithmParams<StochasticReconfigurationParams>();
+          if (Ostar_samples == nullptr || Ostar_mean == nullptr) {
+            throw std::invalid_argument(
+                "Auto step selector for SR requires Ostar_samples and Ostar_mean");
+          }
+          auto [natural_grad, cg_iters] = CalculateNaturalGradient(
+              current_gradient, *Ostar_samples, *Ostar_mean, sr_init_guess);
+          sr_precomputed_direction = std::move(natural_grad);
+          sr_precomputed_iters = cg_iters;
+          sr_precomputed_natural_grad_norm = std::sqrt(sr_precomputed_direction.NormSquare());
+          use_precomputed_sr_direction = true;
+
+          auto make_sr_trial = [&](double eta) {
+            SITPST trial_state = current_state;
+            double applied_eta = eta;
+            if (sr_params.normalize_update) {
+              applied_eta /= std::sqrt(sr_precomputed_natural_grad_norm);
+            }
+            if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+              trial_state += (-applied_eta) * sr_precomputed_direction;
+            }
+            return trial_state;
+          };
+
+          SITPST trial_eta = make_sr_trial(candidate_eta);
+          SITPST trial_half_eta = make_sr_trial(candidate_half_eta);
+          auto [e_eta, err_eta] = evaluate_candidate(trial_eta);
+          auto [e_half, err_half] = evaluate_candidate(trial_half_eta);
+          energy_eta = e_eta;
+          error_eta = err_eta;
+          energy_half_eta = e_half;
+          error_half_eta = err_half;
+        }
+
+        double selected_eta = candidate_eta;
+        if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+          const double phase_boundary = selector_cfg.phase_switch_ratio *
+              static_cast<double>(params_.base_params.max_iterations);
+          const bool early_phase = static_cast<double>(iter) < phase_boundary;
+          if (early_phase) {
+            if (energy_half_eta < energy_eta) {
+              selected_eta = candidate_half_eta;
+            }
+          } else {
+            const double improvement = energy_eta - energy_half_eta;
+            const double threshold = kSelectorLateSigma * std::max(error_eta, error_half_eta);
+            if (improvement > threshold) {
+              selected_eta = candidate_half_eta;
+            }
+          }
+        }
+        if (mpi_size_ > 1) {
+          HANDLE_MPI_ERROR(::MPI_Bcast(&selected_eta, 1, MPI_DOUBLE,
+                                       qlten::hp_numeric::kMPIMasterRank, comm_));
+        }
+        if (rank_ == qlten::hp_numeric::kMPIMasterRank && selected_eta < candidate_eta) {
+          std::cout << "[AUTO_STEP] Iter " << iter << ": step size halved "
+                    << candidate_eta << " -> " << selected_eta << std::endl;
+        }
+        selector_base_eta = std::min(selector_base_eta, selected_eta);
+        learning_rate = selector_base_eta;
+        effective_step_length = learning_rate;
+      }
+
       SITPST updated_state;
       size_t sr_iterations = 0;
       double sr_natural_grad_norm = 0.0;
@@ -521,16 +671,33 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           updated_state = SGDUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
         }
         else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
-          // Fix Intel icpx compiler crash: avoid structured binding in lambda
-          auto sr_result = StochasticReconfigurationUpdate(
-              current_state, current_gradient,
-              Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
-              Ostar_mean ? *Ostar_mean : SITPST{},
-              learning_rate, sr_init_guess, algo_params.normalize_update);
-          updated_state = std::get<0>(sr_result);
-          sr_natural_grad_norm = std::get<1>(sr_result);
-          sr_iterations = std::get<2>(sr_result);
-          sr_init_guess = std::get<0>(sr_result);
+          if (selector_triggered && use_precomputed_sr_direction) {
+            double applied_step = learning_rate;
+            if (algo_params.normalize_update) {
+              applied_step /= std::sqrt(sr_precomputed_natural_grad_norm);
+            }
+            updated_state = current_state;
+            if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+              updated_state += (-applied_step) * sr_precomputed_direction;
+            }
+            sr_natural_grad_norm = sr_precomputed_natural_grad_norm;
+            sr_iterations = sr_precomputed_iters;
+            // Keep alignment with existing SR path: updated_state is meaningful
+            // on master rank only at this point; this assignment intentionally
+            // follows that same rank-local convention.
+            sr_init_guess = updated_state;
+          } else {
+            // Fix Intel icpx compiler crash: avoid structured binding in lambda
+            auto sr_result = StochasticReconfigurationUpdate(
+                current_state, current_gradient,
+                Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
+                Ostar_mean ? *Ostar_mean : SITPST{},
+                learning_rate, sr_init_guess, algo_params.normalize_update);
+            updated_state = std::get<0>(sr_result);
+            sr_natural_grad_norm = std::get<1>(sr_result);
+            sr_iterations = std::get<2>(sr_result);
+            sr_init_guess = std::get<0>(sr_result);
+          }
         }
         else if constexpr (std::is_same_v<T, AdaGradParams>) {
           updated_state = AdaGradUpdate(current_state, preprocessed_gradient, learning_rate);
@@ -694,6 +861,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // === F: Trajectories, best-state, stopping, state update, log, callback ===
       result.energy_trajectory.push_back(current_energy);
+      result.step_length_trajectory.push_back(effective_step_length);
       if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         result.energy_error_trajectory.push_back(current_error);
         result.gradient_norms.push_back(grad_norm);
@@ -872,6 +1040,36 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
   // CRITICAL MPI DESIGN: Do NOT broadcast here!
   // 
   // RESPONSIBILITY SEPARATION: Energy evaluator owns all state distribution for Monte Carlo sampling.
+  return updated_state;
+}
+
+template<typename TenElemT, typename QNT>
+typename Optimizer<TenElemT, QNT>::SITPST
+Optimizer<TenElemT, QNT>::SGDPreviewUpdate_(const SITPST &current_state,
+                                            const SITPST &gradient,
+                                            double step_length,
+                                            const SGDParams &params) const {
+  SITPST updated_state = current_state;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    if (params.weight_decay > 0.0) {
+      const double decay_factor = 1.0 - step_length * params.weight_decay;
+      updated_state *= decay_factor;
+    }
+
+    if (params.momentum > 0.0) {
+      SITPST velocity_for_preview =
+          sgd_momentum_initialized_ ? velocity_ : SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      velocity_for_preview = params.momentum * velocity_for_preview + gradient;
+      if (params.nesterov) {
+        SITPST nesterov_update = params.momentum * velocity_for_preview + gradient;
+        updated_state += (-step_length) * nesterov_update;
+      } else {
+        updated_state += (-step_length) * velocity_for_preview;
+      }
+    } else {
+      updated_state += (-step_length) * gradient;
+    }
+  }
   return updated_state;
 }
 

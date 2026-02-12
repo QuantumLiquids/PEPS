@@ -191,6 +191,36 @@ auto opt_params = qlpeps::OptimizerParamsBuilder()
 - 裁剪仅适用于一阶优化器（SGD/AdaGrad/Adam）。
 - 设置裁剪前先调用 `SetMaxIterations` 或 `SetLearningRate`。
 
+### 自动步长选择器（面向 MC，v1）
+
+`IterativeOptimize` 可选启用自动步长选择器，用少量候选步长应对 MC 噪声。
+
+```cpp
+auto opt_params = qlpeps::OptimizerParamsBuilder()
+    .SetMaxIterations(1000)
+    .SetLearningRate(0.1)
+    .WithSGD()
+    .SetAutoStepSelector(
+        /*enabled=*/true,
+        /*every_n_steps=*/10,
+        /*phase_switch_ratio=*/0.3,
+        /*enable_in_deterministic=*/false)
+    .Build();
+```
+
+v1 行为：
+- 支持算法：仅 SGD 与 SR。
+- 候选集合：`{eta, eta/2}`。
+- 触发频率：仅在迭代号可被 `every_n_steps` 整除时触发；若最后一步不整除，则该步不会触发选择器。
+- 写回策略：选中步长会写回，且保持单调不增。
+- 相位策略：前期（`iter < ratio * max_iterations`）偏激进按均值选；后期要求相对误差条有显著改进才降步长。
+
+重要约束：
+- 默认仅 MC 模式可用（`enable_in_deterministic=false`）；deterministic 评估器需显式开启。
+- v1 中 `lr_scheduler` 与自动步长选择器不能同时启用（fail-fast）。
+- L-BFGS 行为不变，不使用该功能。
+- 功能实现在 `IterativeOptimize`，不在 `LineSearchOptimize` 路径。
+
 ### Checkpointing
 
 ```cpp

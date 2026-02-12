@@ -190,6 +190,37 @@ Notes:
 - Clipping applies only to first-order optimizers (SGD/AdaGrad/Adam).
 - Call `SetMaxIterations` or `SetLearningRate` before setting clip values.
 
+### Auto step selector (MC-oriented, v1)
+
+`IterativeOptimize` can optionally select step size from a small candidate set
+for noisy MC runs.
+
+```cpp
+auto opt_params = qlpeps::OptimizerParamsBuilder()
+    .SetMaxIterations(1000)
+    .SetLearningRate(0.1)
+    .WithSGD()
+    .SetAutoStepSelector(
+        /*enabled=*/true,
+        /*every_n_steps=*/10,
+        /*phase_switch_ratio=*/0.3,
+        /*enable_in_deterministic=*/false)
+    .Build();
+```
+
+v1 behavior:
+- Supported algorithms: SGD and SR only.
+- Candidate set: `{eta, eta/2}`.
+- Trigger policy: only at iteration indices divisible by `every_n_steps`; if the last iteration index is not divisible, no final trigger occurs.
+- Writeback: selected eta is written back and kept non-increasing.
+- Phase policy: early phase (`iter < ratio * max_iterations`) is mean-energy aggressive; late phase requires significant improvement over error bars.
+
+Important constraints:
+- Default is MC-only (`enable_in_deterministic=false`); deterministic evaluators require explicit opt-in.
+- `lr_scheduler` and auto step selector cannot be enabled together in v1 (fail fast).
+- L-BFGS is unchanged; this feature is not used for L-BFGS.
+- This is implemented in `IterativeOptimize`, not `LineSearchOptimize`.
+
 ### Checkpointing
 
 ```cpp

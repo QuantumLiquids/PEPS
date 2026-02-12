@@ -37,7 +37,8 @@ OptimizerParams
 │   ├── gradient_tolerance    // 梯度收敛阈值
 │   ├── plateau_patience      // 平台期耐心参数
 │   ├── learning_rate         // 统一学习率接口
-│   └── lr_scheduler          // 可选学习率调度器
+│   ├── lr_scheduler          // 可选学习率调度器
+│   └── auto_step_selector    // 可选 MC 导向自动步长选择器（v1）
 ├── AlgorithmParams（算法特定）
 │   ├── SGDParams            // 随机梯度下降
 │   ├── AdamParams           // Adam
@@ -248,6 +249,26 @@ $$
 **平台触发**：
 
 跟踪最优能量，在固定的耐心窗口内能量提升小于阈值时，将学习率按比例下降。
+
+## 自动步长选择器（v1，IterativeOptimize）
+
+本仓库在 `Optimizer::IterativeOptimize` 中提供了可选自动步长选择器，
+用于处理 MC 噪声场景下的步长选择。
+
+当前 v1 范围：
+- 算法：仅 SGD 和 SR。
+- 候选集合：`{eta, eta/2}`。
+- 触发频率：仅在迭代号可被 `every_n_steps` 整除时触发（最后一步若不整除则不触发）。
+- 写回策略：选中 `eta` 会写回，并保持单调不增。
+- 两阶段策略：
+  - 前期：偏激进，按均值能量比较。
+  - 后期：只有当相对误差条有显著改进时才降为 `eta/2`。
+
+兼容性与安全性：
+- 默认假设有 MC 误差条。
+- deterministic 场景需显式开启（`enable_in_deterministic=true`）。
+- v1 中 `lr_scheduler` 与自动步长选择器不可同时启用（fail-fast）。
+- L-BFGS 行为不变，不使用该选择器。
 
 ## 蒙特卡洛噪声（共享背景）
 
