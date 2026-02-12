@@ -30,7 +30,7 @@ using qlten::QLTensor;
  * @brief Optimizer for VMC PEPS that handles different optimization strategies with MPI support
  * 
  * This class provides a unified interface for different optimization strategies.
- * It supports line search and iterative optimization, with or without energy error support.
+ * It supports iterative optimization with optional initial-step and periodic step selectors.
  * 
  * The optimization strategies are:
  * 1. SGD (with momentum and Nesterov acceleration)
@@ -141,32 +141,6 @@ class Optimizer {
             const MPI_Comm& comm,
             int rank,
             int mpi_size);
-
-  /**
-   * @brief Perform line search optimization
-   * 
-   * @param initial_state Initial TPS state
-   * @param energy_evaluator Function to evaluate energy and gradient
-   * @param callback Optional callback for monitoring progress
-   * @return Optimization result
-   */
-  OptimizationResult LineSearchOptimize(
-      const WaveFunctionT& initial_state,
-      std::function<std::pair<TenElemT, WaveFunctionT>(const WaveFunctionT&)> energy_evaluator,
-      const OptimizationCallback& callback = OptimizationCallback{});
-
-  /**
-   * @brief Perform line search optimization with energy error support
-   * 
-   * @param initial_state Initial TPS state
-   * @param energy_evaluator Function to evaluate energy, gradient, and error
-   * @param callback Optional callback for monitoring progress
-   * @return Optimization result
-   */
-  OptimizationResult LineSearchOptimize(
-      const WaveFunctionT& initial_state,
-      std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT&)> energy_evaluator,
-      const OptimizationCallback& callback = OptimizationCallback{});
 
   /**
    * @brief Perform iterative optimization with energy error support
@@ -346,7 +320,7 @@ class Optimizer {
    * - Prepare for potential future optimizations
    * 
    * Note: This method is automatically called at the end of optimization methods
-   * (LineSearchOptimize, IterativeOptimize). Users typically don't need to call
+   * (IterativeOptimize). Users typically don't need to call
    * it manually unless they want to explicitly clean up state between operations.
    */
   void ClearUp();
@@ -488,7 +462,9 @@ class Optimizer {
                          double step_length,
                          const SGDParams& params);
 
-  // Side-effect-free SGD preview used by auto step-size selector.
+  // Side-effect-free SGD preview used by step-size selectors.
+  // NOTE: when momentum > 0, preview reads current velocity_ but does not mutate it.
+  // This is intended for single-step candidate comparison, not multi-step trajectory simulation.
   WaveFunctionT SGDPreviewUpdate_(const WaveFunctionT& current_state,
                                   const WaveFunctionT& gradient,
                                   double step_length,

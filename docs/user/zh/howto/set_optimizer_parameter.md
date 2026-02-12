@@ -214,12 +214,14 @@ v1 行为：
 - 触发频率：仅在迭代号可被 `every_n_steps` 整除时触发；若最后一步不整除，则该步不会触发选择器。
 - 写回策略：选中步长会写回，且保持单调不增。
 - 相位策略：前期（`iter < ratio * max_iterations`）偏激进按均值选；后期要求相对误差条有显著改进才降步长。
+- 触发步 MC 成本：每次触发总计会评估 3 次能量（主路径 1 次 + 候选试算 2 次）。
+- 若同时启用 `SetInitialStepSelector(enabled=true, max_line_search_steps=k, ...)`，则第 0 步会评估 `1 + k` 次能量。
 
 重要约束：
 - 默认仅 MC 模式可用（`enable_in_deterministic=false`）；deterministic 评估器需显式开启。
 - v1 中 `lr_scheduler` 与自动步长选择器不能同时启用（fail-fast）。
 - L-BFGS 行为不变，不使用该功能。
-- 功能实现在 `IterativeOptimize`，不在 `LineSearchOptimize` 路径。
+- 功能实现在 `IterativeOptimize`。
 
 ### Checkpointing
 
@@ -266,7 +268,6 @@ qlpeps::VMCPEPSOptimizerParams vmc_params(
 
 实现路径说明：
 - 本仓库中的 L-BFGS 走 `Optimizer::IterativeOptimize` 主链路。
-- `LineSearchOptimize` 不属于当前 L-BFGS 生产路径。
 
 ## 相关阅读
 

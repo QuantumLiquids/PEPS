@@ -160,6 +160,13 @@ TEST(AutoStepSelectorParamsTest, DefaultConfigIsDisabled) {
   EXPECT_FALSE(selector.enable_in_deterministic);
 }
 
+TEST(InitialStepSelectorParamsTest, DefaultConfigIsDisabled) {
+  InitialStepSelectorParams selector;
+  EXPECT_FALSE(selector.enabled);
+  EXPECT_EQ(selector.max_line_search_steps, 3u);
+  EXPECT_FALSE(selector.enable_in_deterministic);
+}
+
 TEST(OptimizerParamsBuilderTest, SetAutoStepSelectorPersists) {
   OptimizerParamsBuilder builder;
   builder.SetMaxIterations(20).SetLearningRate(0.2).WithSGD();
@@ -170,6 +177,17 @@ TEST(OptimizerParamsBuilderTest, SetAutoStepSelectorPersists) {
   EXPECT_EQ(params.base_params.auto_step_selector.every_n_steps, 7u);
   EXPECT_DOUBLE_EQ(params.base_params.auto_step_selector.phase_switch_ratio, 0.4);
   EXPECT_TRUE(params.base_params.auto_step_selector.enable_in_deterministic);
+}
+
+TEST(OptimizerParamsBuilderTest, SetInitialStepSelectorPersists) {
+  OptimizerParamsBuilder builder;
+  builder.SetMaxIterations(20).SetLearningRate(0.2).WithSGD();
+  builder.SetInitialStepSelector(true, /*max_line_search_steps=*/5,
+                                 /*enable_in_deterministic=*/true);
+  OptimizerParams params = builder.Build();
+  EXPECT_TRUE(params.base_params.initial_step_selector.enabled);
+  EXPECT_EQ(params.base_params.initial_step_selector.max_line_search_steps, 5u);
+  EXPECT_TRUE(params.base_params.initial_step_selector.enable_in_deterministic);
 }
 
 // --- Factory default spike/checkpoint tests ---

@@ -163,6 +163,21 @@ struct AutoStepSelectorParams {
 };
 
 /**
+ * @struct InitialStepSelectorParams
+ * @brief Optional initial-step selector used at the first optimization step.
+ *
+ * Semantics:
+ * - enabled=false: disabled, optimizer uses the configured learning rate directly.
+ * - max_line_search_steps: evaluate cumulative candidates {eta, 2*eta, ..., k*eta}.
+ * - enable_in_deterministic: allow running selector when evaluator error bars are unavailable.
+ */
+struct InitialStepSelectorParams {
+  bool enabled = false;
+  size_t max_line_search_steps = 3;
+  bool enable_in_deterministic = false;
+};
+
+/**
  * @struct AdaGradParams
  * @brief Parameters for AdaGrad optimization algorithm
  * 
@@ -286,7 +301,9 @@ struct OptimizerParams {
     std::optional<double> clip_value;
     /// Optional global L2 norm clipping threshold. unset -> no clipping
     std::optional<double> clip_norm;
-    /// Optional auto step-size selector config (disabled by default)
+    /// Optional initial-step selector config (disabled by default)
+    InitialStepSelectorParams initial_step_selector;
+    /// Optional periodic auto step-size selector config (disabled by default)
     AutoStepSelectorParams auto_step_selector;
     
     // No default constructor - force explicit specification
@@ -295,7 +312,8 @@ struct OptimizerParams {
                std::unique_ptr<LearningRateScheduler> scheduler = nullptr)
       : max_iterations(max_iter), energy_tolerance(energy_tol), gradient_tolerance(grad_tol),
         plateau_patience(patience), learning_rate(learning_rate), lr_scheduler(std::move(scheduler)),
-        clip_value(std::nullopt), clip_norm(std::nullopt), auto_step_selector() {}
+        clip_value(std::nullopt), clip_norm(std::nullopt),
+        initial_step_selector(), auto_step_selector() {}
         
     // Copy constructor
     BaseParams(const BaseParams& other)
@@ -304,6 +322,7 @@ struct OptimizerParams {
         learning_rate(other.learning_rate),
         lr_scheduler(other.lr_scheduler ? other.lr_scheduler->Clone() : nullptr),
         clip_value(other.clip_value), clip_norm(other.clip_norm),
+        initial_step_selector(other.initial_step_selector),
         auto_step_selector(other.auto_step_selector) {}
         
     // Copy assignment operator
@@ -317,6 +336,7 @@ struct OptimizerParams {
         lr_scheduler = other.lr_scheduler ? other.lr_scheduler->Clone() : nullptr;
         clip_value = other.clip_value;
         clip_norm = other.clip_norm;
+        initial_step_selector = other.initial_step_selector;
         auto_step_selector = other.auto_step_selector;
       }
       return *this;
@@ -750,6 +770,22 @@ public:
     }
     base_params_->auto_step_selector = AutoStepSelectorParams{
         enabled, every_n_steps, phase_switch_ratio, enable_in_deterministic};
+    return *this;
+  }
+
+  /**
+   * @brief Configure optional initial-step selector for IterativeOptimize.
+   *
+   * Requires BaseParams to be set first.
+   */
+  OptimizerParamsBuilder& SetInitialStepSelector(bool enabled,
+                                                 size_t max_line_search_steps = 3,
+                                                 bool enable_in_deterministic = false) {
+    if (!base_params_) {
+      throw std::invalid_argument("BaseParams must be set before SetInitialStepSelector");
+    }
+    base_params_->initial_step_selector = InitialStepSelectorParams{
+        enabled, max_line_search_steps, enable_in_deterministic};
     return *this;
   }
 

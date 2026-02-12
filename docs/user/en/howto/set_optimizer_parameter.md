@@ -214,12 +214,14 @@ v1 behavior:
 - Trigger policy: only at iteration indices divisible by `every_n_steps`; if the last iteration index is not divisible, no final trigger occurs.
 - Writeback: selected eta is written back and kept non-increasing.
 - Phase policy: early phase (`iter < ratio * max_iterations`) is mean-energy aggressive; late phase requires significant improvement over error bars.
+- MC cost per trigger: each trigger step evaluates 3 energies in total (main-path evaluation + 2 trial evaluations).
+- If `SetInitialStepSelector(enabled=true, max_line_search_steps=k, ...)` is also enabled, iteration 0 evaluates `1 + k` energies.
 
 Important constraints:
 - Default is MC-only (`enable_in_deterministic=false`); deterministic evaluators require explicit opt-in.
 - `lr_scheduler` and auto step selector cannot be enabled together in v1 (fail fast).
 - L-BFGS is unchanged; this feature is not used for L-BFGS.
-- This is implemented in `IterativeOptimize`, not `LineSearchOptimize`.
+- This is implemented in `IterativeOptimize`.
 
 ### Checkpointing
 
@@ -266,7 +268,6 @@ qlpeps::VMCPEPSOptimizerParams vmc_params(
 
 Implementation path note:
 - L-BFGS in this repo is implemented in `Optimizer::IterativeOptimize`.
-- `LineSearchOptimize` is not part of the L-BFGS production path.
 
 ## Related
 

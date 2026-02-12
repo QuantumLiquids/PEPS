@@ -12,6 +12,7 @@
 #include <sstream>
 #include <iostream>
 #include <iomanip>
+#include <limits>
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/optimizer/lr_schedulers.h"
 #include "qlpeps/optimizer/optimizer_params.h"
@@ -219,25 +220,48 @@ TEST_F(OptimizerTest, BasicOptimizationFunctionality) {
   EXPECT_TRUE(true); // If we reach here, the inlined update logic works correctly
 }
 
-// Test line search optimization
-TEST_F(OptimizerTest, LineSearchOptimization) {
-  // Use SGD for line search functionality
-  OptimizerParams::BaseParams base_params(1000, 1e-2, 1e-4, 20, 0.1);
-  SGDParams sgd_params(0.0, false);
-  test_params_ = OptimizerParams(base_params, sgd_params);
+TEST_F(OptimizerTest, InitialStepSelectorChoosesBestCumulativeStepAtIterZero) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/1, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/1, /*learning_rate=*/0.3);
+  base_params.initial_step_selector = InitialStepSelectorParams{/*enabled=*/true,
+                                                                /*max_line_search_steps=*/3,
+                                                                /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, SGDParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
 
-  OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
+  auto evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    const double energy = state.NormSquare();
+    return {energy, std::move(grad), /*error=*/1.0};
+  };
 
-  auto result = optimizer.LineSearchOptimize(test_tps_,
-                                             [this](const SITPST &state) { return MockEnergyEvaluator(state); });
+  auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
+  ASSERT_EQ(result.total_iterations, 1u);
+  ASSERT_EQ(result.step_length_trajectory.size(), 1u);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory.front(), 0.9);
+}
 
-  EXPECT_TRUE(result.converged);
-  EXPECT_FALSE(result.energy_trajectory.empty());
-  EXPECT_FALSE(result.gradient_norms.empty());
+TEST_F(OptimizerTest, InitialStepSelectorWritebackPersistsWhenPeriodicSelectorIsDisabled) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.3);
+  base_params.initial_step_selector = InitialStepSelectorParams{/*enabled=*/true,
+                                                                /*max_line_search_steps=*/3,
+                                                                /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, SGDParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
 
-  // Energy should be finite
-  EXPECT_TRUE(std::isfinite(result.final_energy));
-  EXPECT_TRUE(std::isfinite(result.min_energy));
+  auto evaluator = [](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    const double energy = state.NormSquare();
+    return {energy, std::move(grad), /*error=*/1.0};
+  };
+
+  auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
+  ASSERT_EQ(result.total_iterations, 3u);
+  ASSERT_EQ(result.step_length_trajectory.size(), 3u);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[0], 0.9);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[1], 0.9);
+  EXPECT_DOUBLE_EQ(result.step_length_trajectory[2], 0.9);
 }
 
 // Test iterative optimization
@@ -873,6 +897,44 @@ TEST_F(OptimizerTest, AutoStepSelectorMCIntervalAndMonotonicWriteback) {
   for (size_t i = 1; i < result.step_length_trajectory.size(); ++i) {
     EXPECT_LE(result.step_length_trajectory[i], result.step_length_trajectory[i - 1]);
   }
+}
+
+TEST_F(OptimizerTest, AutoStepSelectorNonFiniteTrialErrorThrowsOnAllRanks) {
+  if (mpi_size_ < 2) {
+    GTEST_SKIP() << "Requires >=2 MPI ranks for rank-consistency check.";
+  }
+
+  OptimizerParams::BaseParams base_params(/*max_iter=*/2, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/2, /*learning_rate=*/0.2);
+  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+                                                          /*phase_switch_ratio=*/0.3,
+                                                          /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, SGDParams());
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
+
+  auto evaluator = [this](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    SITPST grad = state;
+    const double energy = state.NormSquare();
+    const double error = (rank_ == qlten::hp_numeric::kMPIMasterRank)
+                             ? std::numeric_limits<double>::quiet_NaN()
+                             : 1e-3;
+    return {energy, std::move(grad), error};
+  };
+
+  bool threw = false;
+  try {
+    (void)optimizer.IterativeOptimize(test_tps_, evaluator);
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+
+  int threw_local = threw ? 1 : 0;
+  int threw_min = 0;
+  int threw_max = 0;
+  HANDLE_MPI_ERROR(::MPI_Allreduce(&threw_local, &threw_min, 1, MPI_INT, MPI_MIN, comm_));
+  HANDLE_MPI_ERROR(::MPI_Allreduce(&threw_local, &threw_max, 1, MPI_INT, MPI_MAX, comm_));
+  EXPECT_EQ(threw_min, 1);
+  EXPECT_EQ(threw_max, 1);
 }
 
 // Test that optimization continues when no stopping criteria are met
