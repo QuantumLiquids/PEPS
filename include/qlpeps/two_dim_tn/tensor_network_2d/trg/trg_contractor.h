@@ -351,8 +351,8 @@ class TRGContractor {
     // layer_updates[s] stores the tensors that would change at scale s (node_id -> tensor).
     std::vector<std::map<uint32_t, Tensor>> layer_updates;
     // layer_splits[s] stores split data for dirty nodes at scale s.
-    // Key: node_id -> array of 2 optional TrialSplitData (one per parent-slot).
-    std::vector<std::map<uint32_t, std::array<std::optional<TrialSplitData>, 2>>> layer_splits;
+    // Key: node_id -> TrialSplitData (per-node, both parent-slots are identical).
+    std::vector<std::map<uint32_t, TrialSplitData>> layer_splits;
   };
 
   /**
@@ -562,13 +562,10 @@ class TRGContractor {
   Tensor PunchHoleBackpropGeneric_(const SiteIdx& site) const;
 
   // ---- PunchHole helpers (shared by future terminators / larger sizes) ----
-  int ParentSlot_(size_t scale, uint32_t fine_id, uint32_t parent_id) const;
-
   // Adjoint pullback from split-piece holes back to the original rank-4 tensor hole,
-  // using the *linearized* (frozen) forward SVD factors cached per (node, parent-slot).
+  // using the *linearized* (frozen) forward SVD factors cached per node.
   Tensor LinearSplitAdjointToHole_(size_t scale,
                                   uint32_t node,
-                                  uint32_t parent,
                                   const Tensor* H_P,
                                   const Tensor* H_Q) const;
 
@@ -616,23 +613,27 @@ class TRGContractor {
     // For impurity TRG / PunchHole we must reuse the same split pieces as used in the forward TRG
     // contraction. Storing them explicitly keeps the later hole code simple and avoids repeated SVD.
     //
-    // Each *edge context* (fine node -> one of its coarse parents) is split by exactly one of
-    // {SplitType0_, SplitType1_} during the forward TRG. This matters because for checkerboard PBC
-    // a fine node typically participates in TWO parents, and (critically) it may play different
-    // roles in each parent (e.g. odd-layer node can be E in one diamond but W in another).
-    //
-    // Therefore, for impurity TRG / PunchHole we must cache split data per (node, parent-slot),
-    // not per node.
+    // Structural invariant (checked by ValidateTopologyConsistency_): in checkerboard PBC,
+    // each fine node's two parent contexts always yield the same split type, so we store
+    // split data per node (not per parent-slot).
     //
     // Split types:
     // - type0: P(l, u, a_out), Q(a_in, d, r)
     // - type1: Q(l, d, a_out), P(a_in, r, u)
     enum class SplitType : uint8_t { Type0 = 0, Type1 = 1 };
-    std::vector<std::array<SplitType, 2>> split_type;   // per parent-slot (0/1)
-    std::vector<std::array<Tensor, 2>> split_P;         // per parent-slot
-    std::vector<std::array<Tensor, 2>> split_Q;         // per parent-slot
 
-    // --- Split isometries (for impurity TRG / PunchHole linearization) ---
+    // --- Per-node split cache ---
+    //
+    // Structural invariant: in checkerboard PBC, each fine node participates in exactly
+    // 2 coarse parents with symmetric roles ({TL,BR}, {TR,BL}, {N,S}, {E,W}). These
+    // role-pairs always map to the same split type via ChildSplitType_. Therefore the SVD
+    // result is identical for both parent contexts, and we store it once per node (not per
+    // parent-slot). This halves split-cache memory and eliminates redundant SVDs.
+    std::vector<SplitType> split_type;       // per node
+    std::vector<Tensor> split_P;             // per node
+    std::vector<Tensor> split_Q;             // per node
+
+    // Split isometries for impurity TRG / PunchHole linearization.
     //
     // Store the *fixed* SVD isometries and diag reweighting from the forward pass, so that
     // for any updated tensor X at this node we can compute its split pieces (P_X, Q_X) in the
@@ -647,9 +648,9 @@ class TRGContractor {
     //   P_X = S^{-1/2} * (U^T * A_X)
     //
     // Here S^{-1/2} is taken elementwise on the retained singular values (diag tensor).
-    std::vector<std::array<Tensor, 2>> split_U;           // per parent-slot
-    std::vector<std::array<Tensor, 2>> split_Vt;          // per parent-slot
-    std::vector<std::array<qlten::QLTensor<RealT, QNT>, 2>> split_S_inv_sqrt; // per parent-slot
+    std::vector<Tensor> split_U;             // per node
+    std::vector<Tensor> split_Vt;            // per node
+    std::vector<qlten::QLTensor<RealT, QNT>> split_S_inv_sqrt; // per node
   };
 
   struct SplitARes {
@@ -673,6 +674,7 @@ class TRGContractor {
 
   void BuildScale0GraphPBCSquare_();
   void BuildTopology_();
+  void ValidateTopologyConsistency_() const;
   
   // Helpers for incremental updates
   // void MarkDirtySeed_(uint32_t node);

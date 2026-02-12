@@ -22,18 +22,9 @@
 namespace qlpeps {
 
 template <typename TenElemT, typename QNT>
-int TRGContractor<TenElemT, QNT>::ParentSlot_(size_t scale, uint32_t fine_id, uint32_t parent_id) const {
-  const auto& ps = scales_.at(scale).fine_to_coarse.at(fine_id);
-  if (ps[0] == parent_id) return 0;
-  if (ps[1] == parent_id) return 1;
-  return -1;
-}
-
-template <typename TenElemT, typename QNT>
 typename TRGContractor<TenElemT, QNT>::Tensor
 TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
                                                         uint32_t node,
-                                                        uint32_t parent,
                                                         const Tensor* H_P,
                                                         const Tensor* H_Q) const {
   using qlten::Contract;
@@ -46,13 +37,10 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
     }
   };
 
-  const int slot = ParentSlot_(scale, node, parent);
-  if (slot < 0) throw std::logic_error("TRGContractor::LinearSplitAdjointToHole_: missing parent-slot.");
-
-  const auto st = scales_.at(scale).split_type.at(node)[slot];
-  const auto& U = scales_.at(scale).split_U.at(node)[slot];
-  const auto& Vt = scales_.at(scale).split_Vt.at(node)[slot];
-  const auto& Sinv = scales_.at(scale).split_S_inv_sqrt.at(node)[slot];
+  const auto st = scales_.at(scale).split_type.at(node);
+  const auto& U = scales_.at(scale).split_U.at(node);
+  const auto& Vt = scales_.at(scale).split_Vt.at(node);
+  const auto& Sinv = scales_.at(scale).split_S_inv_sqrt.at(node);
 
   // `Sinv` is stored as a *real* tensor. Convert on demand.
   Tensor Sinv_dag;
@@ -155,6 +143,45 @@ void TRGContractor<TenElemT, QNT>::Init(const TensorNetwork2D<TenElemT, QNT>& tn
   ClearCache();
   BuildScale0GraphPBCSquare_();
   BuildTopology_(); // Build skeleton for all scales
+  ValidateTopologyConsistency_();
+}
+
+template <typename TenElemT, typename QNT>
+void TRGContractor<TenElemT, QNT>::ValidateTopologyConsistency_() const {
+  for (size_t s = 0; s + 1 < scales_.size(); ++s) {
+    const auto& fine = scales_.at(s);
+    const auto& coarse = scales_.at(s + 1);
+
+    for (uint32_t fid = 0; fid < fine.fine_to_coarse.size(); ++fid) {
+      const auto& parents = fine.fine_to_coarse[fid];
+      bool found_any_parent = false;
+      std::optional<typename ScaleCache::SplitType> st0;
+      for (int slot = 0; slot < 2; ++slot) {
+        const uint32_t pid = parents[slot];
+        if (pid == 0xFFFFFFFF) continue;
+        found_any_parent = true;
+        if (pid >= coarse.coarse_to_fine.size()) {
+          throw std::logic_error("TRGContractor::ValidateTopologyConsistency_: parent id out of range.");
+        }
+        const auto& children = coarse.coarse_to_fine[pid];
+        int role = -1;
+        for (int k = 0; k < 4; ++k) {
+          if (children[k] == fid) role = k;
+        }
+        if (role < 0) {
+          throw std::logic_error("TRGContractor::ValidateTopologyConsistency_: child missing in parent.");
+        }
+        const auto st = ChildSplitType_(s, fid, role);
+        if (!st0.has_value()) st0 = st;
+        else if (*st0 != st) {
+          throw std::logic_error("TRGContractor::ValidateTopologyConsistency_: split type mismatch across parent contexts.");
+        }
+      }
+      if (!found_any_parent) {
+        throw std::logic_error("TRGContractor::ValidateTopologyConsistency_: fine node has no valid parent.");
+      }
+    }
+  }
 }
 
 template <typename TenElemT, typename QNT>
@@ -492,7 +519,7 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
   auto& layer = scales_[scale];
   const size_t n = layer.tens.size();
   if (layer.split_type.size() != n) {
-    layer.split_type.assign(n, {ScaleCache::SplitType::Type0, ScaleCache::SplitType::Type0});
+    layer.split_type.assign(n, ScaleCache::SplitType::Type0);
   }
   if (layer.split_P.size() != n) layer.split_P.resize(n);
   if (layer.split_Q.size() != n) layer.split_Q.resize(n);
@@ -513,80 +540,71 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
     const auto& parents = layer.fine_to_coarse.at(id);
     const auto& c2f = scales_[scale + 1].coarse_to_fine;
 
-    for (int slot = 0; slot < 2; ++slot) {
+    // Determine split type from any active parent (both give the same result).
+    typename ScaleCache::SplitType st = ScaleCache::SplitType::Type0;
+    bool found = false;
+    for (int slot = 0; slot < 2 && !found; ++slot) {
       const uint32_t pid = parents[slot];
       if (pid == 0xFFFFFFFF) continue;
       if (pid >= c2f.size()) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: coarse parent id out of range.");
-
       const auto& children = c2f.at(pid);
       int role = -1;
       for (int k = 0; k < 4; ++k) {
         if (children[k] == id) role = k;
       }
       if (role < 0) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: invalid topology (child not found in parent).");
+      st = ChildSplitType_(scale, id, role);
+      found = true;
+    }
+    if (!found) {
+      throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: no active coarse parent found for node.");
+    }
 
-      typename ScaleCache::SplitType st = ScaleCache::SplitType::Type0;
-      if (scale == 0) {
-        // Scale-0 split convention is determined by the A/B sublattice (fixed).
-        st = (scales_[0].graph.sublattice.at(id) == SubLattice::A) ? ScaleCache::SplitType::Type0
-                                                                   : ScaleCache::SplitType::Type1;
-      } else if ((scale & 1U) == 0U) {
-        // Even -> Odd plaquette, children order {TL,TR,BL,BR}.
-        st = (role == 0 || role == 3) ? ScaleCache::SplitType::Type0 : ScaleCache::SplitType::Type1;
-      } else {
-        // Odd -> Even diamond, children order {N,E,S,W}.
-        st = (role == 0 || role == 2) ? ScaleCache::SplitType::Type1 : ScaleCache::SplitType::Type0;
-      }
+    // Common SVD regularization
+    auto compute_regularized_inv_sqrt = [&](const qlten::QLTensor<RealT, QNT>& s_sqrt_in) {
+      qlten::QLTensor<RealT, QNT> s_inv_sqrt = s_sqrt_in;
+      const RealT max_s = s_sqrt_in.GetMaxAbs();
+      const RealT effective_eps = tp.ComputeEffectiveInvEps(max_s);
+      s_inv_sqrt.ElementWiseInv(/*eps=*/effective_eps);
+      return s_inv_sqrt;
+    };
 
-      Tensor u, vt;
-      qlten::QLTensor<RealT, QNT> s;
-      RealT trunc_err_actual = RealT(0);
-      size_t bond_dim_actual = 0;
+    Tensor u, vt;
+    qlten::QLTensor<RealT, QNT> s;
+    RealT trunc_err_actual = RealT(0);
+    size_t bond_dim_actual = 0;
 
-      // Common SVD and regularization logic for both split types
-      auto compute_regularized_inv_sqrt = [&](const qlten::QLTensor<RealT, QNT>& s_sqrt_in) {
-        qlten::QLTensor<RealT, QNT> s_inv_sqrt = s_sqrt_in;
-        // Use relative eps based on max singular value for numerical stability.
-        // This ensures regularization scales appropriately with the problem's magnitude.
-        // See TRGTruncateParams documentation for details.
-        const RealT max_s = s_sqrt_in.GetMaxAbs();
-        const RealT effective_eps = tp.ComputeEffectiveInvEps(max_s);
-        s_inv_sqrt.ElementWiseInv(/*eps=*/effective_eps);
-        return s_inv_sqrt;
-      };
+    if (st == ScaleCache::SplitType::Type0) {
+      Tensor TT = T;
+      TT.Transpose({0, 3, 1, 2});
+      SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
+      auto s_sqrt = ElementWiseSqrt(s);
+      auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
+      Tensor P, Q;
+      Contract(&u, &s_sqrt, {{2}, {0}}, &P);
+      Contract(&s_sqrt, &vt, {{1}, {0}}, &Q);
 
-      if (st == ScaleCache::SplitType::Type0) {
-        Tensor TT = T;
-        TT.Transpose({0, 3, 1, 2});
-        SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-        auto s_sqrt = ElementWiseSqrt(s);
-        auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
-        Tensor P, Q;
-        Contract(&u, &s_sqrt, {{2}, {0}}, &P);
-        Contract(&s_sqrt, &vt, {{1}, {0}}, &Q);
+      layer.split_type[id] = st;
+      layer.split_U[id] = u;
+      layer.split_Vt[id] = vt;
+      layer.split_S_inv_sqrt[id] = s_inv_sqrt;
+      layer.split_P[id] = P;
+      layer.split_Q[id] = Q;
+    } else {
+      Tensor TT = T;
+      SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
+      auto s_sqrt = ElementWiseSqrt(s);
+      auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
+      Tensor Q, P;
+      Contract(&u, &s_sqrt, {{2}, {0}}, &Q);
+      Contract(&s_sqrt, &vt, {{1}, {0}}, &P);
 
-        layer.split_type[id][slot] = st;
-        layer.split_U[id][slot] = u;
-        layer.split_Vt[id][slot] = vt;
-        layer.split_S_inv_sqrt[id][slot] = s_inv_sqrt;
-        layer.split_P[id][slot] = P;
-        layer.split_Q[id][slot] = Q;
-      } else {
-        Tensor TT = T;
-        SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-        auto s_sqrt = ElementWiseSqrt(s);
-        auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
-        Tensor Q, P;
-        Contract(&u, &s_sqrt, {{2}, {0}}, &Q);
-        Contract(&s_sqrt, &vt, {{1}, {0}}, &P);
-
-        layer.split_type[id][slot] = st;
-        layer.split_U[id][slot] = u;
-        layer.split_Vt[id][slot] = vt;
-        layer.split_S_inv_sqrt[id][slot] = s_inv_sqrt;
-        layer.split_P[id][slot] = P;
-        layer.split_Q[id][slot] = Q;
-      }
+      layer.split_type[id] = st;
+      layer.split_U[id] = u;
+      layer.split_Vt[id] = vt;
+      layer.split_S_inv_sqrt[id] = s_inv_sqrt;
+      layer.split_P[id] = P;
+      layer.split_Q[id] = Q;
     }
   }
 }
@@ -659,19 +677,6 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
       for (uint32_t c_id = 0; c_id < n_coarse; ++c_id) {
           const auto& children = coarse_layer.coarse_to_fine[c_id];
           
-          auto slot_of = [&](uint32_t fid, uint32_t pid) -> int {
-            const auto& ps = fine_layer.fine_to_coarse.at(fid);
-            if (ps[0] == pid) return 0;
-            if (ps[1] == pid) return 1;
-            return -1;
-          };
-          const int s0 = slot_of(children[0], c_id);
-          const int s1 = slot_of(children[1], c_id);
-          const int s2 = slot_of(children[2], c_id);
-          const int s3 = slot_of(children[3], c_id);
-          if (s0 < 0 || s1 < 0 || s2 < 0 || s3 < 0)
-             throw std::logic_error("TRGContractor::Trace: missing parent-slot.");
-
           if (even_to_odd) {
               // Plaquette contraction (even -> odd), children order is {TL, TR, BL, BR}.
               //
@@ -682,30 +687,18 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
               // Split convention (fixed by sublattice):
               //   TL, BR are A (Type0); TR, BL are B (Type1).
               //
-              // We must select split pieces in the correct parent-context (fine node -> this plaquette parent)
-              // so that alpha indices are stable and reusable by PunchHole().
-              //
-              // External alphas become legs of the coarse tensor; internal bonds are contracted:
-              //
-              //   alpha_NW (from TL.Q)    alpha_NE (from TR.Q)
-              //            \\             /
-              //             \\           /
-              //             [  odd tensor  ]   (returned with leg order [NW, NE, SE, SW])
-              //             /           \\
-              //            /             \\
-              //   alpha_SW (from BL.P)    alpha_SE (from BR.P)
-              //
-              const Tensor& Q0 = fine_layer.split_Q[children[0]][s0];
-              const Tensor& Q1 = fine_layer.split_Q[children[1]][s1];
-              const Tensor& P1 = fine_layer.split_P[children[2]][s2];
-              const Tensor& P0 = fine_layer.split_P[children[3]][s3];
+              // Split data is per-node (identical for both parent contexts).
+              const Tensor& Q0 = fine_layer.split_Q[children[0]];
+              const Tensor& Q1 = fine_layer.split_Q[children[1]];
+              const Tensor& P1 = fine_layer.split_P[children[2]];
+              const Tensor& P0 = fine_layer.split_P[children[3]];
               coarse_layer.tens[c_id] = ContractPlaquetteCore_(Q0, Q1, P1, P0);
           } else {
               // Diamond contraction (odd -> even), children order is {N, E, S, W}.
-              const Tensor& Np = fine_layer.split_P[children[0]][s0];
-              const Tensor& Ep = fine_layer.split_P[children[1]][s1];
-              const Tensor& Sq = fine_layer.split_Q[children[2]][s2];
-              const Tensor& Wq = fine_layer.split_Q[children[3]][s3];
+              const Tensor& Np = fine_layer.split_P[children[0]];
+              const Tensor& Ep = fine_layer.split_P[children[1]];
+              const Tensor& Sq = fine_layer.split_Q[children[2]];
+              const Tensor& Wq = fine_layer.split_Q[children[3]];
               coarse_layer.tens[c_id] = ContractDiamondCore_(Np, Ep, Sq, Wq);
           }
       }
@@ -777,48 +770,41 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
         return fine_layer.tens[id];
       };
 
-      // Helper: perform full SVD for a dirty child, store in trial.layer_splits, return P/Q refs.
-      auto full_split_dirty = [&](uint32_t child_id, int role, int slot) -> const TrialSplitData& {
-        auto& slot_arr = trial.layer_splits[s][child_id];
-        if (!slot_arr[slot].has_value()) {
-          auto st = ChildSplitType_(s, child_id, role);
-          if (st == ScaleCache::SplitType::Type0) {
-            slot_arr[slot] = SplitType0Full_(get_fine_tensor(child_id));
-          } else {
-            slot_arr[slot] = SplitType1Full_(get_fine_tensor(child_id));
-          }
+      // Compute full SVD for a dirty child (per-node, not per-slot).
+      auto full_split_dirty = [&](uint32_t child_id, int role) -> const TrialSplitData& {
+        auto it = trial.layer_splits[s].find(child_id);
+        if (it != trial.layer_splits[s].end()) return it->second;
+        auto st = ChildSplitType_(s, child_id, role);
+        if (st == ScaleCache::SplitType::Type0) {
+          return trial.layer_splits[s].emplace(child_id, SplitType0Full_(get_fine_tensor(child_id))).first->second;
+        } else {
+          return trial.layer_splits[s].emplace(child_id, SplitType1Full_(get_fine_tensor(child_id))).first->second;
         }
-        return *slot_arr[slot];
       };
-
-      const int sl0 = ParentSlot_(s, children[0], c_id);
-      const int sl1 = ParentSlot_(s, children[1], c_id);
-      const int sl2 = ParentSlot_(s, children[2], c_id);
-      const int sl3 = ParentSlot_(s, children[3], c_id);
 
       if (even_to_odd) {
         // Plaquette (even -> odd), children = {TL, TR, BL, BR}.
         // Need: Q from TL(Type0), Q from TR(Type1), P from BL(Type1), P from BR(Type0).
-        const Tensor& Q_TL = is_dirty(children[0]) ? full_split_dirty(children[0], 0, sl0).Q
-                                                    : fine_layer.split_Q.at(children[0])[sl0];
-        const Tensor& Q_TR = is_dirty(children[1]) ? full_split_dirty(children[1], 1, sl1).Q
-                                                    : fine_layer.split_Q.at(children[1])[sl1];
-        const Tensor& P_BL = is_dirty(children[2]) ? full_split_dirty(children[2], 2, sl2).P
-                                                    : fine_layer.split_P.at(children[2])[sl2];
-        const Tensor& P_BR = is_dirty(children[3]) ? full_split_dirty(children[3], 3, sl3).P
-                                                    : fine_layer.split_P.at(children[3])[sl3];
+        const Tensor& Q_TL = is_dirty(children[0]) ? full_split_dirty(children[0], 0).Q
+                                                    : fine_layer.split_Q.at(children[0]);
+        const Tensor& Q_TR = is_dirty(children[1]) ? full_split_dirty(children[1], 1).Q
+                                                    : fine_layer.split_Q.at(children[1]);
+        const Tensor& P_BL = is_dirty(children[2]) ? full_split_dirty(children[2], 2).P
+                                                    : fine_layer.split_P.at(children[2]);
+        const Tensor& P_BR = is_dirty(children[3]) ? full_split_dirty(children[3], 3).P
+                                                    : fine_layer.split_P.at(children[3]);
         trial.layer_updates[s + 1][c_id] = ContractPlaquetteCore_(Q_TL, Q_TR, P_BL, P_BR);
       } else {
         // Diamond (odd -> even), children = {N, E, S, W}.
         // Need: P from N(Type1), P from E(Type0), Q from S(Type1), Q from W(Type0).
-        const Tensor& Np = is_dirty(children[0]) ? full_split_dirty(children[0], 0, sl0).P
-                                                  : fine_layer.split_P.at(children[0])[sl0];
-        const Tensor& Ep = is_dirty(children[1]) ? full_split_dirty(children[1], 1, sl1).P
-                                                  : fine_layer.split_P.at(children[1])[sl1];
-        const Tensor& Sq = is_dirty(children[2]) ? full_split_dirty(children[2], 2, sl2).Q
-                                                  : fine_layer.split_Q.at(children[2])[sl2];
-        const Tensor& Wq = is_dirty(children[3]) ? full_split_dirty(children[3], 3, sl3).Q
-                                                  : fine_layer.split_Q.at(children[3])[sl3];
+        const Tensor& Np = is_dirty(children[0]) ? full_split_dirty(children[0], 0).P
+                                                  : fine_layer.split_P.at(children[0]);
+        const Tensor& Ep = is_dirty(children[1]) ? full_split_dirty(children[1], 1).P
+                                                  : fine_layer.split_P.at(children[1]);
+        const Tensor& Sq = is_dirty(children[2]) ? full_split_dirty(children[2], 2).Q
+                                                  : fine_layer.split_Q.at(children[2]);
+        const Tensor& Wq = is_dirty(children[3]) ? full_split_dirty(children[3], 3).Q
+                                                  : fine_layer.split_Q.at(children[3]);
         trial.layer_updates[s + 1][c_id] = ContractDiamondCore_(Np, Ep, Sq, Wq);
       }
     }
@@ -877,25 +863,14 @@ void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
         const uint32_t id = kv.first;
         auto split_it = trial.layer_splits[s].find(id);
         if (split_it != trial.layer_splits[s].end()) {
-          auto& slot_arr = split_it->second;
-          for (int slot = 0; slot < 2; ++slot) {
-            if (!slot_arr[slot].has_value()) continue;
-            auto& sd = *slot_arr[slot];
-            auto& layer = scales_[s];
-            layer.split_type[id][slot] = static_cast<typename ScaleCache::SplitType>(sd.type);
-            layer.split_U[id][slot] = std::move(sd.U);
-            layer.split_Vt[id][slot] = std::move(sd.Vt);
-            layer.split_S_inv_sqrt[id][slot] = std::move(sd.S_inv_sqrt);
-            layer.split_P[id][slot] = std::move(sd.P);
-            layer.split_Q[id][slot] = std::move(sd.Q);
-          }
-          // Check if both slots are covered; if a slot was not stored, fall back.
-          const auto& parents = scales_[s].fine_to_coarse.at(id);
-          for (int slot = 0; slot < 2; ++slot) {
-            if (parents[slot] != 0xFFFFFFFF && !slot_arr[slot].has_value()) {
-              need_recompute.insert(id);
-            }
-          }
+          auto& sd = split_it->second;
+          auto& layer = scales_[s];
+          layer.split_type[id] = static_cast<typename ScaleCache::SplitType>(sd.type);
+          layer.split_U[id] = std::move(sd.U);
+          layer.split_Vt[id] = std::move(sd.Vt);
+          layer.split_S_inv_sqrt[id] = std::move(sd.S_inv_sqrt);
+          layer.split_P[id] = std::move(sd.P);
+          layer.split_Q[id] = std::move(sd.Q);
         } else {
           need_recompute.insert(id);
         }
@@ -964,11 +939,6 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
         return fine_layer.tens[id];
       };
 
-      const int sl0 = ParentSlot_(s, children[0], c_id);
-      const int sl1 = ParentSlot_(s, children[1], c_id);
-      const int sl2 = ParentSlot_(s, children[2], c_id);
-      const int sl3 = ParentSlot_(s, children[3], c_id);
-
       // Use exact SVD for dirty children to ensure EvaluateReplacement returns the
       // same amplitude as BeginTrialWithReplacement.
       if (even_to_odd) {
@@ -978,10 +948,10 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
         SplitBRes fresh_bl; if (is_dirty(children[2])) fresh_bl = SplitType1_(get_fine_tensor(children[2]));
         SplitARes fresh_br; if (is_dirty(children[3])) fresh_br = SplitType0_(get_fine_tensor(children[3]));
 
-        const Tensor& Q_TL = is_dirty(children[0]) ? fresh_tl.Q : fine_layer.split_Q.at(children[0])[sl0];
-        const Tensor& Q_TR = is_dirty(children[1]) ? fresh_tr.Q : fine_layer.split_Q.at(children[1])[sl1];
-        const Tensor& P_BL = is_dirty(children[2]) ? fresh_bl.P : fine_layer.split_P.at(children[2])[sl2];
-        const Tensor& P_BR = is_dirty(children[3]) ? fresh_br.P : fine_layer.split_P.at(children[3])[sl3];
+        const Tensor& Q_TL = is_dirty(children[0]) ? fresh_tl.Q : fine_layer.split_Q.at(children[0]);
+        const Tensor& Q_TR = is_dirty(children[1]) ? fresh_tr.Q : fine_layer.split_Q.at(children[1]);
+        const Tensor& P_BL = is_dirty(children[2]) ? fresh_bl.P : fine_layer.split_P.at(children[2]);
+        const Tensor& P_BR = is_dirty(children[3]) ? fresh_br.P : fine_layer.split_P.at(children[3]);
         layer_updates[s + 1][c_id] = ContractPlaquetteCore_(Q_TL, Q_TR, P_BL, P_BR);
       } else {
         // Diamond: need P from N(Type1), P from E(Type0), Q from S(Type1), Q from W(Type0).
@@ -990,10 +960,10 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
         SplitBRes fresh_s; if (is_dirty(children[2])) fresh_s = SplitType1_(get_fine_tensor(children[2]));
         SplitARes fresh_w; if (is_dirty(children[3])) fresh_w = SplitType0_(get_fine_tensor(children[3]));
 
-        const Tensor& Np = is_dirty(children[0]) ? fresh_n.P : fine_layer.split_P.at(children[0])[sl0];
-        const Tensor& Ep = is_dirty(children[1]) ? fresh_e.P : fine_layer.split_P.at(children[1])[sl1];
-        const Tensor& Sq = is_dirty(children[2]) ? fresh_s.Q : fine_layer.split_Q.at(children[2])[sl2];
-        const Tensor& Wq = is_dirty(children[3]) ? fresh_w.Q : fine_layer.split_Q.at(children[3])[sl3];
+        const Tensor& Np = is_dirty(children[0]) ? fresh_n.P : fine_layer.split_P.at(children[0]);
+        const Tensor& Ep = is_dirty(children[1]) ? fresh_e.P : fine_layer.split_P.at(children[1]);
+        const Tensor& Sq = is_dirty(children[2]) ? fresh_s.Q : fine_layer.split_Q.at(children[2]);
+        const Tensor& Wq = is_dirty(children[3]) ? fresh_w.Q : fine_layer.split_Q.at(children[3]);
         layer_updates[s + 1][c_id] = ContractDiamondCore_(Np, Ep, Sq, Wq);
       }
     }
@@ -1456,17 +1426,10 @@ TRGContractor<TenElemT, QNT>::BackpropDiamondParent_(size_t s, uint32_t child_id
   for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
   if (role < 0) throw std::logic_error("TRGContractor::BackpropDiamondParent_: invalid diamond topology.");
 
-  const int sn = ParentSlot_(s, children[0], pid);
-  const int se = ParentSlot_(s, children[1], pid);
-  const int ss = ParentSlot_(s, children[2], pid);
-  const int sw = ParentSlot_(s, children[3], pid);
-  if (sn < 0 || se < 0 || ss < 0 || sw < 0)
-    throw std::logic_error("TRGContractor::BackpropDiamondParent_: missing parent-slot in diamond split cache.");
-
-  const Tensor& Np = scales_.at(s).split_P.at(children[0])[sn];
-  const Tensor& Ep = scales_.at(s).split_P.at(children[1])[se];
-  const Tensor& Sq = scales_.at(s).split_Q.at(children[2])[ss];
-  const Tensor& Wq = scales_.at(s).split_Q.at(children[3])[sw];
+  const Tensor& Np = scales_.at(s).split_P.at(children[0]);
+  const Tensor& Ep = scales_.at(s).split_P.at(children[1]);
+  const Tensor& Sq = scales_.at(s).split_Q.at(children[2]);
+  const Tensor& Wq = scales_.at(s).split_Q.at(children[3]);
 
   Tensor SW, NE;
   require_inv(Sq, 0, Wq, 2, "diamond: Sq{0} vs Wq{2}");
@@ -1536,7 +1499,7 @@ TRGContractor<TenElemT, QNT>::BackpropDiamondParent_(size_t s, uint32_t child_id
     Hq_local = (role == 2) ? std::move(H_Sq) : std::move(H_Wq);
     Hq_ptr = &Hq_local;
   }
-  return LinearSplitAdjointToHole_(s, child_id, pid, Hp_ptr, Hq_ptr);
+  return LinearSplitAdjointToHole_(s, child_id, Hp_ptr, Hq_ptr);
 }
 
 // ---- Backprop helper: plaquette (even -> odd) ----
@@ -1563,17 +1526,10 @@ TRGContractor<TenElemT, QNT>::BackpropPlaquetteParent_(size_t s, uint32_t child_
   for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
   if (role < 0) throw std::logic_error("TRGContractor::BackpropPlaquetteParent_: invalid plaquette topology.");
 
-  const int s0 = ParentSlot_(s, children[0], pid);
-  const int s1 = ParentSlot_(s, children[1], pid);
-  const int s2 = ParentSlot_(s, children[2], pid);
-  const int s3 = ParentSlot_(s, children[3], pid);
-  if (s0 < 0 || s1 < 0 || s2 < 0 || s3 < 0)
-    throw std::logic_error("TRGContractor::BackpropPlaquetteParent_: missing parent-slot in plaquette split cache.");
-
-  const Tensor& Q_TL = scales_.at(s).split_Q.at(children[0])[s0];
-  const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1])[s1];
-  const Tensor& P_BL = scales_.at(s).split_P.at(children[2])[s2];
-  const Tensor& P_BR = scales_.at(s).split_P.at(children[3])[s3];
+  const Tensor& Q_TL = scales_.at(s).split_Q.at(children[0]);
+  const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1]);
+  const Tensor& P_BL = scales_.at(s).split_P.at(children[2]);
+  const Tensor& P_BR = scales_.at(s).split_P.at(children[3]);
 
   Tensor tmp0, tmp1, tmp2;
   require_inv(P_BL, 1, P_BR, 0, "plaquette: P_BL{1} vs P_BR{0}");
@@ -1643,7 +1599,7 @@ TRGContractor<TenElemT, QNT>::BackpropPlaquetteParent_(size_t s, uint32_t child_
   else if (role == 2) { Hp_local = std::move(H_PBL); Hp_ptr = &Hp_local; }
   else { Hp_local = std::move(H_PBR); Hp_ptr = &Hp_local; }
 
-  return LinearSplitAdjointToHole_(s, child_id, pid, Hp_ptr, Hq_ptr);
+  return LinearSplitAdjointToHole_(s, child_id, Hp_ptr, Hq_ptr);
 }
 
 template <typename TenElemT, typename QNT>
@@ -1806,19 +1762,12 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
       const Tensor& H_parent = it->second;
       const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);
 
-      const int sl0 = ParentSlot_(s, children[0], pid);
-      const int sl1 = ParentSlot_(s, children[1], pid);
-      const int sl2 = ParentSlot_(s, children[2], pid);
-      const int sl3 = ParentSlot_(s, children[3], pid);
-      if (sl0 < 0 || sl1 < 0 || sl2 < 0 || sl3 < 0)
-        throw std::logic_error("TRGContractor::PunchAllHolesImpl_: missing parent-slot.");
-
       if (even_to_odd) {
         // Plaquette backprop: build tmp0, tmp1 once, then extract holes for TL, TR, BL, BR.
-        const Tensor& Q_TL = scales_.at(s).split_Q.at(children[0])[sl0];
-        const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1])[sl1];
-        const Tensor& P_BL = scales_.at(s).split_P.at(children[2])[sl2];
-        const Tensor& P_BR = scales_.at(s).split_P.at(children[3])[sl3];
+        const Tensor& Q_TL = scales_.at(s).split_Q.at(children[0]);
+        const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1]);
+        const Tensor& P_BL = scales_.at(s).split_P.at(children[2]);
+        const Tensor& P_BR = scales_.at(s).split_P.at(children[3]);
 
         Tensor tmp0, tmp1;
         Contract(&P_BL, {1}, &P_BR, {0}, &tmp0);
@@ -1846,7 +1795,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
         {
           Tensor H_QTL;
           Contract(&H_tmp1, {0, 1}, &Q_TR, {1, 2}, &H_QTL);
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[0], pid, nullptr, &H_QTL);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[0], nullptr, &H_QTL);
           if (hole_accum[children[0]].IsDefault()) hole_accum[children[0]] = std::move(contrib);
           else hole_accum[children[0]] = hole_accum[children[0]] + contrib;
           ++hole_cnt[children[0]];
@@ -1856,7 +1805,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
           Tensor t;
           Contract(&H_tmp1, {2, 3}, &Q_TL, {0, 1}, &t);
           t.Transpose({2, 0, 1});
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[1], pid, nullptr, &t);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[1], nullptr, &t);
           if (hole_accum[children[1]].IsDefault()) hole_accum[children[1]] = std::move(contrib);
           else hole_accum[children[1]] = hole_accum[children[1]] + contrib;
           ++hole_cnt[children[1]];
@@ -1866,7 +1815,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
           Tensor t;
           Contract(&H_tmp0, {2, 3}, &P_BR, {1, 2}, &t);
           t.Transpose({0, 2, 1});
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[2], pid, &t, nullptr);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[2], &t, nullptr);
           if (hole_accum[children[2]].IsDefault()) hole_accum[children[2]] = std::move(contrib);
           else hole_accum[children[2]] = hole_accum[children[2]] + contrib;
           ++hole_cnt[children[2]];
@@ -1876,17 +1825,17 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
           Tensor t;
           Contract(&H_tmp0, {0, 1}, &P_BL, {0, 2}, &t);
           t.Transpose({2, 0, 1});
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[3], pid, &t, nullptr);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[3], &t, nullptr);
           if (hole_accum[children[3]].IsDefault()) hole_accum[children[3]] = std::move(contrib);
           else hole_accum[children[3]] = hole_accum[children[3]] + contrib;
           ++hole_cnt[children[3]];
         }
       } else {
         // Diamond backprop: build SW, NE once, then extract holes for N, E, S, W.
-        const Tensor& Np = scales_.at(s).split_P.at(children[0])[sl0];
-        const Tensor& Ep = scales_.at(s).split_P.at(children[1])[sl1];
-        const Tensor& Sq = scales_.at(s).split_Q.at(children[2])[sl2];
-        const Tensor& Wq = scales_.at(s).split_Q.at(children[3])[sl3];
+        const Tensor& Np = scales_.at(s).split_P.at(children[0]);
+        const Tensor& Ep = scales_.at(s).split_P.at(children[1]);
+        const Tensor& Sq = scales_.at(s).split_Q.at(children[2]);
+        const Tensor& Wq = scales_.at(s).split_Q.at(children[3]);
 
         Tensor SW, NE;
         Contract(&Sq, {0}, &Wq, {2}, &SW);
@@ -1914,7 +1863,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
           Tensor t;
           Contract(&H_NE, {2, 3}, &Ep, {1, 2}, &t);
           t.Transpose({0, 2, 1});
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[0], pid, &t, nullptr);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[0], &t, nullptr);
           if (hole_accum[children[0]].IsDefault()) hole_accum[children[0]] = std::move(contrib);
           else hole_accum[children[0]] = hole_accum[children[0]] + contrib;
           ++hole_cnt[children[0]];
@@ -1924,7 +1873,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
           Tensor t;
           Contract(&H_NE, {0, 1}, &Np, {0, 2}, &t);
           t.Transpose({2, 0, 1});
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[1], pid, &t, nullptr);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[1], &t, nullptr);
           if (hole_accum[children[1]].IsDefault()) hole_accum[children[1]] = std::move(contrib);
           else hole_accum[children[1]] = hole_accum[children[1]] + contrib;
           ++hole_cnt[children[1]];
@@ -1934,7 +1883,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
           Tensor t;
           Contract(&H_SW, {2, 3}, &Wq, {0, 1}, &t);
           t.Transpose({2, 0, 1});
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[2], pid, nullptr, &t);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[2], nullptr, &t);
           if (hole_accum[children[2]].IsDefault()) hole_accum[children[2]] = std::move(contrib);
           else hole_accum[children[2]] = hole_accum[children[2]] + contrib;
           ++hole_cnt[children[2]];
@@ -1943,7 +1892,7 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
         {
           Tensor H_Wq;
           Contract(&H_SW, {0, 1}, &Sq, {1, 2}, &H_Wq);
-          Tensor contrib = LinearSplitAdjointToHole_(s, children[3], pid, nullptr, &H_Wq);
+          Tensor contrib = LinearSplitAdjointToHole_(s, children[3], nullptr, &H_Wq);
           if (hole_accum[children[3]].IsDefault()) hole_accum[children[3]] = std::move(contrib);
           else hole_accum[children[3]] = hole_accum[children[3]] + contrib;
           ++hole_cnt[children[3]];

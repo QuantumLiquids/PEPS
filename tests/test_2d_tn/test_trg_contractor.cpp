@@ -731,3 +731,87 @@ TEST(TRGContractorPBC, PunchHole12x12Z2Ising) {
   // Use diagonal sampling to speed up large system check
   RunZ2IsingPunchHoleTest(12, /*sample_diagonal_only=*/true);
 }
+
+// Regression test: verifies that all TRG operations produce identical results
+// after split-cache structural deduplication (array<T,2> -> T per node).
+TEST(TRGContractorPBC, SplitCacheOptimizationRegression8x8) {
+  using TenElemT = QLTEN_Double;
+  using QNT = qlten::special_qn::Z2QN;
+  using Contractor = qlpeps::TRGContractor<TenElemT, QNT>;
+  using TensorT = typename Contractor::Tensor;
+
+  const size_t n = 8;
+  const double K0 = 0.5;
+
+  // Non-uniform couplings to stress all topology paths
+  auto Kx = [&](size_t r, size_t c) -> double {
+    return K0 * (1.0 + 0.1 * double(r + 1) + 0.2 * double(c + 1));
+  };
+  auto Ky = [&](size_t r, size_t c) -> double {
+    return K0 * (0.8 + 0.3 * double(c + 1) + 0.5 * double(r + 1));
+  };
+  const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
+
+  Contractor trg(n, n);
+  trg.SetTruncateParams(Contractor::TruncateParams(2, 16, 0.0,1e-10));// choosing the relative_eps is a subtle work.
+  trg.Init(tn);
+
+  // 1) Trace
+  const double Z = trg.Trace(tn);
+  ASSERT_TRUE(std::isfinite(Z));
+  ASSERT_GT(std::abs(Z), 0.0);
+
+  // 2) PunchAllHoles: verify <hole_i, T_i> ~ Z for all sites
+  const auto all_holes = trg.PunchAllHoles(tn);
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const TensorT& hole = all_holes({r, c});
+      const TensorT& T = tn({r, c});
+      TensorT out;
+      qlten::Contract(&hole, {0, 1, 2, 3}, &T, {0, 1, 2, 3}, &out);
+      const double ratio = out() / Z;
+      EXPECT_NEAR(ratio, 1.0, 5e-2)
+          << "site=(" << r << "," << c << ") ratio=" << ratio;
+    }
+  }
+
+  // 3) BeginTrialWithReplacement + CommitTrial cycle
+  const double K1 = 0.55;
+  auto Kx1 = [&](size_t r, size_t c) -> double {
+    return (r == 2 && c == 3) ? K1 : Kx(r, c);
+  };
+  auto Ky1 = [&](size_t r, size_t c) -> double { return Ky(r, c); };
+  const SiteIdx sL{2, 3};
+  const SiteIdx sR{2, 4};
+  const TensorT tL = MakeZ2IsingSiteTensorAt(n, sL.row(), sL.col(), Kx1, Ky1);
+  const TensorT tR = MakeZ2IsingSiteTensorAt(n, sR.row(), sR.col(), Kx1, Ky1);
+  const std::vector<std::pair<SiteIdx, TensorT>> repl{{sL, tL}, {sR, tR}};
+
+  // EvaluateReplacement (read-only)
+  const double Z_eval = trg.EvaluateReplacement(repl);
+  ASSERT_TRUE(std::isfinite(Z_eval));
+
+  // BeginTrialWithReplacement
+  auto trial = trg.BeginTrialWithReplacement(repl);
+  EXPECT_NEAR(trial.amplitude, Z_eval, 1e-10 * std::max(1.0, std::abs(Z_eval)));
+
+  // CommitTrial
+  trg.CommitTrial(std::move(trial));
+  const auto tn1 = BuildZ2IsingTorusTN(n, Kx1, Ky1);
+  const double Z_after = trg.Trace(tn1);
+  EXPECT_NEAR(Z_after, Z_eval, 1e-10 * std::max(1.0, std::abs(Z_eval)));
+
+  // 4) PunchAllHoles after commit still works
+  const auto holes_after = trg.PunchAllHoles(tn1);
+  for (size_t r = 0; r < n; ++r) {
+    for (size_t c = 0; c < n; ++c) {
+      const TensorT& hole = holes_after({r, c});
+      const TensorT& T = tn1({r, c});
+      TensorT out;
+      qlten::Contract(&hole, {0, 1, 2, 3}, &T, {0, 1, 2, 3}, &out);
+      const double ratio = out() / Z_after;
+      EXPECT_NEAR(ratio, 1.0, 5e-2)
+          << "post-commit site=(" << r << "," << c << ") ratio=" << ratio;
+    }
+  }
+}
