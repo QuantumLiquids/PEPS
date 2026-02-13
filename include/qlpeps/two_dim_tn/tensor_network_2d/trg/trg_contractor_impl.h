@@ -13,6 +13,7 @@
 #include <cassert>
 #include <string>
 #include <algorithm>
+#include <numeric>
 #include <set>
 #include <map>
 
@@ -29,6 +30,7 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
                                                         const Tensor* H_Q) const {
   using qlten::Contract;
 
+#ifndef NDEBUG
   auto require_match = [&](const Tensor& A, size_t axA, const Tensor& B, size_t axB) {
     const auto& ia = A.GetIndex(axA);
     const auto& ib = B.GetIndex(axB);
@@ -36,6 +38,7 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
       throw std::logic_error("TRGContractor::LinearSplitAdjointToHole_: index mismatch.");
     }
   };
+#endif
 
   const auto st = scales_.at(scale).split_type.at(node);
   const auto& U = scales_.at(scale).split_U.at(node);
@@ -60,18 +63,26 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
     Tensor t1;
     if (H_P != nullptr) {
       Tensor Hp_scaled;
+#ifndef NDEBUG
       require_match(*H_P, 2, Sinv_dag, 0);
+#endif
       Contract(H_P, {2}, &Sinv_dag, {0}, &Hp_scaled);  // (l*,u*,alpha*)
+#ifndef NDEBUG
       require_match(Hp_scaled, 2, V_adj, 0);
+#endif
       Contract(&Hp_scaled, {2}, &V_adj, {0}, &t1);     // (l*,u*,d*,r*)
     }
 
     Tensor t2;
     if (H_Q != nullptr) {
       Tensor Hq_scaled;
+#ifndef NDEBUG
       require_match(Sinv_dag, 1, *H_Q, 0);
+#endif
       Contract(&Sinv_dag, {1}, H_Q, {0}, &Hq_scaled);  // (alpha*,d*,r*)
+#ifndef NDEBUG
       require_match(U_adj, 2, Hq_scaled, 0);
+#endif
       Contract(&U_adj, {2}, &Hq_scaled, {0}, &t2);     // (l*,u*,d*,r*)
     }
 
@@ -87,18 +98,26 @@ TRGContractor<TenElemT, QNT>::LinearSplitAdjointToHole_(size_t scale,
   Tensor t1;
   if (H_Q != nullptr) {
     Tensor Hq_scaled;
+#ifndef NDEBUG
     require_match(*H_Q, 2, Sinv_dag, 0);
+#endif
     Contract(H_Q, {2}, &Sinv_dag, {0}, &Hq_scaled);   // (l*,d*,alpha*)
+#ifndef NDEBUG
     require_match(Hq_scaled, 2, V_adj, 0);
+#endif
     Contract(&Hq_scaled, {2}, &V_adj, {0}, &t1);      // (l*,d*,r*,u*)
   }
 
   Tensor t2;
   if (H_P != nullptr) {
     Tensor Hp_scaled;
+#ifndef NDEBUG
     require_match(Sinv_dag, 1, *H_P, 0);
+#endif
     Contract(&Sinv_dag, {1}, H_P, {0}, &Hp_scaled);   // (alpha*,r*,u*)
+#ifndef NDEBUG
     require_match(U_adj, 2, Hp_scaled, 0);
+#endif
     Contract(&U_adj, {2}, &Hp_scaled, {0}, &t2);      // (l*,d*,r*,u*)
   }
 
@@ -335,140 +354,77 @@ void TRGContractor<TenElemT, QNT>::BuildTopology_() {
 }
 
 template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::SplitARes 
-TRGContractor<TenElemT, QNT>::SplitType0_(const Tensor& T_in) const {
-    using qlten::Contract;
-    using qlten::ElementWiseSqrt;
-    using qlten::SVD;
-    if (T_in.IsDefault()) throw std::runtime_error("TRG split_type0: input tensor is default.");
-    // Group legs (0,3) | (1,2) by transposing to {0,3,1,2}.
-    //
-    // ASCII diagram (type0 split, A-sublattice):
-    //
-    //   up(3)                       up(3)
-    //     |                          |
-    // l(0)-T-r(2)   ==SVD==>    l(0)-P----alpha----Q-r(2)
-    //     |                                        |
-    //   d(1)                                     d(1)
-    //
-    // Grouping convention:
-    //   left group  = (l, up)  = (0,3)
-    //   right group = (d, r)   = (1,2)
-    //
-    // Output tensors:
-    //   P(l, up, alpha)   with alpha as OUT (new bond leaving P)
-    //   Q(alpha, d, r)    with alpha as IN  (new bond entering Q)
-    Tensor T = T_in;
-    T.Transpose({0, 3, 1, 2});
-    Tensor u, vt;
-    qlten::QLTensor<RealT, QNT> s;
-    RealT trunc_err_actual = RealT(0);
-    size_t bond_dim_actual = 0;
-    const auto& tp = *trunc_params_;
-    SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-    auto s_sqrt = ElementWiseSqrt(s);
-    SplitARes out;
-    Contract(&u, &s_sqrt, {{2}, {0}}, &out.P);
-    Contract(&s_sqrt, &vt, {{1}, {0}}, &out.Q);
-    return out;
-}
+typename TRGContractor<TenElemT, QNT>::SplitResult
+TRGContractor<TenElemT, QNT>::SplitNode_(
+    const Tensor& T_in,
+    typename ScaleCache::SplitType split_type,
+    bool compute_isometry) const {
+  using qlten::Contract;
+  using qlten::ElementWiseSqrt;
+  using qlten::SVD;
 
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::SplitBRes 
-TRGContractor<TenElemT, QNT>::SplitType1_(const Tensor& T_in) const {
-    using qlten::Contract;
-    using qlten::ElementWiseSqrt;
-    using qlten::SVD;
-    if (T_in.IsDefault()) throw std::runtime_error("TRG split_type1: input tensor is default.");
-    // Group legs (0,1) | (2,3) in the default order.
-    //
-    // ASCII diagram (type1 split, B-sublattice):
-    //
-    //      up(3)                                 up(3)
-    //      |                                     |
-    // l(0)-T-r(2)   ==SVD==>  l(0)-Q----alpha----P-r(2)
-    //      |                       |
-    //    d(1)                      d(1)
-    //
-    // Grouping convention:
-    //   left group  = (l, d)   = (0,1)
-    //   right group = (r, up)  = (2,3)
-    //
-    // Output tensors:
-    //   Q(l, d, alpha)    with alpha as OUT
-    //   P(alpha, r, up)   with alpha as IN
-    Tensor T = T_in; 
-    // Default order 0,1,2,3 is already 0,1 | 2,3
-    Tensor u, vt;
-    qlten::QLTensor<RealT, QNT> s;
-    RealT trunc_err_actual = RealT(0);
-    size_t bond_dim_actual = 0;
-    const auto& tp = *trunc_params_;
-    SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-    auto s_sqrt = ElementWiseSqrt(s);
-    SplitBRes out;
-    Contract(&u, &s_sqrt, {{2}, {0}}, &out.Q);
-    Contract(&s_sqrt, &vt, {{1}, {0}}, &out.P);
-    return out;
-}
+  if (T_in.IsDefault()) {
+    throw std::runtime_error("TRG SplitNode_: input tensor is default.");
+  }
 
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::TrialSplitData
-TRGContractor<TenElemT, QNT>::SplitType0Full_(const Tensor& T_in) const {
-    using qlten::Contract;
-    using qlten::ElementWiseSqrt;
-    using qlten::SVD;
-    if (T_in.IsDefault()) throw std::runtime_error("TRG SplitType0Full_: input tensor is default.");
-    Tensor T = T_in;
+  // Type0 (A-sublattice): group legs (l,up)|(d,r) via transpose {0,3,1,2}.
+  //
+  //   up(3)                       up(3)
+  //     |                          |
+  // l(0)-T-r(2)   ==SVD==>    l(0)-P----alpha----Q-r(2)
+  //     |                                        |
+  //   d(1)                                     d(1)
+  //
+  // Type1 (B-sublattice): group legs (l,d)|(r,up) — already in order {0,1,2,3}.
+  //
+  //      up(3)                                 up(3)
+  //      |                                     |
+  // l(0)-T-r(2)   ==SVD==>  l(0)-Q----alpha----P-r(2)
+  //      |                       |
+  //    d(1)                      d(1)
+  Tensor T = T_in;
+  if (split_type == ScaleCache::SplitType::Type0) {
     T.Transpose({0, 3, 1, 2});
-    Tensor u, vt;
-    qlten::QLTensor<RealT, QNT> s;
-    RealT trunc_err_actual = RealT(0);
-    size_t bond_dim_actual = 0;
-    const auto& tp = *trunc_params_;
-    SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-    auto s_sqrt = ElementWiseSqrt(s);
+  }
+
+  Tensor u, vt;
+  qlten::QLTensor<RealT, QNT> s;
+  RealT trunc_err_actual = RealT(0);
+  size_t bond_dim_actual = 0;
+  const auto& tp = *trunc_params_;
+  SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max,
+      &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
+
+  auto s_sqrt = ElementWiseSqrt(s);
+
+  SplitResult out;
+  out.split_type = split_type;
+
+  // Type0: P = U*sqrt(S), Q = sqrt(S)*Vt
+  // Type1: Q = U*sqrt(S), P = sqrt(S)*Vt  (note the swap)
+  Tensor left_piece, right_piece;
+  Contract(&u, &s_sqrt, {{2}, {0}}, &left_piece);
+  Contract(&s_sqrt, &vt, {{1}, {0}}, &right_piece);
+
+  if (split_type == ScaleCache::SplitType::Type0) {
+    out.P = std::move(left_piece);
+    out.Q = std::move(right_piece);
+  } else {
+    out.Q = std::move(left_piece);
+    out.P = std::move(right_piece);
+  }
+
+  if (compute_isometry) {
+    out.U = std::move(u);
+    out.Vt = std::move(vt);
     const RealT max_s = s_sqrt.GetMaxAbs();
     const RealT effective_eps = tp.ComputeEffectiveInvEps(max_s);
     auto s_inv_sqrt = s_sqrt;
     s_inv_sqrt.ElementWiseInv(effective_eps);
-    TrialSplitData out;
-    out.type = static_cast<uint8_t>(ScaleCache::SplitType::Type0);
-    out.U = u;
-    out.Vt = vt;
-    out.S_inv_sqrt = s_inv_sqrt;
-    Contract(&u, &s_sqrt, {{2}, {0}}, &out.P);
-    Contract(&s_sqrt, &vt, {{1}, {0}}, &out.Q);
-    return out;
-}
+    out.S_inv_sqrt = std::move(s_inv_sqrt);
+  }
 
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::TrialSplitData
-TRGContractor<TenElemT, QNT>::SplitType1Full_(const Tensor& T_in) const {
-    using qlten::Contract;
-    using qlten::ElementWiseSqrt;
-    using qlten::SVD;
-    if (T_in.IsDefault()) throw std::runtime_error("TRG SplitType1Full_: input tensor is default.");
-    Tensor T = T_in;
-    Tensor u, vt;
-    qlten::QLTensor<RealT, QNT> s;
-    RealT trunc_err_actual = RealT(0);
-    size_t bond_dim_actual = 0;
-    const auto& tp = *trunc_params_;
-    SVD(&T, 2, T.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-    auto s_sqrt = ElementWiseSqrt(s);
-    const RealT max_s = s_sqrt.GetMaxAbs();
-    const RealT effective_eps = tp.ComputeEffectiveInvEps(max_s);
-    auto s_inv_sqrt = s_sqrt;
-    s_inv_sqrt.ElementWiseInv(effective_eps);
-    TrialSplitData out;
-    out.type = static_cast<uint8_t>(ScaleCache::SplitType::Type1);
-    out.U = u;
-    out.Vt = vt;
-    out.S_inv_sqrt = s_inv_sqrt;
-    Contract(&u, &s_sqrt, {{2}, {0}}, &out.Q);  // Type1: U*sqrt(S) = Q
-    Contract(&s_sqrt, &vt, {{1}, {0}}, &out.P);  // Type1: sqrt(S)*Vt = P
-    return out;
+  return out;
 }
 
 template <typename TenElemT, typename QNT>
@@ -478,13 +434,13 @@ TRGContractor<TenElemT, QNT>::ChildSplitType_(size_t scale, uint32_t child_id, i
       return (scales_[0].graph.sublattice.at(child_id) == SubLattice::A)
                  ? ScaleCache::SplitType::Type0
                  : ScaleCache::SplitType::Type1;
-    } else if ((scale & 1U) == 0U) {
+    }
+    if ((scale & 1U) == 0U) {
       // Even -> Odd plaquette, children order {TL,TR,BL,BR}.
       return (role == 0 || role == 3) ? ScaleCache::SplitType::Type0 : ScaleCache::SplitType::Type1;
-    } else {
-      // Odd -> Even diamond, children order {N,E,S,W}.
-      return (role == 0 || role == 2) ? ScaleCache::SplitType::Type1 : ScaleCache::SplitType::Type0;
     }
+    // Odd -> Even diamond, children order {N,E,S,W}.
+    return (role == 0 || role == 2) ? ScaleCache::SplitType::Type1 : ScaleCache::SplitType::Type0;
 }
 
 template <typename TenElemT, typename QNT>
@@ -512,7 +468,7 @@ TRGContractor<TenElemT, QNT>::ContractDiamondCore_(const Tensor& Np, const Tenso
 }
 
 template <typename TenElemT, typename QNT>
-void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const std::set<uint32_t>& nodes) {
+void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const std::vector<uint32_t>& nodes) {
   if (scale >= scales_.size()) throw std::out_of_range("TRGContractor::EnsureSplitCacheForNodes_: invalid scale.");
   if (scale + 1 >= scales_.size()) return;
 
@@ -527,105 +483,85 @@ void TRGContractor<TenElemT, QNT>::EnsureSplitCacheForNodes_(size_t scale, const
   if (layer.split_Vt.size() != n) layer.split_Vt.resize(n);
   if (layer.split_S_inv_sqrt.size() != n) layer.split_S_inv_sqrt.resize(n);
 
+  const auto& c2f = scales_[scale + 1].coarse_to_fine;
+
   for (uint32_t id : nodes) {
     if (id >= n) throw std::out_of_range("TRGContractor::EnsureSplitCacheForNodes_: node id out of range.");
     const auto& T = layer.tens.at(id);
     if (T.IsDefault()) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: tensor is default.");
 
-    using qlten::Contract;
-    using qlten::ElementWiseSqrt;
-    using qlten::SVD;
-
-    const auto& tp = *trunc_params_;
-    const auto& parents = layer.fine_to_coarse.at(id);
-    const auto& c2f = scales_[scale + 1].coarse_to_fine;
-
     // Determine split type from any active parent (both give the same result).
+    const auto& parents = layer.fine_to_coarse.at(id);
     typename ScaleCache::SplitType st = ScaleCache::SplitType::Type0;
     bool found = false;
     for (int slot = 0; slot < 2 && !found; ++slot) {
       const uint32_t pid = parents[slot];
       if (pid == 0xFFFFFFFF) continue;
-      if (pid >= c2f.size()) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: coarse parent id out of range.");
       const auto& children = c2f.at(pid);
-      int role = -1;
       for (int k = 0; k < 4; ++k) {
-        if (children[k] == id) role = k;
+        if (children[k] == id) {
+          st = ChildSplitType_(scale, id, k);
+          found = true;
+          break;
+        }
       }
-      if (role < 0) throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: invalid topology (child not found in parent).");
-      st = ChildSplitType_(scale, id, role);
-      found = true;
     }
     if (!found) {
       throw std::logic_error("TRGContractor::EnsureSplitCacheForNodes_: no active coarse parent found for node.");
     }
 
-    // Common SVD regularization
-    auto compute_regularized_inv_sqrt = [&](const qlten::QLTensor<RealT, QNT>& s_sqrt_in) {
-      qlten::QLTensor<RealT, QNT> s_inv_sqrt = s_sqrt_in;
-      const RealT max_s = s_sqrt_in.GetMaxAbs();
-      const RealT effective_eps = tp.ComputeEffectiveInvEps(max_s);
-      s_inv_sqrt.ElementWiseInv(/*eps=*/effective_eps);
-      return s_inv_sqrt;
-    };
-
-    Tensor u, vt;
-    qlten::QLTensor<RealT, QNT> s;
-    RealT trunc_err_actual = RealT(0);
-    size_t bond_dim_actual = 0;
-
-    if (st == ScaleCache::SplitType::Type0) {
-      Tensor TT = T;
-      TT.Transpose({0, 3, 1, 2});
-      SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-      auto s_sqrt = ElementWiseSqrt(s);
-      auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
-      Tensor P, Q;
-      Contract(&u, &s_sqrt, {{2}, {0}}, &P);
-      Contract(&s_sqrt, &vt, {{1}, {0}}, &Q);
-
-      layer.split_type[id] = st;
-      layer.split_U[id] = u;
-      layer.split_Vt[id] = vt;
-      layer.split_S_inv_sqrt[id] = s_inv_sqrt;
-      layer.split_P[id] = P;
-      layer.split_Q[id] = Q;
-    } else {
-      Tensor TT = T;
-      SVD(&TT, 2, TT.Div(), tp.trunc_err, tp.D_min, tp.D_max, &u, &s, &vt, &trunc_err_actual, &bond_dim_actual);
-      auto s_sqrt = ElementWiseSqrt(s);
-      auto s_inv_sqrt = compute_regularized_inv_sqrt(s_sqrt);
-      Tensor Q, P;
-      Contract(&u, &s_sqrt, {{2}, {0}}, &Q);
-      Contract(&s_sqrt, &vt, {{1}, {0}}, &P);
-
-      layer.split_type[id] = st;
-      layer.split_U[id] = u;
-      layer.split_Vt[id] = vt;
-      layer.split_S_inv_sqrt[id] = s_inv_sqrt;
-      layer.split_P[id] = P;
-      layer.split_Q[id] = Q;
-    }
+    auto result = SplitNode_(T, st, /*compute_isometry=*/true);
+    layer.split_type[id] = result.split_type;
+    layer.split_P[id] = std::move(result.P);
+    layer.split_Q[id] = std::move(result.Q);
+    layer.split_U[id] = std::move(result.U);
+    layer.split_Vt[id] = std::move(result.Vt);
+    layer.split_S_inv_sqrt[id] = std::move(result.S_inv_sqrt);
   }
 }
 
 template <typename TenElemT, typename QNT>
-TenElemT TRGContractor<TenElemT, QNT>::GetCachedAmplitude_() const {
+TenElemT TRGContractor<TenElemT, QNT>::ComputeFinalAmplitude_(
+    const std::map<uint32_t, Tensor>* top_updates) const {
     if (scales_.empty()) return TenElemT(0);
-    if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
-    if (scales_.back().tens.size() == 4) {
-      const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                          scales_.back().tens[2], scales_.back().tens[3]};
+    const auto& top = scales_.back().tens;
+    const size_t n = top.size();
+
+    if (n == 1) {
+      if (top_updates) {
+        auto it = top_updates->find(0);
+        if (it != top_updates->end()) return ContractFinal1x1_(it->second);
+      }
+      return ContractFinal1x1_(top[0]);
+    }
+    if (n == 4) {
+      std::array<Tensor, 4> t2x2 = {top[0], top[1], top[2], top[3]};
+      if (top_updates) {
+        for (uint32_t id = 0; id < 4; ++id) {
+          auto it = top_updates->find(id);
+          if (it != top_updates->end()) t2x2[id] = it->second;
+        }
+      }
       return ContractFinal2x2_(t2x2);
     }
-    if (scales_.back().tens.size() == 9) {
-      const auto& top = scales_.back().tens;
-      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
-                                                  &top[3], &top[4], &top[5],
-                                                  &top[6], &top[7], &top[8]};
+    if (n == 9) {
+      std::array<const Tensor*, 9> t3x3;
+      // For overlaid tensors, we need stable storage for the pointer array.
+      std::array<Tensor, 9> overlay_buf;
+      for (uint32_t id = 0; id < 9; ++id) {
+        if (top_updates) {
+          auto it = top_updates->find(id);
+          if (it != top_updates->end()) {
+            overlay_buf[id] = it->second;
+            t3x3[id] = &overlay_buf[id];
+            continue;
+          }
+        }
+        t3x3[id] = &top[id];
+      }
       return ContractFinal3x3_(t3x3);
     }
-    throw std::logic_error("TRGContractor::GetCachedAmplitude_: invalid final scale size.");
+    throw std::logic_error("TRGContractor::ComputeFinalAmplitude_: invalid final scale size.");
 }
 
 template <typename TenElemT, typename QNT>
@@ -635,38 +571,25 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
   if (!trunc_params_.has_value()) throw std::logic_error("TRGContractor::Trace: truncation params are not set.");
   
   if (tensors_initialized_) {
-    return GetCachedAmplitude_();
+    return ComputeFinalAmplitude_();
   }
 
   // Full initialization
   const size_t N = rows_ * cols_;
   for (uint32_t i = 0; i < N; ++i) {
-     auto coords = Coord_(i);
-     scales_[0].tens[i] = tn({coords.first, coords.second});
+     auto [r, c] = Coord_(i);
+     scales_[0].tens[i] = tn({r, c});
   }
 
   // Handle small systems with no RG steps
   if (scales_.size() == 1) {
     tensors_initialized_ = true;
-    if (scales_.back().tens.size() == 1) return ContractFinal1x1_(scales_.back().tens[0]);
-    if (scales_.back().tens.size() == 4) {
-      const std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                          scales_.back().tens[2], scales_.back().tens[3]};
-      return ContractFinal2x2_(t2x2);
-    }
-    if (scales_.back().tens.size() == 9) {
-      const auto& top = scales_.back().tens;
-      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
-                                                  &top[3], &top[4], &top[5],
-                                                  &top[6], &top[7], &top[8]};
-      return ContractFinal3x3_(t3x3);
-    }
-    throw std::logic_error("TRGContractor::Trace: invalid final scale size.");
+    return ComputeFinalAmplitude_();
   }
 
   // Split scale 0 (all nodes)
-  std::set<uint32_t> all_nodes_0;
-  for(uint32_t i=0; i<N; ++i) all_nodes_0.insert(i);
+  std::vector<uint32_t> all_nodes_0(N);
+  std::iota(all_nodes_0.begin(), all_nodes_0.end(), 0);
   EnsureSplitCacheForNodes_(0, all_nodes_0);
 
   // Propagate Up
@@ -706,15 +629,15 @@ TenElemT TRGContractor<TenElemT, QNT>::Trace(const TensorNetwork2D<TenElemT, QNT
       }
 
       // Populate split cache for next scale
-      std::set<uint32_t> all_coarse_nodes;
-      for(uint32_t i=0; i<n_coarse; ++i) all_coarse_nodes.insert(i);
+      std::vector<uint32_t> all_coarse_nodes(n_coarse);
+      std::iota(all_coarse_nodes.begin(), all_coarse_nodes.end(), 0);
       EnsureSplitCacheForNodes_(s + 1, all_coarse_nodes);
   }
 
   tensors_initialized_ = true;
   
   // Return result
-  return GetCachedAmplitude_();
+  return ComputeFinalAmplitude_();
 }
 
 template <typename TenElemT, typename QNT>
@@ -730,113 +653,20 @@ TRGContractor<TenElemT, QNT>::BeginTrialWithReplacement(
   trial.layer_splits.resize(scales_.size());
 
   // Scale-0 updates.
-  for (const auto& kv : replacements) {
-    const uint32_t id = NodeId_(kv.first.row(), kv.first.col());
-    trial.layer_updates[0][id] = kv.second;
+  for (const auto& [site, tensor] : replacements) {
+    trial.layer_updates[0][NodeId_(site.row(), site.col())] = tensor;
   }
 
   if (trial.layer_updates[0].empty()) {
-     // No changes
-     trial.amplitude = GetCachedAmplitude_();
+     trial.amplitude = ComputeFinalAmplitude_();
      return trial;
   }
 
-  // Shadow RG propagation with full SVD for dirty children (stored for CommitTrial).
-  for (size_t s = 0; s < scales_.size() - 1; ++s) {
-    if (trial.layer_updates[s].empty()) break;
+  PropagateReplacements_(trial.layer_updates, &trial.layer_splits);
 
-    const auto& fine_layer = scales_[s];
-    const auto& coarse_layer = scales_[s + 1];
-    const bool even_to_odd = (s % 2 == 0);
-
-    // Identify affected coarse nodes.
-    std::set<uint32_t> dirty_coarse_nodes;
-    for (const auto& kv : trial.layer_updates[s]) {
-      const uint32_t f_id = kv.first;
-      const auto& parents = fine_layer.fine_to_coarse[f_id];
-      if (parents[0] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[0]);
-      if (parents[1] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[1]);
-    }
-
-    // Recompute affected coarse nodes, reusing cached split pieces for unchanged children.
-    // For dirty children, use full SVD and store results for CommitTrial.
-    for (uint32_t c_id : dirty_coarse_nodes) {
-      const auto& children = coarse_layer.coarse_to_fine[c_id];
-
-      auto is_dirty = [&](uint32_t id) -> bool {
-        return trial.layer_updates[s].count(id) > 0;
-      };
-      auto get_fine_tensor = [&](uint32_t id) -> const Tensor& {
-        auto it = trial.layer_updates[s].find(id);
-        if (it != trial.layer_updates[s].end()) return it->second;
-        return fine_layer.tens[id];
-      };
-
-      // Compute full SVD for a dirty child (per-node, not per-slot).
-      auto full_split_dirty = [&](uint32_t child_id, int role) -> const TrialSplitData& {
-        auto it = trial.layer_splits[s].find(child_id);
-        if (it != trial.layer_splits[s].end()) return it->second;
-        auto st = ChildSplitType_(s, child_id, role);
-        if (st == ScaleCache::SplitType::Type0) {
-          return trial.layer_splits[s].emplace(child_id, SplitType0Full_(get_fine_tensor(child_id))).first->second;
-        } else {
-          return trial.layer_splits[s].emplace(child_id, SplitType1Full_(get_fine_tensor(child_id))).first->second;
-        }
-      };
-
-      if (even_to_odd) {
-        // Plaquette (even -> odd), children = {TL, TR, BL, BR}.
-        // Need: Q from TL(Type0), Q from TR(Type1), P from BL(Type1), P from BR(Type0).
-        const Tensor& Q_TL = is_dirty(children[0]) ? full_split_dirty(children[0], 0).Q
-                                                    : fine_layer.split_Q.at(children[0]);
-        const Tensor& Q_TR = is_dirty(children[1]) ? full_split_dirty(children[1], 1).Q
-                                                    : fine_layer.split_Q.at(children[1]);
-        const Tensor& P_BL = is_dirty(children[2]) ? full_split_dirty(children[2], 2).P
-                                                    : fine_layer.split_P.at(children[2]);
-        const Tensor& P_BR = is_dirty(children[3]) ? full_split_dirty(children[3], 3).P
-                                                    : fine_layer.split_P.at(children[3]);
-        trial.layer_updates[s + 1][c_id] = ContractPlaquetteCore_(Q_TL, Q_TR, P_BL, P_BR);
-      } else {
-        // Diamond (odd -> even), children = {N, E, S, W}.
-        // Need: P from N(Type1), P from E(Type0), Q from S(Type1), Q from W(Type0).
-        const Tensor& Np = is_dirty(children[0]) ? full_split_dirty(children[0], 0).P
-                                                  : fine_layer.split_P.at(children[0]);
-        const Tensor& Ep = is_dirty(children[1]) ? full_split_dirty(children[1], 1).P
-                                                  : fine_layer.split_P.at(children[1]);
-        const Tensor& Sq = is_dirty(children[2]) ? full_split_dirty(children[2], 2).Q
-                                                  : fine_layer.split_Q.at(children[2]);
-        const Tensor& Wq = is_dirty(children[3]) ? full_split_dirty(children[3], 3).Q
-                                                  : fine_layer.split_Q.at(children[3]);
-        trial.layer_updates[s + 1][c_id] = ContractDiamondCore_(Np, Ep, Sq, Wq);
-      }
-    }
-  }
-
-  // Final amplitude
-  if (!trial.layer_updates.empty()) {
-    const size_t last = trial.layer_updates.size() - 1;
-    if (scales_.back().tens.size() == 1) {
-      auto it = trial.layer_updates[last].find(0);
-      trial.amplitude = ContractFinal1x1_(it != trial.layer_updates[last].end() ? it->second : scales_.back().tens[0]);
-    } else if (scales_.back().tens.size() == 4) {
-      std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                    scales_.back().tens[2], scales_.back().tens[3]};
-      for (uint32_t id = 0; id < 4; ++id) {
-        auto it = trial.layer_updates[last].find(id);
-        if (it != trial.layer_updates[last].end()) t2x2[id] = it->second;
-      }
-      trial.amplitude = ContractFinal2x2_(t2x2);
-    } else if (scales_.back().tens.size() == 9) {
-      std::array<const Tensor*, 9> t3x3;
-      for (uint32_t id = 0; id < 9; ++id) {
-        auto it = trial.layer_updates[last].find(id);
-        t3x3[id] = (it != trial.layer_updates[last].end()) ? &it->second : &scales_.back().tens[id];
-      }
-      trial.amplitude = ContractFinal3x3_(t3x3);
-    } else {
-      throw std::logic_error("TRGContractor::BeginTrialWithReplacement: invalid final scale size.");
-    }
-  }
+  const size_t last = trial.layer_updates.size() - 1;
+  trial.amplitude = ComputeFinalAmplitude_(
+      trial.layer_updates[last].empty() ? nullptr : &trial.layer_updates[last]);
   return trial;
 }
 
@@ -851,16 +681,15 @@ void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
     if (trial.layer_updates[s].empty()) continue;
 
     // Update tensors
-    for (auto& kv : trial.layer_updates[s]) {
-      scales_[s].tens[kv.first] = std::move(kv.second);
+    for (auto& [id, tensor] : trial.layer_updates[s]) {
+      scales_[s].tens[id] = std::move(tensor);
     }
 
     // Transplant pre-computed split data from trial into the scale cache.
     // Falls back to EnsureSplitCacheForNodes_ only for nodes without stored splits.
     if (s < trial.layer_splits.size() && !trial.layer_splits[s].empty()) {
-      std::set<uint32_t> need_recompute;
-      for (const auto& kv : trial.layer_updates[s]) {
-        const uint32_t id = kv.first;
+      std::vector<uint32_t> need_recompute;
+      for (const auto& [id, _] : trial.layer_updates[s]) {
         auto split_it = trial.layer_splits[s].find(id);
         if (split_it != trial.layer_splits[s].end()) {
           auto& sd = split_it->second;
@@ -872,7 +701,7 @@ void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
           layer.split_P[id] = std::move(sd.P);
           layer.split_Q[id] = std::move(sd.Q);
         } else {
-          need_recompute.insert(id);
+          need_recompute.push_back(id);
         }
       }
       if (!need_recompute.empty()) {
@@ -880,9 +709,9 @@ void TRGContractor<TenElemT, QNT>::CommitTrial(Trial&& trial) {
       }
     } else {
       // No stored splits at this scale; fall back to full recompute.
-      std::set<uint32_t> modified_nodes;
-      for (const auto& kv : trial.layer_updates[s]) {
-        modified_nodes.insert(kv.first);
+      std::vector<uint32_t> modified_nodes;
+      for (const auto& [id, _] : trial.layer_updates[s]) {
+        modified_nodes.push_back(id);
       }
       EnsureSplitCacheForNodes_(s, modified_nodes);
     }
@@ -897,19 +726,27 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
   if (!tensors_initialized_) throw std::logic_error("TRGContractor::EvaluateReplacement: Trace(tn) must be called at least once to initialize cache.");
 
   if (replacements.empty()) {
-    return GetCachedAmplitude_();
+    return ComputeFinalAmplitude_();
   }
 
-  // Temporary layer updates (not saved, discarded after computation)
   std::vector<std::map<uint32_t, Tensor>> layer_updates(scales_.size());
-
-  // Scale-0 updates
-  for (const auto& kv : replacements) {
-    const uint32_t id = NodeId_(kv.first.row(), kv.first.col());
-    layer_updates[0][id] = kv.second;
+  for (const auto& [site, tensor] : replacements) {
+    layer_updates[0][NodeId_(site.row(), site.col())] = tensor;
   }
 
-  // Shadow RG propagation (same as BeginTrialWithReplacement)
+  PropagateReplacements_(layer_updates, nullptr);
+
+  const size_t last = layer_updates.size() - 1;
+  return ComputeFinalAmplitude_(
+      layer_updates[last].empty() ? nullptr : &layer_updates[last]);
+}
+
+template <typename TenElemT, typename QNT>
+void TRGContractor<TenElemT, QNT>::PropagateReplacements_(
+    std::vector<std::map<uint32_t, Tensor>>& layer_updates,
+    std::vector<std::map<uint32_t, TrialSplitData>>* trial_splits) const {
+  const bool compute_isometry = (trial_splits != nullptr);
+
   for (size_t s = 0; s < scales_.size() - 1; ++s) {
     if (layer_updates[s].empty()) break;
 
@@ -917,16 +754,17 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
     const auto& coarse_layer = scales_[s + 1];
     const bool even_to_odd = (s % 2 == 0);
 
-    // Identify affected coarse nodes
+    // Identify affected coarse nodes.
     std::set<uint32_t> dirty_coarse_nodes;
-    for (const auto& kv : layer_updates[s]) {
-      const uint32_t f_id = kv.first;
+    for (const auto& [f_id, _] : layer_updates[s]) {
       const auto& parents = fine_layer.fine_to_coarse[f_id];
       if (parents[0] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[0]);
       if (parents[1] != 0xFFFFFFFF) dirty_coarse_nodes.insert(parents[1]);
     }
 
-    // Recompute affected coarse nodes, reusing cached split pieces for unchanged children.
+    // Local storage for lightweight splits (evaluate path only).
+    std::map<uint32_t, SplitResult> local_splits;
+
     for (uint32_t c_id : dirty_coarse_nodes) {
       const auto& children = coarse_layer.coarse_to_fine[c_id];
 
@@ -939,58 +777,55 @@ TenElemT TRGContractor<TenElemT, QNT>::EvaluateReplacement(
         return fine_layer.tens[id];
       };
 
-      // Use exact SVD for dirty children to ensure EvaluateReplacement returns the
-      // same amplitude as BeginTrialWithReplacement.
-      if (even_to_odd) {
-        // Plaquette: need Q from TL(Type0), Q from TR(Type1), P from BL(Type1), P from BR(Type0).
-        SplitARes fresh_tl; if (is_dirty(children[0])) fresh_tl = SplitType0_(get_fine_tensor(children[0]));
-        SplitBRes fresh_tr; if (is_dirty(children[1])) fresh_tr = SplitType1_(get_fine_tensor(children[1]));
-        SplitBRes fresh_bl; if (is_dirty(children[2])) fresh_bl = SplitType1_(get_fine_tensor(children[2]));
-        SplitARes fresh_br; if (is_dirty(children[3])) fresh_br = SplitType0_(get_fine_tensor(children[3]));
+      // Get P/Q for a dirty child: compute via SplitNode_ and cache in the appropriate storage.
+      // Returns references to P and Q that remain valid until the end of this coarse-node iteration.
+      auto get_split = [&](uint32_t child_id, int role) -> std::pair<const Tensor&, const Tensor&> {
+        if (!is_dirty(child_id)) {
+          return {fine_layer.split_P.at(child_id), fine_layer.split_Q.at(child_id)};
+        }
+        auto st = ChildSplitType_(s, child_id, role);
+        if (compute_isometry) {
+          // Trial path: store full SVD in trial_splits.
+          auto it = (*trial_splits)[s].find(child_id);
+          if (it != (*trial_splits)[s].end())
+            return {it->second.P, it->second.Q};
+          auto result = SplitNode_(get_fine_tensor(child_id), st, true);
+          TrialSplitData sd;
+          sd.type = static_cast<uint8_t>(result.split_type);
+          sd.U = std::move(result.U);
+          sd.Vt = std::move(result.Vt);
+          sd.S_inv_sqrt = std::move(result.S_inv_sqrt);
+          sd.P = std::move(result.P);
+          sd.Q = std::move(result.Q);
+          auto [pos, _] = (*trial_splits)[s].emplace(child_id, std::move(sd));
+          return {pos->second.P, pos->second.Q};
+        } else {
+          // Evaluate path: store lightweight split locally.
+          auto it = local_splits.find(child_id);
+          if (it != local_splits.end())
+            return {it->second.P, it->second.Q};
+          auto result = SplitNode_(get_fine_tensor(child_id), st, false);
+          auto [pos, _] = local_splits.emplace(child_id, std::move(result));
+          return {pos->second.P, pos->second.Q};
+        }
+      };
 
-        const Tensor& Q_TL = is_dirty(children[0]) ? fresh_tl.Q : fine_layer.split_Q.at(children[0]);
-        const Tensor& Q_TR = is_dirty(children[1]) ? fresh_tr.Q : fine_layer.split_Q.at(children[1]);
-        const Tensor& P_BL = is_dirty(children[2]) ? fresh_bl.P : fine_layer.split_P.at(children[2]);
-        const Tensor& P_BR = is_dirty(children[3]) ? fresh_br.P : fine_layer.split_P.at(children[3]);
+      if (even_to_odd) {
+        // Plaquette (even -> odd), children = {TL, TR, BL, BR}.
+        auto [P_TL, Q_TL] = get_split(children[0], 0);
+        auto [P_TR, Q_TR] = get_split(children[1], 1);
+        auto [P_BL, Q_BL] = get_split(children[2], 2);
+        auto [P_BR, Q_BR] = get_split(children[3], 3);
         layer_updates[s + 1][c_id] = ContractPlaquetteCore_(Q_TL, Q_TR, P_BL, P_BR);
       } else {
-        // Diamond: need P from N(Type1), P from E(Type0), Q from S(Type1), Q from W(Type0).
-        SplitBRes fresh_n; if (is_dirty(children[0])) fresh_n = SplitType1_(get_fine_tensor(children[0]));
-        SplitARes fresh_e; if (is_dirty(children[1])) fresh_e = SplitType0_(get_fine_tensor(children[1]));
-        SplitBRes fresh_s; if (is_dirty(children[2])) fresh_s = SplitType1_(get_fine_tensor(children[2]));
-        SplitARes fresh_w; if (is_dirty(children[3])) fresh_w = SplitType0_(get_fine_tensor(children[3]));
-
-        const Tensor& Np = is_dirty(children[0]) ? fresh_n.P : fine_layer.split_P.at(children[0]);
-        const Tensor& Ep = is_dirty(children[1]) ? fresh_e.P : fine_layer.split_P.at(children[1]);
-        const Tensor& Sq = is_dirty(children[2]) ? fresh_s.Q : fine_layer.split_Q.at(children[2]);
-        const Tensor& Wq = is_dirty(children[3]) ? fresh_w.Q : fine_layer.split_Q.at(children[3]);
+        // Diamond (odd -> even), children = {N, E, S, W}.
+        auto [Np, Nq] = get_split(children[0], 0);
+        auto [Ep, Eq] = get_split(children[1], 1);
+        auto [Sp, Sq] = get_split(children[2], 2);
+        auto [Wp, Wq] = get_split(children[3], 3);
         layer_updates[s + 1][c_id] = ContractDiamondCore_(Np, Ep, Sq, Wq);
       }
     }
-  }
-
-  // Final amplitude computation
-  const size_t last = layer_updates.size() - 1;
-  if (scales_.back().tens.size() == 1) {
-    auto it = layer_updates[last].find(0);
-    return ContractFinal1x1_(it != layer_updates[last].end() ? it->second : scales_.back().tens[0]);
-  } else if (scales_.back().tens.size() == 4) {
-    std::array<Tensor, 4> t2x2 = {scales_.back().tens[0], scales_.back().tens[1],
-                                  scales_.back().tens[2], scales_.back().tens[3]};
-    for (uint32_t id = 0; id < 4; ++id) {
-      auto it = layer_updates[last].find(id);
-      if (it != layer_updates[last].end()) t2x2[id] = it->second;
-    }
-    return ContractFinal2x2_(t2x2);
-  } else if (scales_.back().tens.size() == 9) {
-    std::array<const Tensor*, 9> t3x3;
-    for (uint32_t id = 0; id < 9; ++id) {
-      auto it = layer_updates[last].find(id);
-      t3x3[id] = (it != layer_updates[last].end()) ? &it->second : &scales_.back().tens[id];
-    }
-    return ContractFinal3x3_(t3x3);
-  } else {
-    throw std::logic_error("TRGContractor::EvaluateReplacement: invalid final scale size.");
   }
 }
 

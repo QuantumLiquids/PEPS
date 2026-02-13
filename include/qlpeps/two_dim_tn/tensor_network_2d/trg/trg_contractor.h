@@ -317,11 +317,11 @@ class TRGContractor {
    * production API surface.
    */
   std::pair<Tensor, Tensor> SplitType0PiecesForTest(const Tensor& T) const {
-    auto r = SplitType0_(T);
+    auto r = SplitNode_(T, ScaleCache::SplitType::Type0, false);
     return {std::move(r.P), std::move(r.Q)};
   }
   std::pair<Tensor, Tensor> SplitType1PiecesForTest(const Tensor& T) const {
-    auto r = SplitType1_(T);
+    auto r = SplitNode_(T, ScaleCache::SplitType::Type1, false);
     return {std::move(r.P), std::move(r.Q)};
   }
 #endif
@@ -552,13 +552,15 @@ class TRGContractor {
     std::vector<qlten::QLTensor<RealT, QNT>> split_S_inv_sqrt; // per node
   };
 
-  struct SplitARes {
-    Tensor P;  // "NW" piece: (leg0, leg3, alpha)
-    Tensor Q;  // "SE" piece: (alpha, leg1, leg2)
-  };
-  struct SplitBRes {
-    Tensor Q;  // "SW/N" piece: (leg0, leg1, alpha)
-    Tensor P;  // "NE/S" piece: (alpha, leg2, leg3)
+  /// Result of SplitNode_: unified SVD split for both Type0 and Type1.
+  struct SplitResult {
+    typename ScaleCache::SplitType split_type;
+    Tensor P;
+    Tensor Q;
+    // Populated only when compute_isometry == true:
+    Tensor U;
+    Tensor Vt;
+    qlten::QLTensor<RealT, QNT> S_inv_sqrt;
   };
 
   static bool IsPowerOfTwo_(size_t n) { return n != 0 && ((n & (n - 1)) == 0); }
@@ -575,20 +577,14 @@ class TRGContractor {
   void BuildTopology_();
   void ValidateTopologyConsistency_() const;
   
-  // Helpers for incremental updates
-  // void MarkDirtySeed_(uint32_t node);
-
   // Split cache helpers (for Trace/PunchHole)
-  void EnsureSplitCacheForNodes_(size_t scale, const std::set<uint32_t>& nodes);
-  
-  // SVD Splitters
-  SplitARes SplitType0_(const Tensor& T_in) const;
-  SplitBRes SplitType1_(const Tensor& T_in) const;
+  /// @pre nodes must contain unique IDs (duplicates cause redundant SVD recomputation).
+  void EnsureSplitCacheForNodes_(size_t scale, const std::vector<uint32_t>& nodes);
 
-  // Full SVD splitters returning complete isometry data for caching.
-  // Used by BeginTrialWithReplacement to avoid double SVD in CommitTrial.
-  TrialSplitData SplitType0Full_(const Tensor& T_in) const;
-  TrialSplitData SplitType1Full_(const Tensor& T_in) const;
+  /// Unified SVD split: performs SVD on T_in (transposed per split_type), produces P and Q.
+  /// When compute_isometry is true, also stores U, Vt, S_inv_sqrt for PunchHole linearization.
+  SplitResult SplitNode_(const Tensor& T_in, typename ScaleCache::SplitType split_type,
+                         bool compute_isometry) const;
 
   // Determine split type for a child given its role and scale.
   typename ScaleCache::SplitType ChildSplitType_(size_t scale, uint32_t child_id, int role) const;
@@ -606,7 +602,17 @@ class TRGContractor {
   std::array<Tensor, 4> PunchAllHoleFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
   std::array<Tensor, 9> PunchAllHoleFinal3x3_(const std::array<const Tensor*, 9>& T3x3) const;
 
-  TenElemT GetCachedAmplitude_() const;
+  /// Compute the final amplitude from the top-scale tensors.
+  /// When top_updates is provided, overlay updated tensors before contraction.
+  TenElemT ComputeFinalAmplitude_(
+      const std::map<uint32_t, Tensor>* top_updates = nullptr) const;
+
+  /// Shadow RG propagation: recompute coarse tensors affected by layer_updates.
+  /// When trial_splits is non-null (trial path), full SVD is stored for CommitTrial.
+  /// When trial_splits is null (evaluate path), only P/Q are computed.
+  void PropagateReplacements_(
+      std::vector<std::map<uint32_t, Tensor>>& layer_updates,
+      std::vector<std::map<uint32_t, TrialSplitData>>* trial_splits) const;
 
   size_t rows_ = 0;
   size_t cols_ = 0;
@@ -615,9 +621,6 @@ class TRGContractor {
 
   // Multi-scale cache: scales_[0] corresponds to the original network (scale 0).
   std::vector<ScaleCache> scales_;
-
-  // Dirty seeds on scale 0; influence propagation across scales is handled lazily.
-  // std::unordered_set<uint32_t> dirty_scale0_;
 
   // Must be set by caller (via SetTruncateParams or the ctor taking trunc_params).
   std::optional<TruncateParams> trunc_params_;
