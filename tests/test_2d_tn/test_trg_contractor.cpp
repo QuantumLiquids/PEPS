@@ -129,8 +129,8 @@ double TraceTRGZ(const qlpeps::TensorNetwork2D<TenElemT, QNT> &tn, size_t dmax) 
   return Z;
 }
 
-// Helper for testing PunchHole and PunchAllHoles correctness on Z2 Ising torus
-void RunZ2IsingPunchHoleTest(size_t n, bool sample_diagonal_only) {
+// Helper for testing PunchAllHoles correctness on Z2 Ising torus
+void RunZ2IsingPunchAllHolesTest(size_t n, bool sample_diagonal_only) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
   using TensorT = qlten::QLTensor<TenElemT, QNT>;
@@ -141,16 +141,12 @@ void RunZ2IsingPunchHoleTest(size_t n, bool sample_diagonal_only) {
   const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
 
   qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
-  // Dmax=8 is sufficient for topology validation.
   trg.SetTruncateParams(qlpeps::TRGContractor<TenElemT, QNT>::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
   trg.Init(tn);
 
-  std::cerr << "[PunchHole" << n << "x" << n << "Z2Ising] begin Trace()" << std::endl;
   const TenElemT Z = trg.Trace(tn);
-  std::cerr << "[PunchHole" << n << "x" << n << "Z2Ising] Trace() done, Z=" << Z << std::endl;
   ASSERT_TRUE(std::isfinite(Z));
 
-  // Get all holes using batch API
   const auto all_holes = trg.PunchAllHoles(tn);
 
   using qlten::Contract;
@@ -158,44 +154,21 @@ void RunZ2IsingPunchHoleTest(size_t n, bool sample_diagonal_only) {
   size_t ratio_cnt = 0;
 
   auto check_site = [&](size_t r, size_t c) {
-      const SiteIdx site{r, c};
-
-      // Single-site API
-      TensorT hole_single;
-      ASSERT_NO_THROW(hole_single = trg.PunchHole(tn, site));
-
-      // Batch API result
-      const TensorT& hole_batch = all_holes({r, c});
-
-      // Verify batch matches single-site
-      TensorT diff = hole_batch + (-hole_single);
-      EXPECT_NEAR(diff.GetQuasi2Norm(), 0.0, 1e-12 * std::max(1.0, hole_single.GetQuasi2Norm()))
-          << "site=(" << r << "," << c << ") batch vs single mismatch";
-
-      // Verify single-site can reconstruct Z
-      TensorT out;
+      const TensorT& hole = all_holes({r, c});
       const TensorT& Ts = tn({r, c});
-      ASSERT_NO_THROW(Contract(&hole_single, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
-      const TenElemT z_rec = out();
-
-      const double ratio = z_rec / Z;
+      TensorT out;
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      const double ratio = out() / Z;
       ratio_sum += ratio;
       ++ratio_cnt;
-
-      // Loose per-site check
       EXPECT_NEAR(ratio, 1.0, 5e-2) << "site=(" << r << "," << c << ") ratio=" << ratio;
   };
 
   if (sample_diagonal_only) {
-      for (size_t i = 0; i < n; ++i) {
-          check_site(i, i);
-      }
+      for (size_t i = 0; i < n; ++i) check_site(i, i);
   } else {
-      for (size_t r = 0; r < n; ++r) {
-          for (size_t c = 0; c < n; ++c) {
-              check_site(r, c);
-          }
-      }
+      for (size_t r = 0; r < n; ++r)
+          for (size_t c = 0; c < n; ++c) check_site(r, c);
   }
 
   const double ratio_mean = ratio_sum / double(ratio_cnt);
@@ -421,7 +394,7 @@ TEST(TRGContractorPBC, EvaluateReplacementMatchesTrial4x4) {
   EXPECT_NEAR(Z_eval, Z_tm_ref, 1e-10 * std::max(1.0, std::abs(Z_tm_ref)));
 }
 
-TEST(TRGContractorPBC, PunchHole2x2U1Random) {
+TEST(TRGContractorPBC, PunchAllHoles2x2U1Random) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::U1QN;
   using IndexT = qlten::Index<QNT>;
@@ -430,42 +403,23 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
 
   auto q = [](int sz) { return QNT({QNCard("Sz", U1QNVal(sz))}); };
 
-  // Build 8 distinct bond indices (each has at least charge-0 sector, so divergence-0 blocks exist).
-  const IndexT x01_out({QNSctT(q(0), 1), QNSctT(q(+1), 2)}, TenIndexDirType::OUT); // (0,0).R -> (0,1).L
-  const IndexT x10_out({QNSctT(q(0), 2), QNSctT(q(-1), 1)}, TenIndexDirType::OUT); // (0,1).R -> (0,0).L
-  const IndexT x23_out({QNSctT(q(0), 1), QNSctT(q(+2), 1)}, TenIndexDirType::OUT); // (1,0).R -> (1,1).L
-  const IndexT x32_out({QNSctT(q(0), 3)}, TenIndexDirType::OUT); // (1,1).R -> (1,0).L
+  const IndexT x01_out({QNSctT(q(0), 1), QNSctT(q(+1), 2)}, TenIndexDirType::OUT);
+  const IndexT x10_out({QNSctT(q(0), 2), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);
+  const IndexT x23_out({QNSctT(q(0), 1), QNSctT(q(+2), 1)}, TenIndexDirType::OUT);
+  const IndexT x32_out({QNSctT(q(0), 3)}, TenIndexDirType::OUT);
 
   const IndexT y02_out({QNSctT(q(0), 1), QNSctT(q(+1), 1), QNSctT(q(-1), 1)}, TenIndexDirType::OUT);
-  // (0,0).D -> (1,0).U
-  const IndexT y20_out({QNSctT(q(0), 2), QNSctT(q(+1), 1)}, TenIndexDirType::OUT); // (1,0).D -> (0,0).U
-  const IndexT y13_out({QNSctT(q(0), 1), QNSctT(q(-2), 1)}, TenIndexDirType::OUT); // (0,1).D -> (1,1).U
-  const IndexT y31_out({QNSctT(q(0), 2), QNSctT(q(-1), 2)}, TenIndexDirType::OUT); // (1,1).D -> (0,1).U
+  const IndexT y20_out({QNSctT(q(0), 2), QNSctT(q(+1), 1)}, TenIndexDirType::OUT);
+  const IndexT y13_out({QNSctT(q(0), 1), QNSctT(q(-2), 1)}, TenIndexDirType::OUT);
+  const IndexT y31_out({QNSctT(q(0), 2), QNSctT(q(-1), 2)}, TenIndexDirType::OUT);
 
-  // Site tensors follow TRGContractor convention: (l IN, d OUT, r OUT, u IN).
   auto make_site = [&](const IndexT &l_in, const IndexT &d_out, const IndexT &r_out, const IndexT &u_in) {
     TensorT T({l_in, d_out, r_out, u_in});
-    T.Random(QNT(0)); // divergence 0
+    T.Random(QNT(0));
     return T;
   };
 
   qlpeps::TensorNetwork2D<TenElemT, QNT> tn(2, 2, qlpeps::BoundaryCondition::Periodic);
-
-  // Layout:
-  //   0:(0,0)  1:(0,1)
-  //   2:(1,0)  3:(1,1)
-  //
-  // Horizontal bonds (two per row):
-  //   0.R <-> 1.L uses x01_out
-  //   1.R <-> 0.L uses x10_out
-  //   2.R <-> 3.L uses x23_out
-  //   3.R <-> 2.L uses x32_out
-  //
-  // Vertical bonds (two per column):
-  //   0.D <-> 2.U uses y02_out
-  //   2.D <-> 0.U uses y20_out
-  //   1.D <-> 3.U uses y13_out
-  //   3.D <-> 1.U uses y31_out
   tn({0, 0}) = make_site(InverseIndex(x10_out), y02_out, x01_out, InverseIndex(y20_out));
   tn({0, 1}) = make_site(InverseIndex(x01_out), y13_out, x10_out, InverseIndex(y31_out));
   tn({1, 0}) = make_site(InverseIndex(x32_out), y20_out, x23_out, InverseIndex(y02_out));
@@ -478,30 +432,21 @@ TEST(TRGContractorPBC, PunchHole2x2U1Random) {
   const TenElemT Z = trg.Trace(tn);
   ASSERT_TRUE(std::isfinite(Z));
 
-  // Get all holes using batch API
   const auto all_holes = trg.PunchAllHoles(tn);
 
   using qlten::Contract;
   for (size_t r = 0; r < 2; ++r) {
     for (size_t c = 0; c < 2; ++c) {
-      const SiteIdx site{r, c};
-      const TensorT hole_single = trg.PunchHole(tn, site);
-      const TensorT& hole_batch = all_holes({r, c});
-
-      // Verify batch matches single-site
-      TensorT diff = hole_batch + (-hole_single);
-      EXPECT_NEAR(diff.GetQuasi2Norm(), 0.0, 1e-12 * std::max(1.0, hole_single.GetQuasi2Norm()));
-
+      const TensorT& hole = all_holes({r, c});
+      const TensorT& Ts = tn({r, c});
       TensorT out;
-      const TensorT &Ts = tn({r, c});
-      Contract(&hole_single, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out);
-      const TenElemT z_reconstructed = out();
-      EXPECT_NEAR(z_reconstructed, Z, 1e-10 * std::max(1.0, std::abs(Z)));
+      Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out);
+      EXPECT_NEAR(out(), Z, 1e-10 * std::max(1.0, std::abs(Z)));
     }
   }
 }
 
-TEST(TRGContractorPBC, PunchHole3x3Z2Ising) {
+TEST(TRGContractorPBC, PunchAllHoles3x3Z2Ising) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
   using TensorT = qlten::QLTensor<TenElemT, QNT>;
@@ -519,31 +464,21 @@ TEST(TRGContractorPBC, PunchHole3x3Z2Ising) {
   const TenElemT Z = trg.Trace(tn);
   ASSERT_TRUE(std::isfinite(Z));
 
-  // Get all holes using batch API
   const auto all_holes = trg.PunchAllHoles(tn);
 
   using qlten::Contract;
   for (size_t r = 0; r < n; ++r) {
     for (size_t c = 0; c < n; ++c) {
-      const SiteIdx site{r, c};
-      TensorT hole_single;
-      ASSERT_NO_THROW(hole_single = trg.PunchHole(tn, site));
-
-      // Verify batch matches single-site
-      const TensorT& hole_batch = all_holes({r, c});
-      TensorT diff = hole_batch + (-hole_single);
-      EXPECT_NEAR(diff.GetQuasi2Norm(), 0.0, 1e-12 * std::max(1.0, hole_single.GetQuasi2Norm()));
-
-      TensorT out;
+      const TensorT& hole = all_holes({r, c});
       const TensorT& Ts = tn({r, c});
-      ASSERT_NO_THROW(Contract(&hole_single, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
-      const TenElemT z_reconstructed = out();
-      EXPECT_NEAR(z_reconstructed, Z, 1e-12 * std::max(1.0, std::abs(Z)));
+      TensorT out;
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      EXPECT_NEAR(out(), Z, 1e-12 * std::max(1.0, std::abs(Z)));
     }
   }
 }
 
-TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
+TEST(TRGContractorPBC, PunchAllHoles4x4U1RandomDistinctLegs) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::U1QN;
   using IndexT = qlten::Index<QNT>;
@@ -554,31 +489,25 @@ TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
 
   constexpr size_t n = 4;
 
-  // Build per-directed-bond indices:
-  // - x_out[r,c] is (r,c).R -> (r,c+1).L
-  // - y_out[r,c] is (r,c).D -> (r+1,c).U
-  //
-  // Each index includes at least charge-0 sector so divergence-0 blocks exist.
   std::array<IndexT, n * n> x_out;
   std::array<IndexT, n * n> y_out;
   for (size_t r = 0; r < n; ++r) {
     for (size_t c = 0; c < n; ++c) {
       const size_t id = r * n + c;
-      const int d0 = 1 + int(id % 3); // 1..3
-      const int d1 = 1 + int((id / 3) % 2); // 1..2
-      const int d2 = 1 + int((id / 5) % 2); // 1..2
+      const int d0 = 1 + int(id % 3);
+      const int d1 = 1 + int((id / 3) % 2);
+      const int d2 = 1 + int((id / 5) % 2);
       x_out[id] = IndexT({QNSctT(q(0), d0), QNSctT(q(+1), d1), QNSctT(q(-1), d2)}, TenIndexDirType::OUT);
 
-      const int e0 = 1 + int((id + 1) % 3); // 1..3
-      const int e2 = 1 + int(((id + 2) / 4) % 2); // 1..2
+      const int e0 = 1 + int((id + 1) % 3);
+      const int e2 = 1 + int(((id + 2) / 4) % 2);
       y_out[id] = IndexT({QNSctT(q(0), e0), QNSctT(q(+2), e2)}, TenIndexDirType::OUT);
     }
   }
 
-  // Site tensors follow TRGContractor convention: (l IN, d OUT, r OUT, u IN).
   auto make_site = [&](const IndexT &l_in, const IndexT &d_out, const IndexT &r_out, const IndexT &u_in) {
     TensorT T({l_in, d_out, r_out, u_in});
-    T.Random(QNT(0)); // divergence 0
+    T.Random(QNT(0));
     return T;
   };
 
@@ -588,8 +517,8 @@ TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
       const size_t id = r * n + c;
       const size_t cm1 = (c + n - 1) % n;
       const size_t rm1 = (r + n - 1) % n;
-      const size_t id_l = r * n + cm1; // left neighbor contributes x_out[r,cm1] to our l_in
-      const size_t id_u = rm1 * n + c; // up   neighbor contributes y_out[rm1,c] to our u_in
+      const size_t id_l = r * n + cm1;
+      const size_t id_u = rm1 * n + c;
 
       const IndexT l_in = InverseIndex(x_out[id_l]);
       const IndexT d_out = y_out[id];
@@ -600,53 +529,41 @@ TEST(TRGContractorPBC, PunchHole4x4U1RandomDistinctLegs) {
   }
 
   qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
-  // Use large enough Dmax to avoid truncation being the dominant error source in this wiring test.
   trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/8, /*trunc_error=*/0.0));
   trg.Init(tn);
 
   const TenElemT Z = trg.Trace(tn);
   ASSERT_TRUE(std::isfinite(Z));
 
-  // Get all holes using batch API
   const auto all_holes = trg.PunchAllHoles(tn);
 
   using qlten::Contract;
   for (size_t r = 0; r < n; ++r) {
     for (size_t c = 0; c < n; ++c) {
-      const SiteIdx site{r, c};
-      TensorT hole_single;
-      ASSERT_NO_THROW(hole_single = trg.PunchHole(tn, site));
+      const TensorT& hole = all_holes({r, c});
+      const TensorT& Ts = tn({r, c});
 
-      // Verify batch matches single-site
-      const TensorT& hole_batch = all_holes({r, c});
-      TensorT diff = hole_batch + (-hole_single);
-      EXPECT_NEAR(diff.GetQuasi2Norm(), 0.0, 1e-12 * std::max(1.0, hole_single.GetQuasi2Norm()));
-
-// Optional (expensive) probe baseline comparisons for local debugging.
-// This should stay OFF in normal CI runs.
 #if defined(QLPEPS_TRG_PUNCHHOLE_COMPARE_BASELINE)
       if (r == 0 && c == 0) {
+        const SiteIdx site{r, c};
         const TensorT hole_ref = trg.PunchHoleBaselineByProbingForTest(tn, site);
         TensorT out_ref;
-        const TensorT& Ts0 = tn({r, c});
-        ASSERT_NO_THROW(Contract(&hole_ref, {0, 1, 2, 3}, &Ts0, {0, 1, 2, 3}, &out_ref));
-        const TenElemT z_ref = out_ref();
-        EXPECT_NEAR(z_ref, Z, 1e-10 * std::max(1.0, std::abs(Z)));
+        ASSERT_NO_THROW(Contract(&hole_ref, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out_ref));
+        EXPECT_NEAR(out_ref(), Z, 1e-10 * std::max(1.0, std::abs(Z)));
       }
 #endif
 
       TensorT out;
-      const TensorT &Ts = tn({r, c});
-      ASSERT_NO_THROW(Contract(&hole_single, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
-      const TenElemT z_reconstructed = out();
-      EXPECT_NEAR(z_reconstructed, Z, 1e-10 * std::max(1.0, std::abs(Z)));
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      EXPECT_NEAR(out(), Z, 1e-10 * std::max(1.0, std::abs(Z)));
     }
   }
 }
 
-TEST(TRGContractorPBC, PunchHole4x4Z2Ising) {
+TEST(TRGContractorPBC, PunchAllHoles4x4Z2Ising) {
   using TenElemT = QLTEN_Double;
   using QNT = qlten::special_qn::Z2QN;
+  using TensorT = qlten::QLTensor<TenElemT, QNT>;
 
   const size_t n = 4;
   const double K = 0.3;
@@ -655,81 +572,47 @@ TEST(TRGContractorPBC, PunchHole4x4Z2Ising) {
   const auto tn = BuildZ2IsingTorusTN(n, Kx, Ky);
 
   qlpeps::TRGContractor<TenElemT, QNT> trg(n, n);
-  // Use a small Dmax first to make topology/indexing bugs easier to spot (less room to hide behind large subspaces).
   trg.SetTruncateParams(decltype(trg)::TruncateParams::SVD(/*d_min=*/2, /*d_max=*/16, /*trunc_error=*/0.0));
   trg.Init(tn);
 
-  // Initialize cache so the baseline probing uses a clean, initialized TRG cache.
   double Z = 0.0;
   ASSERT_NO_THROW(Z = trg.Trace(tn));
 
-  // Get all holes using batch API
   const auto all_holes = trg.PunchAllHoles(tn);
 
-  // Correctness check (option-1 semantics):
-  // For each site i, contract hole_i with the original site tensor and recover the global trace.
   using qlten::Contract;
   for (size_t r = 0; r < n; ++r) {
     for (size_t c = 0; c < n; ++c) {
-      const SiteIdx site{r, c};
-      decltype(trg)::Tensor hole_single;
-      // Now use the production PunchHole which supports 4x4
-      ASSERT_NO_THROW(hole_single = trg.PunchHole(tn, site));
+      const TensorT& hole = all_holes({r, c});
+      const TensorT& Ts = tn({r, c});
 
-      // Verify batch matches single-site
-      const auto& hole_batch = all_holes({r, c});
-      decltype(trg)::Tensor diff = hole_batch + (-hole_single);
-      EXPECT_NEAR(diff.GetQuasi2Norm(), 0.0, 1e-12 * std::max(1.0, hole_single.GetQuasi2Norm()));
-
-      const auto &Ts = tn({site.row(), site.col()});
-
-      // Optional: Compare with baseline for one site to ensure exact match of the hole tensor itself
-      if (r == 0 && c == 0) {
 #if defined(QLPEPS_TRG_PUNCHHOLE_COMPARE_BASELINE)
-        decltype(trg)::Tensor hole_ref = trg.PunchHoleBaselineByProbingForTest(tn, site);
-        // Expect very close match (same TRG environment logic)
-        decltype(trg)::Tensor diff_ref;
-        diff_ref = hole_single + (-hole_ref);
-        EXPECT_NEAR(diff_ref.GetQuasi2Norm(), 0.0, 2e-4);
-        // Debug code: we sometimes observe maybe hole = 4 * hole_ref
-        // auto diff2 = hole + (-4.0 * hole_ref);
-        // if (diff2.Get2Norm() < 1e-6) {
-        //   std::cout << "[diff2]" << diff2 <<", Yes, hole = 4 * hole_ref"<< std::endl;
-        // }
-
-        // Baseline sanity: contracting the baseline hole with the original site tensor
-        // should reconstruct the same global trace (approximately under truncation).
-        {
-          decltype(trg)::Tensor out_ref;
-          ASSERT_NO_THROW(Contract(&hole_ref, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out_ref));
-          const double z_ref = out_ref();
-          EXPECT_NEAR(z_ref, Z, 1e-6 * std::max(1.0, std::abs(Z)));
-        }
-#endif
+      if (r == 0 && c == 0) {
+        const SiteIdx site{r, c};
+        TensorT hole_ref = trg.PunchHoleBaselineByProbingForTest(tn, site);
+        TensorT out_ref;
+        ASSERT_NO_THROW(Contract(&hole_ref, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out_ref));
+        EXPECT_NEAR(out_ref(), Z, 1e-6 * std::max(1.0, std::abs(Z)));
       }
+#endif
 
-      typename decltype(trg)::Tensor out;
-      ASSERT_NO_THROW(Contract(&hole_single, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
-      const double z_reconstructed = out();
-
-      // With truncation this is approximate; allow a looser relative tolerance for small Dmax.
-      EXPECT_NEAR(z_reconstructed, Z, 1e-6 * std::max(1.0, std::abs(Z)));
+      TensorT out;
+      ASSERT_NO_THROW(Contract(&hole, {0, 1, 2, 3}, &Ts, {0, 1, 2, 3}, &out));
+      EXPECT_NEAR(out(), Z, 1e-6 * std::max(1.0, std::abs(Z)));
     }
   }
 }
 
-TEST(TRGContractorPBC, PunchHole6x6Z2Ising) {
-  RunZ2IsingPunchHoleTest(6, /*sample_diagonal_only=*/false);
+TEST(TRGContractorPBC, PunchAllHoles6x6Z2Ising) {
+  RunZ2IsingPunchAllHolesTest(6, /*sample_diagonal_only=*/false);
 }
 
-TEST(TRGContractorPBC, PunchHole8x8Z2Ising) {
-  // Use diagonal sampling to speed up large system check
-  RunZ2IsingPunchHoleTest(8, /*sample_diagonal_only=*/true);
+TEST(TRGContractorPBC, PunchAllHoles8x8Z2Ising) {
+  RunZ2IsingPunchAllHolesTest(8, /*sample_diagonal_only=*/true);
 }
 
-TEST(TRGContractorPBC, PunchHole12x12Z2Ising) {
-  // Use diagonal sampling to speed up large system check
-  RunZ2IsingPunchHoleTest(12, /*sample_diagonal_only=*/true);
+TEST(TRGContractorPBC, PunchAllHoles12x12Z2Ising) {
+  RunZ2IsingPunchAllHolesTest(12, /*sample_diagonal_only=*/true);
 }
 
 // Regression test: verifies that all TRG operations produce identical results

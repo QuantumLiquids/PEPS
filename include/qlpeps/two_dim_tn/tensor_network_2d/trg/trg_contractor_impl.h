@@ -1096,464 +1096,126 @@ TenElemT TRGContractor<TenElemT, QNT>::ContractFinal3x3_(const std::array<const 
 }
 
 template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2,
-                                                const uint32_t removed_id) const {
+std::array<typename TRGContractor<TenElemT, QNT>::Tensor, 4>
+TRGContractor<TenElemT, QNT>::PunchAllHoleFinal2x2_(
+    const std::array<Tensor, 4>& T2x2) const {
   using qlten::Contract;
-  // Exact 2x2 PBC hole by contracting the other 3 tensors.
+  // Exact 2x2 PBC holes by contracting the other 3 tensors for each site.
   //
-  // The output tensor legs are ordered to match the removed site's [L,D,R,U] convention.
-  // See PunchHole() documentation in trg_contractor.h.
-  if (removed_id >= 4) throw std::invalid_argument("TRGContractor::PunchHoleFinal2x2_: removed_id out of range.");
-
-  // Hard-code the 4 cases for clarity (avoid clever but fragile graph logic).
   // Id layout (row-major):
   //   0 1
   //   2 3
   //
-  // Note: For a 2x2 torus, each nearest-neighbor pair is connected by TWO bonds.
-  // We always contract the two bonds between a pair simultaneously.
-  if (removed_id == 0) {
-    // Remove 0. Remaining: 1,2,3.
-    // Contract (1)-(3) vertically: 1.{D,U} <-> 3.{U,D}
-    Tensor bd;
-    Contract(&T2x2[1], {1, 3}, &T2x2[3], {3, 1}, &bd);  
-    Tensor hole;
-    Contract(&bd, {2, 3}, &T2x2[2], {2, 0}, &hole);  
-    hole.Transpose({1, 3, 0, 2});
-    return hole;
-  }
-  if (removed_id == 1) {
-    Tensor ac;
-    Contract(&T2x2[0], {1, 3}, &T2x2[2], {3, 1}, &ac);  
-    Tensor hole;
-    Contract(&ac, {2, 3}, &T2x2[3], {2, 0}, &hole);      
-    hole.Transpose({1, 3, 0, 2});
-    return hole;
-  }
-  if (removed_id == 2) {
-    Tensor ab;
-    Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);  
-    Tensor hole;
-    Contract(&ab, {2, 3}, &T2x2[3], {3, 1}, &hole);      
-    hole.Transpose({3, 1, 2, 0});
-    return hole;
-  }
-  // removed_id == 3
+  // For a 2x2 torus, each nearest-neighbor pair is connected by TWO bonds.
+  std::array<Tensor, 4> holes;
+
+  // Shared intermediate: ab contracts horizontal bonds of row 0.
   Tensor ab;
-  Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);    
-  Tensor hole;
-  Contract(&ab, {0, 1}, &T2x2[2], {3, 1}, &hole);        
-  hole.Transpose({3, 1, 2, 0});
-  return hole;
+  Contract(&T2x2[0], {0, 2}, &T2x2[1], {2, 0}, &ab);
+
+  // Hole 0: remove T[0], contract T[1]-T[3] vertically then with T[2].
+  {
+    Tensor bd;
+    Contract(&T2x2[1], {1, 3}, &T2x2[3], {3, 1}, &bd);
+    Contract(&bd, {2, 3}, &T2x2[2], {2, 0}, &holes[0]);
+    holes[0].Transpose({1, 3, 0, 2});
+  }
+  // Hole 1: remove T[1], contract T[0]-T[2] vertically then with T[3].
+  {
+    Tensor ac;
+    Contract(&T2x2[0], {1, 3}, &T2x2[2], {3, 1}, &ac);
+    Contract(&ac, {2, 3}, &T2x2[3], {2, 0}, &holes[1]);
+    holes[1].Transpose({1, 3, 0, 2});
+  }
+  // Hole 2: remove T[2], use shared ab then contract with T[3].
+  {
+    Contract(&ab, {2, 3}, &T2x2[3], {3, 1}, &holes[2]);
+    holes[2].Transpose({3, 1, 2, 0});
+  }
+  // Hole 3: remove T[3], use shared ab then contract with T[2].
+  {
+    Contract(&ab, {0, 1}, &T2x2[2], {3, 1}, &holes[3]);
+    holes[3].Transpose({3, 1, 2, 0});
+  }
+  return holes;
 }
 
 template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::PunchHoleFinal3x3_(const std::array<const Tensor*, 9>& T3x3,
-                                                 const uint32_t removed_id) const {
+std::array<typename TRGContractor<TenElemT, QNT>::Tensor, 9>
+TRGContractor<TenElemT, QNT>::PunchAllHoleFinal3x3_(
+    const std::array<const Tensor*, 9>& T3x3) const {
   using qlten::Contract;
 
-  if (removed_id >= 9) throw std::invalid_argument("TRGContractor::PunchHoleFinal3x3_: removed_id out of range.");
-
-  auto require_inv = [&](const Tensor& A, const size_t axA, const Tensor& B, const size_t axB, const char* where) {
-    if (A.IsDefault() || B.IsDefault())
-      throw std::logic_error(std::string("TRGContractor::PunchHoleFinal3x3_: default tensor at ") + where);
-    const auto& ia = A.GetIndex(axA);
-    const auto& ib = B.GetIndex(axB);
-    if (!(ia == InverseIndex(ib)))
-      throw std::logic_error(std::string("TRGContractor::PunchHoleFinal3x3_: index mismatch at ") + where);
-  };
-
-  auto mod3 = [](int x) -> uint8_t { return static_cast<uint8_t>((x % 3 + 3) % 3); };
-  auto id = [](const uint8_t r, const uint8_t c) -> uint32_t { return uint32_t(r) * 3u + uint32_t(c); };
-  auto rc = [](const uint32_t i) -> std::pair<uint8_t, uint8_t> { return {uint8_t(i / 3u), uint8_t(i % 3u)}; };
-  const auto [rr, cc] = rc(removed_id);
-  auto rel_id = [&](int dr, int dc) -> uint32_t {
-    return id(mod3(int(rr) + dr), mod3(int(cc) + dc));
-  };
-
-  for (size_t sid = 0; sid < 9; ++sid) {
-    if (sid == removed_id) continue;
-    if (T3x3[sid] == nullptr || T3x3[sid]->IsDefault()) {
-      throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: site tensor is default/null.");
+  for (const Tensor* t : T3x3) {
+    if (t == nullptr || t->IsDefault()) {
+      throw std::logic_error("TRGContractor::PunchAllHoleFinal3x3_: site tensor is default/null.");
     }
   }
 
-  const Tensor& T01 = *T3x3[rel_id(0, 1)];
-  const Tensor& T02 = *T3x3[rel_id(0, 2)];
-  const Tensor& T10 = *T3x3[rel_id(1, 0)];
-  const Tensor& T11 = *T3x3[rel_id(1, 1)];
-  const Tensor& T12 = *T3x3[rel_id(1, 2)];
-  const Tensor& T20 = *T3x3[rel_id(2, 0)];
-  const Tensor& T21 = *T3x3[rel_id(2, 1)];
-  const Tensor& T22 = *T3x3[rel_id(2, 2)];
-
-  // Contract one periodic row of 3 tensors into a rank-6 tensor with legs [D0,U0,D1,U1,D2,U2].
-  auto row_ring = [&](const Tensor& A0, const Tensor& A1, const Tensor& A2,
-                      const char* where01, const char* where0l2r, const char* where1r2l) -> Tensor {
-    require_inv(A0, 2, A1, 0, where01);
+  // Contract one periodic row of 3 tensors into rank-6: [D0,U0,D1,U1,D2,U2].
+  auto row_ring = [](const Tensor& A0, const Tensor& A1, const Tensor& A2) -> Tensor {
     Tensor t01;
     Contract(&A0, {2}, &A1, {0}, &t01);
-
     // t01 axes: [A0.L, A0.D, A0.U, A1.D, A1.R, A1.U]
-    require_inv(t01, 0, A2, 2, where0l2r);  // A0.L <-> A2.R
-    require_inv(t01, 4, A2, 0, where1r2l);  // A1.R <-> A2.L
     Tensor row;
     Contract(&t01, {0, 4}, &A2, {2, 0}, &row);
+    // row axes: [A0.D, A0.U, A1.D, A1.U, A2.D, A2.U]
     return row;
   };
 
-  // Row around the hole (right and left neighbors of removed site).
-  require_inv(T01, 2, T02, 0, "R0: T01{2} vs T02{0}");
-  Tensor R0;
-  Contract(&T01, {2}, &T02, {0}, &R0);  // axes: [T01.L,T01.D,T01.U,T02.D,T02.R,T02.U]
+  auto mod3 = [](int x) -> uint8_t { return static_cast<uint8_t>((x % 3 + 3) % 3); };
+  auto site_id = [](uint8_t r, uint8_t c) -> uint32_t { return uint32_t(r) * 3u + uint32_t(c); };
 
-  // Middle and bottom rows (each closed horizontally in one contraction).
-  Tensor R1 = row_ring(T10, T11, T12,
-                       "R1: T10{2} vs T11{0}",
-                       "R1: T10.L vs T12.R",
-                       "R1: T11.R vs T12.L");
-  Tensor R2 = row_ring(T20, T21, T22,
-                       "R2: T20{2} vs T21{0}",
-                       "R2: T20.L vs T22.R",
-                       "R2: T21.R vs T22.L");
+  std::array<Tensor, 9> holes;
 
-  // Vertically merge middle and bottom rows:
-  // R1.{D0,D1,D2} <-> R2.{U0,U1,U2}
-  require_inv(R1, 0, R2, 1, "R12: col0");
-  require_inv(R1, 2, R2, 3, "R12: col1");
-  require_inv(R1, 4, R2, 5, "R12: col2");
-  Tensor R12;
-  Contract(&R1, {0, 2, 4}, &R2, {1, 3, 5}, &R12);  // axes: [R1.U0,U1,U2, R2.D0,D1,D2]
+  for (uint8_t rr = 0; rr < 3; ++rr) {
+    for (uint8_t cc = 0; cc < 3; ++cc) {
+      const uint32_t rid = site_id(rr, cc);
 
-  // Final merge with row around hole:
-  // - R0.D01 <-> R12.U11,U12
-  // - R0.U01 <-> R12.D21,D22
-  require_inv(R0, 1, R12, 1, "Hraw: T01.D vs T11.U");
-  require_inv(R0, 3, R12, 2, "Hraw: T02.D vs T12.U");
-  require_inv(R0, 2, R12, 4, "Hraw: T01.U vs T21.D");
-  require_inv(R0, 5, R12, 5, "Hraw: T02.U vs T22.D");
-  Tensor hole;
-  Contract(&R0, {1, 3, 2, 5}, &R12, {1, 2, 4, 5}, &hole);  // axes: [R,L,D,U]
+      // Relative indexing from the removed site.
+      auto rel_id = [&](int dr, int dc) -> uint32_t {
+        return site_id(mod3(int(rr) + dr), mod3(int(cc) + dc));
+      };
 
-  if (hole.Rank() != 4) {
-    throw std::logic_error("TRGContractor::PunchHoleFinal3x3_: final open legs are not rank-4.");
-  }
-  hole.Transpose({1, 2, 0, 3});  // [R,L,D,U] -> [L,D,R,U]
-  return hole;
-}
+      const Tensor& T01 = *T3x3[rel_id(0, 1)];
+      const Tensor& T02 = *T3x3[rel_id(0, 2)];
+      const Tensor& T10 = *T3x3[rel_id(1, 0)];
+      const Tensor& T11 = *T3x3[rel_id(1, 1)];
+      const Tensor& T12 = *T3x3[rel_id(1, 2)];
+      const Tensor& T20 = *T3x3[rel_id(2, 0)];
+      const Tensor& T21 = *T3x3[rel_id(2, 1)];
+      const Tensor& T22 = *T3x3[rel_id(2, 2)];
 
-// ---- Backprop helper: diamond (odd -> even) ----
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::BackpropDiamondParent_(size_t s, uint32_t child_id, uint32_t pid,
-                                                     const Tensor& H_parent) const {
-  using qlten::Contract;
+      // Row around the hole (open chain of the 2 remaining tensors in the same row).
+      Tensor R0;
+      Contract(&T01, {2}, &T02, {0}, &R0);
+      // R0 axes: [T01.L, T01.D, T01.U, T02.D, T02.R, T02.U]
 
-  auto require_inv = [](const Tensor& A, size_t axA, const Tensor& B, size_t axB, const char* where) {
-    if (A.IsDefault() || B.IsDefault()) {
-      throw std::logic_error(
-          std::string("TRGContractor::BackpropDiamondParent_: default tensor in ") + where);
-    }
-    const auto& ia = A.GetIndex(axA);
-    const auto& ib = B.GetIndex(axB);
-    if (!(ia == InverseIndex(ib))) {
-      throw std::logic_error(std::string("TRGContractor::BackpropDiamondParent_: index mismatch at ") + where);
-    }
-  };
+      // Middle and bottom rows (each closed horizontally).
+      Tensor R1 = row_ring(T10, T11, T12);
+      Tensor R2 = row_ring(T20, T21, T22);
 
-  const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);
-  int role = -1;
-  for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
-  if (role < 0) throw std::logic_error("TRGContractor::BackpropDiamondParent_: invalid diamond topology.");
+      // Vertically merge middle and bottom rows: R1.D <-> R2.U
+      Tensor R12;
+      Contract(&R1, {0, 2, 4}, &R2, {1, 3, 5}, &R12);
+      // R12 axes: [U1_c0, U1_c1, U1_c2, D2_c0, D2_c1, D2_c2]
 
-  const Tensor& Np = scales_.at(s).split_P.at(children[0]);
-  const Tensor& Ep = scales_.at(s).split_P.at(children[1]);
-  const Tensor& Sq = scales_.at(s).split_Q.at(children[2]);
-  const Tensor& Wq = scales_.at(s).split_Q.at(children[3]);
+      // Final merge: connect R0 vertical legs to R12
+      // R0.T01.D(1) <-> R12.U1_c1(1)
+      // R0.T02.D(3) <-> R12.U1_c2(2)
+      // R0.T01.U(2) <-> R12.D2_c1(4)
+      // R0.T02.U(5) <-> R12.D2_c2(5)
+      Tensor hole;
+      Contract(&R0, {1, 3, 2, 5}, &R12, {1, 2, 4, 5}, &hole);
 
-  Tensor SW, NE;
-  require_inv(Sq, 0, Wq, 2, "diamond: Sq{0} vs Wq{2}");
-  Contract(&Sq, {0}, &Wq, {2}, &SW);
-  require_inv(Np, 1, Ep, 0, "diamond: Np{1} vs Ep{0}");
-  Contract(&Np, {1}, &Ep, {0}, &NE);
-
-  Tensor H_out_pre = H_parent;
-  H_out_pre.Transpose({1, 0, 3, 2});
-
-  Tensor H_SW, H_NE;
-  {
-    Tensor tmp;
-    require_inv(H_out_pre, 2, NE, 0, "diamond backprop: H_out_pre{2} vs NE{0}");
-    require_inv(H_out_pre, 3, NE, 3, "diamond backprop: H_out_pre{3} vs NE{3}");
-    Contract(&H_out_pre, {2, 3}, &NE, {0, 3}, &tmp);
-    tmp.Transpose({3, 0, 1, 2});
-    H_SW = std::move(tmp);
-
-    Tensor tmp2;
-    require_inv(H_out_pre, 0, SW, 1, "diamond backprop: H_out_pre{0} vs SW{1}");
-    require_inv(H_out_pre, 1, SW, 2, "diamond backprop: H_out_pre{1} vs SW{2}");
-    Contract(&H_out_pre, {0, 1}, &SW, {1, 2}, &tmp2);
-    tmp2.Transpose({0, 3, 2, 1});
-    H_NE = std::move(tmp2);
-  }
-
-  Tensor H_Sq, H_Wq;
-  {
-    Tensor tmp;
-    require_inv(H_SW, 2, Wq, 0, "diamond backprop SW->Sq: H_SW{2} vs Wq{0}");
-    require_inv(H_SW, 3, Wq, 1, "diamond backprop SW->Sq: H_SW{3} vs Wq{1}");
-    Contract(&H_SW, {2, 3}, &Wq, {0, 1}, &tmp);
-    tmp.Transpose({2, 0, 1});
-    H_Sq = std::move(tmp);
-
-    require_inv(H_SW, 0, Sq, 1, "diamond backprop SW->Wq: H_SW{0} vs Sq{1}");
-    require_inv(H_SW, 1, Sq, 2, "diamond backprop SW->Wq: H_SW{1} vs Sq{2}");
-    Contract(&H_SW, {0, 1}, &Sq, {1, 2}, &H_Wq);
-  }
-
-  Tensor H_Np, H_Ep;
-  {
-    Tensor tmp;
-    require_inv(H_NE, 2, Ep, 1, "diamond backprop NE->Np: H_NE{2} vs Ep{1}");
-    require_inv(H_NE, 3, Ep, 2, "diamond backprop NE->Np: H_NE{3} vs Ep{2}");
-    Contract(&H_NE, {2, 3}, &Ep, {1, 2}, &tmp);
-    tmp.Transpose({0, 2, 1});
-    H_Np = std::move(tmp);
-
-    Tensor tmp2;
-    require_inv(H_NE, 0, Np, 0, "diamond backprop NE->Ep: H_NE{0} vs Np{0}");
-    require_inv(H_NE, 1, Np, 2, "diamond backprop NE->Ep: H_NE{1} vs Np{2}");
-    Contract(&H_NE, {0, 1}, &Np, {0, 2}, &tmp2);
-    tmp2.Transpose({2, 0, 1});
-    H_Ep = std::move(tmp2);
-  }
-
-  const bool is_P = (role == 0 || role == 1);
-  const Tensor* Hp_ptr = nullptr;
-  const Tensor* Hq_ptr = nullptr;
-  Tensor Hp_local, Hq_local;
-  if (is_P) {
-    Hp_local = (role == 0) ? std::move(H_Np) : std::move(H_Ep);
-    Hp_ptr = &Hp_local;
-  } else {
-    Hq_local = (role == 2) ? std::move(H_Sq) : std::move(H_Wq);
-    Hq_ptr = &Hq_local;
-  }
-  return LinearSplitAdjointToHole_(s, child_id, Hp_ptr, Hq_ptr);
-}
-
-// ---- Backprop helper: plaquette (even -> odd) ----
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::BackpropPlaquetteParent_(size_t s, uint32_t child_id, uint32_t pid,
-                                                       const Tensor& H_parent) const {
-  using qlten::Contract;
-
-  auto require_inv = [](const Tensor& A, size_t axA, const Tensor& B, size_t axB, const char* where) {
-    if (A.IsDefault() || B.IsDefault()) {
-      throw std::logic_error(
-          std::string("TRGContractor::BackpropPlaquetteParent_: default tensor in ") + where);
-    }
-    const auto& ia = A.GetIndex(axA);
-    const auto& ib = B.GetIndex(axB);
-    if (!(ia == InverseIndex(ib))) {
-      throw std::logic_error(std::string("TRGContractor::BackpropPlaquetteParent_: index mismatch at ") + where);
-    }
-  };
-
-  const auto& children = scales_.at(s + 1).coarse_to_fine.at(pid);
-  int role = -1;
-  for (int k = 0; k < 4; ++k) if (children[k] == child_id) role = k;
-  if (role < 0) throw std::logic_error("TRGContractor::BackpropPlaquetteParent_: invalid plaquette topology.");
-
-  const Tensor& Q_TL = scales_.at(s).split_Q.at(children[0]);
-  const Tensor& Q_TR = scales_.at(s).split_Q.at(children[1]);
-  const Tensor& P_BL = scales_.at(s).split_P.at(children[2]);
-  const Tensor& P_BR = scales_.at(s).split_P.at(children[3]);
-
-  Tensor tmp0, tmp1, tmp2;
-  require_inv(P_BL, 1, P_BR, 0, "plaquette: P_BL{1} vs P_BR{0}");
-  Contract(&P_BL, {1}, &P_BR, {0}, &tmp0);
-  require_inv(Q_TR, 0, Q_TL, 2, "plaquette: Q_TR{0} vs Q_TL{2}");
-  Contract(&Q_TR, {0}, &Q_TL, {2}, &tmp1);
-  require_inv(tmp0, 1, tmp1, 3, "plaquette: tmp0{1} vs tmp1{3}");
-  require_inv(tmp0, 2, tmp1, 0, "plaquette: tmp0{2} vs tmp1{0}");
-  Contract(&tmp0, {1, 2}, &tmp1, {3, 0}, &tmp2);
-
-  Tensor H_tmp2 = H_parent;
-  H_tmp2.Transpose({3, 2, 1, 0});
-
-  Tensor H_tmp0, H_tmp1;
-  {
-    Tensor t;
-    require_inv(H_tmp2, 2, tmp1, 1, "plaquette backprop tmp2->tmp0: H_tmp2{2} vs tmp1{1}");
-    require_inv(H_tmp2, 3, tmp1, 2, "plaquette backprop tmp2->tmp0: H_tmp2{3} vs tmp1{2}");
-    Contract(&H_tmp2, {2, 3}, &tmp1, {1, 2}, &t);
-    t.Transpose({0, 3, 2, 1});
-    H_tmp0 = std::move(t);
-
-    Tensor t2;
-    require_inv(H_tmp2, 0, tmp0, 0, "plaquette backprop tmp2->tmp1: H_tmp2{0} vs tmp0{0}");
-    require_inv(H_tmp2, 1, tmp0, 3, "plaquette backprop tmp2->tmp1: H_tmp2{1} vs tmp0{3}");
-    Contract(&H_tmp2, {0, 1}, &tmp0, {0, 3}, &t2);
-    t2.Transpose({3, 0, 1, 2});
-    H_tmp1 = std::move(t2);
-  }
-
-  Tensor H_QTR, H_QTL;
-  {
-    Tensor t;
-    require_inv(H_tmp1, 2, Q_TL, 0, "plaquette backprop tmp1->Q_TR: H_tmp1{2} vs Q_TL{0}");
-    require_inv(H_tmp1, 3, Q_TL, 1, "plaquette backprop tmp1->Q_TR: H_tmp1{3} vs Q_TL{1}");
-    Contract(&H_tmp1, {2, 3}, &Q_TL, {0, 1}, &t);
-    t.Transpose({2, 0, 1});
-    H_QTR = std::move(t);
-
-    require_inv(H_tmp1, 0, Q_TR, 1, "plaquette backprop tmp1->Q_TL: H_tmp1{0} vs Q_TR{1}");
-    require_inv(H_tmp1, 1, Q_TR, 2, "plaquette backprop tmp1->Q_TL: H_tmp1{1} vs Q_TR{2}");
-    Contract(&H_tmp1, {0, 1}, &Q_TR, {1, 2}, &H_QTL);
-  }
-
-  Tensor H_PBL, H_PBR;
-  {
-    Tensor t;
-    require_inv(H_tmp0, 2, P_BR, 1, "plaquette backprop tmp0->P_BL: H_tmp0{2} vs P_BR{1}");
-    require_inv(H_tmp0, 3, P_BR, 2, "plaquette backprop tmp0->P_BL: H_tmp0{3} vs P_BR{2}");
-    Contract(&H_tmp0, {2, 3}, &P_BR, {1, 2}, &t);
-    t.Transpose({0, 2, 1});
-    H_PBL = std::move(t);
-
-    Tensor t2;
-    require_inv(H_tmp0, 0, P_BL, 0, "plaquette backprop tmp0->P_BR: H_tmp0{0} vs P_BL{0}");
-    require_inv(H_tmp0, 1, P_BL, 2, "plaquette backprop tmp0->P_BR: H_tmp0{1} vs P_BL{2}");
-    Contract(&H_tmp0, {0, 1}, &P_BL, {0, 2}, &t2);
-    t2.Transpose({2, 0, 1});
-    H_PBR = std::move(t2);
-  }
-
-  const Tensor* Hp_ptr = nullptr;
-  const Tensor* Hq_ptr = nullptr;
-  Tensor Hp_local, Hq_local;
-  if (role == 0) { Hq_local = std::move(H_QTL); Hq_ptr = &Hq_local; }
-  else if (role == 1) { Hq_local = std::move(H_QTR); Hq_ptr = &Hq_local; }
-  else if (role == 2) { Hp_local = std::move(H_PBL); Hp_ptr = &Hp_local; }
-  else { Hp_local = std::move(H_PBR); Hp_ptr = &Hp_local; }
-
-  return LinearSplitAdjointToHole_(s, child_id, Hp_ptr, Hq_ptr);
-}
-
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::PunchHoleBackpropGeneric_(const SiteIdx& site) const {
-  const uint32_t site_id = NodeId_(site.row(), site.col());
-  const size_t last = scales_.size() - 1;
-  const size_t top_size = scales_.at(last).tens.size();
-  
-  if (top_size != 9 && top_size != 4)
-    throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: last scale must be 3x3 (size 9) or 2x2 (size 4).");
-
-  // Build ancestor set for this single site
-  std::vector<std::set<uint32_t>> anc(scales_.size());
-  anc[0].insert(site_id);
-  for (size_t s = 0; s < last; ++s) {
-    for (uint32_t id : anc[s]) {
-      const auto& parents = scales_.at(s).fine_to_coarse.at(id);
-      if (parents[0] != 0xFFFFFFFF) anc[s + 1].insert(parents[0]);
-      if (parents[1] != 0xFFFFFFFF) anc[s + 1].insert(parents[1]);
-    }
-  }
-
-  // Compute top-level holes (only for ancestors)
-  std::map<uint32_t, Tensor> holes_next;
-  {
-    const auto& top = scales_.at(last).tens;
-    if (top_size == 9) {
-      const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
-                                                  &top[3], &top[4], &top[5],
-                                                  &top[6], &top[7], &top[8]};
-      for (uint32_t id = 0; id < 9; ++id) {
-        if (anc[last].count(id) == 0) continue;
-        holes_next.emplace(id, PunchHoleFinal3x3_(t3x3, id));
+      if (hole.Rank() != 4) {
+        throw std::logic_error("TRGContractor::PunchAllHoleFinal3x3_: result is not rank-4.");
       }
-    } else {
-      const std::array<Tensor, 4> t2x2 = {top[0], top[1], top[2], top[3]};
-      for (uint32_t id = 0; id < 4; ++id) {
-        if (anc[last].count(id) == 0) continue;
-        holes_next.emplace(id, PunchHoleFinal2x2_(t2x2, id));
-      }
+      hole.Transpose({1, 2, 0, 3});  // [R,L,D,U] -> [L,D,R,U]
+      holes[rid] = std::move(hole);
     }
   }
-
-  // Backprop layer by layer using extracted helper functions
-  for (size_t s = last; s-- > 0;) {
-    std::map<uint32_t, Tensor> holes_cur;
-    for (uint32_t id : anc[s]) {
-      const auto& parents = scales_.at(s).fine_to_coarse.at(id);
-      Tensor sum;
-      int cnt = 0;
-      for (uint32_t pid : parents) {
-        if (pid == 0xFFFFFFFF) continue;
-        auto it = holes_next.find(pid);
-        if (it == holes_next.end()) continue;
-        const Tensor& H_parent = it->second;
-        const Tensor contrib = (s % 2 == 0)
-                                   ? BackpropPlaquetteParent_(s, id, pid, H_parent)
-                                   : BackpropDiamondParent_(s, id, pid, H_parent);
-        if (sum.IsDefault()) sum = contrib;
-        else sum = sum + contrib;
-        ++cnt;
-      }
-      if (cnt == 0)
-        throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: failed to compute hole (no valid parent contributions).");
-
-      if (cnt > 1) sum = sum * TenElemT(RealT(1.0 / double(cnt)));
-      holes_cur.emplace(id, std::move(sum));
-    }
-    holes_next = std::move(holes_cur);
-  }
-
-  auto it0 = holes_next.find(site_id);
-  if (it0 == holes_next.end())
-    throw std::logic_error("TRGContractor::PunchHoleBackpropGeneric_: missing final site hole.");
-  return it0->second;
-}
-
-template <typename TenElemT, typename QNT>
-typename TRGContractor<TenElemT, QNT>::Tensor
-TRGContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn,
-                                        const SiteIdx& site) const {
-  if (bc_ != BoundaryCondition::Periodic) throw std::logic_error("TRGContractor::PunchHole: call Init(tn) first.");
-  if (tn.GetBoundaryCondition() != BoundaryCondition::Periodic) throw std::invalid_argument("TRGContractor::PunchHole: tn must be periodic.");
-
-  if (rows_ == 2 && cols_ == 2) {
-    std::array<Tensor, 4> t2x2 = {tn({0, 0}), tn({0, 1}), tn({1, 0}), tn({1, 1})};
-    const uint32_t removed_id = NodeId_(site.row(), site.col());
-    return PunchHoleFinal2x2_(t2x2, removed_id);
-  }
-
-  if (rows_ == 3 && cols_ == 3) {
-    const std::array<const Tensor*, 9> t3x3 = {&tn({0, 0}), &tn({0, 1}), &tn({0, 2}),
-                                                &tn({1, 0}), &tn({1, 1}), &tn({1, 2}),
-                                                &tn({2, 0}), &tn({2, 1}), &tn({2, 2})};
-    const uint32_t removed_id = NodeId_(site.row(), site.col());
-    return PunchHoleFinal3x3_(t3x3, removed_id);
-  }
-
-    if (!tensors_initialized_)
-      throw std::logic_error(
-          "TRGContractor::PunchHole: Trace(tn) must be called at least once to initialize cache.");
-
-  const bool is_pow2 = IsPowerOfTwo_(rows_);
-  const bool is_3pow2 = (rows_ % 3 == 0) && IsPowerOfTwo_(rows_ / 3);
-
-  if ((rows_ == cols_) && (is_pow2 || is_3pow2)) {
-    return PunchHoleBackpropGeneric_(site);
-  }
-
-  throw std::logic_error(
-      "TRGContractor::PunchHole: only 2x2, 3x3 and N=2^k or 3*2^k periodic torus is supported currently.");
+  return holes;
 }
 
 // ---- Batch PunchAllHoles implementation ----
@@ -1574,13 +1236,15 @@ TRGContractor<TenElemT, QNT>::PunchAllHolesImpl_() const {
       const std::array<const Tensor*, 9> t3x3 = {&top[0], &top[1], &top[2],
                                                   &top[3], &top[4], &top[5],
                                                   &top[6], &top[7], &top[8]};
+      auto all = PunchAllHoleFinal3x3_(t3x3);
       for (uint32_t id = 0; id < 9; ++id) {
-        holes_cur.emplace(id, PunchHoleFinal3x3_(t3x3, id));
+        holes_cur.emplace(id, std::move(all[id]));
       }
     } else {
       const std::array<Tensor, 4> t2x2 = {top[0], top[1], top[2], top[3]};
+      auto all = PunchAllHoleFinal2x2_(t2x2);
       for (uint32_t id = 0; id < 4; ++id) {
-        holes_cur.emplace(id, PunchHoleFinal2x2_(t2x2, id));
+        holes_cur.emplace(id, std::move(all[id]));
       }
     }
   }
@@ -1778,13 +1442,11 @@ TRGContractor<TenElemT, QNT>::PunchAllHoles(const TensorNetwork2D<TenElemT, QNT>
   // Handle small cases directly (no RG needed)
   if (rows_ == 2 && cols_ == 2) {
     std::array<Tensor, 4> t2x2 = {tn({0, 0}), tn({0, 1}), tn({1, 0}), tn({1, 1})};
+    auto all = PunchAllHoleFinal2x2_(t2x2);
     TensorNetwork2D<TenElemT, QNT> result(2, 2, BoundaryCondition::Periodic);
-    for (size_t r = 0; r < 2; ++r) {
-      for (size_t c = 0; c < 2; ++c) {
-        const uint32_t removed_id = NodeId_(r, c);
-        result({r, c}) = PunchHoleFinal2x2_(t2x2, removed_id);
-      }
-    }
+    for (size_t r = 0; r < 2; ++r)
+      for (size_t c = 0; c < 2; ++c)
+        result({r, c}) = std::move(all[NodeId_(r, c)]);
     return result;
   }
 
@@ -1792,13 +1454,11 @@ TRGContractor<TenElemT, QNT>::PunchAllHoles(const TensorNetwork2D<TenElemT, QNT>
     const std::array<const Tensor*, 9> t3x3 = {&tn({0, 0}), &tn({0, 1}), &tn({0, 2}),
                                                 &tn({1, 0}), &tn({1, 1}), &tn({1, 2}),
                                                 &tn({2, 0}), &tn({2, 1}), &tn({2, 2})};
+    auto all = PunchAllHoleFinal3x3_(t3x3);
     TensorNetwork2D<TenElemT, QNT> result(3, 3, BoundaryCondition::Periodic);
-    for (size_t r = 0; r < 3; ++r) {
-      for (size_t c = 0; c < 3; ++c) {
-        const uint32_t removed_id = NodeId_(r, c);
-        result({r, c}) = PunchHoleFinal3x3_(t3x3, removed_id);
-      }
-    }
+    for (size_t r = 0; r < 3; ++r)
+      for (size_t c = 0; c < 3; ++c)
+        result({r, c}) = std::move(all[NodeId_(r, c)]);
     return result;
   }
 

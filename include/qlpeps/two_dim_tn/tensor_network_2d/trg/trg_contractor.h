@@ -37,7 +37,7 @@ namespace qlpeps {
  *
  * @section trg_inv_regularization Inverse Regularization Strategy
  *
- * During PunchHole backpropagation, we compute \f$S^{-1/2}\f$ from SVD singular values.
+ * During hole computation backpropagation, we compute \f$S^{-1/2}\f$ from SVD singular values.
  * Small singular values produce large inverses that can amplify numerical errors,
  * especially across multiple RG layers.
  *
@@ -54,7 +54,7 @@ namespace qlpeps {
  * - `inv_relative_eps = 1e-12`: Good for double precision, catches numerically insignificant modes
  *
  * @par When to adjust
- * - Increase `inv_relative_eps` if PunchHole accuracy degrades on large systems or different BLAS implementations
+ * - Increase `inv_relative_eps` if hole computation accuracy degrades on large systems or different BLAS implementations
  * - Decrease `inv_relative_eps` if you need higher precision and have well-conditioned tensors
  */
 template <typename RealT>
@@ -185,8 +185,9 @@ class TensorNetwork2D;
  * - Final contraction uses an exact 2x2 PBC contraction (no additional truncation step).
  * - Truncation parameters must be explicitly provided via `SetTruncateParams()` (no hidden defaults).
  * - Fermionic TRG is not implemented.
- * - Incremental updates (`InvalidateEnvs` influence-cone propagation), `Replace*Trace`, and `PunchHole`
- *   are not implemented yet (currently only full `Trace()` is supported).
+ * - `PunchAllHoles` is implemented for batch hole computation via adjoint backpropagation.
+ * - Incremental updates (`InvalidateEnvs` influence-cone propagation) and `Replace*Trace`
+ *   are not implemented yet.
  *
  * @tparam TenElemT Tensor element type (e.g. double, complex<double>)
  * @tparam QNT Quantum number type
@@ -201,7 +202,7 @@ class TRGContractor {
    *
    * This is TRG's dedicated parameter structure that includes:
    * - SVD truncation parameters (D_min, D_max, trunc_err)
-   * - Inverse regularization parameters for numerical stability during PunchHole
+   * - Inverse regularization parameters for numerical stability during hole computation
    *
    * @see TRGTruncateParams for detailed documentation on regularization strategy.
    */
@@ -420,47 +421,15 @@ class TRGContractor {
   void CommitTrial(Trial&& trial);
 
   /**
-   * @brief Compute the "hole" environment tensor at @p site.
-   *
-   * The returned tensor has rank 4 and represents the contraction of the whole network
-   * with the site tensor at @p site removed, leaving the four bond legs open.
-   *
-   * Current implementation status:
-   * - Only supports the 2x2 periodic torus by exact contraction (a terminator for future
-   *   recursive/iterative PunchHole on larger systems).
-   * - For larger sizes this is not implemented yet and will throw.
-   *
-   * Leg convention of the returned hole tensor matches the removed site tensor:
-   * \code
-   *        3 (up)
-   *        |
-   * 0(left)-H-2(right)
-   *        |
-   *        1 (down)
-   * \endcode
-   *
-   * @param tn Tensor network container (must be periodic).
-   * @param site Scale-0 site to remove.
-   * @return Rank-4 hole environment tensor.
-   *
-   * @throws std::logic_error if `Init(tn)` has not been called.
-   * @throws std::invalid_argument if `tn` is not periodic.
-   * @throws std::logic_error if called for sizes other than 2x2 (for now).
-   */
-  Tensor PunchHole(const TensorNetwork2D<TenElemT, QNT>& tn, const SiteIdx& site) const;
-
-  /**
    * @brief Compute hole tensors for all scale-0 sites in one batch.
    *
-   * This is significantly more efficient than calling PunchHole() for each site
-   * individually, because it computes holes layer-by-layer and avoids redundant
-   * calculations at higher scales.
+   * Computes holes layer-by-layer, avoiding redundant calculations at higher scales.
    *
    * For an L×L system with k = log₂(L) TRG layers:
    * - Single-site approach: O(L² × k) redundant top-layer computations
    * - Batch approach: Each node's hole computed exactly once
    *
-   * Leg convention of each hole tensor matches single-site PunchHole:
+   * Leg convention of each hole tensor:
    * \code
    *        3 (up)
    *        |
@@ -490,17 +459,10 @@ class TRGContractor {
 
 #if defined(QLPEPS_UNITTEST)
   /**
-   * @brief Test-only baseline: build a 4x4 hole by brute probing (very expensive).
+   * @brief Test-only baseline: build a hole by brute probing (very expensive).
    *
-   * This method is meant for **unit tests only** as a correctness reference for future
-   * optimized impurity-TRG implementations. It is not intended for production use.
-   *
-   * Behavior:
-   * - Supports 4x4 PBC only.
-   * - Requires cache to be initialized and clean (call `Trace(tn)` once, and no pending invalidations).
-   * - Returns the hole tensor in the **original leg space** of the removed site:
-   *   legs are ordered `[L,D,R,U]` and directions are inverted (dual space) so that
-   *   `Contract(hole, tn(site))` yields a scalar.
+   * Supports 4x4 PBC only. Requires initialized cache.
+   * Returns the hole tensor in the original leg space of the removed site.
    *
    * @warning Complexity is O(product of bond dims at the site) trial contractions.
    */
@@ -509,75 +471,12 @@ class TRGContractor {
 #endif
 
  private:
-  /**
-   * @brief Internal implementation for 4x4 "punch-hole" using cached finite-size TRG graph.
-   *
-   * @details
-   * This routine mirrors the fixed contraction graph used by @ref Trace by reverse-mode contraction
-   * (adjoint pullback) through the cached split pieces and local plaquette/diamond contractions.
-   *
-   * @par A note on the historical "0.25" normalization issue
-   * Earlier revisions contained a hard-coded normalization:
-   * \f[
-   *   \mathrm{hole} \leftarrow 0.25 \times \mathrm{hole},
-   * \f]
-   * to satisfy unit tests requiring \f$\langle \mathrm{hole}_i, T_i\rangle \approx Z\f$.
-   *
-   * The *possible cause* is **systematic over-counting induced by the 4x4 PBC topology encoding**:
-   *
-   * - In @ref BuildTopology_ we build `fine_to_coarse` such that a fine node may have **two coarse
-   *   parents** on each RG step (checkerboard plaquette step and the embedded diamond step).
-   * - In @ref PunchHole4x4_ we then accumulate pullbacks across parent contexts.
-   *
-   * On a 4x4 torus there are exactly two RG steps (scale0->scale1 and scale1->scale2), hence a naive
-   * "sum over both parents" leads to an overall multiplicity of \f$2\times2 = 4\f$ in the composed
-   * pullback, which shows up as \f$\langle \mathrm{hole}, T_{\text{site}}\rangle \approx 4 Z\f$.
-   *
-   * @par Truncation and "frozen" SVD pieces
-   * This code uses a *linearized split* for backpropagation: it treats the SVD factors
-   * \f$(U,S,V)\f$ from the forward pass as **frozen** when mapping a site tensor perturbation
-   * \f$\delta T\f$ to split-piece perturbations \f$(\delta P,\delta Q)\f$.
-   *
-   * - With nonzero truncation (finite `D_max`), the true TRG contraction is not strictly linear in a
-   *   single site tensor, so \f$\langle \mathrm{hole},T\rangle\f$ is only required to match \f$Z\f$
-   *   approximately.
-   * - The observed factor-4 mismatch, however, is a **topology/multiplicity** effect and can persist
-   *   even when truncation is disabled (it is not "caused by truncation").
-   *
-   * @par What to do during future refactors
-   * Prefer eliminating the double-cover at the computation-graph level (single-cover RG mapping, or
-   * an impurity-list style algorithm as in thesis Fig. 3.29 / Fortran reference) rather than relying
-   * on an opaque global rescale.
-   *
-   * Suggested regression checks when refactoring:
-   * - Use a 3x3 terminator (or other terminator variants) to ensure the hole propagation remains
-   *   graph-consistent.
-   * - Test larger sizes (e.g. 8x8) to ensure no size-dependent "magic constants" remain.
-   * - A degenerate diagnostic case: only one row has nontrivial bond dimension (others are trivial),
-   *   so the network reduces to a matrix trace; this helps isolate multiplicity/double-cover issues.
-   */
-  // Generic backprop hole from a small terminator (2x2 or 3x3) down to scale-0.
-  // Handles N=2^k (terminating at 2x2) and N=3*2^k (terminating at 3x3).
-  // Includes automatic averaging of parent contributions to correct for checkerboard multiplicity.
-  Tensor PunchHoleBackpropGeneric_(const SiteIdx& site) const;
-
-  // ---- PunchHole helpers (shared by future terminators / larger sizes) ----
   // Adjoint pullback from split-piece holes back to the original rank-4 tensor hole,
   // using the *linearized* (frozen) forward SVD factors cached per node.
   Tensor LinearSplitAdjointToHole_(size_t scale,
                                   uint32_t node,
                                   const Tensor* H_P,
                                   const Tensor* H_Q) const;
-
-  // Backprop hole from coarse (odd) scale to fine (even) scale through plaquette contraction.
-  // Used by both single-site PunchHole and batch PunchAllHoles.
-  Tensor BackpropPlaquetteParent_(size_t scale, uint32_t child_id, uint32_t parent_id,
-                                  const Tensor& H_parent) const;
-
-  // Backprop hole from coarse (even) scale to fine (odd) scale through diamond contraction.
-  // Used by both single-site PunchHole and batch PunchAllHoles.
-  Tensor BackpropDiamondParent_(size_t scale, uint32_t child_id, uint32_t parent_id,
-                                const Tensor& H_parent) const;
 
   // Internal batch implementation for PunchAllHoles.
   TensorNetwork2D<TenElemT, QNT> PunchAllHolesImpl_() const;
@@ -704,8 +603,8 @@ class TRGContractor {
   TenElemT ContractFinal1x1_(const Tensor& T) const;
   TenElemT ContractFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
   TenElemT ContractFinal3x3_(const std::array<const Tensor*, 9>& T3x3) const;
-  Tensor PunchHoleFinal2x2_(const std::array<Tensor, 4>& T2x2, uint32_t removed_id) const;
-  Tensor PunchHoleFinal3x3_(const std::array<const Tensor*, 9>& T3x3, uint32_t removed_id) const;
+  std::array<Tensor, 4> PunchAllHoleFinal2x2_(const std::array<Tensor, 4>& T2x2) const;
+  std::array<Tensor, 9> PunchAllHoleFinal3x3_(const std::array<const Tensor*, 9>& T3x3) const;
 
   TenElemT GetCachedAmplitude_() const;
 
