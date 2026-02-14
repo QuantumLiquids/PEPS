@@ -138,18 +138,25 @@ class MonteCarloEngine {
   /**
    * @brief Warm up the Markov chain by performing the configured number of sweeps.
    *        Ensures the amplitude sanity and normalizes the state to O(1) amplitude across MPI after warm up.
+   *        Timing is reported once on rank 0 in a consolidated summary:
+   *        active warm-up rank count plus min/max wall time across active ranks only.
+   *        If all ranks are already warmed up, rank 0 prints a skipped summary line.
    * @return 0 on success; aborts MPI on failure.
    */
   int WarmUp() {
+    double local_warmup_seconds = 0.0;
+    int local_did_warmup = 0;
     if (!warm_up_) {
       Timer warm_up_timer("proc " + std::to_string(rank_) + " warm up");
       for (size_t sweep = 0; sweep < monte_carlo_params_.num_warmup_sweeps; sweep++) {
         auto accept_rates = StepSweep(1);
         (void)accept_rates;
       }
-      warm_up_timer.PrintElapsed();
+      local_warmup_seconds = warm_up_timer.Elapsed();
+      local_did_warmup = 1;
       warm_up_ = true;
     }
+    ReportWarmUpTimingSummary_(local_warmup_seconds, local_did_warmup);
     bool psi_legal = CheckWaveFunctionAmplitudeValidity(
         tps_sample_,
         config_rescue_.amplitude_min_threshold,
@@ -441,6 +448,69 @@ class MonteCarloEngine {
       n /= 2;
     }
     return (n == 1) || (n == 3);
+  }
+
+  void ReportWarmUpTimingSummary_(double local_warmup_seconds, int local_did_warmup) const {
+    std::vector<int> warmup_flags;
+    std::vector<double> warmup_times;
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+      warmup_flags.resize(mpi_size_);
+      warmup_times.resize(mpi_size_);
+    }
+
+    HANDLE_MPI_ERROR(::MPI_Gather(&local_did_warmup,
+                                  1,
+                                  MPI_INT,
+                                  rank_ == qlten::hp_numeric::kMPIMasterRank ? warmup_flags.data() : nullptr,
+                                  1,
+                                  MPI_INT,
+                                  qlten::hp_numeric::kMPIMasterRank,
+                                  comm_));
+    HANDLE_MPI_ERROR(::MPI_Gather(&local_warmup_seconds,
+                                  1,
+                                  MPI_DOUBLE,
+                                  rank_ == qlten::hp_numeric::kMPIMasterRank ? warmup_times.data() : nullptr,
+                                  1,
+                                  MPI_DOUBLE,
+                                  qlten::hp_numeric::kMPIMasterRank,
+                                  comm_));
+
+    if (rank_ != qlten::hp_numeric::kMPIMasterRank) {
+      return;
+    }
+
+    const int active_count = std::accumulate(warmup_flags.begin(), warmup_flags.end(), 0);
+    if (active_count == 0) {
+      std::cout << "[timing] warm up summary active_ranks=0/" << mpi_size_
+                << " skipped(all ranks already warmed up)" << std::endl;
+      return;
+    }
+
+    bool first_active_rank = true;
+    double min_time = 0.0;
+    double max_time = 0.0;
+    for (int i = 0; i < mpi_size_; ++i) {
+      if (warmup_flags[i] == 0) {
+        continue;
+      }
+      if (first_active_rank) {
+        min_time = warmup_times[i];
+        max_time = warmup_times[i];
+        first_active_rank = false;
+        continue;
+      }
+      min_time = std::min(min_time, warmup_times[i]);
+      max_time = std::max(max_time, warmup_times[i]);
+    }
+
+    const std::ios::fmtflags original_flags = std::cout.flags();
+    const std::streamsize original_precision = std::cout.precision();
+    std::cout << std::fixed << std::setprecision(5)
+              << "[timing] warm up summary active_ranks=" << active_count << "/" << mpi_size_
+              << " min=" << min_time << "s"
+              << " max=" << max_time << "s" << std::endl;
+    std::cout.flags(original_flags);
+    std::cout.precision(original_precision);
   }
 
   static TruncateParamsT SelectTruncateParams_(const SITPST &sitps, const PEPSParams &peps_params) {

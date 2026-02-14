@@ -34,11 +34,28 @@
 #include "qlpeps/vmc_basic/configuration_update_strategies/monte_carlo_sweep_updater_all.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"
 #include <filesystem>
+#include <sstream>
 
 #include "../test_mpi_env.h"
 
 using namespace qlten;
 using namespace qlpeps;
+
+class ScopedCoutCapture {
+ public:
+  ScopedCoutCapture() : old_buf_(std::cout.rdbuf(captured_.rdbuf())) {}
+  ~ScopedCoutCapture() {
+    if (old_buf_ != nullptr) {
+      std::cout.rdbuf(old_buf_);
+    }
+  }
+
+  std::string str() const { return captured_.str(); }
+
+ private:
+  std::ostringstream captured_;
+  std::streambuf *old_buf_;
+};
 
 TEST(MonteCarloEngineGuards, PBCRequiresTRGContractor) {
   using QNT = special_qn::TrivialRepQN;
@@ -423,6 +440,136 @@ TEST_F(TestConfigurationRescueSum, WarmupAfterRescue2of4) {
       rescue_params.amplitude_min_threshold,
       rescue_params.amplitude_max_threshold))
       << "Rank " << rank << " should have valid amplitude after warmup";
+}
+
+TEST_F(TestConfigurationRescueSum, WarmupTimingUsesConsolidatedSummary) {
+  if (mpi_size < 4) {
+    GTEST_SKIP() << "This test requires at least 4 MPI ranks";
+  }
+
+  auto sitps = CreateSuperpositionTPS(1e-300);
+  Configuration config(Ly, Lx);
+  if (rank == 0) {
+    config = CreateNeelConfig();
+  } else if (rank == 1) {
+    config = CreateAntiNeelConfig();
+  } else if (rank == 2) {
+    config = CreateThirdSz0Config();
+  } else {
+    config = CreateFourthSz0Config();
+  }
+
+  MonteCarloParams mc_params(5, 3, 1, config, false);
+  PEPSParams peps_params(BMPSTruncateParams<QLTEN_Double>(
+      Dpeps, 2 * Dpeps, 1e-15,
+      CompressMPSScheme::SVD_COMPRESS,
+      std::make_optional<double>(1e-14),
+      std::make_optional<size_t>(10)));
+  ConfigurationRescueParams rescue_params;
+
+  MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange> engine(
+      sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
+
+  ScopedCoutCapture capture;
+  int warmup_result = engine.WarmUp();
+  const std::string output = capture.str();
+  EXPECT_EQ(warmup_result, 0) << "Warmup should succeed";
+
+  if (rank == 0) {
+    EXPECT_NE(output.find("[timing] warm up summary active_ranks="), std::string::npos);
+    EXPECT_NE(output.find("active_ranks=" + std::to_string(mpi_size) + "/" + std::to_string(mpi_size)),
+              std::string::npos);
+    EXPECT_NE(output.find(" min="), std::string::npos);
+    EXPECT_NE(output.find(" max="), std::string::npos);
+    EXPECT_EQ(output.find("proc "), std::string::npos);
+  } else {
+    EXPECT_EQ(output.find("[timing] warm up summary"), std::string::npos);
+    EXPECT_EQ(output.find("proc "), std::string::npos);
+  }
+}
+
+TEST_F(TestConfigurationRescueSum, WarmupTimingMixedWarmStateUsesActiveRanksOnly) {
+  if (mpi_size < 4) {
+    GTEST_SKIP() << "This test requires at least 4 MPI ranks";
+  }
+
+  auto sitps = CreateSuperpositionTPS(1e-300);
+  Configuration config(Ly, Lx);
+  if (rank == 0) {
+    config = CreateNeelConfig();
+  } else if (rank == 1) {
+    config = CreateAntiNeelConfig();
+  } else if (rank == 2) {
+    config = CreateThirdSz0Config();
+  } else {
+    config = CreateFourthSz0Config();
+  }
+
+  const bool is_warmed_up = (rank == 0);
+  MonteCarloParams mc_params(5, 3, 1, config, is_warmed_up);
+  PEPSParams peps_params(BMPSTruncateParams<QLTEN_Double>(
+      Dpeps, 2 * Dpeps, 1e-15,
+      CompressMPSScheme::SVD_COMPRESS,
+      std::make_optional<double>(1e-14),
+      std::make_optional<size_t>(10)));
+  ConfigurationRescueParams rescue_params;
+
+  MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange> engine(
+      sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
+
+  ScopedCoutCapture capture;
+  int warmup_result = engine.WarmUp();
+  const std::string output = capture.str();
+  EXPECT_EQ(warmup_result, 0) << "Warmup should succeed in mixed warm state";
+
+  if (rank == 0) {
+    const int expected_active = mpi_size - 1;
+    EXPECT_NE(output.find("[timing] warm up summary active_ranks="), std::string::npos);
+    EXPECT_NE(output.find("active_ranks=" + std::to_string(expected_active) + "/" + std::to_string(mpi_size)),
+              std::string::npos);
+    EXPECT_NE(output.find(" min="), std::string::npos);
+    EXPECT_NE(output.find(" max="), std::string::npos);
+    EXPECT_EQ(output.find("proc "), std::string::npos);
+  } else {
+    EXPECT_EQ(output.find("[timing] warm up summary"), std::string::npos);
+    EXPECT_EQ(output.find("proc "), std::string::npos);
+  }
+}
+
+TEST_F(TestConfigurationRescueSum, WarmupTimingAllRanksAlreadyWarmedPrintsSkippedSummary) {
+  if (mpi_size < 4) {
+    GTEST_SKIP() << "This test requires at least 4 MPI ranks";
+  }
+
+  // Use all-valid setup so warm_up_ remains true on every rank after initialization.
+  auto sitps = CreateSuperpositionTPS(1.0);
+  Configuration config = CreateNeelConfig();
+
+  MonteCarloParams mc_params(5, 3, 1, config, true);
+  PEPSParams peps_params(BMPSTruncateParams<QLTEN_Double>(
+      Dpeps, 2 * Dpeps, 1e-15,
+      CompressMPSScheme::SVD_COMPRESS,
+      std::make_optional<double>(1e-14),
+      std::make_optional<size_t>(10)));
+  ConfigurationRescueParams rescue_params;
+
+  MonteCarloEngine<TenElemT, QNT, MCUpdateSquareNNExchange> engine(
+      sitps, mc_params, peps_params, comm, MCUpdateSquareNNExchange(), rescue_params);
+
+  ScopedCoutCapture capture;
+  int warmup_result = engine.WarmUp();
+  const std::string output = capture.str();
+  EXPECT_EQ(warmup_result, 0) << "Warmup should succeed when already warmed";
+
+  if (rank == 0) {
+    EXPECT_NE(output.find("[timing] warm up summary active_ranks=0/" + std::to_string(mpi_size)),
+              std::string::npos);
+    EXPECT_NE(output.find("skipped(all ranks already warmed up)"), std::string::npos);
+    EXPECT_EQ(output.find("proc "), std::string::npos);
+  } else {
+    EXPECT_EQ(output.find("[timing] warm up summary"), std::string::npos);
+    EXPECT_EQ(output.find("proc "), std::string::npos);
+  }
 }
 
 /**
