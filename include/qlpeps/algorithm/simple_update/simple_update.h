@@ -10,6 +10,8 @@
 #ifndef QLPEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
 #define QLPEPS_ALGORITHM_SIMPLE_UPDATE_SIMPLE_UPDATE_H
 
+#include <optional>
+
 #include "qlten/qlten.h"
 #include "qlpeps/two_dim_tn/peps/square_lattice_peps.h"    //SquareLatticePEPS
 
@@ -17,15 +19,36 @@ namespace qlpeps {
 
 
 struct SimpleUpdatePara {
+  struct AdvancedStopConfig {
+    double energy_abs_tol;
+    double energy_rel_tol;
+    double lambda_rel_tol;
+    size_t patience;
+    size_t min_steps;
+  };
+
   size_t steps;
   double tau;         // Step length
 
   size_t Dmin;
   size_t Dmax;        // Bond dimension
   double Trunc_err;   // Truncation error
+  std::optional<AdvancedStopConfig> advanced_stop;
 
   SimpleUpdatePara(size_t steps, double tau, size_t Dmin, size_t Dmax, double Trunc_err)
-      : steps(steps), tau(tau), Dmin(Dmin), Dmax(Dmax), Trunc_err(Trunc_err) {}
+      : steps(steps), tau(tau), Dmin(Dmin), Dmax(Dmax), Trunc_err(Trunc_err), advanced_stop(std::nullopt) {}
+
+  SimpleUpdatePara(size_t steps, double tau, size_t Dmin, size_t Dmax, double Trunc_err,
+                   const AdvancedStopConfig &advanced_stop_config)
+      : steps(steps), tau(tau), Dmin(Dmin), Dmax(Dmax), Trunc_err(Trunc_err), advanced_stop(advanced_stop_config) {}
+
+  static SimpleUpdatePara Advanced(size_t steps, double tau, size_t Dmin, size_t Dmax, double Trunc_err,
+                                   double energy_abs_tol, double energy_rel_tol, double lambda_rel_tol,
+                                   size_t patience, size_t min_steps) {
+    return SimpleUpdatePara(
+        steps, tau, Dmin, Dmax, Trunc_err,
+        AdvancedStopConfig{energy_abs_tol, energy_rel_tol, lambda_rel_tol, patience, min_steps});
+  }
 };
 
 template<typename TenElemT, typename QNT>
@@ -40,6 +63,17 @@ class SimpleUpdateExecutor : public Executor {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
+  enum class StopReason {
+    kNotRun = 0,
+    kMaxSteps,
+    kAdvancedConverged
+  };
+  struct RunSummary {
+    bool converged = false;
+    StopReason stop_reason = StopReason::kNotRun;
+    size_t executed_steps = 0;
+    std::optional<RealT> final_energy = std::nullopt;
+  };
 
   SimpleUpdateExecutor(const SimpleUpdatePara &update_para,
                        const PEPST &peps_initial);
@@ -68,6 +102,18 @@ class SimpleUpdateExecutor : public Executor {
     }
   }
 
+  const RunSummary &GetLastRunSummary(void) const {
+    return last_run_summary_;
+  }
+
+  bool LastRunConverged(void) const {
+    return last_run_summary_.converged;
+  }
+
+  size_t LastRunExecutedSteps(void) const {
+    return last_run_summary_.executed_steps;
+  }
+
   SimpleUpdatePara update_para;
  protected:
 
@@ -81,6 +127,7 @@ class SimpleUpdateExecutor : public Executor {
   PEPST peps_;
 
   std::optional<RealT> estimated_energy_;
+  RunSummary last_run_summary_;
 };
 
 }//qlpeps

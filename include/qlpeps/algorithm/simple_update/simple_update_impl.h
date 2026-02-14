@@ -10,9 +10,116 @@
 #ifndef QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
 #define QLPEPS_VMC_PEPS_SIMPLE_UPDATE_IMPL_H
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <stdexcept>
+#include <vector>
+
 namespace qlpeps {
 
 using namespace qlten;
+
+template<typename TenElemT, typename QNT>
+using LambdaDiagonalsT = std::vector<std::vector<typename SimpleUpdateExecutor<TenElemT, QNT>::RealT>>;
+
+inline void ValidateAdvancedStopConfig_(const SimpleUpdatePara::AdvancedStopConfig &cfg) {
+  if (cfg.energy_abs_tol < 0.0) {
+    throw std::invalid_argument("SimpleUpdate advanced stop: energy_abs_tol must be >= 0.");
+  }
+  if (cfg.energy_rel_tol < 0.0) {
+    throw std::invalid_argument("SimpleUpdate advanced stop: energy_rel_tol must be >= 0.");
+  }
+  if (cfg.lambda_rel_tol < 0.0) {
+    throw std::invalid_argument("SimpleUpdate advanced stop: lambda_rel_tol must be >= 0.");
+  }
+  if (cfg.patience == 0) {
+    throw std::invalid_argument("SimpleUpdate advanced stop: patience must be > 0.");
+  }
+  if (cfg.min_steps == 0) {
+    throw std::invalid_argument("SimpleUpdate advanced stop: min_steps must be > 0.");
+  }
+}
+
+template<typename RealT>
+RealT ComputeHybridEnergyTolerance_(const RealT prev_energy,
+                                    const RealT curr_energy,
+                                    const SimpleUpdatePara::AdvancedStopConfig &cfg) {
+  const RealT energy_scale = std::max({RealT(1), std::abs(prev_energy), std::abs(curr_energy)});
+  return std::max(static_cast<RealT>(cfg.energy_abs_tol),
+                  static_cast<RealT>(cfg.energy_rel_tol) * energy_scale);
+}
+
+template<typename RealT>
+bool LambdaBondDimensionsStable_(const std::vector<std::vector<RealT>> &prev_lambda_diags,
+                                 const std::vector<std::vector<RealT>> &curr_lambda_diags) {
+  if (prev_lambda_diags.size() != curr_lambda_diags.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < prev_lambda_diags.size(); ++i) {
+    if (prev_lambda_diags[i].size() != curr_lambda_diags[i].size()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+template<typename RealT>
+RealT ComputeMaxRelativeLambdaDrift_(const std::vector<std::vector<RealT>> &prev_lambda_diags,
+                                     const std::vector<std::vector<RealT>> &curr_lambda_diags) {
+  if (!LambdaBondDimensionsStable_(prev_lambda_diags, curr_lambda_diags)) {
+    return std::numeric_limits<RealT>::infinity();
+  }
+  const RealT eps = std::numeric_limits<RealT>::epsilon();
+  RealT max_drift = RealT(0);
+  for (size_t i = 0; i < prev_lambda_diags.size(); ++i) {
+    RealT diff_norm2 = RealT(0);
+    RealT prev_norm2 = RealT(0);
+    for (size_t j = 0; j < prev_lambda_diags[i].size(); ++j) {
+      const RealT diff = curr_lambda_diags[i][j] - prev_lambda_diags[i][j];
+      diff_norm2 += diff * diff;
+      prev_norm2 += prev_lambda_diags[i][j] * prev_lambda_diags[i][j];
+    }
+    const RealT denom = std::max(std::sqrt(prev_norm2), eps);
+    const RealT drift = std::sqrt(diff_norm2) / denom;
+    max_drift = std::max(max_drift, drift);
+  }
+  return max_drift;
+}
+
+template<typename TenElemT, typename QNT>
+LambdaDiagonalsT<TenElemT, QNT> CaptureLambdaDiagonals_(const SquareLatticePEPS<TenElemT, QNT> &peps) {
+  using RealT = typename SimpleUpdateExecutor<TenElemT, QNT>::RealT;
+  LambdaDiagonalsT<TenElemT, QNT> lambda_diags;
+  lambda_diags.reserve(peps.lambda_vert.rows() * peps.lambda_vert.cols()
+                       + peps.lambda_horiz.rows() * peps.lambda_horiz.cols());
+
+  auto capture_diag = [&lambda_diags](const QLTensor<RealT, QNT> &lambda) {
+    const auto &shape = lambda.GetShape();
+    if (shape.size() < 2) {
+      lambda_diags.emplace_back();
+      return;
+    }
+    const size_t dim = std::min(shape[0], shape[1]);
+    std::vector<RealT> diag(dim, RealT(0));
+    for (size_t i = 0; i < dim; ++i) {
+      diag[i] = lambda({i, i});
+    }
+    lambda_diags.push_back(std::move(diag));
+  };
+
+  for (size_t row = 0; row < peps.lambda_vert.rows(); ++row) {
+    for (size_t col = 0; col < peps.lambda_vert.cols(); ++col) {
+      capture_diag(peps.lambda_vert({row, col}));
+    }
+  }
+  for (size_t row = 0; row < peps.lambda_horiz.rows(); ++row) {
+    for (size_t col = 0; col < peps.lambda_horiz.cols(); ++col) {
+      capture_diag(peps.lambda_horiz({row, col}));
+    }
+  }
+  return lambda_diags;
+}
 
 //helper
 std::vector<size_t> DuplicateElements(const std::vector<size_t> &input) {
@@ -155,9 +262,66 @@ template<typename TenElemT, typename QNT>
 void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
   SetStatus(qlten::EXEING);
   SetEvolveGate_();
+  last_run_summary_ = RunSummary{};
+  last_run_summary_.stop_reason = StopReason::kMaxSteps;
+  size_t convergence_streak = 0;
+  std::optional<RealT> prev_energy;
+  LambdaDiagonalsT<TenElemT, QNT> prev_lambda_diags;
+  bool has_prev_lambda_diags = false;
+  const bool use_advanced_stop = update_para.advanced_stop.has_value();
+  if (use_advanced_stop) {
+    ValidateAdvancedStopConfig_(update_para.advanced_stop.value());
+  }
+
   for (size_t step = 0; step < update_para.steps; step++) {
     std::cout << "step = " << step << "\t";
     estimated_energy_ = SimpleUpdateSweep_();
+    ++last_run_summary_.executed_steps;
+    if (estimated_energy_.has_value()) {
+      last_run_summary_.final_energy = estimated_energy_.value();
+    }
+
+    if (!use_advanced_stop || !estimated_energy_.has_value()) {
+      continue;
+    }
+
+    const RealT curr_energy = estimated_energy_.value();
+    const auto curr_lambda_diags = CaptureLambdaDiagonals_<TenElemT, QNT>(peps_);
+    bool gate_passed = false;
+
+    if (prev_energy.has_value() && has_prev_lambda_diags) {
+      const bool dims_stable = LambdaBondDimensionsStable_(prev_lambda_diags, curr_lambda_diags);
+      if (dims_stable) {
+        const RealT energy_tol = ComputeHybridEnergyTolerance_(
+            prev_energy.value(), curr_energy, update_para.advanced_stop.value());
+        const RealT energy_delta = std::abs(curr_energy - prev_energy.value());
+        const bool energy_ok = (energy_delta <= energy_tol);
+
+        const RealT lambda_drift = ComputeMaxRelativeLambdaDrift_(prev_lambda_diags, curr_lambda_diags);
+        const bool lambda_ok =
+            (lambda_drift <= static_cast<RealT>(update_para.advanced_stop->lambda_rel_tol));
+        const bool min_steps_ok =
+            (last_run_summary_.executed_steps >= update_para.advanced_stop->min_steps);
+        gate_passed = min_steps_ok && energy_ok && lambda_ok;
+      }
+    }
+
+    if (gate_passed) {
+      ++convergence_streak;
+    } else {
+      convergence_streak = 0;
+    }
+    if (convergence_streak >= update_para.advanced_stop->patience) {
+      last_run_summary_.converged = true;
+      last_run_summary_.stop_reason = StopReason::kAdvancedConverged;
+      std::cout << "Stopping: advanced simple-update convergence reached after "
+                << last_run_summary_.executed_steps << " sweeps." << std::endl;
+      break;
+    }
+
+    prev_energy = curr_energy;
+    prev_lambda_diags = curr_lambda_diags;
+    has_prev_lambda_diags = true;
   }
   SetStatus(qlten::FINISH);
 }

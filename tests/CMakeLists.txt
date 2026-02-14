@@ -269,6 +269,13 @@ add_two_type_unittest(test_fermion_simple_update
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+
+# Test advanced stopping policy for simple update
+add_two_type_unittest(test_simple_update_advanced_stop
+        "test_algorithm/test_simple_update_advanced_stop.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
 # DEPRECATED: Loop update test moved to test_deprecated/
 # add_two_type_unittest(test_loop_update
 #        "test_deprecated/test_loop_update_deprecated.cpp"

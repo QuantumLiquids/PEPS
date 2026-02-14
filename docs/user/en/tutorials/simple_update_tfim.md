@@ -109,6 +109,33 @@ cd examples/build
 ./transverse_field_ising_simple_update
 ```
 
+### Optional: enable advanced automatic stop
+
+The default example uses fixed `steps`. If you want automatic convergence stop, replace
+the `SimpleUpdatePara` construction with:
+
+```cpp
+auto su_para = SimpleUpdatePara::Advanced(
+    /*steps=*/1000,      // hard cap
+    /*tau=*/0.05,
+    /*Dmin=*/1,
+    /*Dmax=*/4,
+    /*Trunc_err=*/1e-14,
+    /*energy_abs_tol=*/1e-8,
+    /*energy_rel_tol=*/1e-10,
+    /*lambda_rel_tol=*/1e-6,
+    /*patience=*/3,
+    /*min_steps=*/10);
+```
+
+After `Execute()`, you can inspect why it stopped:
+
+```cpp
+executor.Execute();
+std::cout << "Converged: " << std::boolalpha << executor.LastRunConverged() << "\\n";
+std::cout << "Executed sweeps: " << executor.LastRunExecutedSteps() << "\\n";
+```
+
 Expected output:
 
 - A directory `examples/build/peps/` containing the dumped PEPS.

@@ -120,6 +120,53 @@ Main include (square lattice NN Simple Update):
 
 - `qlpeps/algorithm/simple_update/square_lattice_nn_simple_update.h`
 
+Parameter modes:
+
+1. Simple fixed-step mode (backward-compatible behavior):
+
+```cpp
+SimpleUpdatePara su_para(
+    /*steps=*/100,
+    /*tau=*/0.05,
+    /*Dmin=*/1,
+    /*Dmax=*/4,
+    /*Trunc_err=*/1e-14);
+```
+
+2. Advanced automatic-stop mode (opt-in):
+
+```cpp
+auto su_para = SimpleUpdatePara::Advanced(
+    /*steps=*/1000,      // hard cap, still enforced
+    /*tau=*/0.05,
+    /*Dmin=*/1,
+    /*Dmax=*/4,
+    /*Trunc_err=*/1e-14,
+    /*energy_abs_tol=*/1e-8,
+    /*energy_rel_tol=*/1e-10,
+    /*lambda_rel_tol=*/1e-6,
+    /*patience=*/3,      // consecutive sweeps required
+    /*min_steps=*/10);   // do not stop before this many sweeps
+```
+
+Advanced stop semantics:
+
+- Convergence gate is `energy AND lambda`.
+- Energy uses hybrid tolerance:
+  `|ΔE| <= max(energy_abs_tol, energy_rel_tol * max(1, |E_prev|, |E_curr|))`.
+- Lambda uses per-bond relative L2 diagonal drift, then takes the global maximum.
+- If bond dimensions change between two sweeps, lambda drift is skipped and convergence streak resets.
+
+Run summary getters:
+
+```cpp
+executor.Execute();
+
+bool converged = executor.LastRunConverged();
+size_t sweeps_done = executor.LastRunExecutedSteps();
+auto summary = executor.GetLastRunSummary();
+```
+
 ## Related
 
 - End-to-end workflow: `../tutorials/end_to_end_workflow.md`
