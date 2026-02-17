@@ -41,7 +41,7 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
     evolve_gate_tri_ = TaylorExpMatrix(RealT(this->update_para.tau), ham_tri_);
   }
 
-  RealT SimpleUpdateSweep_(void) override;
+  typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult SimpleUpdateSweep_(void) override;
 
   Tensor ham_nn_;
   Tensor ham_tri_;
@@ -50,7 +50,7 @@ class TriangleNNModelSquarePEPSSimpleUpdateExecutor : public SimpleUpdateExecuto
 };
 
 template<typename TenElemT, typename QNT>
-typename TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::RealT TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   RealT norm_a(1), norm_b(1);
@@ -83,16 +83,18 @@ typename TriangleNNModelSquarePEPSSimpleUpdateExecutor<TenElemT, QNT>::RealT Tri
   }
 
   RealT e_b = -std::log(norm_b) / this->update_para.tau;
+  RealT estimated_e0 = (e_a + e_b) / 2;
+  RealT estimated_en = estimated_e0;  // triangle executor uses the same estimate
   double sweep_time = simple_update_sweep_timer.Elapsed();
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
-            << std::right << (e_a + e_b) / 2
+            << std::right << estimated_e0
             << " Delta E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << std::fabs(e_a - e_b) / 2
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  return (e_a + e_b) / 2;
+  return {estimated_e0, estimated_en, std::nullopt, sweep_time, dmin, dmax};
 }
 }
 

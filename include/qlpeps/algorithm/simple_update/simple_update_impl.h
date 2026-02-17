@@ -264,6 +264,9 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
   SetEvolveGate_();
   last_run_summary_ = RunSummary{};
   last_run_summary_.stop_reason = StopReason::kMaxSteps;
+  step_metrics_.clear();
+  step_metrics_.reserve(update_para.steps);
+
   size_t convergence_streak = 0;
   std::optional<RealT> prev_energy;
   LambdaDiagonalsT<TenElemT, QNT> prev_lambda_diags;
@@ -273,12 +276,68 @@ void SimpleUpdateExecutor<TenElemT, QNT>::Execute(void) {
     ValidateAdvancedStopConfig_(update_para.advanced_stop.value());
   }
 
+  size_t prev_dmin = 0, prev_dmax = 0;
+
   for (size_t step = 0; step < update_para.steps; step++) {
     std::cout << "step = " << step << "\t";
-    estimated_energy_ = SimpleUpdateSweep_();
+    SweepResult sweep_result = SimpleUpdateSweep_();
+    estimated_energy_ = sweep_result.estimated_e0;
     ++last_run_summary_.executed_steps;
     if (estimated_energy_.has_value()) {
       last_run_summary_.final_energy = estimated_energy_.value();
+      last_run_summary_.final_estimated_e0 = sweep_result.estimated_e0;
+      last_run_summary_.final_estimated_en = sweep_result.estimated_en;
+    }
+
+    // Detect bond dimension change
+    bool bond_dim_changed = false;
+    if (step > 0) {
+      bond_dim_changed = (sweep_result.dmin != prev_dmin || sweep_result.dmax != prev_dmax);
+    }
+    prev_dmin = sweep_result.dmin;
+    prev_dmax = sweep_result.dmax;
+
+    // Record step metrics
+    StepMetrics metrics;
+    metrics.step_index = step;
+    metrics.tau = update_para.tau;
+    metrics.estimated_e0 = sweep_result.estimated_e0;
+    metrics.estimated_en = sweep_result.estimated_en;
+    metrics.trunc_err = sweep_result.trunc_err;  // propagate optional
+    metrics.elapsed_sec = sweep_result.elapsed_sec;
+    metrics.bond_dim_changed = bond_dim_changed;
+    step_metrics_.push_back(metrics);
+
+    // Invoke observer callback if set
+    if (update_para.step_observer.has_value()) {
+      SimpleUpdateStepMetrics<double> cb_metrics;
+      cb_metrics.step_index = metrics.step_index;
+      cb_metrics.tau = metrics.tau;
+      cb_metrics.estimated_e0 = static_cast<double>(metrics.estimated_e0);
+      cb_metrics.estimated_en = static_cast<double>(metrics.estimated_en);
+      cb_metrics.trunc_err = metrics.trunc_err.has_value()
+          ? std::optional<double>(static_cast<double>(metrics.trunc_err.value()))
+          : std::nullopt;
+      cb_metrics.elapsed_sec = metrics.elapsed_sec;
+      cb_metrics.bond_dim_changed = metrics.bond_dim_changed;
+      update_para.step_observer.value()(cb_metrics);
+    }
+
+    // Emit machine-readable metrics if enabled
+    if (update_para.emit_machine_readable_metrics) {
+      std::cout << "SU_METRIC"
+                << " step=" << step
+                << " tau=" << update_para.tau
+                << " e0=" << std::setprecision(15) << sweep_result.estimated_e0
+                << " en=" << std::setprecision(15) << sweep_result.estimated_en;
+      if (sweep_result.trunc_err.has_value()) {
+        std::cout << " trunc_err=" << std::setprecision(6) << std::scientific
+                  << sweep_result.trunc_err.value() << std::fixed;
+      } else {
+        std::cout << " trunc_err=N/A";
+      }
+      std::cout << " elapsed_sec=" << sweep_result.elapsed_sec
+                << std::endl;
     }
 
     if (!use_advanced_stop || !estimated_energy_.has_value()) {

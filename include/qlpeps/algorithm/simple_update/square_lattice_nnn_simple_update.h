@@ -283,7 +283,7 @@ class SquareLatticeNNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElem
     return TaylorExpMatrix(RealT(this->update_para.tau), ConstructTriHamiltonian(site_b, triposition));
   }
 
-  RealT SimpleUpdateSweep_(void) override;
+  typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult SimpleUpdateSweep_(void) override;
 
   Tensor ham_nn_;   // uniform NN interaction
   Tensor ham_nnn_;  // uniform NNN interaction
@@ -330,7 +330,7 @@ void SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_(void) {
 }
 
 template<typename TenElemT, typename QNT>
-typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   TenElemT e0(0.0);
@@ -344,9 +344,9 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   for (size_t col = 0; col < hor_bond_limit; col++) {
     for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
-          proj_res1 = this->peps_.UpperRightTriangleProject(evolve_gate_upperright_tri_({row, col}), 
-                                                           {row, (col + 1) % this->peps_.lambda_horiz.cols()}, 
-                                                            para, 
+          proj_res1 = this->peps_.UpperRightTriangleProject(evolve_gate_upperright_tri_({row, col}),
+                                                           {row, (col + 1) % this->peps_.lambda_horiz.cols()},
+                                                            para,
                                                             ham_upperright_tri_({row, col}));
       e0 += proj_res1.e_loc.value();
       norm *= proj_res1.norm;
@@ -357,9 +357,9 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   for (size_t col = 0; col < hor_bond_limit; col++) {
     for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
-          proj_res2 = this->peps_.LowerRightTriangleProject(evolve_gate_lowerright_tri_({row, col}), 
-                                                           {row, (col + 1) % this->peps_.lambda_horiz.cols()}, 
-                                                            para, 
+          proj_res2 = this->peps_.LowerRightTriangleProject(evolve_gate_lowerright_tri_({row, col}),
+                                                           {row, (col + 1) % this->peps_.lambda_horiz.cols()},
+                                                            para,
                                                             ham_lowerright_tri_({row, col}));
       e0 += proj_res2.e_loc.value();
       norm *= proj_res2.norm;
@@ -370,9 +370,9 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   for (size_t col = 0; col < hor_bond_limit; col++) {
     for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
-          proj_res3 = this->peps_.LowerLeftTriangleProject(evolve_gate_lowerleft_tri_({row, col}), 
-                                                          {row, col}, 
-                                                           para, 
+          proj_res3 = this->peps_.LowerLeftTriangleProject(evolve_gate_lowerleft_tri_({row, col}),
+                                                          {row, col},
+                                                           para,
                                                            ham_lowerleft_tri_({row, col}));
       e0 += proj_res3.e_loc.value();
       norm *= proj_res3.norm;
@@ -383,9 +383,9 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   for (size_t col = 0; col < hor_bond_limit; col++) {
     for (size_t row = 0; row < ver_bond_limit; row++) {
       ProjectionRes<TenElemT>
-          proj_res4 = this->peps_.UpperLeftTriangleProject(evolve_gate_upperleft_tri_({row, col}), 
-                                                          {row, col}, 
-                                                           para, 
+          proj_res4 = this->peps_.UpperLeftTriangleProject(evolve_gate_upperleft_tri_({row, col}),
+                                                          {row, col},
+                                                           para,
                                                            ham_upperleft_tri_({row, col}));
       e0 += proj_res4.e_loc.value();
       norm *= proj_res4.norm;
@@ -394,17 +394,18 @@ typename SquareLatticeNNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattic
   }
 
   double sweep_time = simple_update_sweep_timer.Elapsed();
+  RealT estimated_en = -std::log(norm) / this->update_para.tau;
   auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0
             << " Estimated En =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
-            << std::right << -std::log(norm) / this->update_para.tau
+            << std::right << estimated_en
             << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
             << " TruncErr = " << std::setprecision(2) << std::scientific << max_trunc_err << std::fixed
             << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
 
-  return qlmps::Real(e0);
+  return {qlmps::Real(e0), estimated_en, std::optional<RealT>(max_trunc_err), sweep_time, dmin, dmax};
 }
 }
 

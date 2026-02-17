@@ -90,7 +90,7 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
                            ConstructBondHamiltonian(h1, on_site_term1, h2, on_site_term2, id));
   }
 
-  RealT SimpleUpdateSweep_(void) override;
+  typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult SimpleUpdateSweep_(void) override;
 
   Tensor ham_two_site_term_; //uniform bond term
 
@@ -193,12 +193,12 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
 }
 
 template<typename TenElemT, typename QNT>
-typename SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
+typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SimpleUpdateSweep_(void) {
   Timer simple_update_sweep_timer("simple_update_sweep");
   SimpleUpdateTruncatePara para(this->update_para.Dmin, this->update_para.Dmax, this->update_para.Trunc_err);
   TenElemT e0(0.0);
   RealT norm = 1.0;
-  RealT middle_bond_trunc_err;
+  std::optional<RealT> middle_bond_trunc_err;
 
   const bool is_pbc = (this->peps_.GetBoundaryCondition() == BoundaryCondition::Periodic);
   const size_t hor_bond_limit = is_pbc ? this->lx_ : this->lx_ - 1;
@@ -244,6 +244,7 @@ typename SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattice
   horizontal_nn_projection_timer.PrintElapsed();
 #endif
   double sweep_time = simple_update_sweep_timer.Elapsed();
+  RealT estimated_en = -std::log(norm) / this->update_para.tau;
   std::cout << "lambda tensors in middle : " << std::endl;
   PrintLambda(this->peps_.lambda_vert({this->ly_ / 2, this->lx_ / 2}));
   PrintLambda(this->peps_.lambda_horiz({this->ly_ / 2, this->lx_ / 2}));
@@ -251,12 +252,14 @@ typename SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::RealT SquareLattice
   std::cout << "Estimated E0 =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
             << std::right << e0
             << "Estimated En =" << std::setw(15) << std::setprecision(kEnergyOutputPrecision) << std::fixed
-            << std::right << -std::log(norm) / this->update_para.tau
-            << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax
-            << " TruncErr = " << std::setprecision(2) << std::scientific << middle_bond_trunc_err << std::fixed
-            << " SweepTime = " << std::setw(8) << sweep_time
+            << std::right << estimated_en
+            << " Dmin/Dmax = " << std::setw(2) << std::right << dmin << "/" << std::setw(2) << std::left << dmax;
+  if (middle_bond_trunc_err.has_value()) {
+    std::cout << " TruncErr = " << std::setprecision(2) << std::scientific << middle_bond_trunc_err.value() << std::fixed;
+  }
+  std::cout << " SweepTime = " << std::setw(8) << sweep_time
             << std::endl;
-  return qlmps::Real(e0);
+  return {qlmps::Real(e0), estimated_en, middle_bond_trunc_err, sweep_time, dmin, dmax};
 }
 }
 

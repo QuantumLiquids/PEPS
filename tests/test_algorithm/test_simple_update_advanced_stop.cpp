@@ -42,6 +42,8 @@ PEPST BuildInitialPEPS(size_t ly, size_t lx) {
 
 class MockSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
  public:
+  using SweepResult = typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult;
+
   struct SweepPattern {
     RealT energy;
     size_t lambda_dim;
@@ -69,11 +71,19 @@ class MockSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT, QNT> {
  protected:
   void SetEvolveGate_(void) override {}
 
-  RealT SimpleUpdateSweep_(void) override {
+  SweepResult SimpleUpdateSweep_(void) override {
     const size_t idx = std::min(sweep_idx_, patterns_.size() - 1);
     ApplyLambdaPattern(patterns_[idx]);
     ++sweep_idx_;
-    return patterns_[idx].energy;
+    auto [dmin, dmax] = this->peps_.GetMinMaxBondDim();
+    return SweepResult{
+        patterns_[idx].energy,
+        patterns_[idx].energy,  // en = e0 for mock
+        std::nullopt,           // no trunc_err for mock
+        0.001,                  // fake elapsed_sec
+        dmin,
+        dmax
+    };
   }
 
  private:
