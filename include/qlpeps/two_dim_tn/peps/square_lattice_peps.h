@@ -70,6 +70,18 @@ struct LoopUpdateTruncatePara {
   double inv_tol;
   //full environment truncation
   FullEnvironmentTruncateParams fet_params;
+
+  //power method parameters
+  size_t power_method_max_iter = 100;
+  double power_method_tolerance = 1e-15;
+  size_t power_method_burn_in = 5;
+
+  //hermiticity correction thresholds in weighted trace gauge fixing
+  double hermiticity_correction_tol = 1e-4;
+  double hermiticity_warning_tol = 1e-8;
+
+  //diagonal matrix inversion tolerance for splitting out environment lambdas
+  double env_lambda_inv_tol = 1e-200;
 };
 
 template<typename ElemT>

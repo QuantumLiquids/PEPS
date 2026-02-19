@@ -38,12 +38,12 @@ void MatSVD(
   assert(t.Rank() == 2);
   assert(t.GetIndex(0).GetDir() != t.GetIndex(1).GetDir());
   if (t.GetIndex(0).GetDir() == IN) {
-    SVD<RealT, QNT>(&t, 1, lqndiv, trunc_err, Dmin, Dmax, &u, &s, &vt, pactual_trunc_err, pD);
+    SVD(&t, 1, lqndiv, trunc_err, Dmin, Dmax, &u, &s, &vt, pactual_trunc_err, pD);
     return;
   } else {
     QLTensor<TenElemT, QNT> transpose_t = t;
     transpose_t.Transpose({1, 0});
-    SVD<RealT, QNT>(&transpose_t, 1, t.Div() + (-lqndiv), trunc_err, Dmin, Dmax, &vt, &s, &u, pactual_trunc_err, pD);
+    SVD(&transpose_t, 1, t.Div() + (-lqndiv), trunc_err, Dmin, Dmax, &vt, &s, &u, pactual_trunc_err, pD);
     u.Transpose({1, 0});
     s.Transpose({1, 0});
     vt.Transpose({1, 0});
@@ -63,12 +63,12 @@ void MatSVD(
   assert(t.Rank() == 2);
   assert(t.GetIndex(0).GetDir() != t.GetIndex(1).GetDir());
   if (t.GetIndex(0).GetDir() == IN) {
-    SVD<RealT, QNT>(&t, 1, lqndiv, &u, &s, &vt);
+    SVD(&t, 1, lqndiv, &u, &s, &vt);
     return;
   } else {
     QLTensor<TenElemT, QNT> transpose_t = t;
     transpose_t.Transpose({1, 0});
-    SVD<RealT, QNT>(&transpose_t, 1, t.Div() + (-lqndiv), &vt, &s, &u);
+    SVD(&transpose_t, 1, t.Div() + (-lqndiv), &vt, &s, &u);
     u.Transpose({1, 0});
     s.Transpose({1, 0});
     vt.Transpose({1, 0});
@@ -116,11 +116,12 @@ void TransposeBackGammaTensorIndicesFromMPSOrder(std::array<QLTensor<TenElemT, Q
 template<typename TenElemT, typename QNT>
 void SplitOut2EnvLambdasInMPSOrderGammas(QLTensor<TenElemT, QNT> &gamma,
                                          const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_l,
-                                         const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_r
+                                         const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &env_lambda_r,
+                                         const double inv_tol
 ) {
   QLTensor<TenElemT, QNT> tmp, res;
-  auto inv_lambda_l = DiagMatInv(env_lambda_l, 1e-200);
-  auto inv_lambda_r = DiagMatInv(env_lambda_r, 1e-200);
+  auto inv_lambda_l = DiagMatInv(env_lambda_l, inv_tol);
+  auto inv_lambda_r = DiagMatInv(env_lambda_r, inv_tol);
   Contract(&gamma, {2}, &inv_lambda_l, {1}, &tmp);
   Contract(&tmp, {2}, &inv_lambda_r, {1}, &res);
   res.Transpose({0, 1, 3, 4, 2});
@@ -134,7 +135,12 @@ void WeightedTraceGaugeFixingInSquareLocalLoop(
     const typename qlten::RealTypeTrait<TenElemT>::type,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas, //input & output
-    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
+    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons, //output
+    const double hermiticity_correction_tol,
+    const double hermiticity_warning_tol,
+    const size_t power_method_max_iter,
+    const double power_method_tolerance,
+    const size_t power_method_burn_in
 );
 
 template<typename TenElemT, typename QNT>
@@ -345,7 +351,10 @@ std::pair<typename qlten::RealTypeTrait<TenElemT>::type, typename qlten::RealTyp
     loop_projection_pre_procedure_timer.PrintElapsed();
   }
   Timer weighted_trace_gauge_fixing_timer("weighted_trace_gauge_fixing");
-  WeightedTraceGaugeFixingInSquareLocalLoop(params.arnoldi_params, params.inv_tol, gammas, lambdas, Upsilons);
+  WeightedTraceGaugeFixingInSquareLocalLoop(params.arnoldi_params, params.inv_tol, gammas, lambdas, Upsilons,
+                                             params.hermiticity_correction_tol, params.hermiticity_warning_tol,
+                                             params.power_method_max_iter, params.power_method_tolerance,
+                                             params.power_method_burn_in);
   if (print_time) {
     weighted_trace_gauge_fixing_timer.PrintElapsed();
   }
@@ -357,7 +366,7 @@ std::pair<typename qlten::RealTypeTrait<TenElemT>::type, typename qlten::RealTyp
   Timer loop_projection_post_procedure_timer("loop_projection_post_procedure");
   //split out the lambdas of envs
   for (size_t i = 0; i < 4; i++) {
-    SplitOut2EnvLambdasInMPSOrderGammas(gammas[i], env_lambda_ls[i], env_lambda_rs[i]);
+    SplitOut2EnvLambdasInMPSOrderGammas(gammas[i], env_lambda_ls[i], env_lambda_rs[i], params.env_lambda_inv_tol);
   }
 
   TransposeBackGammaTensorIndicesFromMPSOrder(gammas);
@@ -588,12 +597,14 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
     const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
     const QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma_dag,
     const QLTensor<TenElemT, QNT> &vec0,
-    TransfTenMultiVec<TenElemT, QNT> transfer_tens_multiple_vec
+    TransfTenMultiVec<TenElemT, QNT> transfer_tens_multiple_vec,
+    const size_t max_iter,
+    const double tolerance,
+    const size_t burn_in
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
-  const size_t iter_max = 100;
-  const RealT iter_tol = static_cast<RealT>(1e-15);
+  const RealT iter_tol = static_cast<RealT>(tolerance);
   RealT eigen_value_last = 0;
   size_t iter;
   TenT vec = vec0;
@@ -603,13 +614,13 @@ ArnoldiRes<TenElemT, QNT> PowerMethod(
   if constexpr (QLTensor<TenElemT, QNT>::IsFermionic()) {
     vec_last_dag.ActFermionPOps();
   }
-  for (iter = 0; iter < iter_max; iter++) {
+  for (iter = 0; iter < max_iter; iter++) {
     vec = transfer_tens_multiple_vec(vec, sigma, sigma_dag, Upsilon);
     RealT eigen_value = vec.QuasiNormalize();
-    if (iter > 5 && std::abs((eigen_value - eigen_value_last) / eigen_value) < iter_tol) {
+    if (iter > burn_in && std::abs((eigen_value - eigen_value_last) / eigen_value) < iter_tol) {
       QLTensor<TenElemT, QNT> overlap_ten;
       Contract(&vec_last_dag, {0, 1}, &vec, {0, 1}, &overlap_ten);
-      if (std::abs(TenElemT(overlap_ten()) - 1.0) < iter_tol)
+      if (std::abs(std::abs(TenElemT(overlap_ten())) - 1.0) < iter_tol)
         return {eigen_value, vec};
     }
     eigen_value_last = eigen_value;
@@ -647,7 +658,12 @@ void WeightedTraceGaugeFixing(
     QLTensor<TenElemT, QNT> &Upsilon,
     QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT> &sigma,
     QLTensor<TenElemT, QNT> &gamma_head,
-    QLTensor<TenElemT, QNT> &gamma_tail
+    QLTensor<TenElemT, QNT> &gamma_tail,
+    const double hermiticity_correction_tol,
+    const double hermiticity_warning_tol,
+    const size_t power_method_max_iter,
+    const double power_method_tolerance,
+    const size_t power_method_burn_in
 ) {
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   RealT diff;
@@ -685,7 +701,10 @@ void WeightedTraceGaugeFixing(
                                sigma,
                                sigma_dag,
                                left_eigen_sys.eig_vec,
-                               TransfTenMultiVec<TenElemT, QNT>(left_vec_multiple_transfer_tens<TenElemT, QNT>));
+                               TransfTenMultiVec<TenElemT, QNT>(left_vec_multiple_transfer_tens<TenElemT, QNT>),
+                               power_method_max_iter,
+                               power_method_tolerance,
+                               power_method_burn_in);
 
   ArnoldiRes<TenElemT, QNT> right_eigen_sys = ArnoldiSolver(Upsilon,
                                                             sigma,
@@ -701,7 +720,10 @@ void WeightedTraceGaugeFixing(
                                 sigma,
                                 sigma_dag,
                                 right_eigen_sys.eig_vec,
-                                TransfTenMultiVec<TenElemT, QNT>(right_vec_multiple_transfer_tens<TenElemT, QNT>));
+                                TransfTenMultiVec<TenElemT, QNT>(right_vec_multiple_transfer_tens<TenElemT, QNT>),
+                                power_method_max_iter,
+                                power_method_tolerance,
+                                power_method_burn_in);
 
   //EVD for eigenvectors, and update the Upsilon_i, Gammas, and Lambdas
   TenT u_l, u_r;
@@ -720,10 +742,19 @@ void WeightedTraceGaugeFixing(
   TenT ul_dag = Dag(u_l);
   TenT ur_dag = Dag(u_r);
 
+  // Convert real diagonal tensors to working element type for typed Contract
+  TenT sqrt_dl_elem, inv_sqrt_dl_elem;
+  if constexpr (std::is_same_v<TenElemT, RealT>) {
+    sqrt_dl_elem = sqrt_dl;
+    inv_sqrt_dl_elem = inv_sqrt_dl;
+  } else {
+    sqrt_dl_elem = ToComplex(sqrt_dl);
+    inv_sqrt_dl_elem = ToComplex(inv_sqrt_dl);
+  }
 
   //calculate sigma_prime
   TenT temp[11];
-  Contract<TenElemT, QNT, false, false>(sqrt_dl, u_l, 0, 1, 1, temp[0]);
+  Contract<TenElemT, QNT, false, false>(sqrt_dl_elem, u_l, 0, 1, 1, temp[0]);
   Contract(temp, {1}, &sigma, {0}, temp + 1);
   Contract(temp + 1, {1}, &u_r, {0}, temp + 2);
   Contract(temp + 2, {1}, &sqrt_dr, {0}, temp + 3);
@@ -735,13 +766,13 @@ void WeightedTraceGaugeFixing(
   //The original data of lambdas and Gammas in PEPS are not changed.
 
   TenT x_inv;
-  Contract<TenElemT, QNT, true, false>(ul_dag, inv_sqrt_dl, 1, 1, 1, temp[4]);
+  Contract<TenElemT, QNT, true, false>(ul_dag, inv_sqrt_dl_elem, 1, 1, 1, temp[4]);
   Contract(temp + 4, {1}, &v_l, {0}, &x_inv);
   TenT x_inv_dag = Dag(x_inv);
   Contract(&Upsilon, {3}, &x_inv_dag, {0}, temp + 5);
   Contract<TenElemT, QNT, false, true>(temp[5], x_inv, 2, 0, 1, temp[6]);
   diff = EvaluateHermiticity(temp[6], {3, 2, 1, 0});
-  if (diff < 1e-4) {
+  if (diff < hermiticity_correction_tol) {
     SymmetrizeMat(temp[6], {3, 2, 1, 0});
   } else {
     std::cout << "temp[6] is extremely asymmetric. diff = " << diff << "consider truncate d_R more." << std::endl;
@@ -762,8 +793,8 @@ void WeightedTraceGaugeFixing(
 //  Contract(&y_inv, {1}, temp + 8, {2}, &Upsilon);
   Upsilon.Transpose({0, 1, 3, 2});
   diff = EvaluateHermiticity(Upsilon, {1, 0, 3, 2});
-  if (diff > 1e-8) {
-    if (diff < 1e-4) {
+  if (diff > hermiticity_warning_tol) {
+    if (diff < hermiticity_correction_tol) {
       std::cout << "Brute-force symmetrize the Upsilon tensor." << std::endl;
       SymmetrizeMat(Upsilon, {1, 0, 3, 2});
     } else {
@@ -789,13 +820,20 @@ void WeightedTraceGaugeFixingInSquareLocalLoop(
     const typename qlten::RealTypeTrait<TenElemT>::type inv_tol,
     std::array<QLTensor<TenElemT, QNT>, 4> &gammas,  //input & output
     std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4> &lambdas, //input & output
-    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons //output
+    std::array<QLTensor<TenElemT, QNT>, 4> &Upsilons, //output
+    const double hermiticity_correction_tol,
+    const double hermiticity_warning_tol,
+    const size_t power_method_max_iter,
+    const double power_method_tolerance,
+    const size_t power_method_burn_in
 ) {
   // Construct the Upsilon_i tensor
   Upsilons = ConstructUpsilons(gammas, lambdas);
   for (size_t i = 0; i < 4; i++) {
     WeightedTraceGaugeFixing(arnoldi_params,
-                             inv_tol, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4]);
+                             inv_tol, Upsilons[i], lambdas[(i + 3) % 4], gammas[i], gammas[(i + 3) % 4],
+                             hermiticity_correction_tol, hermiticity_warning_tol,
+                             power_method_max_iter, power_method_tolerance, power_method_burn_in);
   }
 }
 

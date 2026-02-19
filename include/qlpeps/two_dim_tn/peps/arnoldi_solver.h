@@ -15,9 +15,20 @@
 #include <functional>
 #include <optional>
 #include <memory>
-#include "qlmps/algorithm/lanczos_params.h"           //LanczosParams
 namespace qlpeps {
-using ArnoldiParams = qlmps::LanczosParams;
+
+struct ArnoldiParams {
+  ArnoldiParams(double err, size_t max_iter, double deg_tol = 1e-14)
+      : error(err), max_iterations(max_iter), degeneracy_tol(deg_tol) {}
+
+  ArnoldiParams(double err) : ArnoldiParams(err, 200) {}
+
+  ArnoldiParams() : ArnoldiParams(1.0e-7, 200) {}
+
+  double error;             ///< The Arnoldi tolerated error.
+  size_t max_iterations;    ///< The maximal iteration times.
+  double degeneracy_tol;    ///< Tolerance for detecting degenerate (complex) dominant eigenvalue.
+};
 using qlten::QLTensor;
 
 template<typename TenElemT, typename QNT>
@@ -48,9 +59,16 @@ QLTensor<TenElemT, QNT> left_vec_multiple_transfer_tens(
     const QLTensor<TenElemT, QNT> &Upsilon
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   TenT tmp, tmp1, res;
   Contract(&left_vec, {1}, &sigma_dag, {0}, &tmp);
-  Contract<TenElemT, QNT, false, true>(sigma, tmp, 0, 0, 1, tmp1);
+  TenT sigma_elem;
+  if constexpr (std::is_same_v<TenElemT, RealT>) {
+    sigma_elem = sigma;
+  } else {
+    sigma_elem = ToComplex(sigma);
+  }
+  Contract<TenElemT, QNT, false, true>(sigma_elem, tmp, 0, 0, 1, tmp1);
   Contract<TenElemT, QNT, true, false>(tmp1, Upsilon, 0, 0, 2, res);
   return res;
 }
@@ -70,9 +88,16 @@ QLTensor<TenElemT, QNT> right_vec_multiple_transfer_tens(
     const QLTensor<TenElemT, QNT> &Upsilon
 ) {
   using TenT = QLTensor<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   TenT tmp, tmp1, res;
   Contract(&sigma, {1}, &right_vec, {0}, &tmp);
-  Contract<TenElemT, QNT, true, false>(tmp, sigma_dag, 1, 1, 1, tmp1);
+  TenT sigma_dag_elem;
+  if constexpr (std::is_same_v<TenElemT, RealT>) {
+    sigma_dag_elem = sigma_dag;
+  } else {
+    sigma_dag_elem = ToComplex(sigma_dag);
+  }
+  Contract<TenElemT, QNT, true, false>(tmp, sigma_dag_elem, 1, 1, 1, tmp1);
   Contract(&Upsilon, {2, 3}, &tmp1, {0, 1}, &res);
   return res;
 }
@@ -87,7 +112,8 @@ struct MatDomiEigenSystem {
 
 template<typename ElemT>
 MatDomiEigenSystem<ElemT> HeiMatDiag(
-    const std::vector<std::vector<ElemT>> &h, const size_t n) {
+    const std::vector<std::vector<ElemT>> &h, const size_t n,
+    const double degeneracy_tol) {
   using complex_t = std::complex<double>;
   std::vector<ElemT> h_mat(n * n, 0.0);
 
@@ -129,7 +155,7 @@ MatDomiEigenSystem<ElemT> HeiMatDiag(
     auto max_iter = std::max_element(w_abs.cbegin(), w_abs.cend());
     max_idx = max_iter - w_abs.cbegin();
 
-    if (std::abs(wi[max_idx] / wr[max_idx]) > 1e-14) {
+    if (std::abs(wi[max_idx] / wr[max_idx]) > degeneracy_tol) {
       //degeneracy case
       MatDomiEigenSystem<ElemT> res;
       res.valid = false;
@@ -227,7 +253,7 @@ ArnoldiRes<TenElemT, QNT> ArnoldiSolver(
       continue;
     }
 
-    MatDomiEigenSystem<TenElemT> eigen_solution = HeiMatDiag(h, k);
+    MatDomiEigenSystem<TenElemT> eigen_solution = HeiMatDiag(h, k, params.degeneracy_tol);
     if (eigen_solution.valid
 //    &&(eigenvalue_last.has_value() &&
 //            std::abs((eigen_solution.eigen_value - eigenvalue_last.value()) / eigenvalue_last.value()) < params.error

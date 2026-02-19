@@ -283,12 +283,12 @@ add_two_type_unittest(test_simple_update_observability
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
-# DEPRECATED: Loop update test moved to test_deprecated/
-# add_two_type_unittest(test_loop_update
-#        "test_deprecated/test_loop_update_deprecated.cpp"
-#        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
-#        ""
-# )
+# Test loop update on 2x2 OBC systems (no MPI required)
+add_two_type_unittest(test_loop_update
+        "test_algorithm/test_loop_update.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
 
 # Legacy test_vmc_peps removed - use test_vmc_peps_optimizer instead
 

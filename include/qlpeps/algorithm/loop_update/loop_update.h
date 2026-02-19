@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: LGPL-3.0-only
+
 /*
 * Author: Hao-Xin Wang<wanghaoxin1996@gmail.com>
 * Creation Date: 2024-06-21
 *
-* Description: QuantumLiquids/VMC-SquareLatticePEPS project. Loop update executor class.
+* Description: QuantumLiquids/PEPS project. Loop update executor class.
 * Reference: [1] PRB 102, 075147 (2020), "Loop update for iPEPS in 2D".
 *
 */
@@ -21,12 +23,57 @@ using namespace qlten;
 template<typename TenT>
 using LoopGates = std::array<TenT, 4>;
 
+/// @brief Type of imaginary-time evolution gate used in loop update.
+///
+/// Determines how the energy is estimated from the overlap after projection:
+/// - kFirstOrder: gate ≈ 1 - tau*H. Energy = (1 - overlap) / tau.
+/// - kExponential: gate ≈ exp(-tau*H). Energy = -ln(overlap) / tau.
+enum class LoopGateType {
+  kFirstOrder,   ///< Gate is first-order Taylor expansion: 1 - tau*H
+  kExponential   ///< Gate is (approximate) exponential: exp(-tau*H)
+};
+
+/// @brief Parameters for LoopUpdateExecutor.
+///
+/// Bundles truncation parameters, step count, Trotter step length,
+/// and gate type into a single configuration struct.
+///
+/// @todo Add AdvancedStopConfig for automatic convergence detection.
+/// @todo Add step_observer callback for machine-readable per-step metrics.
+/// @todo Add emit_machine_readable_metrics flag.
+struct LoopUpdatePara {
+  LoopUpdateTruncatePara truncate_para;
+  size_t steps;
+  double tau;
+  LoopGateType gate_type;
+
+  LoopUpdatePara(const LoopUpdateTruncatePara &truncate_para,
+                 size_t steps,
+                 double tau,
+                 LoopGateType gate_type = LoopGateType::kFirstOrder)
+      : truncate_para(truncate_para), steps(steps), tau(tau), gate_type(gate_type) {}
+};
+
+/// @brief Executor for the loop update algorithm on square-lattice PEPS.
+///
+/// The loop update applies imaginary-time evolution gates arranged in 2x2
+/// plaquette loops, following the full-environment truncation scheme of
+/// Ref. [1] PRB 102, 075147 (2020).
+///
+/// @todo Return a SweepResult struct from each sweep (analogous to SimpleUpdateExecutor).
+/// @todo Add RunSummary with convergence detection support.
+/// @todo Add per-step metrics collection and observer callback.
 template<typename TenElemT, typename QNT>
 class LoopUpdateExecutor : public Executor {
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
   using LoopGatesT = LoopGates<Tensor>;
  public:
+  LoopUpdateExecutor(const LoopUpdatePara &para,
+                     const DuoMatrix<LoopGatesT> &evolve_gates,
+                     const PEPST &peps_initial);
+
+  [[deprecated("Use the LoopUpdatePara constructor instead")]]
   LoopUpdateExecutor(const LoopUpdateTruncatePara &truncate_para,
                      const size_t steps,
                      const double tau,
@@ -37,6 +84,10 @@ class LoopUpdateExecutor : public Executor {
 
   const PEPST &GetPEPS(void) const {
     return peps_;
+  }
+
+  double GetEstimatedEnergy(void) const {
+    return estimated_energy_;
   }
 
   bool DumpResult(std::string path, bool release_mem) {
@@ -58,8 +109,8 @@ class LoopUpdateExecutor : public Executor {
 
   const size_t lx_;
   const size_t ly_;
-  const size_t steps_;
-  const double tau_;
+
+  LoopUpdatePara para_;
 
   /** The set of the evolve gates
   *  where each gate form a loop and includes 4 tensors, and
@@ -84,8 +135,8 @@ class LoopUpdateExecutor : public Executor {
   *
   */
   DuoMatrix<LoopGatesT> evolve_gates_;
-  Tensor id_nn_;    // nearest-neighbor identity operator, used for simple update
-  LoopUpdateTruncatePara truncate_para_;
+  Tensor id_nn_;    ///< Nearest-neighbor identity operator. @todo Re-enable canonicalization sweeps.
+  double estimated_energy_ = 0.0;
 
   PEPST peps_;
 };

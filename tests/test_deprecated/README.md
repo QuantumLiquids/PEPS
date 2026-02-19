@@ -3,10 +3,16 @@
 
 ## Current Deprecated Tests
 
-### `test_loop_update_deprecated.cpp`
+(No deprecated tests at this time.)
+
+
+## History
+
+### `test_loop_update_deprecated.cpp` (removed)
 - **Deprecation Date**: 2024-08-13
-- **Reason**: Loop update algorithm may have low performance-price ratio
-- **Status**: Not actively tested, preserved for reference, Potential future re-implementation
+- **Removed**: 2026-02-19
+- **Reason**: Loop update tests re-implemented as 2x2 OBC regression tests
+- **Replacement**: `test_algorithm/test_loop_update.cpp`
 
 
 ## Re-enabling Deprecated Tests
