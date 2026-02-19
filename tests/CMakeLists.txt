@@ -290,6 +290,13 @@ add_two_type_unittest(test_loop_update
         ""
 )
 
+# Test observability APIs and advanced stop for loop update
+add_two_type_unittest(test_loop_update_observability
+        "test_algorithm/test_loop_update_observability.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        ""
+)
+
 # Legacy test_vmc_peps removed - use test_vmc_peps_optimizer instead
 
 # Test optimizer

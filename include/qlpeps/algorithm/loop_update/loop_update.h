@@ -13,6 +13,10 @@
 #ifndef QLPEPS_ALGORITHM_LOOP_UPDATE_LOOP_UPDATE_H
 #define QLPEPS_ALGORITHM_LOOP_UPDATE_LOOP_UPDATE_H
 
+#include <functional>
+#include <optional>
+#include <vector>
+
 #include "qlpeps/algorithm/simple_update/simple_update.h"
 #include "qlpeps/two_dim_tn/framework/duomatrix.h"        //DuoMatrix
 
@@ -33,25 +37,80 @@ enum class LoopGateType {
   kExponential   ///< Gate is (approximate) exponential: exp(-tau*H)
 };
 
+/// @brief Per-step metrics collected during loop update execution.
+template<typename RealT>
+struct LoopUpdateStepMetrics {
+  size_t step_index;                   ///< Zero-based step index within the current Execute() call
+  double tau;                          ///< Trotter step length used for this step
+  RealT estimated_e0;                  ///< Sum of local energies (E0 estimate)
+  RealT estimated_en;                  ///< Norm-based energy estimate: -log(norm)/tau
+  std::optional<RealT> trunc_err;      ///< Representative truncation error for this sweep.
+                                       ///< nullopt when the executor does not report truncation error.
+  double elapsed_sec;                  ///< Wall-clock time for this sweep in seconds
+  bool bond_dim_changed;               ///< Whether bond dimensions changed compared to previous step
+};
+
 /// @brief Parameters for LoopUpdateExecutor.
 ///
 /// Bundles truncation parameters, step count, Trotter step length,
 /// and gate type into a single configuration struct.
-///
-/// @todo Add AdvancedStopConfig for automatic convergence detection.
-/// @todo Add step_observer callback for machine-readable per-step metrics.
-/// @todo Add emit_machine_readable_metrics flag.
 struct LoopUpdatePara {
+  struct AdvancedStopConfig {
+    double energy_abs_tol;
+    double energy_rel_tol;
+    double lambda_rel_tol;
+    size_t patience;
+    size_t min_steps;
+  };
+
   LoopUpdateTruncatePara truncate_para;
   size_t steps;
   double tau;
   LoopGateType gate_type;
+  std::optional<AdvancedStopConfig> advanced_stop;
+
+  /// @brief Optional per-step observer callback. Called after each sweep with step metrics.
+  /// If not set, no callback is invoked (zero overhead).
+  /// @note The callback uses `LoopUpdateStepMetrics<double>` (not `RealT`) because
+  /// `LoopUpdatePara` is a non-templated struct and cannot depend on `RealT`.
+  /// `double` is the natural external-consumption precision; when `RealT` is `float`,
+  /// values are losslessly widened. This is a deliberate design choice.
+  std::optional<std::function<void(const LoopUpdateStepMetrics<double>&)>> step_observer;
+
+  /// @brief When true, emit one machine-readable line per step to stdout.
+  bool emit_machine_readable_metrics = false;
 
   LoopUpdatePara(const LoopUpdateTruncatePara &truncate_para,
                  size_t steps,
                  double tau,
                  LoopGateType gate_type = LoopGateType::kFirstOrder)
-      : truncate_para(truncate_para), steps(steps), tau(tau), gate_type(gate_type) {}
+      : truncate_para(truncate_para), steps(steps), tau(tau), gate_type(gate_type),
+        advanced_stop(std::nullopt), step_observer(std::nullopt),
+        emit_machine_readable_metrics(false) {}
+
+  LoopUpdatePara(const LoopUpdateTruncatePara &truncate_para,
+                 size_t steps,
+                 double tau,
+                 const AdvancedStopConfig &advanced_stop_config,
+                 LoopGateType gate_type = LoopGateType::kFirstOrder)
+      : truncate_para(truncate_para), steps(steps), tau(tau), gate_type(gate_type),
+        advanced_stop(advanced_stop_config), step_observer(std::nullopt),
+        emit_machine_readable_metrics(false) {}
+
+  static LoopUpdatePara Advanced(const LoopUpdateTruncatePara &truncate_para,
+                                 size_t steps,
+                                 double tau,
+                                 double energy_abs_tol,
+                                 double energy_rel_tol,
+                                 double lambda_rel_tol,
+                                 size_t patience,
+                                 size_t min_steps,
+                                 LoopGateType gate_type = LoopGateType::kFirstOrder) {
+    return LoopUpdatePara(
+        truncate_para, steps, tau,
+        AdvancedStopConfig{energy_abs_tol, energy_rel_tol, lambda_rel_tol, patience, min_steps},
+        gate_type);
+  }
 };
 
 /// @brief Executor for the loop update algorithm on square-lattice PEPS.
@@ -59,16 +118,41 @@ struct LoopUpdatePara {
 /// The loop update applies imaginary-time evolution gates arranged in 2x2
 /// plaquette loops, following the full-environment truncation scheme of
 /// Ref. [1] PRB 102, 075147 (2020).
-///
-/// @todo Return a SweepResult struct from each sweep (analogous to SimpleUpdateExecutor).
-/// @todo Add RunSummary with convergence detection support.
-/// @todo Add per-step metrics collection and observer callback.
 template<typename TenElemT, typename QNT>
 class LoopUpdateExecutor : public Executor {
+ public:
   using Tensor = QLTensor<TenElemT, QNT>;
   using PEPST = SquareLatticePEPS<TenElemT, QNT>;
+  using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   using LoopGatesT = LoopGates<Tensor>;
- public:
+  using StepMetrics = LoopUpdateStepMetrics<RealT>;
+
+  enum class StopReason {
+    kNotRun = 0,
+    kMaxSteps,
+    kAdvancedConverged
+  };
+
+  struct RunSummary {
+    bool converged = false;
+    StopReason stop_reason = StopReason::kNotRun;
+    size_t executed_steps = 0;
+    std::optional<RealT> final_energy = std::nullopt;        // kept for backward compat (= final_estimated_e0)
+    std::optional<RealT> final_estimated_e0 = std::nullopt;  ///< Final E0 estimate
+    std::optional<RealT> final_estimated_en = std::nullopt;  ///< Final En estimate
+  };
+
+  /// @brief Data returned by each loop sweep, carrying all per-sweep observables.
+  struct SweepResult {
+    RealT estimated_e0;                ///< Sum of local energies
+    RealT estimated_en;                ///< Norm-based energy: -log(norm)/tau
+    std::optional<RealT> trunc_err;    ///< Representative truncation error.
+                                       ///< nullopt if the executor does not track truncation error.
+    double elapsed_sec;                ///< Wall time for the sweep
+    size_t dmin;                       ///< Minimum bond dimension after sweep
+    size_t dmax;                       ///< Maximum bond dimension after sweep
+  };
+
   LoopUpdateExecutor(const LoopUpdatePara &para,
                      const DuoMatrix<LoopGatesT> &evolve_gates,
                      const PEPST &peps_initial);
@@ -90,13 +174,30 @@ class LoopUpdateExecutor : public Executor {
     return estimated_energy_;
   }
 
+  const RunSummary &GetLastRunSummary(void) const {
+    return last_run_summary_;
+  }
+
+  bool LastRunConverged(void) const {
+    return last_run_summary_.converged;
+  }
+
+  size_t LastRunExecutedSteps(void) const {
+    return last_run_summary_.executed_steps;
+  }
+
+  /// @brief Get the per-step metrics collected during the last Execute() call.
+  const std::vector<StepMetrics> &GetStepMetrics(void) const {
+    return step_metrics_;
+  }
+
   bool DumpResult(std::string path, bool release_mem) {
     return peps_.Dump(path, release_mem);
   }
 
  private:
 
-  double LoopUpdateSweep_(void);
+  SweepResult LoopUpdateSweep_(void);
 
   /**
    *
@@ -139,6 +240,8 @@ class LoopUpdateExecutor : public Executor {
   DuoMatrix<LoopGatesT> evolve_gates_;
   Tensor id_nn_;    ///< Nearest-neighbor identity operator. @todo Re-enable canonicalization sweeps.
   double estimated_energy_ = 0.0;
+  RunSummary last_run_summary_;
+  std::vector<StepMetrics> step_metrics_;
 
   PEPST peps_;
 };

@@ -167,6 +167,83 @@ size_t sweeps_done = executor.LastRunExecutedSteps();
 auto summary = executor.GetLastRunSummary();
 ```
 
+## Loop Update (executor API)
+
+Loop update is also executor-based. Existing fixed-step usage stays unchanged.
+
+Main include:
+
+- `qlpeps/algorithm/loop_update/loop_update.h`
+
+Fixed-step mode (backward-compatible behavior):
+
+```cpp
+LoopUpdatePara lu_para(
+    /*truncate_para=*/loop_truncate_para,
+    /*steps=*/50,
+    /*tau=*/0.01,
+    /*gate_type=*/LoopGateType::kFirstOrder);
+```
+
+Advanced automatic-stop mode (opt-in):
+
+```cpp
+auto lu_para = LoopUpdatePara::Advanced(
+    /*truncate_para=*/loop_truncate_para,
+    /*steps=*/1000,      // hard cap, still enforced
+    /*tau=*/0.01,
+    /*energy_abs_tol=*/1e-8,
+    /*energy_rel_tol=*/1e-10,
+    /*lambda_rel_tol=*/1e-6,
+    /*patience=*/3,      // consecutive sweeps required
+    /*min_steps=*/10,    // do not stop before this many sweeps
+    /*gate_type=*/LoopGateType::kFirstOrder);
+```
+
+Advanced stop semantics:
+
+- Convergence gate is `energy AND lambda`.
+- Energy uses hybrid tolerance:
+  `|ΔE0| <= max(energy_abs_tol, energy_rel_tol * max(1, |E_prev|, |E_curr|))`.
+- Lambda uses per-bond relative L2 diagonal drift, then takes the global maximum.
+- If bond dimensions change between two sweeps, lambda drift is skipped and convergence streak resets.
+
+Run summary getters:
+
+```cpp
+executor.Execute();
+
+bool converged = executor.LastRunConverged();
+size_t sweeps_done = executor.LastRunExecutedSteps();
+auto summary = executor.GetLastRunSummary();
+```
+
+Per-step observability:
+
+```cpp
+const auto &metrics = executor.GetStepMetrics();  // vector<LoopUpdateStepMetrics<RealT>>
+```
+
+Optional step callback and machine-readable logs:
+
+```cpp
+lu_para.step_observer = [](const LoopUpdateStepMetrics<double> &m) {
+  // consume metrics
+};
+lu_para.emit_machine_readable_metrics = true;
+```
+
+When machine-readable logs are enabled, one line is emitted per sweep:
+
+```text
+LU_METRIC step=<i> tau=<tau> e0=<estimated_e0> en=<estimated_en> trunc_err=<value-or-N/A> elapsed_sec=<t>
+```
+
+Defaults:
+
+- Advanced stop is disabled unless `advanced_stop` is explicitly configured.
+- Existing fixed-step behavior (`steps` hard cap) is unchanged by default.
+
 ## Related
 
 - End-to-end workflow: `../tutorials/end_to_end_workflow.md`
