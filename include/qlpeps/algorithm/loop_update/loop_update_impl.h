@@ -42,9 +42,32 @@ LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateExecutor(const LoopUpdatePara &para
     evolve_gates_(evolve_gates),
     id_nn_(GenerateNNId<TenElemT, QNT>(peps_initial.Gamma({0, 0}).GetIndex(4))),
     peps_(peps_initial) {
+  const auto bc = peps_initial.GetBoundaryCondition();
+  if (bc == BoundaryCondition::Periodic) {
+    if (lx_ % 2 != 0 || ly_ % 2 != 0) {
+      throw std::invalid_argument(
+          "LoopUpdateExecutor: PBC loop update requires even lattice dimensions. "
+          "Got (" + std::to_string(lx_) + ", " + std::to_string(ly_) + ").");
+    }
+  }
+
+  // Validate evolve_gates shape matches boundary condition
+  const size_t expected_gate_rows = (bc == BoundaryCondition::Periodic) ? ly_ : ly_ - 1;
+  const size_t expected_gate_cols = (bc == BoundaryCondition::Periodic) ? lx_ : lx_ - 1;
+  if (evolve_gates_.rows() != expected_gate_rows || evolve_gates_.cols() != expected_gate_cols) {
+    throw std::invalid_argument(
+        "LoopUpdateExecutor: evolve_gates shape mismatch. "
+        "Expected (" + std::to_string(expected_gate_rows) + ", " + std::to_string(expected_gate_cols) + ") "
+        "for " + std::string(bc == BoundaryCondition::Periodic ? "PBC" : "OBC") + " "
+        + std::to_string(ly_) + "x" + std::to_string(lx_) + " lattice, "
+        "got (" + std::to_string(evolve_gates_.rows()) + ", " + std::to_string(evolve_gates_.cols()) + ").");
+  }
+
   std::cout << "\n";
   std::cout << "=====> LOOP UPDATE PROGRAM FOR Square-Lattice PEPS <=====" << "\n";
   std::cout << std::setw(40) << "System size (lx, ly) : " << "(" << lx_ << ", " << ly_ << ")\n";
+  std::cout << std::setw(40) << "Boundary condition : "
+            << (bc == BoundaryCondition::Periodic ? "Periodic" : "Open") << "\n";
   std::cout << std::setw(40) << "Setting bond dimension : " << para_.truncate_para.fet_params.Dmin << "/"
             << para_.truncate_para.fet_params.Dmax
             << "\n";
@@ -93,11 +116,15 @@ double LoopUpdateExecutor<TenElemT, QNT>::LoopUpdateSweep_(void) {
 
   double e0 = 0.0;
 
+  const bool is_pbc = (peps_.GetBoundaryCondition() == BoundaryCondition::Periodic);
+  const size_t col_limit = is_pbc ? this->lx_ : this->lx_ - 1;
+  const size_t row_limit = is_pbc ? this->ly_ : this->ly_ - 1;
+
   // TODO: add OpenMP parallelization for independent plaquettes (checkerboard decomposition)
   for (size_t start_col : {0, 1})
     for (size_t start_row : {0, 1}) {
-      for (size_t col = start_col; col < this->lx_ - 1; col += 2) {
-        for (size_t row = start_row; row < this->ly_ - 1; row += 2) {
+      for (size_t col = start_col; col < col_limit; col += 2) {
+        for (size_t row = start_row; row < row_limit; row += 2) {
           bool print_time = (row == (this->ly_ / 2) - 1 && col == (this->lx_ / 2 - 1));
           const LoopGatesT &gate = evolve_gates_({row, col});
           auto proj_res = this->peps_.LocalSquareLoopProject(gate, {row, col}, para_.truncate_para, print_time);

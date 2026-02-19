@@ -79,7 +79,7 @@ double CalGroundStateEnergyForSpinlessNNFreeFermionOBC(
 // ===========================================================================
 // Test 1: Heisenberg model loop update on 2x2 OBC
 // ===========================================================================
-struct HeisenbergLoopUpdate2x2 : public testing::Test {
+struct HeisenbergLoopUpdateOBC2x2 : public testing::Test {
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<U1QN>;
   using Tensor = QLTensor<TenElemT, U1QN>;
@@ -162,7 +162,7 @@ struct HeisenbergLoopUpdate2x2 : public testing::Test {
   }
 };
 
-TEST_F(HeisenbergLoopUpdate2x2, ConvergesToExactEnergy) {
+TEST_F(HeisenbergLoopUpdateOBC2x2, ConvergesToExactEnergy) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
@@ -207,7 +207,7 @@ TEST_F(HeisenbergLoopUpdate2x2, ConvergesToExactEnergy) {
 // ===========================================================================
 // Test 2: Heisenberg model loop update on 4x4 OBC
 // ===========================================================================
-struct HeisenbergLoopUpdate4x4 : public testing::Test {
+struct HeisenbergLoopUpdateOBC4x4 : public testing::Test {
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<U1QN>;
   using Tensor = QLTensor<TenElemT, U1QN>;
@@ -284,7 +284,7 @@ struct HeisenbergLoopUpdate4x4 : public testing::Test {
   }
 };
 
-TEST_F(HeisenbergLoopUpdate4x4, ConvergesToExactEnergy) {
+TEST_F(HeisenbergLoopUpdateOBC4x4, ConvergesToExactEnergy) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
@@ -324,9 +324,179 @@ TEST_F(HeisenbergLoopUpdate4x4, ConvergesToExactEnergy) {
 }
 
 // ===========================================================================
+// Test: Heisenberg PBC loop update with 2x2 -> tiled 4x4
+// Strategy: converge 2x2 PBC (simple update + loop update), tile to 4x4,
+//           then loop update 4x4 and check energy lowers.
+// ===========================================================================
+struct HeisenbergPBCTiledLoopUpdate : public testing::Test {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using Tensor = QLTensor<TenElemT, U1QN>;
+  using DTensor = QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, U1QN>;
+  using LoopGateT = LoopGates<Tensor>;
+
+  IndexT pb_out = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         TenIndexDirType::OUT);
+  IndexT pb_in = InverseIndex(pb_out);
+
+  // D=5 exact cyclic MPO virtual bond
+  IndexT vb_out = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 5)},
+                         TenIndexDirType::OUT);
+  IndexT vb_in = InverseIndex(vb_out);
+
+  Tensor dham_hei_nn = Tensor({pb_in, pb_out, pb_in, pb_out});
+
+  // ED ground state energy for 4x4 Heisenberg PBC (from pbc_benchmarks.py)
+  static constexpr double kExactEnergy4x4PBC = -11.228483208428854;
+
+  void SetUp(void) override {
+    dham_hei_nn({0, 0, 0, 0}) = 0.25;
+    dham_hei_nn({1, 1, 1, 1}) = 0.25;
+    dham_hei_nn({1, 1, 0, 0}) = -0.25;
+    dham_hei_nn({0, 0, 1, 1}) = -0.25;
+    dham_hei_nn({0, 1, 1, 0}) = 0.5;
+    dham_hei_nn({1, 0, 0, 1}) = 0.5;
+  }
+
+  /// D=5 exact cyclic Heisenberg MPO for a single plaquette.
+  /// @param n_i sharing factor for bond terms ending at gate i
+  LoopGateT GenerateHeisenbergLoopGates(double tau,
+                                        size_t n0, size_t n1, size_t n2, size_t n3) {
+    const std::vector<size_t> ns = {n0, n1, n2, n3};
+    LoopGateT gates;
+    for (size_t i = 0; i < 4; i++) {
+      gates[i] = Tensor({vb_in, pb_in, pb_out, vb_out});
+      Tensor &gate = gates[i];
+      gate({0, 0, 0, 0}) = 1.0;
+      gate({0, 1, 1, 0}) = 1.0;
+      gate({0, 0, 0, 1}) = 0.5;
+      gate({0, 1, 1, 1}) = -0.5;
+      gate({0, 1, 0, 2}) = 1.0;
+      gate({0, 0, 1, 3}) = 1.0;
+      gate({1, 0, 0, 4}) = -0.5 * tau / double(ns[i]);
+      gate({1, 1, 1, 4}) = 0.5 * tau / double(ns[i]);
+      gate({2, 0, 1, 4}) = -tau / (2.0 * double(ns[i]));
+      gate({3, 1, 0, 4}) = -tau / (2.0 * double(ns[i]));
+      gate({4, 0, 0, 0}) = 1.0;
+      gate({4, 1, 1, 0}) = 1.0;
+    }
+    return gates;
+  }
+
+  /// Fill DuoMatrix with uniform PBC gates (all n_i = 2).
+  void GeneratePBCEvolveGates(double tau, size_t ly, size_t lx,
+                              DuoMatrix<LoopGateT> &evolve_gates) {
+    for (size_t row = 0; row < ly; row++)
+      for (size_t col = 0; col < lx; col++)
+        evolve_gates({row, col}) = GenerateHeisenbergLoopGates(tau, 2, 2, 2, 2);
+  }
+
+  /// Tile a small_ly x small_lx PBC PEPS to big_ly x big_lx PBC PEPS.
+  /// Requires big dimensions are multiples of small dimensions.
+  static SquareLatticePEPS<TenElemT, U1QN> TilePEPS(
+      const SquareLatticePEPS<TenElemT, U1QN> &small,
+      size_t big_ly, size_t big_lx) {
+    const size_t sly = small.Rows();
+    const size_t slx = small.Cols();
+    assert(big_ly % sly == 0 && big_lx % slx == 0);
+    const IndexT &phys_idx = small.Gamma({0, 0}).GetIndex(4);
+    SquareLatticePEPS<TenElemT, U1QN> big(phys_idx, big_ly, big_lx,
+                                           BoundaryCondition::Periodic);
+    // Copy Gamma tensors periodically
+    for (size_t r = 0; r < big_ly; r++)
+      for (size_t c = 0; c < big_lx; c++)
+        big.Gamma({r, c}) = small.Gamma({r % sly, c % slx});
+    // Copy lambda_vert periodically (PBC: size ly x lx)
+    for (size_t r = 0; r < big_ly; r++)
+      for (size_t c = 0; c < big_lx; c++)
+        big.lambda_vert({r, c}) = small.lambda_vert({r % sly, c % slx});
+    // Copy lambda_horiz periodically (PBC: size ly x lx)
+    for (size_t r = 0; r < big_ly; r++)
+      for (size_t c = 0; c < big_lx; c++)
+        big.lambda_horiz({r, c}) = small.lambda_horiz({r % sly, c % slx});
+    return big;
+  }
+};
+
+TEST_F(HeisenbergPBCTiledLoopUpdate, TiledEnergyLowers) {
+  qlten::hp_numeric::SetTensorManipulationThreads(1);
+
+  // --- Phase 1: Converge 2x2 PBC with simple update ---
+  const size_t small_ly = 2, small_lx = 2;
+  SquareLatticePEPS<TenElemT, U1QN> peps_2x2(pb_out, small_ly, small_lx,
+                                               BoundaryCondition::Periodic);
+  std::vector<std::vector<size_t>> act_2x2 = {{0, 1}, {1, 0}};
+  peps_2x2.Initial(act_2x2);
+
+  // Gradually decrease tau for convergence
+  for (double su_tau : {0.5, 0.2, 0.1}) {
+    auto su = std::make_unique<SquareLatticeNNSimpleUpdateExecutor<TenElemT, U1QN>>(
+        SimpleUpdatePara(100, su_tau, 1, 4, 1e-10), peps_2x2, dham_hei_nn);
+    su->Execute();
+    peps_2x2 = su->GetPEPS();
+  }
+  peps_2x2.NormalizeAllTensor();
+
+  // --- Phase 2: Loop update on 2x2 PBC ---
+  {
+    double tau_2x2 = 0.1;
+    DuoMatrix<LoopGateT> gates_2x2(small_ly, small_lx);
+    GeneratePBCEvolveGates(tau_2x2, small_ly, small_lx, gates_2x2);
+
+    ArnoldiParams ap(1e-10, 100);
+    ConjugateGradientParams cg(100, 1e-10, 20, 0.0);
+    FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
+    LoopUpdatePara lp(LoopUpdateTruncatePara(ap, 1e-7, fet), 5, tau_2x2);
+
+    auto loop_2x2 = std::make_unique<LoopUpdateExecutor<TenElemT, U1QN>>(
+        lp, gates_2x2, peps_2x2);
+    loop_2x2->Execute();
+    peps_2x2 = loop_2x2->GetPEPS();
+  }
+  peps_2x2.NormalizeAllTensor();
+
+  // --- Phase 3: Tile 2x2 -> 4x4 ---
+  const size_t big_ly = 4, big_lx = 4;
+  auto peps_4x4 = TilePEPS(peps_2x2, big_ly, big_lx);
+
+  // --- Phase 4: Loop update on 4x4 PBC ---
+  // Run 1 step to get baseline energy, then 4 more to verify lowering.
+  double tau_4x4 = 0.02;
+  DuoMatrix<LoopGateT> gates_4x4(big_ly, big_lx);
+  GeneratePBCEvolveGates(tau_4x4, big_ly, big_lx, gates_4x4);
+
+  ArnoldiParams ap(1e-10, 100);
+  ConjugateGradientParams cg(100, 1e-10, 20, 0.0);
+  FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
+
+  // Step 1: single sweep to establish baseline energy
+  LoopUpdatePara lp_init(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, tau_4x4);
+  auto loop_init = std::make_unique<LoopUpdateExecutor<TenElemT, U1QN>>(
+      lp_init, gates_4x4, peps_4x4);
+  loop_init->Execute();
+  double e_initial = loop_init->GetEstimatedEnergy();
+  peps_4x4 = loop_init->GetPEPS();
+  loop_init.reset();
+
+  // Steps 2-5: continue evolving
+  LoopUpdatePara lp_rest(LoopUpdateTruncatePara(ap, 1e-7, fet), 4, tau_4x4);
+  auto loop_rest = std::make_unique<LoopUpdateExecutor<TenElemT, U1QN>>(
+      lp_rest, gates_4x4, peps_4x4);
+  loop_rest->Execute();
+  double e_final = loop_rest->GetEstimatedEnergy();
+
+  std::cout << "Heisenberg 4x4 PBC (tiled): ED E0 = " << kExactEnergy4x4PBC
+            << ", initial E0 = " << e_initial
+            << ", final E0 = " << e_final << std::endl;
+
+  EXPECT_NEAR(kExactEnergy4x4PBC, e_final, 0.7);
+  EXPECT_LT(e_final, e_initial);  // energy must lower
+}
+
+// ===========================================================================
 // Test 3: Transverse-field Ising model loop update on 2x2 OBC
 // ===========================================================================
-struct TFIMLoopUpdate2x2 : public testing::Test {
+struct TFIMLoopUpdateOBC2x2 : public testing::Test {
   using IndexT = Index<U1QN>;
   using QNSctT = QNSector<U1QN>;
   using Tensor = QLTensor<TenElemT, U1QN>;
@@ -418,7 +588,7 @@ struct TFIMLoopUpdate2x2 : public testing::Test {
   }
 };
 
-TEST_F(TFIMLoopUpdate2x2, ConvergesToExactEnergy) {
+TEST_F(TFIMLoopUpdateOBC2x2, ConvergesToExactEnergy) {
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
@@ -524,7 +694,7 @@ TEST_F(TFIMLoopUpdate2x2, ConvergesToExactEnergy) {
 // ===========================================================================
 // Test 4: Spinless fermion loop update on 2x2 OBC
 // ===========================================================================
-struct SpinlessFermionLoopUpdate2x2 : public testing::Test {
+struct SpinlessFermionLoopUpdateOBC2x2 : public testing::Test {
   using QNT = qlten::special_qn::fZ2QN;
   using IndexT = Index<QNT>;
   using QNSctT = QNSector<QNT>;
@@ -597,11 +767,93 @@ struct SpinlessFermionLoopUpdate2x2 : public testing::Test {
   }
 };
 
-TEST_F(SpinlessFermionLoopUpdate2x2, ConvergesToExactEnergy) {
+TEST_F(SpinlessFermionLoopUpdateOBC2x2, ConvergesToExactEnergy) {
   // Fermion loop update projection has a pre-existing lambda orientation issue
   // in WeightedTraceGaugeFixing (QuasiSquareRootDiagMat assertion).
   // Skip until the underlying projection4_impl.h is fixed for fermionic PEPS.
   GTEST_SKIP() << "Fermion loop update projection has pre-existing lambda orientation issue";
+}
+
+// ===========================================================================
+// Negative tests: constructor validation
+// ===========================================================================
+
+// Type alias to avoid commas inside EXPECT_THROW macro
+using LoopUpdateExecutorT = LoopUpdateExecutor<TenElemT, U1QN>;
+
+TEST(LoopUpdateValidation, RejectsOddPBCDimensions) {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using Tensor = QLTensor<TenElemT, U1QN>;
+  using LoopGateT = LoopGates<Tensor>;
+
+  IndexT pb_out = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         TenIndexDirType::OUT);
+
+  // 3x4 PBC: odd row count
+  SquareLatticePEPS<TenElemT, U1QN> peps_3x4(pb_out, 3, 4, BoundaryCondition::Periodic);
+  std::vector<std::vector<size_t>> act_3x4(3, std::vector<size_t>(4, 0));
+  peps_3x4.Initial(act_3x4);
+
+  DuoMatrix<LoopGateT> gates_3x4(3, 4);  // PBC: Ly x Lx
+  ArnoldiParams ap(1e-10, 100);
+  ConjugateGradientParams cg(100, 1e-10, 20, 0.0);
+  FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
+  LoopUpdatePara para(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, 0.01);
+
+  EXPECT_THROW(
+      LoopUpdateExecutorT(para, gates_3x4, peps_3x4),
+      std::invalid_argument);
+}
+
+TEST(LoopUpdateValidation, RejectsWrongGateShapeForPBC) {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using Tensor = QLTensor<TenElemT, U1QN>;
+  using LoopGateT = LoopGates<Tensor>;
+
+  IndexT pb_out = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         TenIndexDirType::OUT);
+
+  // 4x4 PBC but gates sized for OBC: (Ly-1, Lx-1) = (3, 3)
+  SquareLatticePEPS<TenElemT, U1QN> peps(pb_out, 4, 4, BoundaryCondition::Periodic);
+  std::vector<std::vector<size_t>> act(4, std::vector<size_t>(4, 0));
+  peps.Initial(act);
+
+  DuoMatrix<LoopGateT> wrong_gates(3, 3);  // OBC size, should be (4, 4) for PBC
+  ArnoldiParams ap(1e-10, 100);
+  ConjugateGradientParams cg(100, 1e-10, 20, 0.0);
+  FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
+  LoopUpdatePara para(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, 0.01);
+
+  EXPECT_THROW(
+      LoopUpdateExecutorT(para, wrong_gates, peps),
+      std::invalid_argument);
+}
+
+TEST(LoopUpdateValidation, RejectsWrongGateShapeForOBC) {
+  using IndexT = Index<U1QN>;
+  using QNSctT = QNSector<U1QN>;
+  using Tensor = QLTensor<TenElemT, U1QN>;
+  using LoopGateT = LoopGates<Tensor>;
+
+  IndexT pb_out = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), 2)},
+                         TenIndexDirType::OUT);
+
+  // 4x4 OBC but gates sized for PBC: (Ly, Lx) = (4, 4)
+  SquareLatticePEPS<TenElemT, U1QN> peps(pb_out, 4, 4);  // OBC default
+  std::vector<std::vector<size_t>> act(4, std::vector<size_t>(4, 0));
+  peps.Initial(act);
+
+  DuoMatrix<LoopGateT> wrong_gates(4, 4);  // PBC size, should be (3, 3) for OBC
+  ArnoldiParams ap(1e-10, 100);
+  ConjugateGradientParams cg(100, 1e-10, 20, 0.0);
+  FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
+  LoopUpdatePara para(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, 0.01);
+
+  EXPECT_THROW(
+      LoopUpdateExecutorT(para, wrong_gates, peps),
+      std::invalid_argument);
 }
 
 int main(int argc, char *argv[]) {

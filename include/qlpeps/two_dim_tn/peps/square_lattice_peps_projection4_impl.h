@@ -3,7 +3,7 @@
 * Creation Date: 2024-07-23
 *
 * Description: QuantumLiquids/PEPS project. The square PEPS class, project 4-site projectors implementation.
-*              Note: Current implementation only supports Open Boundary Condition (OBC).
+*              Supports both Open (OBC) and Periodic (PBC) Boundary Conditions.
 * Reference: [1] PRB 102, 075147 (2020), "Loop update for iPEPS in 2D".
 *            [2] arXiv: 1801.05390v2, Glen Evenbly
 */
@@ -148,11 +148,13 @@ std::array<QLTensor<TenElemT, QNT>, 4>
 SquareLatticePEPS<TenElemT, QNT>::GetLoopGammas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
+  const size_t row1 = (row + 1) % rows_;
+  const size_t col1 = (col + 1) % cols_;
   std::array<QLTensor<TenElemT, QNT>, 4> gammas;
   gammas[0] = Gamma(upper_left_site);
-  gammas[1] = Gamma({row, col + 1});
-  gammas[2] = Gamma({row + 1, col + 1});
-  gammas[3] = Gamma({row + 1, col});
+  gammas[1] = Gamma({row, col1});
+  gammas[2] = Gamma({row1, col1});
+  gammas[3] = Gamma({row1, col});
   return gammas;
 }
 
@@ -161,12 +163,14 @@ std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT>, 4>
 SquareLatticePEPS<TenElemT, QNT>::GetLoopInternalLambdas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
+  const size_t row1 = (row + 1) % rows_;
+  const size_t col1 = (col + 1) % cols_;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   std::array<QLTensor<RealT, QNT>, 4> lambdas;
-  lambdas[0] = lambda_horiz({row, col + 1});
-  lambdas[1] = lambda_vert({row + 1, col + 1});
-  lambdas[2] = lambda_horiz({row + 1, col + 1});
-  lambdas[3] = lambda_vert({row + 1, col});
+  lambdas[0] = lambda_horiz({row, col1});
+  lambdas[1] = lambda_vert({row1, col1});
+  lambdas[2] = lambda_horiz({row1, col1});
+  lambdas[3] = lambda_vert({row1, col});
   lambdas[2].Transpose({1, 0});
   lambdas[3].Transpose({1, 0});
   return lambdas;
@@ -177,19 +181,25 @@ std::pair<std::array<QLTensor<typename qlten::RealTypeTrait<TenElemT>::type, QNT
 SquareLatticePEPS<TenElemT, QNT>::GetLoopEnvLambdas_(const qlpeps::SiteIdx upper_left_site) const {
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
+  const size_t row1 = (row + 1) % rows_;
+  const size_t col1 = (col + 1) % cols_;
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   std::array<QLTensor<RealT, QNT>, 4> env_lambda_ls, env_lambda_rs;
-  env_lambda_ls[0] = lambda_horiz({row, col});
-  env_lambda_rs[0] = lambda_vert({row, col});
-  env_lambda_ls[1] = lambda_horiz({row, col + 2});
+  // G[0] (upper-left) environment
+  env_lambda_ls[0] = GetLambdaHorizWest(row, col);
+  env_lambda_rs[0] = GetLambdaVertNorth(row, col);
+  // G[1] (upper-right) environment
+  env_lambda_ls[1] = GetLambdaHorizEast(row, col1);
   env_lambda_ls[1].Transpose({1, 0});
-  env_lambda_rs[1] = lambda_vert({row, col + 1});
-  env_lambda_ls[2] = lambda_vert({row + 2, col + 1});
+  env_lambda_rs[1] = GetLambdaVertNorth(row, col1);
+  // G[2] (lower-right) environment
+  env_lambda_ls[2] = GetLambdaVertSouth(row1, col1);
   env_lambda_ls[2].Transpose({1, 0});
-  env_lambda_rs[2] = lambda_horiz({row + 1, col + 2});
+  env_lambda_rs[2] = GetLambdaHorizEast(row1, col1);
   env_lambda_rs[2].Transpose({1, 0});
-  env_lambda_ls[3] = lambda_horiz({row + 1, col});
-  env_lambda_rs[3] = lambda_vert({row + 2, col});
+  // G[3] (lower-left) environment
+  env_lambda_ls[3] = GetLambdaHorizWest(row1, col);
+  env_lambda_rs[3] = GetLambdaVertSouth(row1, col);
   env_lambda_rs[3].Transpose({1, 0});
   return {env_lambda_ls, env_lambda_rs};
 }
@@ -312,6 +322,16 @@ std::pair<typename qlten::RealTypeTrait<TenElemT>::type, typename qlten::RealTyp
   using RealT = typename qlten::RealTypeTrait<TenElemT>::type;
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
+  if (boundary_condition_ == BoundaryCondition::Open) {
+    if (row + 1 >= rows_ || col + 1 >= cols_) {
+      throw std::invalid_argument(
+          "LocalSquareLoopProject: OBC site (" + std::to_string(row) + ", " + std::to_string(col) +
+          ") would wrap across boundary. Valid range: row < " + std::to_string(rows_ - 1) +
+          ", col < " + std::to_string(cols_ - 1) + ".");
+    }
+  }
+  const size_t row1 = (row + 1) % rows_;
+  const size_t col1 = (col + 1) % cols_;
   auto gammas_original = GetLoopGammas_(upper_left_site);
   auto lambdas_original = GetLoopInternalLambdas_(upper_left_site);
   TransposeGammaTensorIndicesIntoMPSOrder(gammas_original);
@@ -380,19 +400,19 @@ std::pair<typename qlten::RealTypeTrait<TenElemT>::type, typename qlten::RealTyp
   }
 
   Gamma(upper_left_site) = gammas[0];
-  Gamma({row, col + 1}) = gammas[1];
-  Gamma({row + 1, col + 1}) = gammas[2];
-  Gamma({row + 1, col}) = gammas[3];
-  lambda_horiz({row, col + 1}) = lambdas[0];
-  lambda_vert({row + 1, col + 1}) = lambdas[1];
+  Gamma({row, col1}) = gammas[1];
+  Gamma({row1, col1}) = gammas[2];
+  Gamma({row1, col}) = gammas[3];
+  lambda_horiz({row, col1}) = lambdas[0];
+  lambda_vert({row1, col1}) = lambdas[1];
   lambdas[2].Transpose({1, 0});
   lambdas[3].Transpose({1, 0});
-  lambda_horiz({row + 1, col + 1}) = lambdas[2];
-  lambda_vert({row + 1, col}) = lambdas[3];
+  lambda_horiz({row1, col1}) = lambdas[2];
+  lambda_vert({row1, col}) = lambdas[3];
 #ifndef NDEBUG
   auto phy_idx = Gamma({0, 0}).GetIndex(4);
-  for (const auto &gamma : {Gamma(upper_left_site), Gamma({row, col + 1}),
-                            Gamma({row + 1, col + 1}), Gamma({row + 1, col})}) {
+  for (const auto &gamma : {Gamma(upper_left_site), Gamma({row, col1}),
+                            Gamma({row1, col1}), Gamma({row1, col})}) {
     assert(phy_idx == gamma.GetIndex(4));
   }
 #endif
@@ -433,14 +453,16 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   using DTenT = QLTensor<RealT, QNT>;
   const size_t row = upper_left_site.row();
   const size_t col = upper_left_site.col();
+  const size_t row1 = (row + 1) % rows_;
+  const size_t col1 = (col + 1) % cols_;
 #ifndef NDEBUG
   auto phy_idx = Gamma({0, 0}).GetIndex(4);
 #endif
   std::vector<DTenT *> lambdas(4, nullptr);
-  lambdas[0] = lambda_horiz(row, col + 1);
-  lambdas[1] = lambda_vert(row + 1, col + 1);
-  lambdas[2] = lambda_horiz(row + 1, col + 1);
-  lambdas[3] = lambda_vert(row + 1, col);
+  lambdas[0] = lambda_horiz(row, col1);
+  lambdas[1] = lambda_vert(row1, col1);
+  lambdas[2] = lambda_horiz(row1, col1);
+  lambdas[3] = lambda_vert(row1, col);
   lambdas[2]->Transpose({1, 0});
 #ifndef NDEBUG // for omp parallel + HTTP transpose make catastrophic
   assert((*lambdas[2])({0, 0}) != 0.0);
@@ -460,7 +482,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   Contract(q, {5}, u, {0}, tmp + 2);  // tmp + 2 is gamma0
   *lambdas[0] = std::move(s[0]);
 
-  TenT & Gamma1 = Gamma({row, col + 1});
+  TenT & Gamma1 = Gamma({row, col1});
   Contract(&Gamma1, {4}, &gate_tens[1], {1}, tmp + 3);
   Contract(vt, {1, 2}, tmp + 3, {4, 0}, tmp + 4);
   tmp[4].Transpose({0, 2, 3, 4, 1, 5});
@@ -472,7 +494,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   Gamma1.Transpose({0, 4, 1, 2, 3});
   *lambdas[1] = std::move(s[1]);
 
-  TenT & Gamma2 = Gamma({row + 1, col + 1});
+  TenT & Gamma2 = Gamma({row1, col1});
   Contract(&Gamma2, {4}, &gate_tens[2], {1}, tmp + 6);
   Contract(vt + 1, {1, 2}, tmp + 6, {4, 3}, tmp + 7);
   tmp[7].Transpose({0, 2, 3, 4, 1, 5});
@@ -485,7 +507,7 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   s[2].Transpose({1, 0});
   *lambdas[2] = std::move(s[2]);
 
-  TenT & Gamma3 = Gamma({row + 1, col});
+  TenT & Gamma3 = Gamma({row1, col});
   Contract(&Gamma3, {4}, &gate_tens[3], {1}, tmp + 9);
   Contract(vt + 2, {1, 2}, tmp + 9, {4, 2}, tmp + 10);
   tmp[10].Transpose({0, 1, 2, 4, 3, 5});
@@ -502,8 +524,8 @@ void SquareLatticePEPS<TenElemT, QNT>::PatSquareLocalLoopProjector_(
   Contract(vt + 3, {2, 1}, tmp + 2, {0, 1}, &Gamma0);
   Gamma0.Transpose({1, 0, 4, 2, 3});
 #ifndef NDEBUG
-  for (const auto &gamma : {Gamma(upper_left_site), Gamma({row, col + 1}),
-                            Gamma({row + 1, col + 1}), Gamma({row + 1, col})}) {
+  for (const auto &gamma : {Gamma(upper_left_site), Gamma({row, col1}),
+                            Gamma({row1, col1}), Gamma({row1, col})}) {
     assert(phy_idx == gamma.GetIndex(4));
   }
 #endif

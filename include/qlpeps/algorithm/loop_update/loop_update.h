@@ -115,7 +115,9 @@ class LoopUpdateExecutor : public Executor {
   /** The set of the evolve gates
   *  where each gate form a loop and includes 4 tensors, and
   *  represents the local imaginary evolve gate exp(-\tau * h).
-  *  sizes of the DuoMatrix are (Ly-1) in rows by (Lx-1) in columns
+  *  Sizes of the DuoMatrix:
+  *    - OBC: (Ly-1) rows by (Lx-1) columns
+  *    - PBC: Ly rows by Lx columns (requires even Lx and Ly)
   *
   *  The order of the 4 tensors in one loop is accord to Ref. [1] Fig. 2 (a)
   *
