@@ -12,6 +12,8 @@
 #ifndef QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION4_IMPL_H
 #define QLPEPS_TWO_DIM_TN_PEPS_SQUARE_LATTICE_PEPS_PROJECTION4_IMPL_H
 
+#include <stdexcept>
+#include <string>
 #include "arnoldi_solver.h"
 
 namespace qlpeps {
@@ -1021,12 +1023,19 @@ FullEnvironmentTruncate(
     PtenVecT p_ten_vec(P_ten);
     PtenVecT r_init(R_ten_init);
     BtenMatT b_ten_mat(B_ten);
-    size_t cg_iter;
 
-    PtenVecT update_r_vec =
-        ConjugateGradientSolver(b_ten_mat, p_ten_vec, r_init,
-                                trunc_params.cg_params.max_iter,
-                                trunc_params.cg_params.tolerance, cg_iter);
+    auto cg_result_r = ConjugateGradientSolver(b_ten_mat, p_ten_vec, r_init,
+                                               trunc_params.cg_params.max_iter,
+                                               trunc_params.cg_params.tolerance,
+                                               trunc_params.cg_params.residue_restart_step,
+                                               trunc_params.cg_params.absolute_tolerance);
+    if (!cg_result_r.converged) {
+      throw std::runtime_error(
+          "CG solver did not converge in full-environment truncation (R update)."
+          " iterations=" + std::to_string(cg_result_r.iterations)
+          + " residual_norm=" + std::to_string(cg_result_r.residual_norm));
+    }
+    PtenVecT update_r_vec = std::move(cg_result_r.x);
 
     Contract(&update_r_vec.p_ten, {0}, &u, {0}, tmp + 1);
     u = TenT();
@@ -1060,10 +1069,18 @@ FullEnvironmentTruncate(
     Contract(&sigma, {1}, &u, {0}, &L_ten_init);
     L_ten_init.Transpose({1, 0});
     PtenVecT l_init(L_ten_init);
-    PtenVecT update_l_vec =
-        ConjugateGradientSolver(b_ten_mat, p_ten_vec, l_init,
-                                trunc_params.cg_params.max_iter,
-                                trunc_params.cg_params.tolerance, cg_iter);
+    auto cg_result_l = ConjugateGradientSolver(b_ten_mat, p_ten_vec, l_init,
+                                               trunc_params.cg_params.max_iter,
+                                               trunc_params.cg_params.tolerance,
+                                               trunc_params.cg_params.residue_restart_step,
+                                               trunc_params.cg_params.absolute_tolerance);
+    if (!cg_result_l.converged) {
+      throw std::runtime_error(
+          "CG solver did not converge in full-environment truncation (L update)."
+          " iterations=" + std::to_string(cg_result_l.iterations)
+          + " residual_norm=" + std::to_string(cg_result_l.residual_norm));
+    }
+    PtenVecT update_l_vec = std::move(cg_result_l.x);
     Contract(&vdag, {1}, &update_l_vec.p_ten, {1}, tmp + 3);
 
     u = TenT();

@@ -330,6 +330,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
         std::cout << std::setw(indent) << "SR adaptive diag shift:" << algo_params.adaptive_diagonal_shift << "\n";
         std::cout << std::setw(indent) << "CG max iter:" << algo_params.cg_params.max_iter << "\n";
         std::cout << std::setw(indent) << "CG tolerance:" << algo_params.cg_params.tolerance << "\n";
+        std::cout << std::setw(indent) << "CG absolute tolerance:" << algo_params.cg_params.absolute_tolerance << "\n";
         std::cout << std::setw(indent) << "CG residue restart step:" << algo_params.cg_params.residue_restart_step
                   << "\n";
         std::cout << std::setw(indent) << "CG diagonal shift:" << algo_params.cg_params.diag_shift << "\n";

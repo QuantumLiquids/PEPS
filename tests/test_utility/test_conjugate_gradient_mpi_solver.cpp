@@ -26,11 +26,11 @@ void RunTestPlainCGSolverParallelCase(
   int rank, mpi_size;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &mpi_size);
-  size_t iter;
-  auto x = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 20, iter, comm);
+  auto result = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 20, comm);
   if (rank == hp_numeric::kMPIMasterRank) {
-    x.Print();
-    auto diff_vec = x - x_res;
+    EXPECT_TRUE(result.converged);
+    result.x.Print();
+    auto diff_vec = result.x - x_res;
     EXPECT_NEAR(diff_vec.NormSquare(), 0.0, 1e-13);
   }
 }
@@ -174,6 +174,130 @@ TEST(TestPlainCGSolver, ParallelComplexImaginaryOffDiagonal) {
                                   });
 
   RunTestPlainCGSolverParallelCase(cmat2, cb2, cx02, cx_res2, comm);
+}
+
+TEST(TestPlainCGSolver, ParallelZeroRhsRelativeOnlyPreservesLegacyBehavior) {
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+  ::testing::TestEventListeners &listeners =
+      ::testing::UnitTest::GetInstance()->listeners();
+  if (rank != 0) {
+    delete listeners.Release(listeners.default_result_printer());
+  }
+
+  MySquareMatrix<double> mat;
+  if (rank == 0) {
+    mat = MySquareMatrix<double>({
+        {1.7014087728892546, -1.9258430571407281},
+        {-1.9258430571407281, 2.7386516770021552}
+    });
+  } else {
+    mat = MySquareMatrix<double>({
+        {0.0, 0.0},
+        {0.0, 0.0}
+    });
+  }
+
+  MyVector<double> b({0.0, 0.0});
+  MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
+  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    EXPECT_FALSE(result.converged);
+  }
+}
+
+TEST(TestPlainCGSolver, ParallelTinyRhsRelativeOnlyPreservesLegacyBehavior) {
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+  ::testing::TestEventListeners &listeners =
+      ::testing::UnitTest::GetInstance()->listeners();
+  if (rank != 0) {
+    delete listeners.Release(listeners.default_result_printer());
+  }
+
+  MySquareMatrix<double> mat;
+  if (rank == 0) {
+    mat = MySquareMatrix<double>({
+        {1.7014087728892546, -1.9258430571407281},
+        {-1.9258430571407281, 2.7386516770021552}
+    });
+  } else {
+    mat = MySquareMatrix<double>({
+        {0.0, 0.0},
+        {0.0, 0.0}
+    });
+  }
+
+  MyVector<double> b({1e-300, -1e-300});
+  MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
+  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    EXPECT_FALSE(result.converged);
+  }
+}
+
+TEST(TestPlainCGSolver, ParallelZeroRhsConvergesWithExplicitAbsoluteTolerance) {
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+  ::testing::TestEventListeners &listeners =
+      ::testing::UnitTest::GetInstance()->listeners();
+  if (rank != 0) {
+    delete listeners.Release(listeners.default_result_printer());
+  }
+
+  MySquareMatrix<double> mat;
+  if (rank == 0) {
+    mat = MySquareMatrix<double>({
+        {1.7014087728892546, -1.9258430571407281},
+        {-1.9258430571407281, 2.7386516770021552}
+    });
+  } else {
+    mat = MySquareMatrix<double>({
+        {0.0, 0.0},
+        {0.0, 0.0}
+    });
+  }
+
+  MyVector<double> b({0.0, 0.0});
+  MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
+  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm, 1e-150);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    EXPECT_TRUE(result.converged);
+  }
+}
+
+TEST(TestPlainCGSolver, ParallelTinyRhsConvergesWithExplicitAbsoluteTolerance) {
+  MPI_Comm comm = MPI_COMM_WORLD;
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+  ::testing::TestEventListeners &listeners =
+      ::testing::UnitTest::GetInstance()->listeners();
+  if (rank != 0) {
+    delete listeners.Release(listeners.default_result_printer());
+  }
+
+  MySquareMatrix<double> mat;
+  if (rank == 0) {
+    mat = MySquareMatrix<double>({
+        {1.7014087728892546, -1.9258430571407281},
+        {-1.9258430571407281, 2.7386516770021552}
+    });
+  } else {
+    mat = MySquareMatrix<double>({
+        {0.0, 0.0},
+        {0.0, 0.0}
+    });
+  }
+
+  MyVector<double> b({1e-300, -1e-300});
+  MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
+  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm, 1e-150);
+  if (rank == hp_numeric::kMPIMasterRank) {
+    EXPECT_TRUE(result.converged);
+  }
 }
 
 int main(int argc, char *argv[]) {

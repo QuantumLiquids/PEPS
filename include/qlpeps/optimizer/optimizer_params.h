@@ -33,21 +33,40 @@ namespace qlpeps {
 
 /**
  * @struct ConjugateGradientParams
- * @brief Parameters for conjugate gradient solver used in stochastic reconfiguration.
- * 
- * No default constructor following Google C++ style - forces explicit parameter specification.
+ * @brief Parameters for conjugate gradient solver.
+ *
+ * Used by both stochastic reconfiguration (SR) and loop update full-environment
+ * truncation.
+ *
+ * Current stopping criterion:
+ *   ||r||^2 <= max(tolerance * ||b||^2, absolute_tolerance^2).
+ *
+ * Notes:
+ * - \c tolerance is used in squared-residual form, so the equivalent norm-space
+ *   relative tolerance is sqrt(tolerance).
+ * - \c absolute_tolerance is in residual 2-norm (not squared).
+ * - Default \c absolute_tolerance is 0.0 to preserve legacy relative-only behavior.
+ * - A future API revision is planned to align with standard norm-space
+ *   conventions (e.g. ||r|| <= atol + rtol * ||b||).
  */
 struct ConjugateGradientParams {
-  size_t max_iter;
-  double tolerance;
-  int residue_restart_step;
-  double diag_shift;
+  size_t max_iter;              ///< Maximum CG iterations
+  double tolerance;             ///< Relative tolerance used in squared criterion (tolerance * ||b||^2)
+  double absolute_tolerance;    ///< Absolute tolerance in residual norm ||r|| (default 0.0)
+  int residue_restart_step;     ///< Periodically recompute residual (0 to disable)
+  double diag_shift;            ///< Diagonal shift for regularization (SR only)
 
   // Default constructor for backward compatibility
-  ConjugateGradientParams() : max_iter(100), tolerance(1e-5), residue_restart_step(20), diag_shift(0.001) {}
+  ConjugateGradientParams()
+      : max_iter(100), tolerance(1e-5), absolute_tolerance(0.0),
+        residue_restart_step(20), diag_shift(0.001) {}
 
-  ConjugateGradientParams(size_t max_iter, double tolerance, int residue_restart_step, double diag_shift)
-      : max_iter(max_iter), tolerance(tolerance), residue_restart_step(residue_restart_step), diag_shift(diag_shift) {}
+  ConjugateGradientParams(
+      size_t max_iter, double tolerance, int residue_restart_step,
+      double diag_shift, double absolute_tolerance = 0.0)
+      : max_iter(max_iter), tolerance(tolerance),
+        absolute_tolerance(absolute_tolerance),
+        residue_restart_step(residue_restart_step), diag_shift(diag_shift) {}
 };
 
 // BaseParams is now nested inside OptimizerParams - see below

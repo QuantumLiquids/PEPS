@@ -37,6 +37,8 @@
 #include <complex>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
+#include <string>
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/utility/helpers.h"
 #include "qlpeps/utility/filesystem_utils.h"
@@ -915,13 +917,27 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
   SRSMatrix s_matrix(const_cast<std::vector<SITPST> *>(&Ostar_samples), pOstar_mean, mpi_size_);
   s_matrix.diag_shift = cg_params.diag_shift;
 
-  size_t cg_iterations;
-  SITPST natural_gradient = ConjugateGradientSolver(
+  auto cg_result = ConjugateGradientSolver(
       s_matrix, gradient, init_guess,
       cg_params.max_iter, cg_params.tolerance,
-      cg_params.residue_restart_step, cg_iterations, comm_);
+      cg_params.residue_restart_step, comm_,
+      cg_params.absolute_tolerance);
 
-  return {natural_gradient, cg_iterations};
+  // Broadcast convergence status from master to all ranks for coordinated error handling.
+  // Slave ranks hold a placeholder (converged=false) that does not reflect the actual solve.
+  int converged_flag = cg_result.converged ? 1 : 0;
+  ::MPI_Bcast(&converged_flag, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_);
+
+  if (!converged_flag) {
+    std::string msg = "CG solver did not converge in SR natural gradient computation.";
+    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+      msg += " iterations=" + std::to_string(cg_result.iterations)
+           + " residual_norm=" + std::to_string(cg_result.residual_norm);
+    }
+    throw std::runtime_error(msg);
+  }
+
+  return {std::move(cg_result.x), cg_result.iterations};
 }
 
 template<typename TenElemT, typename QNT>
