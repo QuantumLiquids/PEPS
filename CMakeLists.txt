@@ -9,6 +9,7 @@ cmake_minimum_required(VERSION 3.12)
 
 
 project("QuantumLiquids/PEPS"
+        VERSION 0.1.0
         DESCRIPTION "A finite-size PEPS algorithms library"
         LANGUAGES CXX)
 

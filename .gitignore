@@ -33,6 +33,7 @@
 
 
 # Dir
+.worktrees/
 build/
 release/
 debug/
@@ -50,6 +51,8 @@ external/gqten/
 .DS_Store
 .ycm_extra_conf.py
 docs/PEPS.tag
+docs/dev/design/math/*.pdf
+docs/dev/design/math/*.txt
 
 Testing/
 AGENTS.md

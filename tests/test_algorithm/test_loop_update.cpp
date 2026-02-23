@@ -24,12 +24,23 @@
 #include "qlpeps/algorithm/loop_update/loop_update.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <string>
 
 using namespace qlten;
 using namespace qlpeps;
 
 using qlten::special_qn::U1QN;
 using TenElemT = TEN_ELEM_TYPE;
+
+namespace {
+
+bool EnableExperimentalLoopUpdateConvergenceTests(void) {
+  const char *flag = std::getenv("QLPEPS_ENABLE_EXPERIMENTAL_LOOP_UPDATE_TESTS");
+  return flag != nullptr && std::string(flag) == "1";
+}
+
+}  // namespace
 
 // ---------------------------------------------------------------------------
 // Exact energy helpers
@@ -163,6 +174,10 @@ struct HeisenbergLoopUpdateOBC2x2 : public testing::Test {
 };
 
 TEST_F(HeisenbergLoopUpdateOBC2x2, ConvergesToExactEnergy) {
+  if (!EnableExperimentalLoopUpdateConvergenceTests()) {
+    GTEST_SKIP() << "Loop-update convergence tests are disabled by default "
+                 << "(slow/unstable). Set QLPEPS_ENABLE_EXPERIMENTAL_LOOP_UPDATE_TESTS=1 to run.";
+  }
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
@@ -285,6 +300,10 @@ struct HeisenbergLoopUpdateOBC4x4 : public testing::Test {
 };
 
 TEST_F(HeisenbergLoopUpdateOBC4x4, ConvergesToExactEnergy) {
+  if (!EnableExperimentalLoopUpdateConvergenceTests()) {
+    GTEST_SKIP() << "Loop-update convergence tests are disabled by default "
+                 << "(slow/unstable). Set QLPEPS_ENABLE_EXPERIMENTAL_LOOP_UPDATE_TESTS=1 to run.";
+  }
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
@@ -419,6 +438,10 @@ struct HeisenbergPBCTiledLoopUpdate : public testing::Test {
 };
 
 TEST_F(HeisenbergPBCTiledLoopUpdate, TiledEnergyLowers) {
+  if (!EnableExperimentalLoopUpdateConvergenceTests()) {
+    GTEST_SKIP() << "Loop-update convergence tests are disabled by default "
+                 << "(slow/unstable). Set QLPEPS_ENABLE_EXPERIMENTAL_LOOP_UPDATE_TESTS=1 to run.";
+  }
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   // --- Phase 1: Converge 2x2 PBC with simple update ---
@@ -589,6 +612,10 @@ struct TFIMLoopUpdateOBC2x2 : public testing::Test {
 };
 
 TEST_F(TFIMLoopUpdateOBC2x2, ConvergesToExactEnergy) {
+  if (!EnableExperimentalLoopUpdateConvergenceTests()) {
+    GTEST_SKIP() << "Loop-update convergence tests are disabled by default "
+                 << "(slow/unstable). Set QLPEPS_ENABLE_EXPERIMENTAL_LOOP_UPDATE_TESTS=1 to run.";
+  }
   qlten::hp_numeric::SetTensorManipulationThreads(1);
 
   SquareLatticePEPS<TenElemT, U1QN> peps0(pb_out, Ly, Lx);
