@@ -38,7 +38,7 @@ OptimizerParams
 │   ├── plateau_patience      // Plateau patience parameter
 │   ├── learning_rate         // Unified learning rate interface
 │   ├── lr_scheduler          // Optional learning rate scheduler
-│   └── auto_step_selector    // Optional MC-oriented auto step-size selector (v1)
+│   └── periodic_step_selector    // Optional MC-oriented auto step-size selector (v1)
 ├── AlgorithmParams (algorithm-specific)
 │   ├── SGDParams            // Stochastic Gradient Descent
 │   ├── AdamParams           // Adam optimizer

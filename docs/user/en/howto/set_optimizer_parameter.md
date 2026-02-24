@@ -200,7 +200,7 @@ auto opt_params = qlpeps::OptimizerParamsBuilder()
     .SetMaxIterations(1000)
     .SetLearningRate(0.1)
     .WithSGD()
-    .SetAutoStepSelector(
+    .SetPeriodicStepSelector(
         /*enabled=*/true,
         /*every_n_steps=*/10,
         /*phase_switch_ratio=*/0.3,

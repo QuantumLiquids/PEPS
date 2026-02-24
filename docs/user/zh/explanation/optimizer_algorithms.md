@@ -38,7 +38,7 @@ OptimizerParams
 │   ├── plateau_patience      // 平台期耐心参数
 │   ├── learning_rate         // 统一学习率接口
 │   ├── lr_scheduler          // 可选学习率调度器
-│   └── auto_step_selector    // 可选 MC 导向自动步长选择器（v1）
+│   └── periodic_step_selector    // 可选 MC 导向自动步长选择器（v1）
 ├── AlgorithmParams（算法特定）
 │   ├── SGDParams            // 随机梯度下降
 │   ├── AdamParams           // Adam

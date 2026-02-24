@@ -32,7 +32,7 @@ SITPST CreateScalarState(double value) {
 TEST(AutoStepSelectorPolicyTest, EarlyPhaseChoosesLowerMeanEnergyIgnoringErrorbar) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/4, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/4, /*learning_rate=*/3.0);
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/1.0,
                                                           /*enable_in_deterministic=*/true};
   OptimizerParams params(base_params, SGDParams());
@@ -45,14 +45,14 @@ TEST(AutoStepSelectorPolicyTest, EarlyPhaseChoosesLowerMeanEnergyIgnoringErrorba
   };
 
   auto result = optimizer.IterativeOptimize(CreateScalarState(1.0), evaluator);
-  ASSERT_FALSE(result.step_length_trajectory.empty());
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory.front(), 1.5);
+  ASSERT_FALSE(result.learning_rate_trajectory.empty());
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory.front(), 1.5);
 }
 
 TEST(AutoStepSelectorPolicyTest, LatePhaseRequiresSignificantImprovementToHalve) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/1, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/1, /*learning_rate=*/0.2);
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/0.0,
                                                           /*enable_in_deterministic=*/true};
   OptimizerParams params(base_params, SGDParams());
@@ -67,8 +67,8 @@ TEST(AutoStepSelectorPolicyTest, LatePhaseRequiresSignificantImprovementToHalve)
   };
 
   auto result = optimizer.IterativeOptimize(CreateScalarState(1.0), evaluator);
-  ASSERT_FALSE(result.step_length_trajectory.empty());
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory.front(), 0.2);
+  ASSERT_FALSE(result.learning_rate_trajectory.empty());
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory.front(), 0.2);
 }
 
 } // namespace

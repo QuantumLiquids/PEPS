@@ -237,8 +237,8 @@ TEST_F(OptimizerTest, InitialStepSelectorChoosesBestCumulativeStepAtIterZero) {
 
   auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
   ASSERT_EQ(result.total_iterations, 1u);
-  ASSERT_EQ(result.step_length_trajectory.size(), 1u);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory.front(), 0.9);
+  ASSERT_EQ(result.learning_rate_trajectory.size(), 1u);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory.front(), 0.9);
 }
 
 TEST_F(OptimizerTest, InitialStepSelectorWritebackPersistsWhenPeriodicSelectorIsDisabled) {
@@ -258,10 +258,10 @@ TEST_F(OptimizerTest, InitialStepSelectorWritebackPersistsWhenPeriodicSelectorIs
 
   auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
   ASSERT_EQ(result.total_iterations, 3u);
-  ASSERT_EQ(result.step_length_trajectory.size(), 3u);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[0], 0.9);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[1], 0.9);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[2], 0.9);
+  ASSERT_EQ(result.learning_rate_trajectory.size(), 3u);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[0], 0.9);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], 0.9);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[2], 0.9);
 }
 
 // Test iterative optimization
@@ -561,31 +561,6 @@ TEST_F(OptimizerTest, StochasticReconfigurationStructure) {
   EXPECT_EQ(sr_params.cg_params.tolerance, 1e-6);
 }
 
-// Test bounded gradient update
-TEST_F(OptimizerTest, BoundedGradientUpdate) {
-  OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
-
-  SITPST initial_state = test_tps_;
-  SITPST gradient = test_tps_;
-
-  // Fill gradient with some values
-  for (size_t row = 0; row < gradient.rows(); ++row) {
-    for (size_t col = 0; col < gradient.cols(); ++col) {
-      for (size_t i = 0; i < gradient({row, col}).size(); ++i) {
-        QNT qn0 = QNT();
-        gradient({row, col})[i] = Tensor(gradient({row, col})[i].GetIndexes());
-        gradient({row, col})[i].Random(qn0);
-      }
-    }
-  }
-  gradient *= 100.0; //Make gradient large enough to trigger bounded update.
-
-  double step_length = 0.1;
-  SITPST updated_state = optimizer.BoundedGradientUpdate(initial_state, gradient, step_length);
-
-  EXPECT_NE(GetMaxAbs(updated_state), GetMaxAbs(initial_state));
-}
-
 // Test advanced stop functionality - Gradient convergence
 TEST_F(OptimizerTest, AdvancedStopGradientConvergence) {
   // Set very low gradient tolerance to trigger gradient convergence
@@ -821,10 +796,10 @@ TEST_F(OptimizerTest, ActualPlateauDetection) {
   EXPECT_FALSE(result.gradient_norms.empty());
 }
 
-TEST_F(OptimizerTest, AutoStepSelectorRejectsUnsupportedAlgorithm) {
+TEST_F(OptimizerTest, PeriodicStepSelectorRejectsUnsupportedAlgorithm) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/3, /*learning_rate=*/0.1);
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/0.3,
                                                           /*enable_in_deterministic=*/true};
   OptimizerParams params(base_params, LBFGSParams());
@@ -837,11 +812,11 @@ TEST_F(OptimizerTest, AutoStepSelectorRejectsUnsupportedAlgorithm) {
   EXPECT_THROW((void)optimizer.IterativeOptimize(test_tps_, evaluator), std::invalid_argument);
 }
 
-TEST_F(OptimizerTest, AutoStepSelectorRejectsSchedulerConflict) {
+TEST_F(OptimizerTest, PeriodicStepSelectorRejectsSchedulerConflict) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/3, /*learning_rate=*/0.1,
                                           std::make_unique<StepLR>(0.1, 1, 0.5));
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/0.3,
                                                           /*enable_in_deterministic=*/true};
   OptimizerParams params(base_params, SGDParams());
@@ -854,10 +829,10 @@ TEST_F(OptimizerTest, AutoStepSelectorRejectsSchedulerConflict) {
   EXPECT_THROW((void)optimizer.IterativeOptimize(test_tps_, evaluator), std::invalid_argument);
 }
 
-TEST_F(OptimizerTest, AutoStepSelectorRejectsDeterministicByDefault) {
+TEST_F(OptimizerTest, PeriodicStepSelectorRejectsDeterministicByDefault) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/3, /*learning_rate=*/0.1);
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/0.3,
                                                           /*enable_in_deterministic=*/false};
   OptimizerParams params(base_params, SGDParams());
@@ -870,10 +845,10 @@ TEST_F(OptimizerTest, AutoStepSelectorRejectsDeterministicByDefault) {
   EXPECT_THROW((void)optimizer.IterativeOptimize(test_tps_, evaluator), std::invalid_argument);
 }
 
-TEST_F(OptimizerTest, AutoStepSelectorMCIntervalAndMonotonicWriteback) {
+TEST_F(OptimizerTest, PeriodicStepSelectorMCIntervalAndMonotonicWriteback) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/6, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/6, /*learning_rate=*/3.0);
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/2,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/2,
                                                           /*phase_switch_ratio=*/0.3,
                                                           /*enable_in_deterministic=*/false};
   OptimizerParams params(base_params, SGDParams());
@@ -887,26 +862,26 @@ TEST_F(OptimizerTest, AutoStepSelectorMCIntervalAndMonotonicWriteback) {
 
   auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
   ASSERT_EQ(result.total_iterations, 6u);
-  ASSERT_EQ(result.step_length_trajectory.size(), result.total_iterations);
+  ASSERT_EQ(result.learning_rate_trajectory.size(), result.total_iterations);
   // iter=0 is a trigger step (every_n_steps=2). For a quadratic objective,
   // eta=1.5 reaches lower trial energy than eta=3.0, so first writeback is 1.5.
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[0], 1.5);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[1], result.step_length_trajectory[0]);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[2], 0.75);
-  EXPECT_DOUBLE_EQ(result.step_length_trajectory[3], result.step_length_trajectory[2]);
-  for (size_t i = 1; i < result.step_length_trajectory.size(); ++i) {
-    EXPECT_LE(result.step_length_trajectory[i], result.step_length_trajectory[i - 1]);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[0], 1.5);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], result.learning_rate_trajectory[0]);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[2], 0.75);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[3], result.learning_rate_trajectory[2]);
+  for (size_t i = 1; i < result.learning_rate_trajectory.size(); ++i) {
+    EXPECT_LE(result.learning_rate_trajectory[i], result.learning_rate_trajectory[i - 1]);
   }
 }
 
-TEST_F(OptimizerTest, AutoStepSelectorNonFiniteTrialErrorThrowsOnAllRanks) {
+TEST_F(OptimizerTest, PeriodicStepSelectorNonFiniteTrialErrorThrowsOnAllRanks) {
   if (mpi_size_ < 2) {
     GTEST_SKIP() << "Requires >=2 MPI ranks for rank-consistency check.";
   }
 
   OptimizerParams::BaseParams base_params(/*max_iter=*/2, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/2, /*learning_rate=*/0.2);
-  base_params.auto_step_selector = AutoStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/0.3,
                                                           /*enable_in_deterministic=*/true};
   OptimizerParams params(base_params, SGDParams());

@@ -99,25 +99,25 @@ double Optimizer<TenElemT, QNT>::GetCurrentLearningRate(size_t iteration, double
 template<typename TenElemT, typename QNT>
 typename Optimizer<TenElemT, QNT>::OptimizationResult
 Optimizer<TenElemT, QNT>::IterativeOptimize(
-    const SITPST &initial_state,
-    std::function<std::tuple<TenElemT, SITPST, double>(const SITPST &)> energy_evaluator,
+    const WaveFunctionT &initial_state,
+    std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT &)> energy_evaluator,
     const OptimizationCallback &callback,
-    const std::vector<SITPST> *Ostar_samples,
-    const SITPST *Ostar_mean) {
+    const std::vector<WaveFunctionT> *Ostar_samples,
+    const WaveFunctionT *Ostar_mean) {
 
   OptimizationResult result;
   result.optimized_state = initial_state;
   result.converged = false;
   result.total_iterations = 0;
 
-  SITPST current_state = initial_state;
-  SITPST best_state = initial_state;
+  WaveFunctionT current_state = initial_state;
+  WaveFunctionT best_state = initial_state;
   double best_energy = std::numeric_limits<double>::max();
 
   // Initialize for stochastic reconfiguration if needed
-  SITPST sr_init_guess;
+  WaveFunctionT sr_init_guess;
   if (params_.IsAlgorithm<StochasticReconfigurationParams>()) {
-    sr_init_guess = SITPST(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
+    sr_init_guess = WaveFunctionT(initial_state.rows(), initial_state.cols(), initial_state.PhysicalDim());
   }
 
   // Advanced stopping criteria tracking
@@ -132,7 +132,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   const bool is_lbfgs = params_.IsAlgorithm<LBFGSParams>();
   const auto &initial_selector_cfg = params_.base_params.initial_step_selector;
   const bool initial_selector_enabled = initial_selector_cfg.enabled;
-  const auto &periodic_selector_cfg = params_.base_params.auto_step_selector;
+  const auto &periodic_selector_cfg = params_.base_params.periodic_step_selector;
   const bool periodic_selector_enabled = periodic_selector_cfg.enabled;
   const bool any_selector_enabled = initial_selector_enabled || periodic_selector_enabled;
   constexpr double kSelectorLateSigma = 1.0;
@@ -165,7 +165,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     throw std::invalid_argument("Step selectors require a positive base learning_rate");
   }
 
-  double selector_base_eta = params_.base_params.learning_rate;
+  double selector_base_lr = params_.base_params.learning_rate;
 
   if (is_lbfgs && rank_ == qlten::hp_numeric::kMPIMasterRank) {
     ResetLBFGSState_();
@@ -268,14 +268,14 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // === C: Compute learning rate and optimization update ===
       double learning_rate = any_selector_enabled
-          ? selector_base_eta
+          ? selector_base_lr
           : GetCurrentLearningRate(iter, (iter == 0) ? std::real(current_energy) : previous_energy);
-      double effective_step_length = learning_rate;
+      double effective_learning_rate = learning_rate;
 
       Timer update_timer("optimization_update");
 
       // Gradient preprocessing (clipping) for first-order methods
-      SITPST preprocessed_gradient = current_gradient;
+      WaveFunctionT preprocessed_gradient = current_gradient;
       if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         if (params_.IsFirstOrder()) {
           if (params_.base_params.clip_value && *(params_.base_params.clip_value) > 0.0) {
@@ -294,7 +294,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           !initial_selector_triggered;
       const bool selector_triggered = initial_selector_triggered || periodic_selector_triggered;
       bool use_precomputed_sr_direction = false;
-      SITPST sr_precomputed_direction;
+      WaveFunctionT sr_precomputed_direction;
       size_t sr_precomputed_iters = 0;
       double sr_precomputed_natural_grad_norm = 0.0;
 
@@ -325,11 +325,11 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         if (initial_selector_triggered) {
           candidate_etas.reserve(initial_selector_cfg.max_line_search_steps);
           for (size_t i = 1; i <= initial_selector_cfg.max_line_search_steps; ++i) {
-            candidate_etas.push_back(selector_base_eta * static_cast<double>(i));
+            candidate_etas.push_back(selector_base_lr * static_cast<double>(i));
           }
         } else {
-          const double candidate_eta = selector_base_eta;
-          const double candidate_half_eta = selector_base_eta * 0.5;
+          const double candidate_eta = selector_base_lr;
+          const double candidate_half_eta = selector_base_lr * 0.5;
           if (candidate_half_eta <= 0.0) {
             throw std::invalid_argument(
                 "Auto step selector requires positive candidate step sizes");
@@ -338,7 +338,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           candidate_etas.push_back(candidate_half_eta);
         }
 
-        auto evaluate_candidate = [&](const SITPST &trial_state) {
+        auto evaluate_candidate = [&](const WaveFunctionT &trial_state) {
           // v1 keeps the existing evaluator contract (energy, gradient, error).
           // Gradient is intentionally ignored for selector trials; consider an
           // energy-only evaluator path in v2 for expensive MC evaluations.
@@ -389,7 +389,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         if (is_sgd) {
           const auto &sgd_params = params_.GetAlgorithmParams<SGDParams>();
           for (const double eta : candidate_etas) {
-            SITPST trial_state =
+            WaveFunctionT trial_state =
                 SGDPreviewUpdate_(current_state, preprocessed_gradient, eta, sgd_params);
             auto [trial_energy, trial_error] = evaluate_candidate(trial_state);
             candidate_results.push_back(CandidateEvalResult{eta, trial_energy, trial_error});
@@ -408,7 +408,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           use_precomputed_sr_direction = true;
 
           auto make_sr_trial = [&](double eta) {
-            SITPST trial_state = current_state;
+            WaveFunctionT trial_state = current_state;
             double applied_eta = eta;
             if (sr_params.normalize_update) {
               applied_eta /= std::sqrt(sr_precomputed_natural_grad_norm);
@@ -420,7 +420,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           };
 
           for (const double eta : candidate_etas) {
-            SITPST trial_state = make_sr_trial(eta);
+            WaveFunctionT trial_state = make_sr_trial(eta);
             auto [trial_energy, trial_error] = evaluate_candidate(trial_state);
             candidate_results.push_back(CandidateEvalResult{eta, trial_energy, trial_error});
           }
@@ -462,25 +462,25 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                                        qlten::hp_numeric::kMPIMasterRank, comm_));
         }
         if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-          if (initial_selector_triggered && selected_eta != selector_base_eta) {
+          if (initial_selector_triggered && selected_eta != selector_base_lr) {
             std::cout << "[INITIAL_STEP] Iter 0: selected step size "
-                      << selector_base_eta << " -> " << selected_eta << std::endl;
+                      << selector_base_lr << " -> " << selected_eta << std::endl;
           }
-          if (periodic_selector_triggered && selected_eta < selector_base_eta) {
-            std::cout << "[AUTO_STEP] Iter " << iter << ": step size halved "
-                      << selector_base_eta << " -> " << selected_eta << std::endl;
+          if (periodic_selector_triggered && selected_eta < selector_base_lr) {
+            std::cout << "[PERIODIC_STEP] Iter " << iter << ": step size halved "
+                      << selector_base_lr << " -> " << selected_eta << std::endl;
           }
         }
         if (initial_selector_triggered) {
-          selector_base_eta = selected_eta;
+          selector_base_lr = selected_eta;
         } else {
-          selector_base_eta = std::min(selector_base_eta, selected_eta);
+          selector_base_lr = std::min(selector_base_lr, selected_eta);
         }
-        learning_rate = selector_base_eta;
-        effective_step_length = learning_rate;
+        learning_rate = selector_base_lr;
+        effective_learning_rate = learning_rate;
       }
 
-      SITPST updated_state;
+      WaveFunctionT updated_state;
       size_t sr_iterations = 0;
       double sr_natural_grad_norm = 0.0;
 
@@ -511,8 +511,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             // Fix Intel icpx compiler crash: avoid structured binding in lambda
             auto sr_result = StochasticReconfigurationUpdate(
                 current_state, current_gradient,
-                Ostar_samples ? *Ostar_samples : std::vector<SITPST>{},
-                Ostar_mean ? *Ostar_mean : SITPST{},
+                Ostar_samples ? *Ostar_samples : std::vector<WaveFunctionT>{},
+                Ostar_mean ? *Ostar_mean : WaveFunctionT{},
                 learning_rate, sr_init_guess, algo_params.normalize_update);
             updated_state = std::get<0>(sr_result);
             sr_natural_grad_norm = std::get<1>(sr_result);
@@ -553,7 +553,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           if (algo_params.step_mode == LBFGSStepMode::kFixed) {
             auto [next_state, used_step] = ApplyFixedLBFGSStep_(current_state, search_direction, learning_rate);
             updated_state = std::move(next_state);
-            effective_step_length = used_step;
+            effective_learning_rate = used_step;
           } else {
             if (mpi_size_ > 1) {
               qlpeps::MPI_Bcast(search_direction, comm_, qlten::hp_numeric::kMPIMasterRank);
@@ -563,18 +563,18 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
                 std::real(current_energy), dphi0);
             if (wolfe_status == WolfeStepStatus::kAccepted) {
               updated_state = std::move(next_state);
-              effective_step_length = used_step;
+              effective_learning_rate = used_step;
             } else if (algo_params.allow_fallback_to_fixed_step) {
               const double fallback_lr = std::max(algo_params.min_step,
                                                   learning_rate * algo_params.fallback_fixed_step_scale);
               auto [fallback_state, used_step] = ApplyFixedLBFGSStep_(current_state, search_direction, fallback_lr);
               updated_state = std::move(fallback_state);
-              effective_step_length = used_step;
+              effective_learning_rate = used_step;
               if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
                 std::cerr << "[LBFGS][WARN] Strong Wolfe failed within max_eval="
                           << algo_params.max_eval
                           << ", fallback to fixed step alpha=" << std::scientific
-                          << effective_step_length << std::endl;
+                          << effective_learning_rate << std::endl;
               }
             } else {
               throw std::runtime_error(
@@ -682,7 +682,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // === F: Trajectories, best-state, stopping, state update, log, callback ===
       result.energy_trajectory.push_back(current_energy);
-      result.step_length_trajectory.push_back(effective_step_length);
+      result.learning_rate_trajectory.push_back(effective_learning_rate);
       if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         result.energy_error_trajectory.push_back(current_error);
         result.gradient_norms.push_back(grad_norm);
@@ -710,7 +710,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         if (should_stop) {
           if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
             LogOptimizationStep(iter, current_energy_real, current_error, grad_norm,
-                               effective_step_length, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
+                               effective_learning_rate, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
                                energy_eval_time, update_time);
             result.converged = true;
           }
@@ -746,7 +746,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       // Log progress
       LogOptimizationStep(iter, std::real(current_energy), current_error, grad_norm,
-                          effective_step_length, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
+                          effective_learning_rate, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
                           energy_eval_time, update_time);
 
       if (callback.on_iteration) {
@@ -788,8 +788,6 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   return result;
 }
 
-
-
 /**
  * @brief Unified SGD implementation with momentum and Nesterov support
  * 
@@ -813,19 +811,19 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
  * This case uses direct inline update for simplicity.
  */
 template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
-                                   const SITPST &gradient,
-                                   double step_length,
+typename Optimizer<TenElemT, QNT>::WaveFunctionT
+Optimizer<TenElemT, QNT>::SGDUpdate(const WaveFunctionT &current_state,
+                                   const WaveFunctionT &gradient,
+                                   double learning_rate,
                                    const SGDParams &params) {
   
-  SITPST updated_state = current_state;
+  WaveFunctionT updated_state = current_state;
   
   // MPI VERIFICATION: Only master rank processes gradients and algorithm state
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // LAZY INITIALIZATION: Initialize velocity on first use (master rank only)
     if (!sgd_momentum_initialized_) {
-      velocity_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      velocity_ = WaveFunctionT(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
       // Default construction gives zero tensors - perfect for initial velocity
       sgd_momentum_initialized_ = true;
       
@@ -835,7 +833,7 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
     
     // Apply decoupled L2 weight decay (AdamW-style) to parameters
     if (params.weight_decay > 0.0) {
-      const double decay_factor = 1.0 - step_length * params.weight_decay;
+      const double decay_factor = 1.0 - learning_rate * params.weight_decay;
       updated_state *= decay_factor;
     }
 
@@ -846,15 +844,15 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
       
       if (params.nesterov) {
         // Nesterov: θ_{t+1} = θ_t - α * (μ * v_{t+1} + g_t)
-        SITPST nesterov_update = params.momentum * velocity_ + gradient;
-        updated_state += (-step_length) * nesterov_update;
+        WaveFunctionT nesterov_update = params.momentum * velocity_ + gradient;
+        updated_state += (-learning_rate) * nesterov_update;
       } else {
         // Standard momentum: θ_{t+1} = θ_t - α * v_{t+1}
-        updated_state += (-step_length) * velocity_;
+        updated_state += (-learning_rate) * velocity_;
       }
     } else {
       // Vanilla SGD: direct inline update (already inside master-only block)
-      updated_state += (-step_length) * gradient;
+      updated_state += (-learning_rate) * gradient;
     }
   }
   
@@ -865,56 +863,56 @@ Optimizer<TenElemT, QNT>::SGDUpdate(const SITPST &current_state,
 }
 
 template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::SGDPreviewUpdate_(const SITPST &current_state,
-                                            const SITPST &gradient,
-                                            double step_length,
+typename Optimizer<TenElemT, QNT>::WaveFunctionT
+Optimizer<TenElemT, QNT>::SGDPreviewUpdate_(const WaveFunctionT &current_state,
+                                            const WaveFunctionT &gradient,
+                                            double learning_rate,
                                             const SGDParams &params) const {
-  SITPST updated_state = current_state;
+  WaveFunctionT updated_state = current_state;
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     if (params.weight_decay > 0.0) {
-      const double decay_factor = 1.0 - step_length * params.weight_decay;
+      const double decay_factor = 1.0 - learning_rate * params.weight_decay;
       updated_state *= decay_factor;
     }
 
     if (params.momentum > 0.0) {
       // Preview keeps velocity_ immutable by construction. With momentum enabled,
       // this evaluates candidates from the same velocity snapshot.
-      SITPST velocity_for_preview =
-          sgd_momentum_initialized_ ? velocity_ : SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      WaveFunctionT velocity_for_preview =
+          sgd_momentum_initialized_ ? velocity_ : WaveFunctionT(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
       velocity_for_preview = params.momentum * velocity_for_preview + gradient;
       if (params.nesterov) {
-        SITPST nesterov_update = params.momentum * velocity_for_preview + gradient;
-        updated_state += (-step_length) * nesterov_update;
+        WaveFunctionT nesterov_update = params.momentum * velocity_for_preview + gradient;
+        updated_state += (-learning_rate) * nesterov_update;
       } else {
-        updated_state += (-step_length) * velocity_for_preview;
+        updated_state += (-learning_rate) * velocity_for_preview;
       }
     } else {
-      updated_state += (-step_length) * gradient;
+      updated_state += (-learning_rate) * gradient;
     }
   }
   return updated_state;
 }
 
 template<typename TenElemT, typename QNT>
-std::pair<typename Optimizer<TenElemT, QNT>::SITPST, size_t>
+std::pair<typename Optimizer<TenElemT, QNT>::WaveFunctionT, size_t>
 Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
-    const SITPST &gradient,
-    const std::vector<SITPST> &Ostar_samples,
-    const SITPST &Ostar_mean,
-    const SITPST &init_guess) {
+    const WaveFunctionT &gradient,
+    const std::vector<WaveFunctionT> &Ostar_samples,
+    const WaveFunctionT &Ostar_mean,
+    const WaveFunctionT &init_guess) {
 
   // Get CG parameters from StochasticReconfigurationParams
   const auto& sr_params = params_.GetAlgorithmParams<StochasticReconfigurationParams>();
   const ConjugateGradientParams &cg_params = sr_params.cg_params;
 
   // Create S-matrix for stochastic reconfiguration
-  SITPST *pOstar_mean = nullptr;
+  WaveFunctionT *pOstar_mean = nullptr;
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    pOstar_mean = const_cast<SITPST *>(&Ostar_mean);
+    pOstar_mean = const_cast<WaveFunctionT *>(&Ostar_mean);
   }
 
-  SRSMatrix s_matrix(const_cast<std::vector<SITPST> *>(&Ostar_samples), pOstar_mean, mpi_size_);
+  SRSMatrix s_matrix(const_cast<std::vector<WaveFunctionT> *>(&Ostar_samples), pOstar_mean, mpi_size_);
   s_matrix.diag_shift = cg_params.diag_shift;
 
   auto cg_result = ConjugateGradientSolver(
@@ -941,14 +939,14 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
 }
 
 template<typename TenElemT, typename QNT>
-std::tuple<typename Optimizer<TenElemT, QNT>::SITPST, double, size_t>
+std::tuple<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double, size_t>
 Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
-    const SITPST &current_state,
-    const SITPST &gradient,
-    const std::vector<SITPST> &Ostar_samples,
-    const SITPST &Ostar_mean,
-    double step_length,
-    const SITPST &init_guess,
+    const WaveFunctionT &current_state,
+    const WaveFunctionT &gradient,
+    const std::vector<WaveFunctionT> &Ostar_samples,
+    const WaveFunctionT &Ostar_mean,
+    double learning_rate,
+    const WaveFunctionT &init_guess,
     bool normalize) {
 
   // Calculate natural gradient using stochastic reconfiguration
@@ -959,52 +957,25 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
   double natural_grad_norm = std::sqrt(natural_gradient.NormSquare());
 
   if (normalize) {
-    step_length /= std::sqrt(natural_grad_norm);
+    learning_rate /= std::sqrt(natural_grad_norm);
   }
 
   // Apply the update using the natural gradient
-  SITPST updated_state = current_state;
+  WaveFunctionT updated_state = current_state;
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    updated_state += (-step_length) * natural_gradient;
+    updated_state += (-learning_rate) * natural_gradient;
   }
 
   return {updated_state, natural_grad_norm, cg_iterations};
 }
 
 template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::BoundedGradientUpdate(const SITPST &current_state,
-                                                const SITPST &gradient,
-                                                double step_length) {
-  SITPST updated_state = current_state;
-
-  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    // Apply bounded gradient update only on master rank
-    // This matches the behavior of the original VMCPEPSExecutor
-    for (size_t row = 0; row < current_state.rows(); ++row) {
-      for (size_t col = 0; col < current_state.cols(); ++col) {
-        const size_t phy_dim = gradient({row, col}).size();
-        for (size_t compt = 0; compt < phy_dim; ++compt) {
-          Tensor &grad_ten = const_cast<SITPST &>(gradient)({row, col})[compt];
-          grad_ten.ElementWiseClipTo(step_length);
-          updated_state({row, col})[compt] += (-step_length) * grad_ten;
-        }
-      }
-    }
-  }
-
-  // CRITICAL MPI DESIGN: Do NOT broadcast here!
-  // Energy evaluator owns all state distribution for Monte Carlo sampling.
-  return updated_state;
-}
-
-template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
-                                        const SITPST &gradient,
-                                        double step_length) {
+typename Optimizer<TenElemT, QNT>::WaveFunctionT
+Optimizer<TenElemT, QNT>::AdaGradUpdate(const WaveFunctionT &current_state,
+                                        const WaveFunctionT &gradient,
+                                        double learning_rate) {
   // MPI VERIFICATION: Only master rank processes gradients and algorithm state
-  SITPST updated_state = current_state;
+  WaveFunctionT updated_state = current_state;
   
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // Get AdaGrad parameters from the algorithm params
@@ -1012,7 +983,7 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
     
     // LAZY INITIALIZATION: Initialize AdaGrad state on first use (master rank only)
     if (!adagrad_initialized_) {
-      accumulated_gradients_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      accumulated_gradients_ = WaveFunctionT(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
       // Initialize with small values to avoid division by zero
       for (size_t row = 0; row < accumulated_gradients_.rows(); ++row) {
         for (size_t col = 0; col < accumulated_gradients_.cols(); ++col) {
@@ -1032,18 +1003,18 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
     }
 
     // Update accumulated gradients: G_k = G_{k-1} + |gradient|^2
-    SITPST squared_gradient = ElementWiseSquaredNorm(gradient);
+    WaveFunctionT squared_gradient = ElementWiseSquaredNorm(gradient);
     accumulated_gradients_ += squared_gradient;
 
     // Compute adaptive learning rates: 1/sqrt(G_k) for |G_k| > epsilon
-    SITPST adaptive_rates = ElementWiseInverse(ElementWiseSqrt(accumulated_gradients_), adagrad_params.epsilon);
+    WaveFunctionT adaptive_rates = ElementWiseInverse(ElementWiseSqrt(accumulated_gradients_), adagrad_params.epsilon);
 
     // Apply AdaGrad update: θ_{k+1} = θ_k - η * adaptive_rates * gradient
     for (size_t row = 0; row < current_state.rows(); ++row) {
       for (size_t col = 0; col < current_state.cols(); ++col) {
         for (size_t i = 0; i < current_state({row, col}).size(); ++i) {
-          // Compute adaptive step: step_length * adaptive_rate * gradient
-          Tensor adaptive_step = ElementWiseMultiply(adaptive_rates({row, col})[i], gradient({row, col})[i]) * step_length;
+          // Compute adaptive step: learning_rate * adaptive_rate * gradient
+          Tensor adaptive_step = ElementWiseMultiply(adaptive_rates({row, col})[i], gradient({row, col})[i]) * learning_rate;
 
           // Update state: θ_{k+1} = θ_k - adaptive_step
           updated_state({row, col})[i] += (-adaptive_step);
@@ -1074,19 +1045,19 @@ Optimizer<TenElemT, QNT>::AdaGradUpdate(const SITPST &current_state,
  *   θ_{t+1} = (1 - αλ) θ_t - α m̂_t / (√v̂_t + ε)
  */
 template<typename TenElemT, typename QNT>
-typename Optimizer<TenElemT, QNT>::SITPST
-Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
-                                     const SITPST &gradient,
-                                     double step_length,
+typename Optimizer<TenElemT, QNT>::WaveFunctionT
+Optimizer<TenElemT, QNT>::AdamUpdate(const WaveFunctionT &current_state,
+                                     const WaveFunctionT &gradient,
+                                     double learning_rate,
                                      const AdamParams &params) {
-  SITPST updated_state = current_state;
+  WaveFunctionT updated_state = current_state;
   
   // MPI VERIFICATION: Only master rank processes gradients and algorithm state
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     // LAZY INITIALIZATION on first use (master rank only)
     if (!adam_initialized_) {
-      first_moment_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
-      second_moment_ = SITPST(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      first_moment_ = WaveFunctionT(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
+      second_moment_ = WaveFunctionT(gradient.rows(), gradient.cols(), gradient.PhysicalDim());
       // Initialize with zeros
       for (size_t row = 0; row < first_moment_.rows(); ++row) {
         for (size_t col = 0; col < first_moment_.cols(); ++col) {
@@ -1108,7 +1079,7 @@ Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
     
     // Apply decoupled L2 weight decay (AdamW-style) to parameters
     if (params.weight_decay > 0.0) {
-      const double decay_factor = 1.0 - step_length * params.weight_decay;
+      const double decay_factor = 1.0 - learning_rate * params.weight_decay;
       updated_state *= decay_factor;
     }
     
@@ -1116,7 +1087,7 @@ Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
     first_moment_ = params.beta1 * first_moment_ + (1.0 - params.beta1) * gradient;
     
     // Update biased second moment estimate: v_t = β₂ v_{t-1} + (1-β₂) |g_t|²
-    SITPST squared_gradient = ElementWiseSquaredNorm(gradient);
+    WaveFunctionT squared_gradient = ElementWiseSquaredNorm(gradient);
     second_moment_ = params.beta2 * second_moment_ + (1.0 - params.beta2) * squared_gradient;
     
     // Compute bias correction factors
@@ -1124,17 +1095,17 @@ Optimizer<TenElemT, QNT>::AdamUpdate(const SITPST &current_state,
     double bias_correction2 = 1.0 - std::pow(params.beta2, adam_timestep_);
     
     // Compute bias-corrected estimates
-    SITPST m_hat = (1.0 / bias_correction1) * first_moment_;
-    SITPST v_hat = (1.0 / bias_correction2) * second_moment_;
+    WaveFunctionT m_hat = (1.0 / bias_correction1) * first_moment_;
+    WaveFunctionT v_hat = (1.0 / bias_correction2) * second_moment_;
     
     // Compute update: -α * m̂_t / (√v̂_t + ε)
-    SITPST sqrt_v_hat = ElementWiseSqrt(v_hat);
-    SITPST denom = ElementWiseInverse(sqrt_v_hat, params.epsilon);  // 1/(√v̂ + ε)
+    WaveFunctionT sqrt_v_hat = ElementWiseSqrt(v_hat);
+    WaveFunctionT denom = ElementWiseInverse(sqrt_v_hat, params.epsilon);  // 1/(√v̂ + ε)
     
     for (size_t row = 0; row < current_state.rows(); ++row) {
       for (size_t col = 0; col < current_state.cols(); ++col) {
         for (size_t i = 0; i < current_state({row, col}).size(); ++i) {
-          Tensor update = ElementWiseMultiply(denom({row, col})[i], m_hat({row, col})[i]) * step_length;
+          Tensor update = ElementWiseMultiply(denom({row, col})[i], m_hat({row, col})[i]) * learning_rate;
           updated_state({row, col})[i] += (-update);
         }
       }
@@ -1421,7 +1392,7 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
                                                    double energy,
                                                    double energy_error,
                                                    double gradient_norm,
-                                                   double step_length,
+                                                   double learning_rate,
                                                    const std::vector<double> &accept_rates,
                                                    size_t sr_iterations,
                                                    double sr_natural_grad_norm,
@@ -1429,8 +1400,8 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
                                                    double update_time) {
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     std::cout << "Iter " << std::setw(4) << iteration;
-    if (step_length > 0.0) {
-      std::cout << "LR = " << std::setw(9) << std::scientific << std::setprecision(1) << step_length;
+    if (learning_rate > 0.0) {
+      std::cout << "LR = " << std::setw(9) << std::scientific << std::setprecision(1) << learning_rate;
     }
     std::cout << "E0 = " << std::setw(14) << std::fixed << std::setprecision(6) << energy;
     if (energy_error > 0.0) {
@@ -1510,20 +1481,20 @@ template<typename TenElemT, typename QNT>
 void Optimizer<TenElemT, QNT>::ClearUp() {
   // Clear AdaGrad state
   if (adagrad_initialized_) {
-    accumulated_gradients_ = SITPST();
+    accumulated_gradients_ = WaveFunctionT();
     adagrad_initialized_ = false;
   }
 
   // Clear SGD momentum state
   if (sgd_momentum_initialized_) {
-    velocity_ = SITPST();
+    velocity_ = WaveFunctionT();
     sgd_momentum_initialized_ = false;
   }
 
   // Clear Adam state
   if (adam_initialized_) {
-    first_moment_ = SITPST();
-    second_moment_ = SITPST();
+    first_moment_ = WaveFunctionT();
+    second_moment_ = WaveFunctionT();
     adam_timestep_ = 0;
     adam_initialized_ = false;
   }

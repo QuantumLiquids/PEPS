@@ -36,9 +36,8 @@ using qlten::QLTensor;
  * 1. SGD (with momentum and Nesterov acceleration)
  * 2. AdaGrad (Adaptive Gradient)
  * 3. Stochastic reconfiguration (natural gradient)
- * 4. Bounded gradient element update
- * 5. Adam (with AdamW-style decoupled weight decay)
- * 6. L-BFGS (fixed-step and strong-Wolfe modes)
+ * 4. Adam (with AdamW-style decoupled weight decay)
+ * 5. L-BFGS (fixed-step and strong-Wolfe modes)
  * 
  * CRITICAL MPI RESPONSIBILITY SEPARATION:
  * 
@@ -122,7 +121,7 @@ class Optimizer {
     std::vector<TenElemT> energy_trajectory;
     std::vector<double> energy_error_trajectory;
     std::vector<double> gradient_norms;
-    std::vector<double> step_length_trajectory;
+    std::vector<double> learning_rate_trajectory;
     size_t total_iterations;
     bool converged;
     SpikeStatistics spike_stats;   ///< Spike detection statistics for the run
@@ -159,8 +158,6 @@ class Optimizer {
       const std::vector<WaveFunctionT>* Ostar_samples = nullptr,
       const WaveFunctionT* Ostar_mean = nullptr);
 
-
-
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
    * 
@@ -193,7 +190,7 @@ class Optimizer {
    * @param gradient Standard gradient
    * @param Ostar_samples O^*(S) tensor samples
    * @param Ostar_mean Average O^* tensor
-   * @param step_length Step length
+   * @param learning_rate Learning rate
    * @param init_guess Initial guess for CG solver
    * @param normalize Whether to normalize the natural gradient
    * @return Updated state, natural gradient norm, and CG iterations
@@ -203,24 +200,9 @@ class Optimizer {
       const WaveFunctionT& gradient,
       const std::vector<WaveFunctionT>& Ostar_samples,
       const WaveFunctionT& Ostar_mean,
-      double step_length,
+      double learning_rate,
       const WaveFunctionT& init_guess,
       bool normalize = false);
-
-  /**
-   * @brief Apply bounded gradient element update
-   * 
-   * MPI RESPONSIBILITY: This function does NOT broadcast the updated state.
-   * Energy evaluator handles all state distribution for Monte Carlo sampling.
-   * 
-   * @param current_state Current TPS state (valid on all ranks)
-   * @param gradient Gradient (valid ONLY on master rank)
-   * @param step_length Step length
-   * @return Updated TPS state (valid ONLY on master rank)
-   */
-  WaveFunctionT BoundedGradientUpdate(const WaveFunctionT& current_state,
-                               const WaveFunctionT& gradient,
-                               double step_length);
 
   /**
    * @brief Apply AdaGrad update with adaptive learning rates
@@ -230,12 +212,12 @@ class Optimizer {
    * 
    * @param current_state Current TPS state (valid on all ranks)
    * @param gradient Gradient (valid ONLY on master rank)
-   * @param step_length Step length (base learning rate)
+   * @param learning_rate Learning rate
    * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT AdaGradUpdate(const WaveFunctionT& current_state,
                        const WaveFunctionT& gradient,
-                       double step_length);
+                       double learning_rate);
 
   /**
    * @brief Apply Adam update with bias-corrected moment estimates
@@ -255,13 +237,13 @@ class Optimizer {
    * 
    * @param current_state Current TPS state (valid on all ranks)
    * @param gradient Gradient (valid ONLY on master rank)
-   * @param step_length Step length (learning rate)
+   * @param learning_rate Learning rate
    * @param params Adam parameters (beta1, beta2, epsilon, weight_decay)
    * @return Updated TPS state (valid ONLY on master rank)
    */
   WaveFunctionT AdamUpdate(const WaveFunctionT& current_state,
                            const WaveFunctionT& gradient,
-                           double step_length,
+                           double learning_rate,
                            const AdamParams& params);
 
   /**
@@ -272,12 +254,6 @@ class Optimizer {
    * @return Learning rate for this iteration
    */
   double GetCurrentLearningRate(size_t iteration, double current_energy = 0.0) const;
-
-  // =============================================================================
-  // BACKWARD COMPATIBILITY: Static methods for legacy VMC PEPS code
-  // =============================================================================
-  
-  // Legacy enum-based helper methods removed - use OptimizerParams.IsAlgorithm<T>() instead
 
   /**
    * @brief Get spike detection statistics from the last optimization run.
@@ -430,20 +406,13 @@ class Optimizer {
                           double energy,
                           double energy_error,
                           double gradient_norm,
-                          double step_length = 0.0,
+                          double learning_rate = 0.0,
                           const std::vector<double>& accept_rates = {},
                           size_t sr_iterations = 0,
                           double sr_natural_grad_norm = 0.0,
                           double energy_eval_time = 0.0,
                           double update_time = 0.0);
   
-  template<typename UpdateFunc>
-  OptimizationResult PerformOptimization(
-      const WaveFunctionT& initial_state,
-      std::function<std::pair<TenElemT, WaveFunctionT>(const WaveFunctionT&)> energy_evaluator,
-      UpdateFunc update_func,
-      const OptimizationCallback& callback);
-
   // Algorithm-specific update methods
   
   /**
@@ -459,7 +428,7 @@ class Optimizer {
    */
   WaveFunctionT SGDUpdate(const WaveFunctionT& current_state,
                          const WaveFunctionT& gradient,
-                         double step_length,
+                         double learning_rate,
                          const SGDParams& params);
 
   // Side-effect-free SGD preview used by step-size selectors.
@@ -467,12 +436,10 @@ class Optimizer {
   // This is intended for single-step candidate comparison, not multi-step trajectory simulation.
   WaveFunctionT SGDPreviewUpdate_(const WaveFunctionT& current_state,
                                   const WaveFunctionT& gradient,
-                                  double step_length,
+                                  double learning_rate,
                                   const SGDParams& params) const;
-  
+
  };
-
-
 
 } // namespace qlpeps
 
