@@ -914,7 +914,8 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
     pOstar_mean = const_cast<WaveFunctionT *>(&Ostar_mean);
   }
 
-  SRSMatrix s_matrix(const_cast<std::vector<WaveFunctionT> *>(&Ostar_samples), pOstar_mean, mpi_size_);
+  SRSMatrix s_matrix(const_cast<std::vector<WaveFunctionT> *>(&Ostar_samples),
+                     pOstar_mean, mpi_size_, comm_);
   s_matrix.diag_shift = cg_params.diag_shift;
 
   auto cg_result = ConjugateGradientSolver(

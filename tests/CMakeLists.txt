@@ -113,6 +113,48 @@ macro(add_two_type_unittest
     set_target_properties(${TEST_NAME}_complex PROPERTIES FOLDER tests)
 endmacro()
 
+macro(add_two_type_mpi_unittest
+        TEST_NAME TEST_SRC MATH_HEADER LINK_LIBS LINK_LIB_FLAGS PROCESSOR_NUM INPUT_ARGS)
+    # Compile for QLTEN_Double
+    add_executable(${TEST_NAME}_double ${TEST_SRC})
+    target_include_directories(${TEST_NAME}_double
+            PRIVATE ${MATH_HEADER}
+            PRIVATE ${QLPEPS_HEADER_PATH}
+            PRIVATE ${hptt_INCLUDE_DIR}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE MPI::MPI_CXX)
+    target_compile_definitions(${TEST_NAME}_double PRIVATE TEN_ELEM_TYPE=QLTEN_Double TEN_ELEM_TYPE_NUM=1)
+    target_link_libraries(${TEST_NAME}_double
+            GTest::GTest GTest::Main
+            ${hptt_LIBRARY}
+            OpenMP::OpenMP_CXX
+            MPI::MPI_CXX
+            "${LINK_LIB_FLAGS}")
+    set_target_properties(${TEST_NAME}_double PROPERTIES FOLDER tests)
+
+    # Compile for QLTEN_Complex
+    add_executable(${TEST_NAME}_complex ${TEST_SRC})
+    target_include_directories(${TEST_NAME}_complex
+            PRIVATE ${MATH_HEADER}
+            PRIVATE ${QLPEPS_HEADER_PATH}
+            PRIVATE ${hptt_INCLUDE_DIR}
+            PRIVATE ${QLTENSOR_HEADER_PATH}
+            PRIVATE ${QLMPS_HEADER_PATH}
+            PRIVATE MPI::MPI_CXX)
+    target_compile_definitions(${TEST_NAME}_complex PRIVATE TEN_ELEM_TYPE=QLTEN_Complex TEN_ELEM_TYPE_NUM=2)
+    target_link_libraries(${TEST_NAME}_complex
+            GTest::GTest GTest::Main
+            ${hptt_LIBRARY}
+            MPI::MPI_CXX
+            OpenMP::OpenMP_CXX
+            "${LINK_LIB_FLAGS}")
+    set_target_properties(${TEST_NAME}_complex PROPERTIES FOLDER tests)
+
+    add_mpi_unittest_run(${TEST_NAME}_double ${PROCESSOR_NUM} "${INPUT_ARGS}")
+    add_mpi_unittest_run(${TEST_NAME}_complex ${PROCESSOR_NUM} "${INPUT_ARGS}")
+endmacro()
+
 macro(add_mpi_unittest_run
         TEST_NAME PROCESSOR_NUM INPUT_ARGS)
     # Check if we have enough processors to run the requested number of MPI processes
@@ -473,6 +515,27 @@ add_two_type_unittest(test_fermion_mc_sr_golden
         "test_algorithm/test_fermion_mc_sr_golden.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
+)
+
+# Golden regression: bosonic MC gradient + SR natural-gradient signatures
+add_two_type_unittest(test_boson_mc_sr_golden
+        "test_algorithm/test_boson_mc_sr_golden.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+
+# Golden regression (MPI): bosonic MC gradient + SR natural-gradient with multi-rank CG
+add_two_type_mpi_unittest(test_boson_mc_sr_golden_mpi
+        "test_algorithm/test_boson_mc_sr_golden_mpi.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "2" " "
+)
+
+# Golden regression (MPI): fermionic MC gradient + SR natural-gradient with multi-rank CG
+add_two_type_mpi_unittest(test_fermion_mc_sr_golden_mpi
+        "test_algorithm/test_fermion_mc_sr_golden_mpi.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "2" " "
 )
 
 # MonteCarloEngine tests (configuration rescue, etc.)
