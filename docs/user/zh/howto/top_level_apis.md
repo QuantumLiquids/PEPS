@@ -63,7 +63,7 @@ PEPSParams peps_params(trunc);
 
 auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
     /*max_iterations=*/40,
-    ConjugateGradientParams(/*max_iter=*/100, /*tolerance=*/1e-5, /*restart=*/20, /*diag_shift=*/1e-3),
+    ConjugateGradientParams(/*max_iter=*/100, /*relative_tolerance=*/3e-3, /*restart=*/20, /*diag_shift=*/1e-3),
     /*learning_rate=*/0.1);
 
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");

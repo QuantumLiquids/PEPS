@@ -1026,7 +1026,7 @@ FullEnvironmentTruncate(
 
     auto cg_result_r = ConjugateGradientSolver(b_ten_mat, p_ten_vec, r_init,
                                                trunc_params.cg_params.max_iter,
-                                               trunc_params.cg_params.tolerance,
+                                               trunc_params.cg_params.relative_tolerance,
                                                trunc_params.cg_params.residue_restart_step,
                                                trunc_params.cg_params.absolute_tolerance);
     if (!cg_result_r.converged) {
@@ -1071,7 +1071,7 @@ FullEnvironmentTruncate(
     PtenVecT l_init(L_ten_init);
     auto cg_result_l = ConjugateGradientSolver(b_ten_mat, p_ten_vec, l_init,
                                                trunc_params.cg_params.max_iter,
-                                               trunc_params.cg_params.tolerance,
+                                               trunc_params.cg_params.relative_tolerance,
                                                trunc_params.cg_params.residue_restart_step,
                                                trunc_params.cg_params.absolute_tolerance);
     if (!cg_result_l.converged) {

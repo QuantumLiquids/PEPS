@@ -96,7 +96,7 @@ protected:
     energy_ed = -8.0; // Approximate expected energy for triangle lattice
     
     optimize_para.emplace(
-        OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
+        OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 3e-3, 20, 0.001), 0.3),
         MonteCarloParams(5000, 100, 1,
                          Configuration(Ly, Lx,
                                        OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),

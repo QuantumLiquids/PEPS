@@ -46,7 +46,7 @@ struct HeisenbergSystem : public MPITest {
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
 
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
-      OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.3),
+      OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 3e-3, 20, 0.001), 0.3),
       MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),

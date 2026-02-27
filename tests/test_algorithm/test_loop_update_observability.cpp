@@ -47,7 +47,7 @@ PEPST BuildInitialPEPS(const IndexT &pb_out) {
 
 LoopUpdateTruncatePara BuildTruncatePara(void) {
   ArnoldiParams arnoldi_params(1e-10, 40);
-  ConjugateGradientParams cg_params(50, 1e-10, 10, 0.0);
+  ConjugateGradientParams cg_params(50, 1e-5, 10, 0.0);
   FullEnvironmentTruncateParams fet_params(1, 2, 1e-10, 1e-12, 12, cg_params);
   return LoopUpdateTruncatePara(arnoldi_params, 1e-7, fet_params);
 }

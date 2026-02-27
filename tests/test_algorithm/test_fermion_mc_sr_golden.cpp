@@ -287,7 +287,7 @@ TEST_F(FermionMCSRGoldenTest, MCEnergyGradientAndSRGolden) {
   ASSERT_EQ(eval_res.Ostar_samples.size(), kSamples);
   if (rank != qlten::hp_numeric::kMPIMasterRank) { return; }
 
-  ConjugateGradientParams cg_params(/*max_iter=*/32, /*tolerance=*/1e-10, /*residue_restart_step=*/8, /*diag_shift=*/1e-3);
+  ConjugateGradientParams cg_params(/*max_iter=*/32, /*relative_tolerance=*/1e-5, /*residue_restart_step=*/8, /*diag_shift=*/1e-3);
   OptimizerParams sr_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(
       /*max_iterations=*/1, /*energy_tolerance=*/1e-30, /*gradient_tolerance=*/1e-30,
       /*plateau_patience=*/1, cg_params, /*learning_rate=*/0.1);

@@ -558,7 +558,7 @@ TEST_F(OptimizerTest, StochasticReconfigurationStructure) {
   
   const auto& sr_params = test_params_.GetAlgorithmParams<StochasticReconfigurationParams>();
   EXPECT_EQ(sr_params.cg_params.max_iter, 100);
-  EXPECT_EQ(sr_params.cg_params.tolerance, 1e-6);
+  EXPECT_EQ(sr_params.cg_params.relative_tolerance, 1e-6);
 }
 
 // Test advanced stop functionality - Gradient convergence

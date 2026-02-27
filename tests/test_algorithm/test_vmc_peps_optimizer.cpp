@@ -154,7 +154,7 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
     }
 
     // Set up VMC parameters using new structure with explicit path control
-    ConjugateGradientParams cg_params(100, 1e-5, 10, 0.01);
+    ConjugateGradientParams cg_params(100, 3e-3, 10, 0.01);
     OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(
         10, 1e-15, 1e-30, 20, cg_params, 0.1);
     Configuration random_config(Ly, Lx);
@@ -331,7 +331,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
     
     // Update optimizer params for each algorithm type
     if (name == "StochasticReconfiguration") {
-      ConjugateGradientParams cg_params(100, 1e-5, 10, 0.01);
+      ConjugateGradientParams cg_params(100, 3e-3, 10, 0.01);
       scheme_para.optimizer_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
     } else if (name == "SGD") {
       OptimizerParams::BaseParams base_params(10, 1e-15, 1e-15, 20, 0.1);
@@ -374,7 +374,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
       {
           "StochasticReconfiguration",
           []() {
-            ConjugateGradientParams cg_params(10, 1e-4, 5, 0.01);
+            ConjugateGradientParams cg_params(10, 1e-2, 5, 0.01);
             return OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
           }
       },

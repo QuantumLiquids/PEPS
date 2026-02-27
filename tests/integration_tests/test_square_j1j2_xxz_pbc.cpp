@@ -63,7 +63,7 @@ struct SquareJ1J2XXZPBCSystem : public MPITest {
 
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(
-          100, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.1),
+          100, ConjugateGradientParams(100, 3e-3, 20, 0.001), 0.1),
       MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx,
                                      OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),  // Sz = 0

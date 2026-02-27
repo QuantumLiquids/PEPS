@@ -137,17 +137,11 @@ inline bool pap_is_valid(std::complex<double> pap) {
  * @param b Right-hand side vector
  * @param x0 Initial guess
  * @param max_iter Maximum number of CG iterations
- * @param tolerance Relative tolerance used in squared-residual criterion.
- *        Current criterion uses tolerance * ||b||^2, so the corresponding norm-space
- *        relative tolerance is sqrt(tolerance).
+ * @param relative_tolerance Relative tolerance in residual norm.
+ *        Stopping criterion: ||r|| <= max(relative_tolerance * ||b||, absolute_tolerance).
  * @param residue_restart_step Periodically recompute residual from scratch (0 to disable)
  * @param absolute_tolerance Absolute tolerance in residual 2-norm ||r||.
- *        Internally this is squared and combined as:
- *        ||r||^2 <= max(tolerance * ||b||^2, absolute_tolerance^2).
  *        Default is 0.0 to preserve legacy relative-only behavior.
- * @note Current API uses squared-residual relative tolerance. A future API revision
- *       will align naming/semantics with the standard norm-space form
- *       (e.g. ||r|| <= atol + rtol * ||b||).
  * @return CGResult containing solution, residual norm, iteration count, and convergence status
  */
 template<typename MatrixType, typename VectorType>
@@ -157,14 +151,12 @@ CGResult<VectorType> ConjugateGradientSolver(
     const VectorType &b,
     const VectorType &x0, //initial guess
     const size_t max_iter,
-    const double tolerance,
+    const double relative_tolerance,
     const int residue_restart_step,
     const double absolute_tolerance = 0.0
 ) {
   const double rhs_norm_sq = b.NormSquare();
-  // TODO: use ||r|| <= max(tolerance * ||b||, absolute_tolerance), which is
-  // the standard norm-space stopping form in many CG APIs.
-  const double tol_sq = std::max(rhs_norm_sq * tolerance,
+  const double tol_sq = std::max(relative_tolerance * relative_tolerance * rhs_norm_sq,
                                  absolute_tolerance * absolute_tolerance);
   VectorType r = b - matrix_a * x0;
   double r_norm_sq = r.NormSquare();
@@ -232,7 +224,7 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
     const VectorType &b,
     const VectorType &x0, //initial guess
     size_t max_iter,
-    double tolerance,
+    double relative_tolerance,
     int residue_restart_step,
     double absolute_tolerance,
     const MPI_Comm &comm
@@ -278,18 +270,12 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
  * @param b Right-hand side vector
  * @param x0 Initial guess
  * @param max_iter Maximum number of iterations
- * @param tolerance Relative tolerance used in squared-residual criterion.
- *        Current criterion uses tolerance * ||b||^2, so the corresponding norm-space
- *        relative tolerance is sqrt(tolerance).
+ * @param relative_tolerance Relative tolerance in residual norm.
+ *        Stopping criterion: ||r|| <= max(relative_tolerance * ||b||, absolute_tolerance).
  * @param residue_restart_step Residue restart interval (0 to disable)
  * @param comm MPI communicator
  * @param absolute_tolerance Absolute tolerance in residual 2-norm ||r||.
- *        Internally this is squared and combined as:
- *        ||r||^2 <= max(tolerance * ||b||^2, absolute_tolerance^2).
  *        Default is 0.0 to preserve legacy relative-only behavior.
- * @note Current API uses squared-residual relative tolerance. A future API revision
- *       will align naming/semantics with the standard norm-space form
- *       (e.g. ||r|| <= atol + rtol * ||b||).
  * @return CGResult containing solution, residual norm, iteration count, and convergence flag
  */
 template<typename MatrixType, typename VectorType>
@@ -299,7 +285,7 @@ CGResult<VectorType> ConjugateGradientSolver(
     const VectorType &b,
     const VectorType &x0, //initial guess
     const size_t max_iter,
-    const double tolerance,
+    const double relative_tolerance,
     const int residue_restart_step,
     const MPI_Comm &comm,
     const double absolute_tolerance = 0.0
@@ -308,7 +294,7 @@ CGResult<VectorType> ConjugateGradientSolver(
   MPI_Comm_rank(comm, &rank);
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
     return ConjugateGradientSolverMaster(
-        matrix_a, b, x0, max_iter, tolerance, residue_restart_step,
+        matrix_a, b, x0, max_iter, relative_tolerance, residue_restart_step,
         absolute_tolerance, comm
     );
   } else {
@@ -353,7 +339,7 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
     const VectorType &b,
     const VectorType &x0, //initial guess
     size_t max_iter,
-    double tolerance,
+    double relative_tolerance,
     int residue_restart_step,
     double absolute_tolerance,
     const MPI_Comm &comm
@@ -361,9 +347,7 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
   MasterBroadcastInstruction(start, comm);
 
   const double rhs_norm_sq = b.NormSquare();
-  // TODO: use ||r|| <= max(tolerance * ||b||, absolute_tolerance), which is
-  // the standard norm-space stopping form in many CG APIs.
-  const double tol_sq = std::max(rhs_norm_sq * tolerance,
+  const double tol_sq = std::max(relative_tolerance * relative_tolerance * rhs_norm_sq,
                                  absolute_tolerance * absolute_tolerance);
 
   VectorType ax0 = MatrixMultiplyVectorMaster(matrix_a, x0, comm);
@@ -375,7 +359,7 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
   }
   VectorType p = r;
   VectorType x = x0;
-  double rkp1_2norm;
+  double rkp1_2norm = rk_2norm;
   for (size_t k = 0; k < max_iter; k++) {
     MasterBroadcastInstruction(multiplication, comm);
     VectorType ap = MatrixMultiplyVectorMaster(matrix_a, p, comm);

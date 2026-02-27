@@ -410,8 +410,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           auto make_sr_trial = [&](double eta) {
             WaveFunctionT trial_state = current_state;
             double applied_eta = eta;
-            if (sr_params.normalize_update) {
-              applied_eta /= std::sqrt(sr_precomputed_natural_grad_norm);
+            if (sr_params.normalize_update && sr_precomputed_natural_grad_norm > 0.0) {
+              applied_eta /= sr_precomputed_natural_grad_norm;
             }
             if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
               trial_state += (-applied_eta) * sr_precomputed_direction;
@@ -494,8 +494,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
           if (selector_triggered && use_precomputed_sr_direction) {
             double applied_step = learning_rate;
-            if (algo_params.normalize_update) {
-              applied_step /= std::sqrt(sr_precomputed_natural_grad_norm);
+            if (algo_params.normalize_update && sr_precomputed_natural_grad_norm > 0.0) {
+              applied_step /= sr_precomputed_natural_grad_norm;
             }
             updated_state = current_state;
             if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
@@ -508,11 +508,13 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             // follows that same rank-local convention.
             sr_init_guess = updated_state;
           } else {
-            // Fix Intel icpx compiler crash: avoid structured binding in lambda
+            if (Ostar_samples == nullptr || Ostar_mean == nullptr) {
+              throw std::invalid_argument(
+                  "SR requires Ostar_samples and Ostar_mean");
+            }
             auto sr_result = StochasticReconfigurationUpdate(
                 current_state, current_gradient,
-                Ostar_samples ? *Ostar_samples : std::vector<WaveFunctionT>{},
-                Ostar_mean ? *Ostar_mean : WaveFunctionT{},
+                *Ostar_samples, *Ostar_mean,
                 learning_rate, sr_init_guess, algo_params.normalize_update);
             updated_state = std::get<0>(sr_result);
             sr_natural_grad_norm = std::get<1>(sr_result);
@@ -917,7 +919,7 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
 
   auto cg_result = ConjugateGradientSolver(
       s_matrix, gradient, init_guess,
-      cg_params.max_iter, cg_params.tolerance,
+      cg_params.max_iter, cg_params.relative_tolerance,
       cg_params.residue_restart_step, comm_,
       cg_params.absolute_tolerance);
 
@@ -956,8 +958,8 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
 
   double natural_grad_norm = std::sqrt(natural_gradient.NormSquare());
 
-  if (normalize) {
-    learning_rate /= std::sqrt(natural_grad_norm);
+  if (normalize && natural_grad_norm > 0.0) {
+    learning_rate /= natural_grad_norm;
   }
 
   // Apply the update using the natural gradient
