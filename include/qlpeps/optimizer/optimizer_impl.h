@@ -297,6 +297,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       WaveFunctionT sr_precomputed_direction;
       size_t sr_precomputed_iters = 0;
       double sr_precomputed_natural_grad_norm = 0.0;
+      double sr_precomputed_residual_norm = 0.0;
 
       if (selector_triggered) {
         int deterministic_error_missing = 0;
@@ -400,10 +401,11 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             throw std::invalid_argument(
                 "Auto step selector for SR requires Ostar_samples and Ostar_mean");
           }
-          auto [natural_grad, cg_iters] = CalculateNaturalGradient(
+          auto [natural_grad, cg_iters, cg_resid] = CalculateNaturalGradient(
               current_gradient, *Ostar_samples, *Ostar_mean, sr_init_guess);
           sr_precomputed_direction = std::move(natural_grad);
           sr_precomputed_iters = cg_iters;
+          sr_precomputed_residual_norm = cg_resid;
           sr_precomputed_natural_grad_norm = std::sqrt(sr_precomputed_direction.NormSquare());
           use_precomputed_sr_direction = true;
 
@@ -483,6 +485,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       WaveFunctionT updated_state;
       size_t sr_iterations = 0;
       double sr_natural_grad_norm = 0.0;
+      double sr_residual_norm = 0.0;
 
       // Single algorithm dispatch with correct learning rate
       std::visit([&](const auto& algo_params) {
@@ -503,6 +506,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             }
             sr_natural_grad_norm = sr_precomputed_natural_grad_norm;
             sr_iterations = sr_precomputed_iters;
+            sr_residual_norm = sr_precomputed_residual_norm;
             // Keep alignment with existing SR path: updated_state is meaningful
             // on master rank only at this point; this assignment intentionally
             // follows that same rank-local convention.
@@ -519,6 +523,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             updated_state = std::get<0>(sr_result);
             sr_natural_grad_norm = std::get<1>(sr_result);
             sr_iterations = std::get<2>(sr_result);
+            sr_residual_norm = std::get<3>(sr_result);
             sr_init_guess = std::get<0>(sr_result);
           }
         }
@@ -713,7 +718,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
             LogOptimizationStep(iter, current_energy_real, current_error, grad_norm,
                                effective_learning_rate, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
-                               energy_eval_time, update_time);
+                               sr_residual_norm, energy_eval_time, update_time);
             result.converged = true;
           }
           step_accepted = true;
@@ -749,7 +754,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       // Log progress
       LogOptimizationStep(iter, std::real(current_energy), current_error, grad_norm,
                           effective_learning_rate, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
-                          energy_eval_time, update_time);
+                          sr_residual_norm, energy_eval_time, update_time);
 
       if (callback.on_iteration) {
         callback.on_iteration(iter, std::real(current_energy), current_error, grad_norm);
@@ -897,7 +902,7 @@ Optimizer<TenElemT, QNT>::SGDPreviewUpdate_(const WaveFunctionT &current_state,
 }
 
 template<typename TenElemT, typename QNT>
-std::pair<typename Optimizer<TenElemT, QNT>::WaveFunctionT, size_t>
+std::tuple<typename Optimizer<TenElemT, QNT>::WaveFunctionT, size_t, double>
 Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
     const WaveFunctionT &gradient,
     const std::vector<WaveFunctionT> &Ostar_samples,
@@ -927,21 +932,37 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
   ::MPI_Bcast(&reason_int, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_);
   auto reason = static_cast<CGTerminationReason>(reason_int);
 
-  if (reason != CGTerminationReason::kConverged) {
-    std::string msg = "CG solver terminated: ";
-    msg += to_string(reason);
-    if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-      msg += " iterations=" + std::to_string(cg_result.iterations)
-           + " residual_norm=" + std::to_string(cg_result.residual_norm);
+  switch (reason) {
+    case CGTerminationReason::kConverged:
+      break;
+    case CGTerminationReason::kMaxIterations:
+    case CGTerminationReason::kStagnated:
+      // Non-convergence is not fatal for SR: use the best-iterate solution.
+      // The CG solver already returns the iterate with minimum residual in cg_result.x.
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        std::cerr << "[SR][WARN] CG did not converge: " << to_string(reason)
+                  << ", iterations=" << cg_result.iterations
+                  << ", residual_norm=" << std::scientific << std::setprecision(3)
+                  << cg_result.residual_norm << std::defaultfloat << std::endl;
+      }
+      break;
+    case CGTerminationReason::kIndefiniteMatrix:
+    case CGTerminationReason::kNumericalBreakdown: {
+      std::string msg = "CG solver terminated: ";
+      msg += to_string(reason);
+      if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+        msg += " iterations=" + std::to_string(cg_result.iterations)
+             + " residual_norm=" + std::to_string(cg_result.residual_norm);
+      }
+      throw std::runtime_error(msg);
     }
-    throw std::runtime_error(msg);
   }
 
-  return {std::move(cg_result.x), cg_result.iterations};
+  return {std::move(cg_result.x), cg_result.iterations, cg_result.residual_norm};
 }
 
 template<typename TenElemT, typename QNT>
-std::tuple<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double, size_t>
+std::tuple<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double, size_t, double>
 Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
     const WaveFunctionT &current_state,
     const WaveFunctionT &gradient,
@@ -953,7 +974,7 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
 
   // Calculate natural gradient using stochastic reconfiguration
   // This involves solving the SR equation which should be done by all cores together
-  auto [natural_gradient, cg_iterations] = CalculateNaturalGradient(
+  auto [natural_gradient, cg_iterations, cg_residual_norm] = CalculateNaturalGradient(
       gradient, Ostar_samples, Ostar_mean, init_guess);
 
   double natural_grad_norm = std::sqrt(natural_gradient.NormSquare());
@@ -968,7 +989,7 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
     updated_state += (-learning_rate) * natural_gradient;
   }
 
-  return {updated_state, natural_grad_norm, cg_iterations};
+  return {updated_state, natural_grad_norm, cg_iterations, cg_residual_norm};
 }
 
 template<typename TenElemT, typename QNT>
@@ -1398,6 +1419,7 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
                                                    const std::vector<double> &accept_rates,
                                                    size_t sr_iterations,
                                                    double sr_natural_grad_norm,
+                                                   double sr_residual_norm,
                                                    double energy_eval_time,
                                                    double update_time) {
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
@@ -1424,6 +1446,9 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
     if (params_.IsAlgorithm<StochasticReconfigurationParams>() && sr_iterations > 0) {
       std::cout << "SRSolver Iter = " << std::setw(4) << sr_iterations;
       std::cout << "NGrad norm = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_natural_grad_norm;
+      if (sr_residual_norm > 0.0) {
+        std::cout << "CG resid = " << std::setw(9) << std::scientific << std::setprecision(1) << sr_residual_norm;
+      }
     }
 
     // Print timing information

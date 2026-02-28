@@ -302,7 +302,7 @@ TEST_F(FermionMCSRGoldenMPITest, MCEnergyGradientAndSRGoldenMPI) {
   Optimizer<TenElemT, QNT> optimizer(sr_params, comm, rank, mpi_size);
 
   SITPST init_guess = eval_res.gradient * TenElemT(0.0);
-  auto [nat_grad, cg_iters] = optimizer.CalculateNaturalGradient(
+  auto [nat_grad, cg_iters, cg_resid] = optimizer.CalculateNaturalGradient(
       eval_res.gradient, eval_res.Ostar_samples, eval_res.Ostar_mean.value(), init_guess);
 
   // Only master has valid gradient/nat_grad for golden checks.

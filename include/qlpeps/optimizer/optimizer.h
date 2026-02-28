@@ -175,9 +175,9 @@ class Optimizer {
    * @param Ostar_samples O^*(S) tensor samples (distributed across ranks)
    * @param Ostar_mean Average O^* tensor (valid ONLY on master rank)
    * @param init_guess Initial guess for conjugate gradient solver
-   * @return Natural gradient and number of CG iterations (valid ONLY on master rank)
+   * @return Natural gradient, CG iterations, and CG residual norm (valid ONLY on master rank)
    */
-  std::pair<WaveFunctionT, size_t> CalculateNaturalGradient(
+  std::tuple<WaveFunctionT, size_t, double> CalculateNaturalGradient(
       const WaveFunctionT& gradient,
       const std::vector<WaveFunctionT>& Ostar_samples,
       const WaveFunctionT& Ostar_mean,
@@ -193,9 +193,9 @@ class Optimizer {
    * @param learning_rate Learning rate
    * @param init_guess Initial guess for CG solver
    * @param normalize Whether to normalize the natural gradient
-   * @return Updated state, natural gradient norm, and CG iterations
+   * @return Updated state, natural gradient norm, CG iterations, and CG residual norm
    */
-  std::tuple<WaveFunctionT, double, size_t> StochasticReconfigurationUpdate(
+  std::tuple<WaveFunctionT, double, size_t, double> StochasticReconfigurationUpdate(
       const WaveFunctionT& current_state,
       const WaveFunctionT& gradient,
       const std::vector<WaveFunctionT>& Ostar_samples,
@@ -410,6 +410,7 @@ class Optimizer {
                           const std::vector<double>& accept_rates = {},
                           size_t sr_iterations = 0,
                           double sr_natural_grad_norm = 0.0,
+                          double sr_residual_norm = 0.0,
                           double energy_eval_time = 0.0,
                           double update_time = 0.0);
   
