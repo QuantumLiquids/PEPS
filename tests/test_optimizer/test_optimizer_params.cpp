@@ -52,8 +52,9 @@ TEST(OptimizerParamsTest, IsFirstOrderDetectsAlgorithms) {
   EXPECT_TRUE(p_adam.IsFirstOrder());
 
   // SR is not first-order
-  ConjugateGradientParams cg;
-  OptimizerParams p_sr(base_params, StochasticReconfigurationParams(cg));
+  ConjugateGradientParams cg{};
+  StochasticReconfigurationParams sr{.cg_params = cg};
+  OptimizerParams p_sr(base_params, sr);
   EXPECT_FALSE(p_sr.IsFirstOrder());
 
   // LBFGS is not first-order

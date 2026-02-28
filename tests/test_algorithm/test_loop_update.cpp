@@ -203,7 +203,8 @@ TEST_F(HeisenbergLoopUpdateOBC2x2, ConvergesToExactEnergy) {
 
   // Loop update
   ArnoldiParams arnoldi_params(1e-10, 100);
-  ConjugateGradientParams cg_params(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-5,
+                                    .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet_params(1, 4, 1e-10, 1e-12, 30, cg_params);
 
   LoopUpdatePara loop_para(LoopUpdateTruncatePara(arnoldi_params, 1e-7, fet_params), 50, tau);
@@ -327,7 +328,8 @@ TEST_F(HeisenbergLoopUpdateOBC4x4, ConvergesToExactEnergy) {
   GenerateAllEvolveGates(tau, evolve_gates);
 
   ArnoldiParams arnoldi_params(1e-10, 100);
-  ConjugateGradientParams cg_params(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-5,
+                                    .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet_params(1, 4, 1e-10, 1e-12, 30, cg_params);
 
   LoopUpdatePara loop_para(LoopUpdateTruncatePara(arnoldi_params, 1e-7, fet_params), 30, tau);
@@ -467,7 +469,8 @@ TEST_F(HeisenbergPBCTiledLoopUpdate, TiledEnergyLowers) {
     GeneratePBCEvolveGates(tau_2x2, small_ly, small_lx, gates_2x2);
 
     ArnoldiParams ap(1e-10, 100);
-    ConjugateGradientParams cg(100, 1e-5, 20, 0.0);
+    ConjugateGradientParams cg{.max_iter = 100, .relative_tolerance = 1e-5,
+                               .residual_recompute_interval = 20};
     FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
     LoopUpdatePara lp(LoopUpdateTruncatePara(ap, 1e-7, fet), 5, tau_2x2);
 
@@ -489,7 +492,8 @@ TEST_F(HeisenbergPBCTiledLoopUpdate, TiledEnergyLowers) {
   GeneratePBCEvolveGates(tau_4x4, big_ly, big_lx, gates_4x4);
 
   ArnoldiParams ap(1e-10, 100);
-  ConjugateGradientParams cg(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg{.max_iter = 100, .relative_tolerance = 1e-5,
+                             .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
 
   // Step 1: single sweep to establish baseline energy
@@ -697,7 +701,8 @@ TEST_F(TFIMLoopUpdateOBC2x2, ConvergesToExactEnergy) {
 
   // Loop update
   ArnoldiParams arnoldi_params(1e-13, 30);
-  ConjugateGradientParams cg_params(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-5,
+                                    .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet_params(1, 4, 1e-10, 1e-12, 30, cg_params);
 
   LoopUpdatePara loop_para(LoopUpdateTruncatePara(arnoldi_params, 1e-7, fet_params), 50, tau);
@@ -824,7 +829,8 @@ TEST(LoopUpdateValidation, RejectsOddPBCDimensions) {
 
   DuoMatrix<LoopGateT> gates_3x4(3, 4);  // PBC: Ly x Lx
   ArnoldiParams ap(1e-10, 100);
-  ConjugateGradientParams cg(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg{.max_iter = 100, .relative_tolerance = 1e-5,
+                             .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
   LoopUpdatePara para(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, 0.01);
 
@@ -849,7 +855,8 @@ TEST(LoopUpdateValidation, RejectsWrongGateShapeForPBC) {
 
   DuoMatrix<LoopGateT> wrong_gates(3, 3);  // OBC size, should be (4, 4) for PBC
   ArnoldiParams ap(1e-10, 100);
-  ConjugateGradientParams cg(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg{.max_iter = 100, .relative_tolerance = 1e-5,
+                             .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
   LoopUpdatePara para(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, 0.01);
 
@@ -874,7 +881,8 @@ TEST(LoopUpdateValidation, RejectsWrongGateShapeForOBC) {
 
   DuoMatrix<LoopGateT> wrong_gates(4, 4);  // PBC size, should be (3, 3) for OBC
   ArnoldiParams ap(1e-10, 100);
-  ConjugateGradientParams cg(100, 1e-5, 20, 0.0);
+  ConjugateGradientParams cg{.max_iter = 100, .relative_tolerance = 1e-5,
+                             .residual_recompute_interval = 20};
   FullEnvironmentTruncateParams fet(1, 4, 1e-10, 1e-12, 30, cg);
   LoopUpdatePara para(LoopUpdateTruncatePara(ap, 1e-7, fet), 1, 0.01);
 

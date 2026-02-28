@@ -26,9 +26,11 @@ void RunTestPlainCGSolverParallelCase(
   int rank, mpi_size;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &mpi_size);
-  auto result = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 20, comm);
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-16,
+                                 .residual_recompute_interval = 20};
+  auto result = ConjugateGradientSolver(mat, b, x0, params, comm);
   if (rank == hp_numeric::kMPIMasterRank) {
-    EXPECT_TRUE(result.converged);
+    EXPECT_TRUE(result.converged());
     result.x.Print();
     auto diff_vec = result.x - x_res;
     EXPECT_NEAR(diff_vec.NormSquare(), 0.0, 1e-13);
@@ -201,9 +203,10 @@ TEST(TestPlainCGSolver, ParallelZeroRhsRelativeOnlyPreservesLegacyBehavior) {
 
   MyVector<double> b({0.0, 0.0});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm);
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params, comm);
   if (rank == hp_numeric::kMPIMasterRank) {
-    EXPECT_FALSE(result.converged);
+    EXPECT_FALSE(result.converged());
   }
 }
 
@@ -232,9 +235,10 @@ TEST(TestPlainCGSolver, ParallelTinyRhsRelativeOnlyPreservesLegacyBehavior) {
 
   MyVector<double> b({1e-300, -1e-300});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm);
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params, comm);
   if (rank == hp_numeric::kMPIMasterRank) {
-    EXPECT_FALSE(result.converged);
+    EXPECT_FALSE(result.converged());
   }
 }
 
@@ -263,9 +267,15 @@ TEST(TestPlainCGSolver, ParallelZeroRhsConvergesWithExplicitAbsoluteTolerance) {
 
   MyVector<double> b({0.0, 0.0});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm, 1e-150);
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10,
+                                 .absolute_tolerance = 1e-20};
+  auto result = ConjugateGradientSolver(mat, b, x0, params, comm);
   if (rank == hp_numeric::kMPIMasterRank) {
-    EXPECT_TRUE(result.converged);
+    EXPECT_TRUE(result.converged());
+    // Exact solution: x = {0, 0}
+    MyVector<double> x_expected({0.0, 0.0});
+    auto diff = result.x - x_expected;
+    EXPECT_NEAR(diff.NormSquare(), 0.0, 1e-20);
   }
 }
 
@@ -294,9 +304,15 @@ TEST(TestPlainCGSolver, ParallelTinyRhsConvergesWithExplicitAbsoluteTolerance) {
 
   MyVector<double> b({1e-300, -1e-300});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, comm, 1e-150);
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10,
+                                 .absolute_tolerance = 1e-20};
+  auto result = ConjugateGradientSolver(mat, b, x0, params, comm);
   if (rank == hp_numeric::kMPIMasterRank) {
-    EXPECT_TRUE(result.converged);
+    EXPECT_TRUE(result.converged());
+    // Exact solution ~ O(1e-300), indistinguishable from zero in double precision
+    MyVector<double> x_expected({0.0, 0.0});
+    auto diff = result.x - x_expected;
+    EXPECT_NEAR(diff.NormSquare(), 0.0, 1e-20);
   }
 }
 

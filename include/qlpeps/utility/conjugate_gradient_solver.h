@@ -16,10 +16,12 @@
 #include <concepts>   // std::convertible_to, std::same_as
 #include <cstddef>    // size_t
 #include <iostream>   // cout, endl
+#include <limits>     // std::numeric_limits
 #include <type_traits>  // std::remove_cvref_t
 #include <utility>      // std::declval
 #include <vector>
 #include "mpi.h"
+#include "qlpeps/optimizer/optimizer_params.h"  // ConjugateGradientParams
 #ifndef  NDEBUG
 
 #include <cassert>
@@ -35,19 +37,6 @@
 namespace qlpeps {
 using qlten::hp_numeric::kMPIMasterRank;
 namespace hp_numeric = qlten::hp_numeric;
-
-/**
- * @brief Result of conjugate gradient solver.
- *
- * @tparam VectorType The vector type used in the linear system.
- */
-template<typename VectorType>
-struct CGResult {
-  VectorType x;            ///< Solution vector
-  double residual_norm;    ///< Final residual 2-norm ||r|| (NOT squared)
-  size_t iterations;       ///< Number of CG iterations performed
-  bool converged;          ///< True if residual met tolerance criterion
-};
 
 template<typename InnerType>
 concept CGInnerProductType =
@@ -77,6 +66,43 @@ concept CGVectorType = requires(
   { v += rhs } -> std::convertible_to<VectorType>;
   { beta * lhs } -> std::convertible_to<VectorType>;
   { (std::declval<double>() / (lhs * rhs)) * lhs } -> std::convertible_to<VectorType>;
+};
+
+/**
+ * @brief Reason the CG solver terminated.
+ */
+enum class CGTerminationReason {
+  kConverged,           ///< ||r|| <= tolerance
+  kMaxIterations,       ///< Hit max_iter without convergence
+  kIndefiniteMatrix,    ///< p^T A p <= 0 detected
+  kNumericalBreakdown,  ///< NaN or Inf detected in residual, alpha, or beta
+  kStagnated            ///< Step norm < eps * ||x|| for 3 consecutive iterations
+};
+
+inline const char* to_string(CGTerminationReason reason) {
+  switch (reason) {
+    case CGTerminationReason::kConverged:          return "kConverged";
+    case CGTerminationReason::kMaxIterations:      return "kMaxIterations";
+    case CGTerminationReason::kIndefiniteMatrix:   return "kIndefiniteMatrix";
+    case CGTerminationReason::kNumericalBreakdown: return "kNumericalBreakdown";
+    case CGTerminationReason::kStagnated:          return "kStagnated";
+    default:                                       return "Unknown";
+  }
+}
+
+/**
+ * @brief Result of conjugate gradient solver.
+ *
+ * @tparam VectorType The vector type used in the linear system.
+ */
+template<typename VectorType>
+struct CGResult {
+  VectorType x;                    ///< Solution (best iterate when not converged)
+  double residual_norm;            ///< Final residual 2-norm ||r||
+  size_t iterations;               ///< Number of CG iterations performed
+  CGTerminationReason reason;      ///< Why CG stopped
+
+  bool converged() const { return reason == CGTerminationReason::kConverged; }
 };
 
 /**
@@ -121,6 +147,12 @@ inline bool pap_is_valid(std::complex<double> pap) {
   return pap.real() > 0.0 && std::abs(pap.imag()) < 1e-10;
 }
 
+inline double real_part(double x) { return x; }
+inline double real_part(std::complex<double> x) { return x.real(); }
+
+inline double abs_sq(double x) { return x * x; }
+inline double abs_sq(std::complex<double> x) { return std::norm(x); }
+
 }  // namespace detail
 
 /**
@@ -129,6 +161,13 @@ inline bool pap_is_valid(std::complex<double> pap) {
  * Solves the linear system A * x = b where A is a self-adjoint positive-definite
  * matrix/operator, using the conjugate gradient method.
  *
+ * Features:
+ * - Best-iterate tracking: non-converged returns use the x with smallest residual norm
+ * - NaN/Inf detection: terminates with kNumericalBreakdown
+ * - Stagnation detection: terminates with kStagnated after 3 consecutive no-progress steps
+ * - Orthogonality-based restart: resets search direction when residuals lose orthogonality
+ * - Periodic residual recomputation: reduces floating-point drift
+ *
  * Reference: https://en.wikipedia.org/wiki/Conjugate_gradient_method
  *
  * @tparam MatrixType Type satisfying CGMatrixType (matrix_a * vector operation).
@@ -136,61 +175,104 @@ inline bool pap_is_valid(std::complex<double> pap) {
  * @param matrix_a Self-adjoint positive-definite matrix/operator
  * @param b Right-hand side vector
  * @param x0 Initial guess
- * @param max_iter Maximum number of CG iterations
- * @param relative_tolerance Relative tolerance in residual norm.
- *        Stopping criterion: ||r|| <= max(relative_tolerance * ||b||, absolute_tolerance).
- * @param residue_restart_step Periodically recompute residual from scratch (0 to disable)
- * @param absolute_tolerance Absolute tolerance in residual 2-norm ||r||.
- *        Default is 0.0 to preserve legacy relative-only behavior.
- * @return CGResult containing solution, residual norm, iteration count, and convergence status
+ * @param params CG solver parameters (tolerances, max iterations, etc.)
+ * @return CGResult containing solution, residual norm, iteration count, and termination reason
  */
 template<typename MatrixType, typename VectorType>
 requires CGMatrixType<MatrixType, VectorType>
 CGResult<VectorType> ConjugateGradientSolver(
     const MatrixType &matrix_a,
     const VectorType &b,
-    const VectorType &x0, //initial guess
-    const size_t max_iter,
-    const double relative_tolerance,
-    const int residue_restart_step,
-    const double absolute_tolerance = 0.0
-) {
+    const VectorType &x0,
+    const ConjugateGradientParams &params) {
+  const size_t max_iter = params.max_iter;
+  const double relative_tolerance = params.relative_tolerance;
+  const double absolute_tolerance = params.absolute_tolerance;
+  const int residual_recompute_interval = params.residual_recompute_interval;
+  const double orthogonality_threshold = params.orthogonality_threshold;
+
   const double rhs_norm_sq = b.NormSquare();
   const double tol_sq = std::max(relative_tolerance * relative_tolerance * rhs_norm_sq,
                                  absolute_tolerance * absolute_tolerance);
   VectorType r = b - matrix_a * x0;
   double r_norm_sq = r.NormSquare();
   if (r_norm_sq <= tol_sq) {
-    return {x0, std::sqrt(r_norm_sq), 0, true};
+    return {x0, std::sqrt(r_norm_sq), 0, CGTerminationReason::kConverged};
   }
+
   VectorType p = r;
   VectorType x = x0;
+  VectorType best_x = x0;
+  double best_residual_norm_sq = r_norm_sq;
+  VectorType r_prev = r;  // copy-init avoids requiring default construction
   double rkp1_2norm = r_norm_sq;
+  size_t stagnation_count = 0;
+  constexpr double eps = std::numeric_limits<double>::epsilon();
+
   for (size_t k = 0; k < max_iter; k++) {
     double rk_2norm = rkp1_2norm;
     VectorType ap = matrix_a * p;
     auto pap = p * ap;
     if (!detail::pap_is_valid(pap)) {
-      return {x, std::sqrt(rk_2norm), k, false};
+      return {best_x, std::sqrt(best_residual_norm_sq), k, CGTerminationReason::kIndefiniteMatrix};
     }
     auto alpha = rk_2norm / pap;
     x = x + alpha * p;
 
-    if (residue_restart_step > 0 && (k % residue_restart_step) == (residue_restart_step - 1)) {
+    // Stagnation detection
+    double alpha_abs_sq = detail::abs_sq(alpha);
+    double step_norm_sq = alpha_abs_sq * p.NormSquare();
+    double x_norm_sq = x.NormSquare();
+    if (step_norm_sq < eps * eps * x_norm_sq) {
+      if (++stagnation_count >= 3) {
+        return {best_x, std::sqrt(best_residual_norm_sq), k + 1, CGTerminationReason::kStagnated};
+      }
+    } else {
+      stagnation_count = 0;
+    }
+
+    if (residual_recompute_interval > 0 && (k % residual_recompute_interval) == (residual_recompute_interval - 1)) {
       r = b - matrix_a * x;
     } else {
       r = r - alpha * ap;
     }
-    rkp1_2norm = r.NormSquare();   // return value of norm has definitely double type.
-    if (rkp1_2norm <= tol_sq) {
-      return {x, std::sqrt(rkp1_2norm), k + 1, true};
+    rkp1_2norm = r.NormSquare();
+
+    // NaN/Inf detection
+    if (!std::isfinite(rkp1_2norm)) {
+      return {best_x, std::sqrt(best_residual_norm_sq), k + 1, CGTerminationReason::kNumericalBreakdown};
     }
+
+    // Best-iterate tracking
+    if (rkp1_2norm < best_residual_norm_sq) {
+      best_x = x;
+      best_residual_norm_sq = rkp1_2norm;
+    }
+
+    if (rkp1_2norm <= tol_sq) {
+      return {x, std::sqrt(rkp1_2norm), k + 1, CGTerminationReason::kConverged};
+    }
+
+    // Orthogonality-based restart
+    if (k > 0) {
+      double ortho = std::abs(detail::real_part(r_prev * r));
+      if (ortho > orthogonality_threshold * rkp1_2norm) {
+        p = r;
+        r_prev = r;
+        continue;
+      }
+    }
+    r_prev = r;
+
     double beta = rkp1_2norm / rk_2norm;
+    if (!std::isfinite(beta)) {
+      return {best_x, std::sqrt(best_residual_norm_sq), k + 1, CGTerminationReason::kNumericalBreakdown};
+    }
     p = r + beta * p;
   }
   std::cout << "warning: convergence may fail in conjugate gradient solver. residual_norm = "
             << std::scientific << std::sqrt(rkp1_2norm) << std::endl;
-  return {x, std::sqrt(rkp1_2norm), max_iter, false};
+  return {best_x, std::sqrt(best_residual_norm_sq), max_iter, CGTerminationReason::kMaxIterations};
 }
 
 //forward declaration
@@ -222,31 +304,28 @@ requires CGMatrixType<MatrixType, VectorType> && CGMPICommunicationVectorType<Ve
 CGResult<VectorType> ConjugateGradientSolverMaster(
     const MatrixType &matrix_a,
     const VectorType &b,
-    const VectorType &x0, //initial guess
-    size_t max_iter,
-    double relative_tolerance,
-    int residue_restart_step,
-    double absolute_tolerance,
+    const VectorType &x0,
+    const ConjugateGradientParams &params,
     const MPI_Comm &comm
 );
 
 /**
  * @brief User-defined MPI communication functions required for VectorType.
- * 
+ *
  * For parallel conjugate gradient solver to work, users must provide the following
  * MPI communication functions for their VectorType:
- * 
+ *
  * @code
  * template<typename VectorType>
  * void MPI_Bcast(VectorType &vector, const MPI_Comm &comm);
- * 
- * template<typename VectorType> 
+ *
+ * template<typename VectorType>
  * void MPI_Send(const VectorType &vector, int dest, const MPI_Comm &comm, int tag = 0);
- * 
+ *
  * template<typename VectorType>
  * MPI_Status MPI_Recv(VectorType &vector, int src, const MPI_Comm &comm, int tag = 0);
  * @endcode
- * 
+ *
  * These functions must handle:
  * - Broadcasting vector data from master to all ranks
  * - Sending vector data to specified destination rank
@@ -269,39 +348,29 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
  * @param matrix_a Self-adjoint matrix/operator (distributed)
  * @param b Right-hand side vector
  * @param x0 Initial guess
- * @param max_iter Maximum number of iterations
- * @param relative_tolerance Relative tolerance in residual norm.
- *        Stopping criterion: ||r|| <= max(relative_tolerance * ||b||, absolute_tolerance).
- * @param residue_restart_step Residue restart interval (0 to disable)
+ * @param params CG solver parameters (tolerances, max iterations, etc.)
  * @param comm MPI communicator
- * @param absolute_tolerance Absolute tolerance in residual 2-norm ||r||.
- *        Default is 0.0 to preserve legacy relative-only behavior.
- * @return CGResult containing solution, residual norm, iteration count, and convergence flag
+ * @return CGResult containing solution, residual norm, iteration count, and termination reason
  */
 template<typename MatrixType, typename VectorType>
 requires CGMatrixType<MatrixType, VectorType> && CGMPICommunicationVectorType<VectorType>
 CGResult<VectorType> ConjugateGradientSolver(
     const MatrixType &matrix_a,
     const VectorType &b,
-    const VectorType &x0, //initial guess
-    const size_t max_iter,
-    const double relative_tolerance,
-    const int residue_restart_step,
-    const MPI_Comm &comm,
-    const double absolute_tolerance = 0.0
-) {
+    const VectorType &x0,
+    const ConjugateGradientParams &params,
+    const MPI_Comm &comm) {
   int rank;
   MPI_Comm_rank(comm, &rank);
   if (rank == qlten::hp_numeric::kMPIMasterRank) {
     return ConjugateGradientSolverMaster(
-        matrix_a, b, x0, max_iter, relative_tolerance, residue_restart_step,
-        absolute_tolerance, comm
+        matrix_a, b, x0, params, comm
     );
   } else {
     ConjugateGradientSolverSlave<MatrixType, VectorType>(
         matrix_a, comm
     );
-    return {x0, 0.0, 0, false};  // Slave returns placeholder
+    return {x0, 0.0, 0, CGTerminationReason::kMaxIterations};  // Slave returns placeholder
   }
 }
 
@@ -332,18 +401,28 @@ SlaveReceiveBroadcastInstruction(const MPI_Comm &comm) {
   return instruction;
 }
 
+/**
+ * @brief MPI master-side conjugate gradient solver.
+ *
+ * Same algorithm as the serial solver, but uses distributed matrix-vector products
+ * via MatrixMultiplyVectorMaster. Every early-return path broadcasts a finish
+ * instruction to prevent slave deadlocks.
+ */
 template<typename MatrixType, typename VectorType>
 requires CGMatrixType<MatrixType, VectorType> && CGMPICommunicationVectorType<VectorType>
 CGResult<VectorType> ConjugateGradientSolverMaster(
     const MatrixType &matrix_a,
     const VectorType &b,
-    const VectorType &x0, //initial guess
-    size_t max_iter,
-    double relative_tolerance,
-    int residue_restart_step,
-    double absolute_tolerance,
+    const VectorType &x0,
+    const ConjugateGradientParams &params,
     const MPI_Comm &comm
 ) {
+  const size_t max_iter = params.max_iter;
+  const double relative_tolerance = params.relative_tolerance;
+  const double absolute_tolerance = params.absolute_tolerance;
+  const int residual_recompute_interval = params.residual_recompute_interval;
+  const double orthogonality_threshold = params.orthogonality_threshold;
+
   MasterBroadcastInstruction(start, comm);
 
   const double rhs_norm_sq = b.NormSquare();
@@ -352,59 +431,99 @@ CGResult<VectorType> ConjugateGradientSolverMaster(
 
   VectorType ax0 = MatrixMultiplyVectorMaster(matrix_a, x0, comm);
   VectorType r = b - ax0;
-  double rk_2norm = r.NormSquare();
-  if (rk_2norm <= tol_sq) {
+  double r_norm_sq = r.NormSquare();
+  if (r_norm_sq <= tol_sq) {
     MasterBroadcastInstruction(finish, comm);
-    return {x0, std::sqrt(rk_2norm), 0, true};
+    return {x0, std::sqrt(r_norm_sq), 0, CGTerminationReason::kConverged};
   }
   VectorType p = r;
   VectorType x = x0;
-  double rkp1_2norm = rk_2norm;
+  VectorType best_x = x0;
+  double best_residual_norm_sq = r_norm_sq;
+  VectorType r_prev;
+  double rkp1_2norm = r_norm_sq;
+  size_t stagnation_count = 0;
+  constexpr double eps = std::numeric_limits<double>::epsilon();
+
   for (size_t k = 0; k < max_iter; k++) {
+    double rk_2norm = rkp1_2norm;
     MasterBroadcastInstruction(multiplication, comm);
     VectorType ap = MatrixMultiplyVectorMaster(matrix_a, p, comm);
     auto pap = (p * ap);
     if (!detail::pap_is_valid(pap)) {
       MasterBroadcastInstruction(finish, comm);
-      return {x, std::sqrt(rk_2norm), k, false};
+      return {best_x, std::sqrt(best_residual_norm_sq), k, CGTerminationReason::kIndefiniteMatrix};
     }
     auto alpha = rk_2norm / pap; //auto is double or complex
     x += alpha * p;
 
-    if (residue_restart_step > 0 && (k % residue_restart_step) == (residue_restart_step - 1)) {
+    // Stagnation detection
+    double alpha_abs_sq = detail::abs_sq(alpha);
+    double step_norm_sq = alpha_abs_sq * p.NormSquare();
+    double x_norm_sq = x.NormSquare();
+    if (step_norm_sq < eps * eps * x_norm_sq) {
+      if (++stagnation_count >= 3) {
+        MasterBroadcastInstruction(finish, comm);
+        return {best_x, std::sqrt(best_residual_norm_sq), k + 1, CGTerminationReason::kStagnated};
+      }
+    } else {
+      stagnation_count = 0;
+    }
+
+    if (residual_recompute_interval > 0 && (k % residual_recompute_interval) == (residual_recompute_interval - 1)) {
       MasterBroadcastInstruction(multiplication, comm);
       VectorType ax = MatrixMultiplyVectorMaster(matrix_a, x, comm);
       r = b - ax;
     } else {
       r += (-alpha) * ap;
     }
-    rkp1_2norm = r.NormSquare();   // return value of norm has definitely double type.
+    rkp1_2norm = r.NormSquare();
+
+    // NaN/Inf detection
+    if (!std::isfinite(rkp1_2norm)) {
+      MasterBroadcastInstruction(finish, comm);
+      return {best_x, std::sqrt(best_residual_norm_sq), k + 1, CGTerminationReason::kNumericalBreakdown};
+    }
+
+    // Best-iterate tracking
+    if (rkp1_2norm < best_residual_norm_sq) {
+      best_x = x;
+      best_residual_norm_sq = rkp1_2norm;
+    }
 
     if (rkp1_2norm <= tol_sq) {
       MasterBroadcastInstruction(finish, comm);
-      return {x, std::sqrt(rkp1_2norm), k + 1, true};
+      return {x, std::sqrt(rkp1_2norm), k + 1, CGTerminationReason::kConverged};
     }
+
+    // Orthogonality-based restart
+    if (k > 0) {
+      double ortho = std::abs(detail::real_part(r_prev * r));
+      if (ortho > orthogonality_threshold * rkp1_2norm) {
+        p = r;
+        r_prev = r;
+        rk_2norm = rkp1_2norm;
+        continue;
+      }
+    }
+    r_prev = r;
+
     double beta = rkp1_2norm / rk_2norm;
-#if VERBOSE_MODE == 1
-    std::cout << "k = " << k << "\t residue norm = " << std::scientific << rkp1_2norm
-                << "\t beta = " << std::fixed << beta << "."
-                << std::endl;
-#endif
-#ifndef NDEBUG
-    if (beta > 1.0) {
-      std::cout << "k = " << k << "\t residue norm = " << std::scientific << rkp1_2norm
-                << "\t pap = " << std::scientific << pap
-                << "\t beta = " << std::fixed << beta << "."
-                << std::endl;
+    if (!std::isfinite(beta)) {
+      MasterBroadcastInstruction(finish, comm);
+      return {best_x, std::sqrt(best_residual_norm_sq), k + 1, CGTerminationReason::kNumericalBreakdown};
     }
+#if VERBOSE_MODE == 1
+    std::cout << "k = " << k << "\t residual norm = " << std::scientific << rkp1_2norm
+                << "\t beta = " << std::fixed << beta << "."
+                << std::endl;
 #endif
     p = r + beta * p;
-    rk_2norm = rkp1_2norm;
   }
   std::cout << "warning: convergence may fail in conjugate gradient solver. residual_norm = "
             << std::scientific << std::sqrt(rkp1_2norm) << std::endl;
   MasterBroadcastInstruction(finish, comm);
-  return {x, std::sqrt(rkp1_2norm), max_iter, false};
+  return {best_x, std::sqrt(best_residual_norm_sq), max_iter, CGTerminationReason::kMaxIterations};
 }
 
 template<typename MatrixType, typename VectorType>

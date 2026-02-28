@@ -115,14 +115,14 @@ mpirun -n 4 ./transverse_field_ising_vmc_optimize
 | `is_warmed_up` | 初始组态是否已平衡 |
 | `config_dump_path` | 可选：导出最终组态的目录 |
 
-SR（stochastic reconfiguration）使用的 CG 参数：
+SR（stochastic reconfiguration）使用 CG 参数（`ConjugateGradientParams`）和 SR 参数（`StochasticReconfigurationParams`）：
 
-| 字段 | 含义 |
-|---|---|
-| `max_iter` | CG 最大迭代数 |
-| `tolerance` | CG 残差收敛阈值 |
-| `restart` | CG 重启间隔 |
-| `diag_shift` | 对角正则（改善条件数） |
+| 字段 | 所属结构 | 含义 |
+|---|---|---|
+| `max_iter` | `ConjugateGradientParams` | CG 最大迭代数 |
+| `relative_tolerance` | `ConjugateGradientParams` | CG 残差收敛阈值（相对于初始残差范数） |
+| `residual_recompute_interval` | `ConjugateGradientParams` | 重新计算精确残差的间隔（防止浮点漂移） |
+| `diag_shift` | `StochasticReconfigurationParams` | 对角正则（改善条件数） |
 
 ## 下一步
 

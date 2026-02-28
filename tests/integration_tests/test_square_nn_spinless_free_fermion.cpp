@@ -96,7 +96,10 @@ struct Z2SpinlessFreeFermionSystem : public MPITest {
   std::string tps_path = GenTPSPath(model_name, Dpeps, Lx, Ly);
 
   VMCPEPSOptimizerParams optimize_para = VMCPEPSOptimizerParams(
-      OptimizerFactory::CreateStochasticReconfiguration(60, ConjugateGradientParams(100, 1e-2, 20, 0.01), 0.2),
+      OptimizerFactory::CreateStochasticReconfiguration(60,
+          StochasticReconfigurationParams{.cg_params = ConjugateGradientParams{.max_iter = 100, .relative_tolerance = 1e-2,
+                                                                                .residual_recompute_interval = 20},
+                                          .diag_shift = 0.01}, 0.2),
       MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx,
                                      OccupancyNum({4, 8})),

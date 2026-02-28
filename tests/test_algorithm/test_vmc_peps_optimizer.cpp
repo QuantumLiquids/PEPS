@@ -154,9 +154,11 @@ class VMCPEPSOptimizerUnitTest : public MPITest {
     }
 
     // Set up VMC parameters using new structure with explicit path control
-    ConjugateGradientParams cg_params(100, 3e-3, 10, 0.01);
+    ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 3e-3,
+                                      .residual_recompute_interval = 10};
+    StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 0.01};
     OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(
-        10, 1e-15, 1e-30, 20, cg_params, 0.1);
+        10, 1e-15, 1e-30, 20, sr_params, 0.1);
     Configuration random_config(Ly, Lx);
     std::vector<size_t> occupancy = {Ly * Lx / 2, Ly * Lx / 2};  // Equal number of 0s and 1s
     random_config.Random(occupancy);
@@ -331,8 +333,10 @@ TEST_F(VMCPEPSOptimizerUnitTest, OptimizationSchemes) {
     
     // Update optimizer params for each algorithm type
     if (name == "StochasticReconfiguration") {
-      ConjugateGradientParams cg_params(100, 3e-3, 10, 0.01);
-      scheme_para.optimizer_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
+      ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 3e-3,
+                                        .residual_recompute_interval = 10};
+      StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 0.01};
+      scheme_para.optimizer_params = OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, sr_params, 0.1);
     } else if (name == "SGD") {
       OptimizerParams::BaseParams base_params(10, 1e-15, 1e-15, 20, 0.1);
       SGDParams sgd_params(0.0, false);
@@ -374,8 +378,10 @@ TEST_F(VMCPEPSOptimizerUnitTest, LegacyOptimizationSchemes) {
       {
           "StochasticReconfiguration",
           []() {
-            ConjugateGradientParams cg_params(10, 1e-2, 5, 0.01);
-            return OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, cg_params, 0.1);
+            ConjugateGradientParams cg_params{.max_iter = 10, .relative_tolerance = 1e-2,
+                                              .residual_recompute_interval = 5};
+            StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 0.01};
+            return OptimizerFactory::CreateStochasticReconfigurationAdvanced(10, 1e-15, 1e-30, 20, sr_params, 0.1);
           }
       },
       {

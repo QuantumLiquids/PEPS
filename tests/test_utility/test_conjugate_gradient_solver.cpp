@@ -16,7 +16,7 @@
 static_assert(std::is_same_v<decltype(qlpeps::CGResult<MyVector<double>>::x), MyVector<double>>);
 static_assert(std::is_same_v<decltype(qlpeps::CGResult<MyVector<double>>::residual_norm), double>);
 static_assert(std::is_same_v<decltype(qlpeps::CGResult<MyVector<double>>::iterations), size_t>);
-static_assert(std::is_same_v<decltype(qlpeps::CGResult<MyVector<double>>::converged), bool>);
+// converged() is now a method, not a field — no static_assert needed
 
 using namespace qlten;
 using namespace qlpeps;
@@ -28,8 +28,9 @@ void RunTestPlainCGSolverNoParallelCase(
     const MyVector<ElemT> &x0,
     const MyVector<ElemT> x_res
 ) {
-  auto result = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 0);
-  EXPECT_TRUE(result.converged);
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-16};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_TRUE(result.converged());
   EXPECT_LT(result.iterations, 100u);
   EXPECT_LT(result.residual_norm, 1e-6);
   auto diff_vec = result.x - x_res;
@@ -79,20 +80,25 @@ TEST(TestPlainCGSolver, RelativeToleranceScaleIndependence) {
 
   double tol = 1e-10;
 
-  auto result_small = ConjugateGradientSolver(mat, b_small, x0, 100, tol, 0);
-  auto result_large = ConjugateGradientSolver(mat, b_large, x0, 100, tol, 0);
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = tol};
+  auto result_small = ConjugateGradientSolver(mat, b_small, x0, params);
+  auto result_large = ConjugateGradientSolver(mat, b_large, x0, params);
 
   // Both should converge (not hit max_iter)
-  EXPECT_TRUE(result_small.converged);
-  EXPECT_TRUE(result_large.converged);
+  EXPECT_TRUE(result_small.converged());
+  EXPECT_TRUE(result_large.converged());
   EXPECT_LT(result_small.iterations, 100u);
   EXPECT_LT(result_large.iterations, 100u);
 
-  // Verify solutions: A*x - b should be small relative to ||b||
-  auto diff_small = mat * result_small.x - b_small;
-  auto diff_large = mat * result_large.x - b_large;
-  EXPECT_LT(diff_small.NormSquare() / b_small.NormSquare(), tol);
-  EXPECT_LT(diff_large.NormSquare() / b_large.NormSquare(), tol);
+  // Exact solutions: A = [[4,1],[1,3]], det = 11
+  //   b = [1,1]   -> x = [2/11, 3/11]
+  //   b = [1e6,1e6] -> x = [2e6/11, 3e6/11]
+  MyVector<double> x_expected_small({2.0 / 11.0, 3.0 / 11.0});
+  MyVector<double> x_expected_large({2.0e6 / 11.0, 3.0e6 / 11.0});
+  auto diff_small = result_small.x - x_expected_small;
+  auto diff_large = result_large.x - x_expected_large;
+  EXPECT_NEAR(diff_small.NormSquare(), 0.0, 1e-13);
+  EXPECT_NEAR(diff_large.NormSquare() / x_expected_large.NormSquare(), 0.0, 1e-13);
 }
 
 TEST(TestPlainCGSolver, SerialResidueRestart) {
@@ -102,9 +108,11 @@ TEST(TestPlainCGSolver, SerialResidueRestart) {
   MyVector<double> x0({0.0, 0.0});
   MyVector<double> x_expected({1.0, 1.0});
 
-  // Call with residue_restart_step = 5
-  auto result = ConjugateGradientSolver(mat, b, x0, 100, 1e-16, 5);
-  EXPECT_TRUE(result.converged);
+  // Call with residual_recompute_interval = 5
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-16,
+                                 .residual_recompute_interval = 5};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_TRUE(result.converged());
   auto diff = result.x - x_expected;
   EXPECT_NEAR(diff.NormSquare(), 0.0, 1e-13);
 }
@@ -117,8 +125,9 @@ TEST(TestPlainCGSolver, ZeroRhsRelativeOnlyPreservesLegacyBehavior) {
   MyVector<double> b({0.0, 0.0});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
 
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0);
-  EXPECT_FALSE(result.converged);
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_FALSE(result.converged());
 }
 
 TEST(TestPlainCGSolver, TinyRhsRelativeOnlyPreservesLegacyBehavior) {
@@ -129,8 +138,9 @@ TEST(TestPlainCGSolver, TinyRhsRelativeOnlyPreservesLegacyBehavior) {
   MyVector<double> b({1e-300, -1e-300});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
 
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0);
-  EXPECT_FALSE(result.converged);
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_FALSE(result.converged());
 }
 
 TEST(TestPlainCGSolver, ZeroRhsConvergesWithExplicitAbsoluteTolerance) {
@@ -141,8 +151,16 @@ TEST(TestPlainCGSolver, ZeroRhsConvergesWithExplicitAbsoluteTolerance) {
   MyVector<double> b({0.0, 0.0});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
 
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, 1e-150);
-  EXPECT_TRUE(result.converged);
+  // absolute_tolerance must be achievable: CG on a 2x2 SPD system
+  // reaches ||r|| ~ 1e-14 in 2 iterations; 1e-10 is comfortably above that.
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10,
+                                 .absolute_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_TRUE(result.converged());
+  // Exact solution: x = {0, 0}
+  MyVector<double> x_expected({0.0, 0.0});
+  auto diff = result.x - x_expected;
+  EXPECT_NEAR(diff.NormSquare(), 0.0, 1e-20);
 }
 
 TEST(TestPlainCGSolver, TinyRhsConvergesWithExplicitAbsoluteTolerance) {
@@ -153,8 +171,16 @@ TEST(TestPlainCGSolver, TinyRhsConvergesWithExplicitAbsoluteTolerance) {
   MyVector<double> b({1e-300, -1e-300});
   MyVector<double> x0({-1.3252085986071422, 0.84568824604762072});
 
-  auto result = ConjugateGradientSolver(mat, b, x0, 200, 1e-10, 0, 1e-150);
-  EXPECT_TRUE(result.converged);
+  // With b ~ 1e-300 and x0 ~ O(1), CG's floating-point residual bottoms
+  // out at ~1e-14 (dominated by roundoff in A*x, not by b).
+  ConjugateGradientParams params{.max_iter = 200, .relative_tolerance = 1e-10,
+                                 .absolute_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_TRUE(result.converged());
+  // Exact solution ~ O(1e-300), indistinguishable from zero in double precision
+  MyVector<double> x_expected({0.0, 0.0});
+  auto diff = result.x - x_expected;
+  EXPECT_NEAR(diff.NormSquare(), 0.0, 1e-20);
 }
 
 TEST(TestPlainCGSolver, BreakdownDetection) {
@@ -163,9 +189,10 @@ TEST(TestPlainCGSolver, BreakdownDetection) {
   MyVector<double> b({1.0, 1.0});
   MyVector<double> x0({0.0, 0.0});
 
-  auto result = ConjugateGradientSolver(mat, b, x0, 100, 1e-10, 0);
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
   // Should not crash; should report non-convergence
-  EXPECT_FALSE(result.converged);
+  EXPECT_FALSE(result.converged());
 }
 
 TEST(TestPlainCGSolver, NonConvergenceReported) {
@@ -174,8 +201,116 @@ TEST(TestPlainCGSolver, NonConvergenceReported) {
   MyVector<double> x0({0.0, 0.0});
 
   // max_iter=1 with tight tolerance: one iteration is not enough to converge
-  auto result = ConjugateGradientSolver(mat, b, x0, 1, 1e-30, 0);
-  EXPECT_FALSE(result.converged);
+  ConjugateGradientParams params{.max_iter = 1, .relative_tolerance = 1e-30};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_FALSE(result.converged());
   EXPECT_EQ(result.iterations, 1u);
   EXPECT_GT(result.residual_norm, 0.0);
+}
+
+// ---------------------------------------------------------------------------
+// Termination reason tests
+// ---------------------------------------------------------------------------
+
+TEST(TestPlainCGSolver, IndefiniteMatrixDetection) {
+  // Diagonal matrix with a negative entry: diag(1, -1, 1).
+  // With b directed along the negative-eigenvalue axis, the very first
+  // search direction p = r = b gives p^T A p < 0, triggering kIndefiniteMatrix.
+  MySquareMatrix<double> neg_mat({{1.0, 0.0, 0.0},
+                                  {0.0, -1.0, 0.0},
+                                  {0.0, 0.0, 1.0}});
+  MyVector<double> b({0.0, 1.0, 0.0});
+  MyVector<double> x0({0.0, 0.0, 0.0});
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(neg_mat, b, x0, params);
+  EXPECT_EQ(result.reason, CGTerminationReason::kIndefiniteMatrix);
+  EXPECT_FALSE(result.converged());
+}
+
+// A matrix wrapper that injects Inf into the result after a given number of
+// matrix-vector multiplications.  Inf passes the pap > 0 check but causes
+// 0 * Inf = NaN in the residual update, triggering kNumericalBreakdown.
+class InfInjectingMatrix {
+ public:
+  InfInjectingMatrix(const MySquareMatrix<double> &inner, size_t inf_after)
+      : inner_(inner), inf_after_(inf_after) {}
+
+  MyVector<double> operator*(const MyVector<double> &v) const {
+    if (++call_count_ > inf_after_) {
+      MyVector<double> result = inner_ * v;
+      result.GetElements()[0] = std::numeric_limits<double>::infinity();
+      return result;
+    }
+    return inner_ * v;
+  }
+
+ private:
+  MySquareMatrix<double> inner_;
+  mutable size_t call_count_ = 0;
+  size_t inf_after_;
+};
+
+TEST(TestPlainCGSolver, NumericalBreakdownDetection) {
+  // The first mat-vec (initial residual r = b - A*x0) is clean.
+  // The second mat-vec (ap = A*p in iteration k=0) returns Inf in the
+  // first element.  pap = p * ap = Inf > 0, so the indefinite check
+  // passes.  Then alpha = rk_norm / Inf = 0, and the residual update
+  // r = r - alpha * ap involves 0 * Inf = NaN, making the residual
+  // norm non-finite and triggering kNumericalBreakdown.
+  InfInjectingMatrix inf_mat(
+      MySquareMatrix<double>({{2.0, 0.0, 0.0},
+                              {0.0, 3.0, 0.0},
+                              {0.0, 0.0, 5.0}}),
+      1);  // Inf starting from the 2nd mat-vec
+  MyVector<double> b({1.0, 2.0, 3.0});
+  MyVector<double> x0({0.0, 0.0, 0.0});
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-10};
+  auto result = ConjugateGradientSolver(inf_mat, b, x0, params);
+  EXPECT_EQ(result.reason, CGTerminationReason::kNumericalBreakdown);
+  EXPECT_FALSE(result.converged());
+}
+
+TEST(TestPlainCGSolver, StagnationDetection) {
+  // 10x10 diagonal system with eigenvalues spanning 15 orders of magnitude.
+  // CG reaches machine precision quickly but cannot satisfy the impossibly
+  // tight relative tolerance (1e-30).  The steps become smaller than
+  // eps * ||x||, triggering kStagnated after 3 consecutive tiny-step
+  // iterations.
+  std::vector<std::vector<double>> diag_data(10, std::vector<double>(10, 0.0));
+  std::vector<double> b_data(10);
+  std::vector<double> x0_data(10, 0.0);
+  for (size_t i = 0; i < 10; ++i) {
+    double eigenvalue = std::pow(10.0, -static_cast<double>(i) * 15.0 / 9.0);
+    diag_data[i][i] = eigenvalue;
+    b_data[i] = eigenvalue;  // exact solution is (1, 1, ..., 1)
+  }
+  MySquareMatrix<double> ill_mat(diag_data);
+  MyVector<double> b(b_data);
+  MyVector<double> x0(x0_data);
+  ConjugateGradientParams params{.max_iter = 10000, .relative_tolerance = 1e-30};
+  auto result = ConjugateGradientSolver(ill_mat, b, x0, params);
+  EXPECT_EQ(result.reason, CGTerminationReason::kStagnated);
+  EXPECT_FALSE(result.converged());
+}
+
+TEST(TestPlainCGSolver, OrthogonalityRestartConverges) {
+  // With an aggressively low orthogonality threshold (0.01), the solver
+  // restarts the search direction much more frequently than the default.
+  // Verify that CG still converges to the correct answer despite the
+  // frequent restarts.
+  MySquareMatrix<double> mat({{2.0, 0.0, 0.0, 0.0},
+                              {0.0, 3.0, 0.0, 0.0},
+                              {0.0, 0.0, 5.0, 0.0},
+                              {0.0, 0.0, 0.0, 7.0}});
+  MyVector<double> b({1.0, 2.0, 3.0, 4.0});
+  MyVector<double> x0({0.0, 0.0, 0.0, 0.0});
+  ConjugateGradientParams params{.max_iter = 100, .relative_tolerance = 1e-10,
+                                 .orthogonality_threshold = 0.01};
+  auto result = ConjugateGradientSolver(mat, b, x0, params);
+  EXPECT_TRUE(result.converged());
+  EXPECT_EQ(result.reason, CGTerminationReason::kConverged);
+  // Exact solution: x = {1/2, 2/3, 3/5, 4/7}
+  MyVector<double> x_expected({0.5, 2.0 / 3.0, 0.6, 4.0 / 7.0});
+  auto diff = result.x - x_expected;
+  EXPECT_NEAR(diff.NormSquare(), 0.0, 1e-13);
 }

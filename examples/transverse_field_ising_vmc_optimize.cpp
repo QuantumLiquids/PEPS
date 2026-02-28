@@ -83,9 +83,11 @@ int main(int argc, char* argv[]) {
     PEPSParams peps_params(trunc_para);
 
     // Optimizer params: Stochastic Reconfiguration with CG
-    ConjugateGradientParams cg_params(/*max_iter=*/100, /*tolerance=*/1e-5, /*restart=*/20, /*diag_shift=*/1e-3);
+    ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-5,
+                                      .residual_recompute_interval = 20};
+    StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 1e-3};
     auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
-        /*max_iterations=*/40, cg_params, /*learning_rate=*/0.1);
+        /*max_iterations=*/40, sr_params, /*learning_rate=*/0.1);
 
     VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");
 

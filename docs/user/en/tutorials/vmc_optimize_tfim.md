@@ -115,14 +115,14 @@ Monte Carlo parameters:
 | `is_warmed_up` | whether the initial configuration is already equilibrated |
 | `config_dump_path` | optional dump path for the final configuration |
 
-SR (stochastic reconfiguration) uses CG parameters:
+SR (stochastic reconfiguration) uses CG parameters (`ConjugateGradientParams`) and SR parameters (`StochasticReconfigurationParams`):
 
-| Field | Meaning |
-|---|---|
-| `max_iter` | maximum CG iterations |
-| `tolerance` | CG residual tolerance |
-| `restart` | CG restart interval |
-| `diag_shift` | diagonal regularization for conditioning |
+| Field | Location | Meaning |
+|---|---|---|
+| `max_iter` | `ConjugateGradientParams` | maximum CG iterations |
+| `relative_tolerance` | `ConjugateGradientParams` | CG residual tolerance (relative to initial residual norm) |
+| `residual_recompute_interval` | `ConjugateGradientParams` | interval for recomputing exact residual (avoids drift) |
+| `diag_shift` | `StochasticReconfigurationParams` | diagonal regularization for conditioning |
 
 ## Next steps
 

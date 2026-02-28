@@ -547,8 +547,10 @@ TEST_F(OptimizerTest, ErrorHandling) {
 
 // Test stochastic reconfiguration structure (basic test)
 TEST_F(OptimizerTest, StochasticReconfigurationStructure) {
-  ConjugateGradientParams cg_params(100, 1e-6, 0, 10);
-  test_params_ = OptimizerFactory::CreateStochasticReconfigurationAdvanced(1000, 1e-15, 1e-30, 20, cg_params, 0.1);
+  ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-6,
+                                    .residual_recompute_interval = 0};
+  StochasticReconfigurationParams sr_algo_params{.cg_params = cg_params, .diag_shift = 10};
+  test_params_ = OptimizerFactory::CreateStochasticReconfigurationAdvanced(1000, 1e-15, 1e-30, 20, sr_algo_params, 0.1);
 
   OptimizerT optimizer(test_params_, comm_, rank_, mpi_size_);
 

@@ -96,8 +96,10 @@ protected:
     MonteCarloParams mc_params(5000, 100, 1, initial_config, false);
     PEPSParams peps_params(truncate_para);
     
-    ConjugateGradientParams cg_params(100, 1e-5, 20, 0.001);
-    auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(100, cg_params, 0.1);
+    ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-5,
+                                     .residual_recompute_interval = 20};
+    StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 0.001};
+    auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(100, sr_params, 0.1);
     
     optimize_para.emplace(opt_params, mc_params, peps_params);
     

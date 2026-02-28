@@ -28,10 +28,13 @@ VMCOptimizePara params(/*many parameters*/);
 VMCPEPSExecutor<TenElemT, QNT, Updater, Model> executor(params, tps, comm, model);
 ```
 
-#### After  
+#### After
 ```cpp
+ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 1e-5,
+                                   .residual_recompute_interval = 20};
+StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 0.001};
 OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfiguration(
-  1000, ConjugateGradientParams(100, 1e-5, 20, 0.001), 0.01);
+  1000, sr_params, 0.01);
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 VMCPEPSOptimizer<TenElemT, QNT, Updater, Model> executor(params, tps, comm, model);
 ```

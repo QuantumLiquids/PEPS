@@ -904,9 +904,8 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
     const WaveFunctionT &Ostar_mean,
     const WaveFunctionT &init_guess) {
 
-  // Get CG parameters from StochasticReconfigurationParams
+  // Get SR parameters (contains CG params and diagonal shift)
   const auto& sr_params = params_.GetAlgorithmParams<StochasticReconfigurationParams>();
-  const ConjugateGradientParams &cg_params = sr_params.cg_params;
 
   // Create S-matrix for stochastic reconfiguration
   WaveFunctionT *pOstar_mean = nullptr;
@@ -916,21 +915,21 @@ Optimizer<TenElemT, QNT>::CalculateNaturalGradient(
 
   SRSMatrix s_matrix(const_cast<std::vector<WaveFunctionT> *>(&Ostar_samples),
                      pOstar_mean, mpi_size_, comm_);
-  s_matrix.diag_shift = cg_params.diag_shift;
+  s_matrix.diag_shift = sr_params.diag_shift;
 
   auto cg_result = ConjugateGradientSolver(
       s_matrix, gradient, init_guess,
-      cg_params.max_iter, cg_params.relative_tolerance,
-      cg_params.residue_restart_step, comm_,
-      cg_params.absolute_tolerance);
+      sr_params.cg_params, comm_);
 
-  // Broadcast convergence status from master to all ranks for coordinated error handling.
-  // Slave ranks hold a placeholder (converged=false) that does not reflect the actual solve.
-  int converged_flag = cg_result.converged ? 1 : 0;
-  ::MPI_Bcast(&converged_flag, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_);
+  // Broadcast termination reason from master to all ranks for coordinated error handling.
+  // Slave ranks hold a placeholder that does not reflect the actual solve.
+  int reason_int = static_cast<int>(cg_result.reason);
+  ::MPI_Bcast(&reason_int, 1, MPI_INT, qlten::hp_numeric::kMPIMasterRank, comm_);
+  auto reason = static_cast<CGTerminationReason>(reason_int);
 
-  if (!converged_flag) {
-    std::string msg = "CG solver did not converge in SR natural gradient computation.";
+  if (reason != CGTerminationReason::kConverged) {
+    std::string msg = "CG solver terminated: ";
+    msg += to_string(reason);
     if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
       msg += " iterations=" + std::to_string(cg_result.iterations)
            + " residual_norm=" + std::to_string(cg_result.residual_norm);

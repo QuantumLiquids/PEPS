@@ -98,7 +98,10 @@ class TriangleJ1J2HeisenbergSystem
       energy_ed = -8.5; // Approximate expected energy for triangle J1-J2 lattice
 
       optimize_para.emplace(
-          OptimizerFactory::CreateStochasticReconfiguration(40, ConjugateGradientParams(100, 3e-3, 20, 0.001), 0.3),
+          OptimizerFactory::CreateStochasticReconfiguration(40,
+              StochasticReconfigurationParams{.cg_params = ConjugateGradientParams{.max_iter = 100, .relative_tolerance = 3e-3,
+                                                                                    .residual_recompute_interval = 20},
+                                              .diag_shift = 0.001}, 0.3),
           MonteCarloParams(5000, 100, 1,
                            Configuration(Ly, Lx,
                                          OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),

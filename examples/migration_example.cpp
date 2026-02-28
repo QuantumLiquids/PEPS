@@ -85,10 +85,10 @@ void new_modern_approach() {
     );
     
     // 3. Optimizer parameters
-    OptimizerParams opt_params;
-    opt_params.core_params.step_lengths = {0.01, 0.01, 0.01};
-    opt_params.update_scheme = StochasticReconfiguration;
-    opt_params.cg_params = ConjugateGradientParams(1e-6, 1000, 1e-8);
+    ConjugateGradientParams cg_params{.max_iter = 1000, .relative_tolerance = 1e-6};
+    StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 1e-8};
+    OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfiguration(
+        /*max_iterations=*/100, sr_params, /*learning_rate=*/0.01);
     
     // 4. Combine all parameters
     VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
@@ -104,8 +104,7 @@ void new_modern_approach() {
     
     std::cout << "Modern parameter structure created successfully" << std::endl;
     std::cout << "  - MC total samples: " << mc_params.total_samples << std::endl;
-    std::cout << "  - Step lengths: " << opt_params.core_params.step_lengths.size() << " steps" << std::endl;
-    std::cout << "  - Update scheme: " << opt_params.update_scheme << std::endl;
+    std::cout << "  - Max iterations: " << opt_params.base_params.max_iterations << std::endl;
 }
 
 // ============================================================================
@@ -129,9 +128,11 @@ VMCPEPSOptimizerParams create_modern_parameters() {
     PEPSParams peps_params(truncate_para);
     
     // Create optimizer parameters using factory method
-    ConjugateGradientParams cg_params(1000, 1e-6, 20, 1e-8);
-    OptimizerParams opt_params = OptimizerParams::CreateStochasticReconfiguration(
-        100, cg_params, 0.01);
+    ConjugateGradientParams cg_params{.max_iter = 1000, .relative_tolerance = 1e-6,
+                                       .residual_recompute_interval = 20};
+    StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 1e-8};
+    OptimizerParams opt_params = OptimizerFactory::CreateStochasticReconfiguration(
+        100, sr_params, 0.01);
     
     VMCPEPSOptimizerParams modern_params(opt_params, mc_params, peps_params);
     

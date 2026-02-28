@@ -1025,11 +1025,8 @@ FullEnvironmentTruncate(
     BtenMatT b_ten_mat(B_ten);
 
     auto cg_result_r = ConjugateGradientSolver(b_ten_mat, p_ten_vec, r_init,
-                                               trunc_params.cg_params.max_iter,
-                                               trunc_params.cg_params.relative_tolerance,
-                                               trunc_params.cg_params.residue_restart_step,
-                                               trunc_params.cg_params.absolute_tolerance);
-    if (!cg_result_r.converged) {
+                                               trunc_params.cg_params);
+    if (!cg_result_r.converged()) {
       throw std::runtime_error(
           "CG solver did not converge in full-environment truncation (R update)."
           " iterations=" + std::to_string(cg_result_r.iterations)
@@ -1070,11 +1067,8 @@ FullEnvironmentTruncate(
     L_ten_init.Transpose({1, 0});
     PtenVecT l_init(L_ten_init);
     auto cg_result_l = ConjugateGradientSolver(b_ten_mat, p_ten_vec, l_init,
-                                               trunc_params.cg_params.max_iter,
-                                               trunc_params.cg_params.relative_tolerance,
-                                               trunc_params.cg_params.residue_restart_step,
-                                               trunc_params.cg_params.absolute_tolerance);
-    if (!cg_result_l.converged) {
+                                               trunc_params.cg_params);
+    if (!cg_result_l.converged()) {
       throw std::runtime_error(
           "CG solver did not converge in full-environment truncation (L update)."
           " iterations=" + std::to_string(cg_result_l.iterations)

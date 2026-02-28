@@ -123,15 +123,15 @@ strong-Wolfe 失败策略：
 ### 随机重构（SR）
 
 ```cpp
-qlpeps::ConjugateGradientParams cg_params(
-    /*max_iter=*/100,
-    /*tolerance=*/1e-5,
-    /*restart_step=*/20,
-    /*diag_shift=*/1e-3);
+qlpeps::ConjugateGradientParams cg_params{.max_iter = 100,
+                                           .relative_tolerance = 1e-5,
+                                           .residual_recompute_interval = 20};
+qlpeps::StochasticReconfigurationParams sr_params{.cg_params = cg_params,
+                                                   .diag_shift = 1e-3};
 
 auto opt_params = qlpeps::OptimizerFactory::CreateStochasticReconfiguration(
     /*max_iterations=*/1000,
-    cg_params,
+    sr_params,
     /*learning_rate=*/0.1);
 ```
 
@@ -151,7 +151,7 @@ auto opt_params = qlpeps::OptimizerFactory::CreateStochasticReconfigurationAdvan
     /*energy_tolerance=*/1e-8,
     /*gradient_tolerance=*/1e-6,
     /*plateau_patience=*/50,
-    cg_params,
+    sr_params,
     /*learning_rate=*/0.1,
     std::move(scheduler));
 ```

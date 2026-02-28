@@ -62,7 +62,10 @@ struct SquareTFIMPBCSystem : public MPITest {
   // Use smaller learning rate (0.1) since Simple Update already gives good initial state
   VMCPEPSOptimizerParams vmc_peps_para = VMCPEPSOptimizerParams(
       OptimizerFactory::CreateStochasticReconfiguration(
-          40, ConjugateGradientParams(100, 3e-3, 20, 0.001), 0.03),
+          40,
+          StochasticReconfigurationParams{.cg_params = ConjugateGradientParams{.max_iter = 100, .relative_tolerance = 3e-3,
+                                                                                .residual_recompute_interval = 20},
+                                          .diag_shift = 0.001}, 0.03),
       MonteCarloParams(5000, 100, 1,
                        Configuration(Ly, Lx, 2),  // Physical dimension 2, random init
                        false),

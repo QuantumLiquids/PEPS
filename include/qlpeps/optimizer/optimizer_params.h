@@ -40,28 +40,20 @@ namespace qlpeps {
  *   ||r|| <= max(relative_tolerance * ||b||, absolute_tolerance).
  *
  * Notes:
- * - \c relative_tolerance is in residual 2-norm (norm-space), not squared.
- * - \c absolute_tolerance is in residual 2-norm (not squared).
- * - Default \c absolute_tolerance is 0.0 to preserve legacy relative-only behavior.
+ * - relative_tolerance is in residual 2-norm (norm-space), not squared.
+ * - absolute_tolerance is in residual 2-norm (not squared).
+ * - Default absolute_tolerance is 0.0 to preserve legacy relative-only behavior.
+ * - No user-declared constructors: this is a C++20 aggregate supporting
+ *   designated initializers. Stale positional calls Type(...) are compile errors.
+ *   Brace positional init Type{...} still compiles; use designated init by convention.
  */
 struct ConjugateGradientParams {
-  size_t max_iter;              ///< Maximum CG iterations
-  double relative_tolerance;    ///< Relative tolerance in residual norm: ||r|| <= rtol * ||b||
-  double absolute_tolerance;    ///< Absolute tolerance in residual norm ||r|| (default 0.0)
-  int residue_restart_step;     ///< Periodically recompute residual (0 to disable)
-  double diag_shift;            ///< Diagonal shift for regularization (SR only)
-
-  // Default constructor for backward compatibility
-  ConjugateGradientParams()
-      : max_iter(100), relative_tolerance(1e-4), absolute_tolerance(0.0),
-        residue_restart_step(20), diag_shift(0.001) {}
-
-  ConjugateGradientParams(
-      size_t max_iter, double relative_tolerance, int residue_restart_step,
-      double diag_shift, double absolute_tolerance = 0.0)
-      : max_iter(max_iter), relative_tolerance(relative_tolerance),
-        absolute_tolerance(absolute_tolerance),
-        residue_restart_step(residue_restart_step), diag_shift(diag_shift) {}
+  size_t max_iter = 100;                    ///< Maximum CG iterations
+  double relative_tolerance = 1e-4;         ///< Relative tolerance in residual norm
+  double absolute_tolerance = 0.0;          ///< Absolute tolerance in residual norm
+  int residual_recompute_interval = 20;     ///< Periodically recompute residual (0 to disable)
+  double orthogonality_threshold = 0.5;     ///< Orthogonality restart threshold (Sierra/SM convention)
+  // No constructors — pure aggregate.
 };
 
 // BaseParams is now nested inside OptimizerParams - see below
@@ -100,15 +92,15 @@ struct AdamParams {
 /**
  * @struct StochasticReconfigurationParams
  * @brief Parameters for Stochastic Reconfiguration (Natural Gradient) algorithm
+ *
+ * No user-declared constructors: same aggregate safety strategy as ConjugateGradientParams.
  */
 struct StochasticReconfigurationParams {
-  ConjugateGradientParams cg_params;                     // CG solver configuration  
-  bool normalize_update;                                 // For normalized SR
-  double adaptive_diagonal_shift;                        // Dynamic regularization
-  
-  StochasticReconfigurationParams(const ConjugateGradientParams& cg_params,
-                                 bool normalize = false, double adaptive_shift = 0.0)
-    : cg_params(cg_params), normalize_update(normalize), adaptive_diagonal_shift(adaptive_shift) {}
+  ConjugateGradientParams cg_params;        ///< CG solver configuration
+  double diag_shift = 0.001;                ///< Diagonal shift for regularization (moved from CG params)
+  bool normalize_update = false;            ///< For normalized SR
+  double adaptive_diagonal_shift = 0.0;     ///< Dynamic regularization
+  // No constructors — pure aggregate.
 };
 
 /**
@@ -428,12 +420,10 @@ public:
    */
   static OptimizerParams CreateStochasticReconfiguration(
       size_t max_iterations,
-      const ConjugateGradientParams& cg_params,
+      const StochasticReconfigurationParams& sr_params,
       double learning_rate = 0.1) {
-    
-    // Set tolerances to 0 to disable advanced stopping
+
     OptimizerParams::BaseParams base_params(max_iterations, 0.0, 0.0, max_iterations, learning_rate);
-    StochasticReconfigurationParams sr_params(cg_params);
     return OptimizerParams(base_params, sr_params);
   }
 
@@ -445,13 +435,12 @@ public:
       double energy_tolerance,
       double gradient_tolerance,
       size_t plateau_patience,
-      const ConjugateGradientParams& cg_params,
+      const StochasticReconfigurationParams& sr_params,
       double learning_rate = 0.1,
       std::unique_ptr<LearningRateScheduler> scheduler = nullptr) {
-    
-    OptimizerParams::BaseParams base_params(max_iterations, energy_tolerance, gradient_tolerance, plateau_patience, 
+
+    OptimizerParams::BaseParams base_params(max_iterations, energy_tolerance, gradient_tolerance, plateau_patience,
                           learning_rate, std::move(scheduler));
-    StochasticReconfigurationParams sr_params(cg_params);
     return OptimizerParams(base_params, sr_params);
   }
   
@@ -691,10 +680,7 @@ public:
   /**
    * @brief Configure for Stochastic Reconfiguration algorithm
    */
-  OptimizerParamsBuilder& WithStochasticReconfiguration(const ConjugateGradientParams& cg_params,
-                                                       bool normalize = false, 
-                                                       double adaptive_shift = 0.0) {
-    StochasticReconfigurationParams sr_params(cg_params, normalize, adaptive_shift);
+  OptimizerParamsBuilder& WithStochasticReconfiguration(const StochasticReconfigurationParams& sr_params) {
     algorithm_params_ = sr_params;
     return *this;
   }

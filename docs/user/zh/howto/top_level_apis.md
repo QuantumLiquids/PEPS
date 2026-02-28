@@ -61,10 +61,11 @@ MonteCarloParams mc_params(
 auto trunc = BMPSTruncateParams<double>::SVD(/*D_min=*/2, /*D_max=*/8, /*trunc_err=*/1e-14);
 PEPSParams peps_params(trunc);
 
+ConjugateGradientParams cg_params{.max_iter = 100, .relative_tolerance = 3e-3,
+                                  .residual_recompute_interval = 20};
+StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 1e-3};
 auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
-    /*max_iterations=*/40,
-    ConjugateGradientParams(/*max_iter=*/100, /*relative_tolerance=*/3e-3, /*restart=*/20, /*diag_shift=*/1e-3),
-    /*learning_rate=*/0.1);
+    /*max_iterations=*/40, sr_params, /*learning_rate=*/0.1);
 
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");
 
