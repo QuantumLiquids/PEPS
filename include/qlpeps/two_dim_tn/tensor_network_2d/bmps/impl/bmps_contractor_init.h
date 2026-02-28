@@ -77,30 +77,30 @@ void BMPSContractor<TenElemT, QNT>::InitBTen(const TensorNetwork2D<TenElemT, QNT
   switch (position) {
     case DOWN: {
       const size_t col = slice_num;
-      index0 = InverseIndex(bmps_set_[LEFT][col](tn.rows() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(LEFT, col)(tn.rows() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({tn.rows() - 1, col}).GetIndex(position));
-      index2 = InverseIndex(bmps_set_[RIGHT][tn.cols() - col - 1](0)->GetIndex(0));
+      index2 = InverseIndex(BMPSAtSlice_(RIGHT, col)(0)->GetIndex(0));
       break;
     }
     case UP: {
       const size_t col = slice_num;
-      index0 = InverseIndex(bmps_set_[RIGHT][tn.cols() - col - 1](tn.rows() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(RIGHT, col)(tn.rows() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({0, col}).GetIndex(position));
-      index2 = InverseIndex(bmps_set_[LEFT][col](0)->GetIndex(0));
+      index2 = InverseIndex(BMPSAtSlice_(LEFT, col)(0)->GetIndex(0));
       break;
     }
     case LEFT: {
       const size_t row = slice_num;
-      index0 = InverseIndex(bmps_set_[UP][row](tn.cols() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(UP, row)(tn.cols() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({row, 0}).GetIndex(position));
-      index2 = InverseIndex(bmps_set_[DOWN][tn.rows() - row - 1](0)->GetIndex(0));
+      index2 = InverseIndex(BMPSAtSlice_(DOWN, row)(0)->GetIndex(0));
       break;
     }
     case RIGHT: {
       const size_t row = slice_num;
-      index0 = InverseIndex(bmps_set_[DOWN][tn.rows() - row - 1](tn.cols() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(DOWN, row)(tn.cols() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({row, tn.cols() - 1}).GetIndex(position));
-      index2 = InverseIndex(bmps_set_[UP][row](0)->GetIndex(0));
+      index2 = InverseIndex(BMPSAtSlice_(UP, row)(0)->GetIndex(0));
       break;
     }
   }
@@ -137,37 +137,37 @@ void BMPSContractor<TenElemT, QNT>::InitBTen2(const TensorNetwork2D<TenElemT, QN
     case DOWN: {
       const size_t col1 = slice_num1;
       const size_t col2 = col1 + 1;
-      index0 = InverseIndex(bmps_set_[LEFT][col1](tn.rows() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(LEFT, col1)(tn.rows() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({tn.rows() - 1, col1}).GetIndex(position));
       index2 = InverseIndex(tn({tn.rows() - 1, col2}).GetIndex(position));
-      index3 = InverseIndex(bmps_set_[RIGHT][tn.cols() - col2 - 1](0)->GetIndex(0));
+      index3 = InverseIndex(BMPSAtSlice_(RIGHT, col2)(0)->GetIndex(0));
       break;
     }
     case UP: {
       const size_t col1 = slice_num1;
       const size_t col2 = col1 + 1;
-      index0 = InverseIndex(bmps_set_[RIGHT][tn.cols() - col2 - 1](tn.rows() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(RIGHT, col2)(tn.rows() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({0, col2}).GetIndex(position));
       index2 = InverseIndex(tn({0, col1}).GetIndex(position));
-      index3 = InverseIndex(bmps_set_[LEFT][col1](0)->GetIndex(0));
+      index3 = InverseIndex(BMPSAtSlice_(LEFT, col1)(0)->GetIndex(0));
       break;
     }
     case LEFT: {
       const size_t row1 = slice_num1;
       const size_t row2 = row1 + 1;
-      index0 = InverseIndex(bmps_set_[UP][row1](tn.cols() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(UP, row1)(tn.cols() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({row1, 0}).GetIndex(position));
       index2 = InverseIndex(tn({row2, 0}).GetIndex(position));
-      index3 = InverseIndex(bmps_set_[DOWN][tn.rows() - row2 - 1](0)->GetIndex(0));
+      index3 = InverseIndex(BMPSAtSlice_(DOWN, row2)(0)->GetIndex(0));
       break;
     }
     case RIGHT: {
       const size_t row1 = slice_num1;
       const size_t row2 = row1 + 1;
-      index0 = InverseIndex(bmps_set_[DOWN][tn.rows() - row2 - 1](tn.cols() - 1)->GetIndex(2));
+      index0 = InverseIndex(BMPSAtSlice_(DOWN, row2)(tn.cols() - 1)->GetIndex(2));
       index1 = InverseIndex(tn({row2, tn.cols() - 1}).GetIndex(position));
       index2 = InverseIndex(tn({row1, tn.cols() - 1}).GetIndex(position));
-      index3 = InverseIndex(bmps_set_[UP][row1](0)->GetIndex(0));
+      index3 = InverseIndex(BMPSAtSlice_(UP, row1)(0)->GetIndex(0));
       break;
     }
   }

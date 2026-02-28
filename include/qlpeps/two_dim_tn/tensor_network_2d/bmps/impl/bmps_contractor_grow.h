@@ -124,10 +124,9 @@ BMPSContractor<TenElemT, QNT>::GrowBMPSForCol(const TensorNetwork2D<TenElemT, QN
 template<typename TenElemT, typename QNT>
 const std::pair<BMPS<TenElemT, QNT>, BMPS<TenElemT, QNT> >
 BMPSContractor<TenElemT, QNT>::GetBMPSForRow(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t row) {
-  const size_t rows = tn.rows();
   GrowBMPSForRow(tn, row);
   BMPST &up_bmps = bmps_set_[UP][row];
-  BMPST &down_bmps = bmps_set_[DOWN][rows - 1 - row];
+  BMPST &down_bmps = BMPSAtSlice_(DOWN, row);
 
   return std::pair(up_bmps, down_bmps);
 }
@@ -135,10 +134,9 @@ BMPSContractor<TenElemT, QNT>::GetBMPSForRow(const TensorNetwork2D<TenElemT, QNT
 template<typename TenElemT, typename QNT>
 const std::pair<BMPS<TenElemT, QNT>, BMPS<TenElemT, QNT> >
 BMPSContractor<TenElemT, QNT>::GetBMPSForCol(const TensorNetwork2D<TenElemT, QNT>& tn, const size_t col) {
-  const size_t cols = tn.cols();
   GrowBMPSForCol(tn, col);
   BMPST &left_bmps = bmps_set_[LEFT][col];
-  BMPST &right_bmps = bmps_set_[RIGHT][cols - 1 - col];
+  BMPST &right_bmps = BMPSAtSlice_(RIGHT, col);
   return std::pair(left_bmps, right_bmps);
 }
 
@@ -157,31 +155,17 @@ BMPSContractor<TenElemT, QNT>::PunchHole(const TensorNetwork2D<TenElemT, QNT>& t
   const size_t row = site[0];
   const size_t col = site[1];
   
-#ifndef NDEBUG
   if (mps_orient == HORIZONTAL) {
-    up_ten = &(bmps_set_.at(UP).at(row)[tn.cols() - col - 1]);
-    down_ten = &(bmps_set_.at(DOWN).at(tn.rows() - row - 1)[col]);
-    left_ten = &(bten_set_.at(LEFT).at(col));
-    right_ten = &(bten_set_.at(RIGHT).at(tn.cols() - col - 1));
-  } else {
-    up_ten = &(bten_set_.at(UP).at(row));
-    down_ten = &(bten_set_.at(DOWN).at(tn.rows() - row - 1));
-    left_ten = &(bmps_set_.at(LEFT).at(col)[row]);
-    right_ten = &(bmps_set_.at(RIGHT).at(tn.cols() - col - 1)[tn.rows() - row - 1]);
-  }
-#else
-  if (mps_orient == HORIZONTAL) {
-    up_ten = &(bmps_set_.at(UP)[row][tn.cols() - col - 1]);
-    down_ten = &(bmps_set_.at(DOWN)[tn.rows() - row - 1][col]);
+    up_ten = &(BMPSAtSlice_(UP, row).AtLogicalCol(col));
+    down_ten = &(BMPSAtSlice_(DOWN, row).AtLogicalCol(col));
     left_ten = &(bten_set_.at(LEFT)[col]);
-    right_ten = &(bten_set_.at(RIGHT)[tn.cols() - col - 1]);
+    right_ten = &(BTenAtSlice_(RIGHT, col));
   } else {
     up_ten = &(bten_set_.at(UP)[row]);
-    down_ten = &(bten_set_.at(DOWN)[tn.rows() - row - 1]);
-    left_ten = &(bmps_set_.at(LEFT)[col][row]);
-    right_ten = &(bmps_set_.at(RIGHT)[tn.cols() - col - 1][tn.rows() - row - 1]);
+    down_ten = &(BTenAtSlice_(DOWN, row));
+    left_ten = &(BMPSAtSlice_(LEFT, col).AtLogicalCol(row));
+    right_ten = &(BMPSAtSlice_(RIGHT, col).AtLogicalCol(row));
   }
-#endif
   Tensor tmp1, tmp2, res_ten;
   if constexpr (Tensor::IsFermionic()) {
     Contract<TenElemT, QNT, false, true>(*left_ten, *down_ten, 2, 0, 1, tmp1);
@@ -273,8 +257,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen(const TensorNetwork2D<TenElemT,
       const TransferMPO &mpo = tn.get_col(col);
       const size_t N = mpo.size(); // tn.cols()
       const size_t end_idx = N - remain_sites;
-      auto &left_bmps = bmps_set_[LEFT][col];
-      auto &right_bmps = bmps_set_[RIGHT][tn.cols() - col - 1];
+      auto &left_bmps = BMPSAtSlice_(LEFT, col);
+      auto &right_bmps = BMPSAtSlice_(RIGHT, col);
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &left_mps_ten = left_bmps[N - i - 1];
         auto &right_mps_ten = right_bmps[i];
@@ -302,8 +286,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen(const TensorNetwork2D<TenElemT,
       const TransferMPO &mpo = tn.get_col(col);
       const size_t N = mpo.size(); // tn.cols()
       const size_t end_idx = N - remain_sites;
-      auto &left_bmps = bmps_set_[LEFT][col];
-      auto &right_bmps = bmps_set_[RIGHT][tn.cols() - col - 1];
+      auto &left_bmps = BMPSAtSlice_(LEFT, col);
+      auto &right_bmps = BMPSAtSlice_(RIGHT, col);
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &left_mps_ten = left_bmps[i];
         auto &right_mps_ten = right_bmps[N - i - 1];
@@ -331,8 +315,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen(const TensorNetwork2D<TenElemT,
       const TransferMPO &mpo = tn.get_row(row);
       const size_t N = mpo.size(); // tn.cols()
       const size_t end_idx = N - remain_sites;
-      auto &up_bmps = bmps_set_[UP][row];
-      auto &down_bmps = bmps_set_[DOWN][tn.rows() - row - 1];
+      auto &up_bmps = BMPSAtSlice_(UP, row);
+      auto &down_bmps = BMPSAtSlice_(DOWN, row);
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &up_mps_ten = up_bmps[N - i - 1];
         auto &down_mps_ten = down_bmps[i];
@@ -361,8 +345,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen(const TensorNetwork2D<TenElemT,
       const TransferMPO &mpo = tn.get_row(row);
       const size_t N = mpo.size(); // tn.cols()
       const size_t end_idx = N - remain_sites;
-      auto &up_bmps = bmps_set_[UP][row];
-      auto &down_bmps = bmps_set_[DOWN][tn.rows() - row - 1];
+      auto &up_bmps = BMPSAtSlice_(UP, row);
+      auto &down_bmps = BMPSAtSlice_(DOWN, row);
       for (size_t i = start_idx; i < end_idx; i++) {
         auto &up_mps_ten = up_bmps[i];
         auto &down_mps_ten = down_bmps[N - i - 1];
@@ -412,8 +396,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen2(const TensorNetwork2D<TenElemT
       std::reverse(mpo1.begin(), mpo1.end());
       std::reverse(mpo2.begin(), mpo2.end());
       N = mpo1.size(); // tn.rows();
-      bmps_pre = &bmps_set_[pre_post][col1];
-      bmps_post = &bmps_set_[next_post][tn.cols() - 1 - col2];
+      bmps_pre = &BMPSAtSlice_(LEFT, col1);
+      bmps_post = &BMPSAtSlice_(RIGHT, col2);
       break;
     }
     case RIGHT: {
@@ -424,10 +408,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen2(const TensorNetwork2D<TenElemT
       std::reverse(mpo1.begin(), mpo1.end());
       std::reverse(mpo2.begin(), mpo2.end());
       N = mpo1.size(); // tn.cols()
-      const size_t mps1_num = tn.rows() - 1 - row2;
-      const size_t mps2_num = row1;
-      bmps_pre = &bmps_set_[pre_post][mps1_num];
-      bmps_post = &bmps_set_[next_post][mps2_num];
+      bmps_pre = &BMPSAtSlice_(DOWN, row2);
+      bmps_post = &BMPSAtSlice_(UP, row1);
       break;
     }
     case UP: {
@@ -436,8 +418,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen2(const TensorNetwork2D<TenElemT
       mpo1 = tn.get_col(col2);
       mpo2 = tn.get_col(col1);
       N = mpo1.size(); // tn.rows();
-      bmps_pre = &bmps_set_[RIGHT][tn.cols() - 1 - col2];
-      bmps_post = &bmps_set_[LEFT][col1];
+      bmps_pre = &BMPSAtSlice_(RIGHT, col2);
+      bmps_post = &BMPSAtSlice_(LEFT, col1);
       break;
     }
     case LEFT: {
@@ -446,10 +428,8 @@ void BMPSContractor<TenElemT, QNT>::GrowFullBTen2(const TensorNetwork2D<TenElemT
       mpo1 = tn.get_row(row1);
       mpo2 = tn.get_row(row2);
       N = mpo1.size(); // tn.cols()
-      const size_t mps1_num = row1;
-      const size_t mps2_num = tn.rows() - 1 - row2;
-      bmps_pre = &bmps_set_[pre_post][mps1_num];
-      bmps_post = &bmps_set_[next_post][mps2_num];
+      bmps_pre = &BMPSAtSlice_(UP, row1);
+      bmps_post = &BMPSAtSlice_(DOWN, row2);
       break;
     }
   }

@@ -147,7 +147,7 @@ using BMPSTruncatePara [[deprecated("Use BMPSTruncateParams<> instead")]] = BMPS
  * - UP/RIGHT: Reversed order. bmps[0] = rightmost/bottommost column, bmps[i] = col N-1-i
  * - DOWN/LEFT: Natural order. bmps[0] = leftmost/topmost column, bmps[i] = col i
  *
- * This convention is internally handled by AlignTransferMPOTensorOrder_() during MultiplyMPO.
+ * This convention is internally handled by ReverseTransferMPOIfNeeded_() during MultiplyMPO.
  * Use AtLogicalCol() for position-independent access by logical column index.
  */
 template<typename TenElemT, typename QNT>
@@ -257,7 +257,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
 
   void Reverse();
 
-  void InplaceMultiplyMPO(TransferMPO &, const size_t, const size_t, const RealT,
+  void MultiplyMPOInplace(TransferMPO &, const size_t, const size_t, const RealT,
                           const size_t max_iter, //only valid for variational methods
                           const CompressMPSScheme &scheme);
 
@@ -279,10 +279,54 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
 
  private:
 
+  /// MPO leg index of the "previous" posting direction: (MPOIndex(position_) + 3) % 4.
+  size_t PrePostLegIndex_() const { return (MPOIndex(position_) + 3) % 4; }
+
+  /// MPO leg index of the "next" posting direction: ((size_t)(position_) + 1) % 4.
+  size_t NextPostLegIndex_() const { return ((size_t)(position_) + 1) % 4; }
+
   /**
- * reverse mpo tensor order if the position is RIGHT or UP, so that it is aligned with boundary-MPS tensor order.
- */
-  void AlignTransferMPOTensorOrder_(TransferMPO &) const;
+   * Build the initial left and right environment boundary tensors for
+   * variational MPO compression.
+   *
+   * @param mpo        The transfer MPO (already in storage order).
+   * @param res_dag    The current (conjugated) result BMPS.
+   * @return (lenvs, renvs) each containing one boundary tensor.
+   */
+  std::pair<std::vector<Tensor>, std::vector<Tensor>>
+  MakeEnvironmentBoundaries_(const TransferMPO &mpo,
+                             const BMPS<TenElemT, QNT> &res_dag) const;
+
+  /**
+   * Grow right environment tensors from site N-1 down to site 2.
+   *
+   * Appends (N-2) tensors to @p renvs by contracting this MPS, @p mpo, and @p res_dag
+   * from the right boundary inward.
+   *
+   * @param mpo      The transfer MPO (already in storage order).
+   * @param res_dag  The current (conjugated) result BMPS.
+   * @param renvs    Right environments vector; must already contain the boundary tensor.
+   */
+  void GrowRightEnvironments_(const TransferMPO &mpo,
+                              const BMPS<TenElemT, QNT> &res_dag,
+                              std::vector<Tensor> &renvs) const;
+
+  /**
+   * Convert a conjugated result BMPS into the final compressed BMPS.
+   *
+   * Applies Dag() to every tensor, sets all canonical types to RIGHT,
+   * and sets center = 0.
+   *
+   * @param res_dag  The conjugated result BMPS (consumed via move).
+   * @return The finalized BMPS ready for return.
+   */
+  static BMPS<TenElemT, QNT> FinalizeCompressedBMPS_(BMPS<TenElemT, QNT> res_dag);
+
+  /**
+   * Reverse MPO tensor order if the position is RIGHT or UP,
+   * so that it matches the boundary-MPS storage order.
+   */
+  void ReverseTransferMPOIfNeeded_(TransferMPO &) const;
 
   BMPS MultiplyMPOSVDCompress_(const TransferMPO &,
                                const size_t, const size_t, const RealT,
@@ -294,17 +338,16 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   // strictly, 1-site variational compress method is only suitable for the cases those tensors have no symmetry constrain.
   BMPS MultiplyMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
                                             const RealT variational_converge_tol, const size_t max_iter) const;
-  BMPS InitGuessForVariationalMPOMultiplication_(const TransferMPO &, const size_t, const size_t, const RealT) const;
+  BMPS MakeVariationalInitGuess_(const TransferMPO &, const size_t, const size_t, const RealT) const;
 
-  // todo code.
+  // TODO(wanghaoxin): validate fermionic case and add unit test coverage
   RealT RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const RealT);
 
-  // todo code.
-  BMPS
-  InitGuessForVariationalMPOMultiplicationWithPhyIdx_(const TransferMPO &,
-                                                      const size_t,
-                                                      const size_t,
-                                                      const RealT) const;
+  // TODO(wanghaoxin): validate with variational compress schemes beyond SVD
+  BMPS MakeVariationalInitGuessWithPhyIdx_(const TransferMPO &,
+                                           const size_t,
+                                           const size_t,
+                                           const RealT) const;
 
   const BMPSPOSITION
       position_; //possible to remove this member and replace it with function parameter if the function needs

@@ -50,19 +50,19 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceOneSiteTrace(const TensorNetwork2
 #endif
   const Tensor *up_ten, *down_ten, *left_ten, *right_ten;
   if (mps_orient == HORIZONTAL) {
-    const Tensor &up_mps_ten = bmps_set_.at(UP)[row][tn.cols() - col - 1];
-    const Tensor &down_mps_ten = bmps_set_.at(DOWN)[tn.rows() - row - 1][col];
+    const auto &up_mps_ten = BMPSAtSlice_(UP, row).AtLogicalCol(col);
+    const auto &down_mps_ten = BMPSAtSlice_(DOWN, row).AtLogicalCol(col);
     const Tensor &left_bten = bten_set_.at(LEFT)[col];
-    const Tensor &right_bten = bten_set_.at(RIGHT)[tn.cols() - col - 1];
+    const auto &right_bten = BTenAtSlice_(RIGHT, col);
     up_ten = &up_mps_ten;
     down_ten = &down_mps_ten;
     left_ten = &left_bten;
     right_ten = &right_bten;
   } else {
-    const Tensor &left_mps_ten = bmps_set_.at(LEFT)[col][row];
-    const Tensor &right_mps_ten = bmps_set_.at(RIGHT)[tn.cols() - col - 1][tn.rows() - row - 1];
+    const auto &left_mps_ten = BMPSAtSlice_(LEFT, col).AtLogicalCol(row);
+    const auto &right_mps_ten = BMPSAtSlice_(RIGHT, col).AtLogicalCol(row);
     const Tensor &up_bten = bten_set_.at(UP)[row];
-    const Tensor &down_bten = bten_set_.at(DOWN)[tn.rows() - row - 1];
+    const auto &down_bten = BTenAtSlice_(DOWN, row);
     up_ten = &up_bten;
     down_ten = &down_bten;
     left_ten = &left_mps_ten;
@@ -117,8 +117,8 @@ BMPSContractor<TenElemT, QNT>::ReplaceNNSiteTrace(const TensorNetwork2D<TenElemT
     const size_t row = site_a[0];
     const size_t col_a = site_a[1];
 
-    const Tensor &up_mps_ten_a = bmps_set_.at(UP)[row][tn.cols() - col_a - 1];
-    const Tensor &down_mps_ten_a = bmps_set_.at(DOWN)[tn.rows() - row - 1][col_a];
+    const auto &up_mps_ten_a = BMPSAtSlice_(UP, row).AtLogicalCol(col_a);
+    const auto &down_mps_ten_a = BMPSAtSlice_(DOWN, row).AtLogicalCol(col_a);
     if constexpr (Tensor::IsFermionic()) {
       Contract<TenElemT, QNT, true, true>(up_mps_ten_a, bten_set_.at(LEFT)[col_a], 2, 0, 1, tmp[0]);
       tmp[0].FuseIndex(0, 5);
@@ -132,11 +132,11 @@ BMPSContractor<TenElemT, QNT>::ReplaceNNSiteTrace(const TensorNetwork2D<TenElemT
     }
 
     size_t col_b = site_b[1];
-    const Tensor &up_mps_ten_b = bmps_set_.at(UP)[row][tn.cols() - col_b - 1];
-    const Tensor &down_mps_ten_b = bmps_set_.at(DOWN)[tn.rows() - row - 1][col_b];
+    const auto &up_mps_ten_b = BMPSAtSlice_(UP, row).AtLogicalCol(col_b);
+    const auto &down_mps_ten_b = BMPSAtSlice_(DOWN, row).AtLogicalCol(col_b);
     if constexpr (Tensor::IsFermionic()) {
       Contract<TenElemT, QNT, true, true>(down_mps_ten_b,
-                                          bten_set_.at(RIGHT)[tn.cols() - col_b - 1],
+                                          BTenAtSlice_(RIGHT, col_b),
                                           2,
                                           0,
                                           1,
@@ -147,7 +147,7 @@ BMPSContractor<TenElemT, QNT>::ReplaceNNSiteTrace(const TensorNetwork2D<TenElemT
       tmp[5].FuseIndex(0, 5);
     } else {
       Contract<TenElemT, QNT, true, true>(down_mps_ten_b,
-                                          bten_set_.at(RIGHT)[tn.cols() - col_b - 1],
+                                          BTenAtSlice_(RIGHT, col_b),
                                           2,
                                           0,
                                           1,
@@ -158,8 +158,8 @@ BMPSContractor<TenElemT, QNT>::ReplaceNNSiteTrace(const TensorNetwork2D<TenElemT
   } else {
     const size_t col = site_a[1];
     const size_t row_a = site_a[0];
-    const Tensor &left_mps_ten_a = bmps_set_.at(LEFT)[col][row_a];
-    const Tensor &right_mps_ten_a = bmps_set_.at(RIGHT)[tn.cols() - col - 1][tn.rows() - row_a - 1];
+    const auto &left_mps_ten_a = BMPSAtSlice_(LEFT, col).AtLogicalCol(row_a);
+    const auto &right_mps_ten_a = BMPSAtSlice_(RIGHT, col).AtLogicalCol(row_a);
     if constexpr (Tensor::IsFermionic()) {
       Contract<TenElemT, QNT, true, true>(right_mps_ten_a, bten_set_.at(UP)[row_a], 2, 0, 1, tmp[0]);
       tmp[0].FuseIndex(0, 5);
@@ -173,11 +173,11 @@ BMPSContractor<TenElemT, QNT>::ReplaceNNSiteTrace(const TensorNetwork2D<TenElemT
     }
 
     const size_t row_b = site_b[0];
-    const Tensor &left_mps_ten_b = bmps_set_.at(LEFT)[col][row_b];
-    const Tensor &right_mps_ten_b = bmps_set_.at(RIGHT)[tn.cols() - col - 1][tn.rows() - row_b - 1];
+    const auto &left_mps_ten_b = BMPSAtSlice_(LEFT, col).AtLogicalCol(row_b);
+    const auto &right_mps_ten_b = BMPSAtSlice_(RIGHT, col).AtLogicalCol(row_b);
     if constexpr (Tensor::IsFermionic()) {
       Contract<TenElemT, QNT, true, true>(left_mps_ten_b,
-                                          bten_set_.at(DOWN)[tn.rows() - row_b - 1],
+                                          BTenAtSlice_(DOWN, row_b),
                                           2, 0, 1, tmp[3]);
       tmp[3].FuseIndex(0, 5);
       Contract(&tmp[3], {2, 3}, &ten_b, {0, 1}, &tmp[4]);
@@ -185,7 +185,7 @@ BMPSContractor<TenElemT, QNT>::ReplaceNNSiteTrace(const TensorNetwork2D<TenElemT
       tmp[5].FuseIndex(0, 5);
     } else {
       Contract<TenElemT, QNT, true, true>(left_mps_ten_b,
-                                          bten_set_.at(DOWN)[tn.rows() - row_b - 1],
+                                          BTenAtSlice_(DOWN, row_b),
                                           2,
                                           0,
                                           1,
@@ -216,22 +216,15 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceNNNSiteTrace(const TensorNetwork2
   const size_t col2 = col1 + 1;
   Tensor tmp[9];
   if (mps_orient == HORIZONTAL) {
-#ifndef NDEBUG
-    const Tensor &mps_ten1 = bmps_set_.at(UP).at(row1)[tn.cols() - col1 - 1];
-    const Tensor &mps_ten2 = bmps_set_.at(DOWN).at(tn.rows() - 1 - row2)[col1];
-    const Tensor &mps_ten3 = bmps_set_.at(DOWN).at(tn.rows() - 1 - row2)[col2];
-    const Tensor &mps_ten4 = bmps_set_.at(UP).at(row1)[tn.cols() - col2 - 1];
-#else
-    const Tensor &mps_ten1 = bmps_set_.at(UP)[row1][tn.cols() - col1 - 1];
-    const Tensor &mps_ten2 = bmps_set_.at(DOWN)[tn.rows() - 1 - row2][col1];
-    const Tensor &mps_ten3 = bmps_set_.at(DOWN)[tn.rows() - 1 - row2][col2];
-    const Tensor &mps_ten4 = bmps_set_.at(UP)[row1][tn.cols() - col2 - 1];
-#endif
+    const auto &mps_ten1 = BMPSAtSlice_(UP, row1).AtLogicalCol(col1);
+    const auto &mps_ten2 = BMPSAtSlice_(DOWN, row2).AtLogicalCol(col1);
+    const auto &mps_ten3 = BMPSAtSlice_(DOWN, row2).AtLogicalCol(col2);
+    const auto &mps_ten4 = BMPSAtSlice_(UP, row1).AtLogicalCol(col2);
 
     Tensor *mpo_ten0, *mpo_ten2;
     const Tensor *mpo_ten1, *mpo_ten3;
     const Tensor &left_bten = bten_set2_.at(LEFT)[col1];
-    const Tensor &right_bten = bten_set2_.at(RIGHT)[tn.cols() - col2 - 1];
+    const auto &right_bten = BTen2AtSlice_(RIGHT, col2);
     if (nnn_dir == LEFTUP_TO_RIGHTDOWN) {
       if (Tensor::IsFermionic()) {
         mpo_ten0 = const_cast<Tensor *>(&ten_left);
@@ -294,19 +287,12 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceNNNSiteTrace(const TensorNetwork2
     assert(!Tensor::IsFermionic());
     Tensor mpo_ten[4];
     Tensor tmp[9];
-#ifndef NDEBUG
-    const Tensor &mps_ten1 = bmps_set_.at(LEFT).at(col1)[row2];
-    const Tensor &mps_ten2 = bmps_set_.at(RIGHT).at(tn.cols() - 1 - col2)[tn.rows() - 1 - row2];
-    const Tensor &mps_ten3 = bmps_set_.at(LEFT).at(col1)[row1];
-    const Tensor &mps_ten4 = bmps_set_.at(RIGHT).at(tn.cols() - 1 - col2)[tn.rows() - 1 - row1];
-#else
-    const Tensor &mps_ten1 = bmps_set_.at(LEFT)[col1][row2];
-    const Tensor &mps_ten2 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col2][tn.rows() - 1 - row2];
-    const Tensor &mps_ten3 = bmps_set_.at(LEFT)[col1][row1];
-    const Tensor &mps_ten4 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col2][tn.rows() - 1 - row1];
-#endif
+    const auto &mps_ten1 = BMPSAtSlice_(LEFT, col1).AtLogicalCol(row2);
+    const auto &mps_ten2 = BMPSAtSlice_(RIGHT, col2).AtLogicalCol(row2);
+    const auto &mps_ten3 = BMPSAtSlice_(LEFT, col1).AtLogicalCol(row1);
+    const auto &mps_ten4 = BMPSAtSlice_(RIGHT, col2).AtLogicalCol(row1);
     const Tensor &top_bten = bten_set2_.at(UP)[row1];
-    const Tensor &bottom_bten = bten_set2_.at(DOWN)[tn.rows() - row2 - 1];
+    const auto &bottom_bten = BTen2AtSlice_(DOWN, row2);
 
     if (nnn_dir == LEFTUP_TO_RIGHTDOWN) {
       mpo_ten[0] = tn({row2, col1});
@@ -349,25 +335,14 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceTNNSiteTrace(const TensorNetwork2
     const size_t col0 = site0.col();
     const size_t col1 = col0 + 1;
     const size_t col2 = col0 + 2;
-#ifndef NDEBUG
-    const Tensor &mps_ten0 = bmps_set_.at(UP).at(row)[tn.cols() - col0 - 1];
-    const Tensor &mps_ten1 = bmps_set_.at(DOWN).at(tn.rows() - 1 - row)[col0];
-    const Tensor &mps_ten2 = bmps_set_.at(UP).at(row)[tn.cols() - col1 - 1];
-    const Tensor &mps_ten3 = bmps_set_.at(DOWN).at(tn.rows() - 1 - row)[col1];
-    const Tensor &mps_ten4 = bmps_set_.at(UP).at(row)[tn.cols() - col2 - 1];
-    const Tensor &mps_ten5 = bmps_set_.at(DOWN).at(tn.rows() - 1 - row)[col2];
-    const Tensor &left_bten = bten_set_.at(LEFT).at(col0);
-    const Tensor &right_bten = bten_set_.at(RIGHT).at(tn.cols() - col2 - 1);
-#else
-    const Tensor &mps_ten0 = bmps_set_.at(UP)[row][tn.cols() - col0 - 1];
-    const Tensor &mps_ten1 = bmps_set_.at(DOWN)[tn.rows() - 1 - row][col0];
-    const Tensor &mps_ten2 = bmps_set_.at(UP)[row][tn.cols() - col1 - 1];
-    const Tensor &mps_ten3 = bmps_set_.at(DOWN)[tn.rows() - 1 - row][col1];
-    const Tensor &mps_ten4 = bmps_set_.at(UP)[row][tn.cols() - col2 - 1];
-    const Tensor &mps_ten5 = bmps_set_.at(DOWN)[tn.rows() - 1 - row][col2];
+    const auto &mps_ten0 = BMPSAtSlice_(UP, row).AtLogicalCol(col0);
+    const auto &mps_ten1 = BMPSAtSlice_(DOWN, row).AtLogicalCol(col0);
+    const auto &mps_ten2 = BMPSAtSlice_(UP, row).AtLogicalCol(col1);
+    const auto &mps_ten3 = BMPSAtSlice_(DOWN, row).AtLogicalCol(col1);
+    const auto &mps_ten4 = BMPSAtSlice_(UP, row).AtLogicalCol(col2);
+    const auto &mps_ten5 = BMPSAtSlice_(DOWN, row).AtLogicalCol(col2);
     const Tensor &left_bten = bten_set_.at(LEFT)[col0];
-    const Tensor &right_bten = bten_set_.at(RIGHT)[tn.cols() - col2 - 1];
-#endif
+    const auto &right_bten = BTenAtSlice_(RIGHT, col2);
     if constexpr (Tensor::IsFermionic()) {
       Tensor next_left_bten1 =
           FermionGrowBTenStep(LEFT, left_bten,
@@ -406,15 +381,15 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceTNNSiteTrace(const TensorNetwork2
     const size_t row1 = row0 + 1;
     const size_t row2 = row1 + 1;
 
-    const Tensor &mps_ten0 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col][tn.rows() - 1 - row0];
-    const Tensor &mps_ten1 = bmps_set_.at(LEFT)[col][row0];
-    const Tensor &mps_ten2 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col][tn.rows() - 1 - row1];
-    const Tensor &mps_ten3 = bmps_set_.at(LEFT)[col][row1];
-    const Tensor &mps_ten4 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col][tn.rows() - 1 - row2];
-    const Tensor &mps_ten5 = bmps_set_.at(LEFT)[col][row2];
+    const auto &mps_ten0 = BMPSAtSlice_(RIGHT, col).AtLogicalCol(row0);
+    const auto &mps_ten1 = BMPSAtSlice_(LEFT, col).AtLogicalCol(row0);
+    const auto &mps_ten2 = BMPSAtSlice_(RIGHT, col).AtLogicalCol(row1);
+    const auto &mps_ten3 = BMPSAtSlice_(LEFT, col).AtLogicalCol(row1);
+    const auto &mps_ten4 = BMPSAtSlice_(RIGHT, col).AtLogicalCol(row2);
+    const auto &mps_ten5 = BMPSAtSlice_(LEFT, col).AtLogicalCol(row2);
 
     const Tensor &top_bten = bten_set_.at(UP)[row0];
-    const Tensor &bottom_bten = bten_set_.at(DOWN)[tn.rows() - row2 - 1];
+    const auto &bottom_bten = BTenAtSlice_(DOWN, row2);
 
     if constexpr (Tensor::IsFermionic()) {
       Tensor next_up_bten1 =
@@ -463,15 +438,15 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const Tenso
     const size_t col2 = col1 + 1;
     const size_t col3 = col2 + 1;
 
-    const Tensor &mps_ten1 = bmps_set_.at(UP)[row1][tn.cols() - col1 - 1];
-    const Tensor &mps_ten2 = bmps_set_.at(DOWN)[tn.rows() - 1 - row2][col1];
-    const Tensor &mps_ten3 = bmps_set_.at(UP)[row1][tn.cols() - col2 - 1];
-    const Tensor &mps_ten4 = bmps_set_.at(DOWN)[tn.rows() - 1 - row2][col2];
-    const Tensor &mps_ten5 = bmps_set_.at(UP)[row1][tn.cols() - col3 - 1];
-    const Tensor &mps_ten6 = bmps_set_.at(DOWN)[tn.rows() - 1 - row2][col3];
+    const auto &mps_ten1 = BMPSAtSlice_(UP, row1).AtLogicalCol(col1);
+    const auto &mps_ten2 = BMPSAtSlice_(DOWN, row2).AtLogicalCol(col1);
+    const auto &mps_ten3 = BMPSAtSlice_(UP, row1).AtLogicalCol(col2);
+    const auto &mps_ten4 = BMPSAtSlice_(DOWN, row2).AtLogicalCol(col2);
+    const auto &mps_ten5 = BMPSAtSlice_(UP, row1).AtLogicalCol(col3);
+    const auto &mps_ten6 = BMPSAtSlice_(DOWN, row2).AtLogicalCol(col3);
 
     const Tensor &left_bten = bten_set2_.at(LEFT)[col1];
-    const Tensor &right_bten = bten_set2_.at(RIGHT)[tn.cols() - col3 - 1];
+    const auto &right_bten = BTen2AtSlice_(RIGHT, col3);
 
     if (sqrt5link_dir == LEFTUP_TO_RIGHTDOWN) {
       mpo_ten[0] = ten_left;
@@ -513,15 +488,15 @@ TenElemT BMPSContractor<TenElemT, QNT>::ReplaceSqrt5DistTwoSiteTrace(const Tenso
     const size_t col1 = left_up_site.col();
     const size_t col2 = col1 + 1;
 
-    const Tensor &mps_ten1 = bmps_set_.at(LEFT)[col1][row3];
-    const Tensor &mps_ten2 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col2][tn.rows() - 1 - row3];
-    const Tensor &mps_ten3 = bmps_set_.at(LEFT)[col1][row2];
-    const Tensor &mps_ten4 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col2][tn.rows() - 1 - row2];
-    const Tensor &mps_ten5 = bmps_set_.at(LEFT)[col1][row1];
-    const Tensor &mps_ten6 = bmps_set_.at(RIGHT)[tn.cols() - 1 - col2][tn.rows() - 1 - row1];
+    const auto &mps_ten1 = BMPSAtSlice_(LEFT, col1).AtLogicalCol(row3);
+    const auto &mps_ten2 = BMPSAtSlice_(RIGHT, col2).AtLogicalCol(row3);
+    const auto &mps_ten3 = BMPSAtSlice_(LEFT, col1).AtLogicalCol(row2);
+    const auto &mps_ten4 = BMPSAtSlice_(RIGHT, col2).AtLogicalCol(row2);
+    const auto &mps_ten5 = BMPSAtSlice_(LEFT, col1).AtLogicalCol(row1);
+    const auto &mps_ten6 = BMPSAtSlice_(RIGHT, col2).AtLogicalCol(row1);
 
     const Tensor &top_bten = bten_set2_.at(UP)[row1];
-    const Tensor &bottom_bten = bten_set2_.at(DOWN)[tn.rows() - row3 - 1];
+    const auto &bottom_bten = BTen2AtSlice_(DOWN, row3);
 
     mpo_ten[2] = tn({row2, col1});
     mpo_ten[3] = tn({row2, col2});

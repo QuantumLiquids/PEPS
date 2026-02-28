@@ -45,6 +45,18 @@ class MonteCarloSweepUpdaterBase {
   std::uniform_real_distribution<double> u_double_ = std::uniform_real_distribution<double>(0, 1.0);
   std::mt19937 random_engine_;
 };
+// TODO: Row-based direct-sampling MC updater
+// For one row of L sites in the BMPS, directly sample a full-row
+// configuration from the MPS probability distribution using sequential
+// conditional sampling:
+//   P(s_1,...,s_L) = P(s_1) * P(s_2|s_1) * ... * P(s_L|s_1,...,s_{L-1})
+// Each conditional is obtained from the reduced density matrix at site k,
+// computed by contracting the BMPS from both ends up to site k.
+// With U(1) symmetry, the local Hilbert space at each step is restricted
+// by the remaining quantum number budget, reducing the effective choices.
+// This provides exact sampling within the BMPS approximation, dramatically
+// improving ergodicity compared to local single-bond Metropolis updates.
+
 }//qlpeps
 
 #endif //QLPEPS_VMC_BASIC_CONFIGURATION_UPDATE_STRATEGIES_MONTE_CARLO_SWEEP_UPDATER_BASE_H

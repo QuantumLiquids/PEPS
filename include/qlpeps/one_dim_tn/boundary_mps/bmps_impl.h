@@ -175,7 +175,7 @@ void BMPS<TenElemT, QNT>::LeftCanonicalizeTen(const size_t site_idx) {
 
 template<typename TenElemT, typename QNT>
 qlten::QLTensor<typename BMPS<TenElemT, QNT>::RealT, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
-  ///< TODO: using LU decomposition
+  ///< TODO: replace SVD with LQ decomposition (available since TensorToolkit 2042b5a)
   assert(site_idx > 0);
   size_t ldims = 1;
   Tensor u;
@@ -310,7 +310,7 @@ void BMPS<TenElemT, QNT>::Reverse() {
 
 template<typename TenElemT, typename QNT>
 void
-BMPS<TenElemT, QNT>::InplaceMultiplyMPO(BMPS::TransferMPO &mpo,
+BMPS<TenElemT, QNT>::MultiplyMPOInplace(BMPS::TransferMPO &mpo,
                                         const size_t Dmin, const size_t Dmax,
                                         const typename qlten::RealTypeTrait<TenElemT>::type trunc_err, const size_t iter_max,
                                         const CompressMPSScheme &scheme) {
@@ -391,7 +391,7 @@ BMPS<TenElemT, QNT>::MultiplyMPO(BMPS::TransferMPO &mpo, const CompressMPSScheme
   using RealT = typename BMPS<TenElemT, QNT>::RealT;
   const size_t N = this->size();
   assert(mpo.size() == N);
-  AlignTransferMPOTensorOrder_(mpo);
+  ReverseTransferMPOIfNeeded_(mpo);
   if (N == 2 || scheme == CompressMPSScheme::SVD_COMPRESS) {
     RealT actual_trunc_err_max;
     size_t actual_D_max;
@@ -436,8 +436,8 @@ BMPS<TenElemT, QNT>::MultiplyMPOWithPhyIdx(BMPS::TransferMPO &mpo,
                                            const CompressMPSScheme &scheme) const {
   using RealT = typename BMPS<TenElemT, QNT>::RealT;
   assert(mpo.size() == this->size());
-  size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
-  size_t next_post = ((size_t) (position_) + 1) % 4;
+  const size_t pre_post = PrePostLegIndex_();
+  const size_t next_post = NextPostLegIndex_();
   switch (scheme) {
     case CompressMPSScheme::SVD_COMPRESS: {
       BMPS<TenElemT, QNT> res(position_, this->size());
@@ -517,7 +517,7 @@ BMPS<TenElemT, QNT>::MultiplyMPOWithPhyIdx(BMPS::TransferMPO &mpo,
         return MultiplyMPOWithPhyIdx(mpo, Dmin, Dmax,
                                      trunc_err, iter_max, CompressMPSScheme::SVD_COMPRESS);
       }
-      BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplicationWithPhyIdx_(mpo, Dmin, Dmax, trunc_err);
+      BMPS<TenElemT, QNT> res_init = MakeVariationalInitGuessWithPhyIdx_(mpo, Dmin, Dmax, trunc_err);
       BMPS<TenElemT, QNT> res_dag(res_init);
       for (size_t i = 0; i < res_dag.size(); i++) {
         res_dag[i].Dag();
@@ -671,10 +671,65 @@ BMPS<TenElemT, QNT>::MultiplyMPOWithPhyIdx(BMPS::TransferMPO &mpo,
 }
 
 template<typename TenElemT, typename QNT>
-void BMPS<TenElemT, QNT>::AlignTransferMPOTensorOrder_(TransferMPO &mpo) const {
+void BMPS<TenElemT, QNT>::ReverseTransferMPOIfNeeded_(TransferMPO &mpo) const {
   if (MPOIndex(position_) > 1) {  //RIGHT or UP
     std::reverse(mpo.begin(), mpo.end());
   }
+}
+
+template<typename TenElemT, typename QNT>
+std::pair<std::vector<QLTensor<TenElemT, QNT>>, std::vector<QLTensor<TenElemT, QNT>>>
+BMPS<TenElemT, QNT>::MakeEnvironmentBoundaries_(const TransferMPO &mpo,
+                                                 const BMPS<TenElemT, QNT> &res_dag) const {
+  const size_t N = this->size();
+  const size_t pre_post = PrePostLegIndex_();
+  const size_t next_post = NextPostLegIndex_();
+
+  std::vector<Tensor> lenvs, renvs;
+  lenvs.reserve(N - 1);
+  renvs.reserve(N - 1);
+
+  IndexT index2 = InverseIndex((*this)[0].GetIndex(0));
+  IndexT index1 = InverseIndex(mpo[0]->GetIndex(pre_post));
+  IndexT index0 = InverseIndex(res_dag[0].GetIndex(0));
+  auto lenv0 = Tensor({index0, index1, index2});
+  lenv0({0, 0, 0}) = 1;
+  lenvs.push_back(lenv0);
+
+  index0 = InverseIndex((*this)[N - 1].GetIndex(2));
+  index1 = InverseIndex(mpo[N - 1]->GetIndex(next_post));
+  index2 = InverseIndex(res_dag[N - 1].GetIndex(2));
+  auto renv0 = Tensor({index0, index1, index2});
+  renv0({0, 0, 0}) = 1;
+  renvs.push_back(renv0);
+
+  return {std::move(lenvs), std::move(renvs)};
+}
+
+template<typename TenElemT, typename QNT>
+void BMPS<TenElemT, QNT>::GrowRightEnvironments_(const TransferMPO &mpo,
+                                                   const BMPS<TenElemT, QNT> &res_dag,
+                                                   std::vector<Tensor> &renvs) const {
+  const size_t N = this->size();
+  for (size_t i = N - 1; i > 1; i--) {
+    Tensor renv_next, temp_ten, temp_ten2;
+    Contract<TenElemT, QNT, true, true>((*this)[i], renvs.back(), 2, 0, 1, temp_ten);
+    Contract<TenElemT, QNT, false, false>(temp_ten, *mpo[i], 1, position_, 2, temp_ten2);
+    Contract(&temp_ten2, {2, 0}, res_dag(i), {1, 2}, &renv_next);
+    renvs.emplace_back(renv_next);
+  }
+}
+
+template<typename TenElemT, typename QNT>
+BMPS<TenElemT, QNT>
+BMPS<TenElemT, QNT>::FinalizeCompressedBMPS_(BMPS<TenElemT, QNT> res_dag) {
+  BMPS<TenElemT, QNT> res(std::move(res_dag));
+  for (size_t i = 0; i < res.size(); i++) {
+    res[i].Dag();
+    res.tens_cano_type_[i] = MPSTenCanoType::RIGHT;
+  }
+  res.center_ = 0;
+  return res;
 }
 
 template<typename TenElemT, typename QNT>
@@ -688,7 +743,7 @@ BMPS<TenElemT, QNT>::MultiplyMPOSVDCompress_(const TransferMPO &mpo,
 #ifndef NDEBUG
   assert(mpo.size() == N);
 #endif
-  size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
+  const size_t pre_post = PrePostLegIndex_();
   BMPS<TenElemT, QNT> res_mps(position_, N);
   IndexT idx1 = InverseIndex(mpo[0]->GetIndex(pre_post));
   IndexT idx2 = InverseIndex((*this)[0].GetIndex(0));
@@ -797,40 +852,16 @@ BMPS<TenElemT, QNT>::MultiplyMPO2SiteVariationalCompress_(const TransferMPO &mpo
 //  static_assert(!Tensor::IsFermionic());
   assert(!Tensor::IsFermionic());
   const size_t N = this->size();
-  size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
-  size_t next_post = ((size_t) (position_) + 1) % 4;
+  const size_t pre_post = PrePostLegIndex_();
 
-  BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmin, Dmax, trunc_err);
+  BMPS<TenElemT, QNT> res_init = MakeVariationalInitGuess_(mpo, Dmin, Dmax, trunc_err);
   BMPS<TenElemT, QNT> res_dag(res_init);
   for (size_t i = 0; i < res_dag.size(); i++) {
     res_dag[i].Dag();
   }
 
-  std::vector<Tensor> lenvs, renvs;  // from the view of down mps
-  lenvs.reserve(N - 1);
-  renvs.reserve(N - 1);
-  IndexT index2 =
-      InverseIndex((*this)[0].GetIndex(0)); // for fermion case, the boundary index should always be even qn trivial index.
-  IndexT index1 = InverseIndex(mpo[0]->GetIndex(pre_post));
-  IndexT index0 = InverseIndex(res_dag[0].GetIndex(0));
-  auto lenv0 = Tensor({index0, index1, index2});
-  lenv0({0, 0, 0}) = 1;
-  lenvs.push_back(lenv0);
-  index0 = InverseIndex((*this)[N - 1].GetIndex(2));
-  index1 = InverseIndex(mpo[N - 1]->GetIndex(next_post));
-  index2 = InverseIndex(res_dag[N - 1].GetIndex(2));
-  auto renv0 = Tensor({index0, index1, index2});
-  renv0({0, 0, 0}) = 1;
-  renvs.push_back(renv0);
-
-  //initially grow the renvs
-  for (size_t i = N - 1; i > 1; i--) {
-    Tensor renv_next, temp_ten, temp_ten2;
-    Contract<TenElemT, QNT, true, true>((*this)[i], renvs.back(), 2, 0, 1, temp_ten);
-    Contract<TenElemT, QNT, false, false>(temp_ten, *mpo[i], 1, position_, 2, temp_ten2);
-    Contract(&temp_ten2, {2, 0}, res_dag(i), {1, 2}, &renv_next);
-    renvs.emplace_back(renv_next);
-  }
+  auto [lenvs, renvs] = MakeEnvironmentBoundaries_(mpo, res_dag);
+  GrowRightEnvironments_(mpo, res_dag, renvs);
 
 QLTensor<RealT, QNT> s12bond_last;
   for (size_t iter = 0; iter < max_iter; iter++) {
@@ -935,12 +966,7 @@ QLTensor<RealT, QNT> s12bond_last;
   delete (res_dag(1));
   res_dag(1) = pvt;
 
-  BMPS<TenElemT, QNT> res(std::move(res_dag));
-  for (size_t i = 0; i < res.size(); i++) {
-    res[i].Dag();
-    res.tens_cano_type_[i] = MPSTenCanoType::RIGHT;
-  }
-  res.center_ = 0;
+  auto res = FinalizeCompressedBMPS_(std::move(res_dag));
 #ifndef NDEBUG
   MultiplyMPOResCheck_(mpo, true, *this, res, position_);
 #endif
@@ -959,40 +985,17 @@ BMPS<TenElemT, QNT>::MultiplyMPO1SiteVariationalCompress_(const TransferMPO &mpo
 //  static_assert(!Tensor::IsFermionic());
   assert(!Tensor::IsFermionic());
   const size_t N = this->size();
-  size_t pre_post = (MPOIndex(position_) + 3) % 4; //equivalent to -1, but work for 0
-  size_t next_post = ((size_t) (position_) + 1) % 4;
+  const size_t pre_post = PrePostLegIndex_();
 
   // Copy the code from VARIATIONAL2Site
-  BMPS<TenElemT, QNT> res_init = InitGuessForVariationalMPOMultiplication_(mpo, Dmax, Dmax, 0.0);
+  BMPS<TenElemT, QNT> res_init = MakeVariationalInitGuess_(mpo, Dmax, Dmax, 0.0);
   BMPS<TenElemT, QNT> res_dag(res_init);
   for (size_t i = 0; i < res_dag.size(); i++) {
     res_dag[i].Dag();
   } //initial guess for the result
 
-  std::vector<Tensor> lenvs, renvs;  // from the view of down mps
-  lenvs.reserve(N - 1);
-  renvs.reserve(N - 1);
-  IndexT index2 = InverseIndex((*this)[0].GetIndex(0));
-  IndexT index1 = InverseIndex(mpo[0]->GetIndex(pre_post));
-  IndexT index0 = InverseIndex(res_dag[0].GetIndex(0));
-  auto lenv0 = Tensor({index0, index1, index2});
-  lenv0({0, 0, 0}) = 1;
-  lenvs.push_back(lenv0);
-  index0 = InverseIndex((*this)[N - 1].GetIndex(2));
-  index1 = InverseIndex(mpo[N - 1]->GetIndex(next_post));
-  index2 = InverseIndex(res_dag[N - 1].GetIndex(2));
-  auto renv0 = Tensor({index0, index1, index2});
-  renv0({0, 0, 0}) = 1;
-  renvs.push_back(renv0);
-
-  //initially grow the renvs
-  for (size_t i = N - 1; i > 1; i--) {
-    Tensor renv_next, temp_ten, temp_ten2;
-    Contract<TenElemT, QNT, true, true>((*this)[i], renvs.back(), 2, 0, 1, temp_ten);
-    Contract<TenElemT, QNT, false, false>(temp_ten, *mpo[i], 1, position_, 2, temp_ten2);
-    Contract(&temp_ten2, {2, 0}, res_dag(i), {1, 2}, &renv_next);
-    renvs.emplace_back(renv_next);
-  }
+  auto [lenvs, renvs] = MakeEnvironmentBoundaries_(mpo, res_dag);
+  GrowRightEnvironments_(mpo, res_dag, renvs);
 
   // do once 2 site update to make sure the bond dimension = Dmax
   {
@@ -1140,20 +1143,16 @@ BMPS<TenElemT, QNT>::MultiplyMPO1SiteVariationalCompress_(const TransferMPO &mpo
   Contract(temp + 1, {0, 2}, &renvs.back(), {0, 1}, res_dag(0));
   res_dag(0)->Dag();
 
-  BMPS<TenElemT, QNT> res(std::move(res_dag));
-  for (size_t i = 0; i < res.size(); i++) {
-    res[i].Dag();
-    res.tens_cano_type_[i] = MPSTenCanoType::RIGHT;
-  }
-  res.center_ = 0;
+  auto res = FinalizeCompressedBMPS_(std::move(res_dag));
 #ifndef NDEBUG
   MultiplyMPOResCheck_(mpo, true, *this, res, position_);
 #endif
   return res;
 }
+
 template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
-BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(const BMPS::TransferMPO &mpo,
+BMPS<TenElemT, QNT>::MakeVariationalInitGuess_(const BMPS::TransferMPO &mpo,
                                                                const size_t Dmin,
                                                                const size_t Dmax,
                                                                const RealT trunc_err) const {
@@ -1194,7 +1193,7 @@ BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplication_(const BMPS::Trans
 ///< mpo is original mpo without reverse
 template<typename TenElemT, typename QNT>
 BMPS<TenElemT, QNT>
-BMPS<TenElemT, QNT>::InitGuessForVariationalMPOMultiplicationWithPhyIdx_(const BMPS::TransferMPO &mpo,
+BMPS<TenElemT, QNT>::MakeVariationalInitGuessWithPhyIdx_(const BMPS::TransferMPO &mpo,
                                                                          const size_t Dmin,
                                                                          const size_t Dmax,
                                                                          const RealT trunc_err) const {

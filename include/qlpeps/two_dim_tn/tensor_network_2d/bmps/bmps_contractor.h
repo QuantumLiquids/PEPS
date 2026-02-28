@@ -978,10 +978,49 @@ class BMPSContractor {
   void GrowBTen2Step(const TensorNetwork2D<TenElemT, QNT>& tn, const BTenPOSITION post, const size_t slice_num1);
 
  private:
+  /// Access the BMPS stack at a logical slice index, hiding the storage reversal.
+  /// For UP/LEFT: returns bmps_set_[pos][logical_idx] (natural).
+  /// For DOWN: returns bmps_set_[DOWN][rows_ - 1 - logical_idx] (reversed).
+  /// For RIGHT: returns bmps_set_[RIGHT][cols_ - 1 - logical_idx] (reversed).
+  const BMPST &BMPSAtSlice_(BMPSPOSITION pos, size_t logical_idx) const {
+    switch (pos) {
+      case DOWN:  return bmps_set_.at(DOWN).at(rows_ - 1 - logical_idx);
+      case RIGHT: return bmps_set_.at(RIGHT).at(cols_ - 1 - logical_idx);
+      default:    return bmps_set_.at(pos).at(logical_idx);
+    }
+  }
+
+  BMPST &BMPSAtSlice_(BMPSPOSITION pos, size_t logical_idx) {
+    switch (pos) {
+      case DOWN:  return bmps_set_.at(DOWN).at(rows_ - 1 - logical_idx);
+      case RIGHT: return bmps_set_.at(RIGHT).at(cols_ - 1 - logical_idx);
+      default:    return bmps_set_.at(pos).at(logical_idx);
+    }
+  }
+
+  /// Access the BTen at a logical slice index.
+  /// For LEFT/UP: natural. For RIGHT: cols_ - 1 - logical_idx. For DOWN: rows_ - 1 - logical_idx.
+  const Tensor &BTenAtSlice_(BTenPOSITION pos, size_t logical_idx) const {
+    switch (pos) {
+      case DOWN:  return bten_set_.at(DOWN).at(rows_ - 1 - logical_idx);
+      case RIGHT: return bten_set_.at(RIGHT).at(cols_ - 1 - logical_idx);
+      default:    return bten_set_.at(pos).at(logical_idx);
+    }
+  }
+
+  /// Access the BTen2 at a logical slice index.
+  const Tensor &BTen2AtSlice_(BTenPOSITION pos, size_t logical_idx) const {
+    switch (pos) {
+      case DOWN:  return bten_set2_.at(DOWN).at(rows_ - 1 - logical_idx);
+      case RIGHT: return bten_set2_.at(RIGHT).at(cols_ - 1 - logical_idx);
+      default:    return bten_set2_.at(pos).at(logical_idx);
+    }
+  }
+
   std::map<BMPSPOSITION, std::vector<BMPS<TenElemT, QNT>>> bmps_set_;
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set_;  // for 1 layer between two bmps
   std::map<BTenPOSITION, std::vector<Tensor>> bten_set2_; // for 2 layers between two bmps
-  
+
   size_t rows_;
   size_t cols_;
   std::optional<TruncateParams> trunc_params_;
