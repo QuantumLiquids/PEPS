@@ -54,13 +54,14 @@ VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contractor
   }, "EnergySolver must implement SetPsiConsistencyWarningParams(const PsiConsistencyWarningParams&).");
   energy_solver_.SetPsiConsistencyWarningParams(params_.runtime_params.psi_consistency);
 
-  // Check if using stochastic reconfiguration algorithm
-  stochastic_reconfiguration_update_class_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>();
+  // Algorithms that need O* samples and energy_samples (SR, MinSR)
+  needs_sr_buffers_ = params.optimizer_params.IsAlgorithm<StochasticReconfigurationParams>()
+                      || params.optimizer_params.IsAlgorithm<MinSRParams>();
 
   // Create persistent evaluator to reuse internal buffers; SR buffers toggled by algorithm type
   energy_grad_evaluator_ = std::make_unique<
       MCEnergyGradEvaluator<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>>(
-      monte_carlo_engine_, energy_solver_, monte_carlo_engine_.Comm(), stochastic_reconfiguration_update_class_,
+      monte_carlo_engine_, energy_solver_, monte_carlo_engine_.Comm(), needs_sr_buffers_,
       params_.runtime_params.psi_consistency);
 
   // Ensure necessary directories exist for output
@@ -139,9 +140,9 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
 
   // Use iterative optimization for all algorithms in the current implementation
   // Line search support can be added as enhancement later
-  if (stochastic_reconfiguration_update_class_) {
+  if (needs_sr_buffers_) {
     result = optimizer_.IterativeOptimize(monte_carlo_engine_.State(), energy_evaluator, optimization_callback_,
-                                          &Ostar_samples_, &Ostar_mean_);
+                                          &Ostar_samples_, &Ostar_mean_, &energy_samples_);
   } else {
     result = optimizer_.IterativeOptimize(monte_carlo_engine_.State(), energy_evaluator, optimization_callback_);
   }
@@ -199,12 +200,14 @@ VMCPEPSOptimizer<TenElemT,
   optimizer_.SetCurrentAcceptRates(result.accept_rates_avg);
 
   // Wire SR buffers into optimizer-owned storage when SR is enabled
-  if (stochastic_reconfiguration_update_class_) {
+  if (needs_sr_buffers_) {
     if (result.Ostar_mean.has_value()) {
       Ostar_mean_ = std::move(result.Ostar_mean.value());
     }
     Ostar_samples_ = std::move(result.Ostar_samples);
   }
+  // Always wire energy samples for MinSR (and potential future use)
+  energy_samples_ = std::move(result.energy_samples);
 
   // Track trajectories on master is handled inside Gather in evaluator; here we just return
   return std::make_tuple(result.energy, std::move(result.gradient), result.energy_error);
@@ -250,7 +253,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
     grad_norm_.reserve(params_.optimizer_params.base_params.max_iterations);
   }
 
-  if (stochastic_reconfiguration_update_class_) {
+  if (needs_sr_buffers_) {
     Ostar_samples_.reserve(mc_samples);
     // Note: Ostar_mean_ will be initialized in GatherStatisticEnergyAndGrad_ when needed
   }
@@ -334,6 +337,14 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
         std::cout << std::setw(indent) << "CG residual recompute interval:" << algo_params.cg_params.residual_recompute_interval
                   << "\n";
         std::cout << std::setw(indent) << "SR diagonal shift:" << algo_params.diag_shift << "\n";
+      } else if constexpr (std::is_same_v<T, MinSRParams>) {
+        std::cout << std::setw(indent) << "MinSR r_pinv:" << algo_params.r_pinv << "\n";
+        std::cout << std::setw(indent) << "MinSR a_pinv:" << algo_params.a_pinv << "\n";
+        std::cout << std::setw(indent) << "MinSR soft cutoff:" << (algo_params.soft_cutoff ? "true" : "false") << "\n";
+        const char *mode_str = "Auto";
+        if (algo_params.solver_mode == MinSRSolverMode::kReplicated) mode_str = "Replicated";
+        else if (algo_params.solver_mode == MinSRSolverMode::kDistributed) mode_str = "Distributed";
+        std::cout << std::setw(indent) << "MinSR solver mode:" << mode_str << "\n";
       }
     }, params_.optimizer_params.algorithm_params);
 

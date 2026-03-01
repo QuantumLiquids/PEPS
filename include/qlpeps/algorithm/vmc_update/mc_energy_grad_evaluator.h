@@ -71,6 +71,7 @@ class MCEnergyGradEvaluator {
     std::vector<double> accept_rates_avg; // Per-update-type average acceptance across samples
     std::optional<SITPST> Ostar_mean;     // Present when collect_sr_buffers==true
     std::vector<SITPST> Ostar_samples;    // Present when collect_sr_buffers==true
+    std::vector<TenElemT> energy_samples; // Per-rank raw E_loc values (always populated)
   };
 
   /**
@@ -134,9 +135,8 @@ class MCEnergyGradEvaluator {
    *   zero extra copies.
    *
    * Energy samples:
-   * - Per-rank raw energy samples are not returned by default. Historically they
-   *   were dumped for debugging from VMCPEPSOptimizer; this has been disabled
-   *   during refactor and can be reintroduced here behind a debug switch if needed.
+   * - Per-rank raw E_loc values are always collected and returned in
+   *   Result::energy_samples for use by MinSR and potential future consumers.
    *
    * Error estimation:
    * - The reported energy error is a coarse reference estimated via sqrt(N)-binning
@@ -319,6 +319,7 @@ class MCEnergyGradEvaluator {
       res.Ostar_mean = std::move(Ostar_mean);
       res.Ostar_samples = std::move(Ostar_samples);
     }
+    res.energy_samples = std::move(energy_samples);
     return res;
   }
 

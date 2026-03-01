@@ -20,6 +20,8 @@
 #include "qlpeps/optimizer/spike_detection.h"
 #include "qlpeps/utility/conjugate_gradient_solver.h"
 #include "qlpeps/optimizer/stochastic_reconfiguration_smatrix.h"
+#include "qlpeps/optimizer/minsr_tmatrix.h"
+#include "qlpeps/optimizer/minsr_eigensolve.h"
 
 namespace qlpeps {
 
@@ -149,6 +151,7 @@ class Optimizer {
    * @param callback Optional callback for monitoring progress
    * @param Ostar_samples Optional O^*(S) samples for stochastic reconfiguration
    * @param Ostar_mean Optional average O^* tensor for stochastic reconfiguration
+   * @param energy_samples Optional per-rank raw E_loc values for MinSR
    * @return Optimization result
    */
   OptimizationResult IterativeOptimize(
@@ -156,7 +159,8 @@ class Optimizer {
       std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT&)> energy_evaluator,
       const OptimizationCallback& callback = OptimizationCallback{},
       const std::vector<WaveFunctionT>* Ostar_samples = nullptr,
-      const WaveFunctionT* Ostar_mean = nullptr);
+      const WaveFunctionT* Ostar_mean = nullptr,
+      const std::vector<TenElemT>* energy_samples = nullptr);
 
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
@@ -203,6 +207,32 @@ class Optimizer {
       double learning_rate,
       const WaveFunctionT& init_guess,
       bool normalize = false);
+
+  /**
+   * @brief Apply MinSR update: T-matrix construction, eigensolve, back-substitution.
+   *
+   * MPI COMMUNICATION REQUIRED: Ring exchange for T-matrix construction,
+   * Allgather for replicated eigensolve, MPI_Reduce for back-substitution.
+   *
+   * @param current_state Current TPS state
+   * @param gradient Standard gradient (valid ONLY on master rank)
+   * @param Ostar_samples O^*(S) tensor samples (distributed across ranks)
+   * @param Ostar_mean Average O^* tensor (valid ONLY on master rank)
+   * @param energy_samples Per-rank raw E_loc values (distributed across ranks)
+   * @param energy Mean energy (broadcast to all ranks)
+   * @param learning_rate Learning rate
+   * @param params MinSR parameters
+   * @return Updated state and natural gradient norm (valid ONLY on master rank)
+   */
+  std::pair<WaveFunctionT, double> MinSRUpdate(
+      const WaveFunctionT& current_state,
+      const WaveFunctionT& gradient,
+      const std::vector<WaveFunctionT>& Ostar_samples,
+      const WaveFunctionT& Ostar_mean,
+      const std::vector<TenElemT>& energy_samples,
+      TenElemT energy,
+      double learning_rate,
+      const MinSRParams& params);
 
   /**
    * @brief Apply AdaGrad update with adaptive learning rates

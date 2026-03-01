@@ -94,6 +94,7 @@ double Optimizer<TenElemT, QNT>::GetCurrentLearningRate(size_t iteration, double
  * @param callback Optional callback for monitoring progress
  * @param Ostar_samples O^*(S) samples for stochastic reconfiguration (if used)
  * @param Ostar_mean Average O^* for stochastic reconfiguration (if used)
+ * @param energy_samples Per-rank raw E_loc values for MinSR (if used)
  * @return Optimization result with final state valid on all ranks
  */
 template<typename TenElemT, typename QNT>
@@ -103,7 +104,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     std::function<std::tuple<TenElemT, WaveFunctionT, double>(const WaveFunctionT &)> energy_evaluator,
     const OptimizationCallback &callback,
     const std::vector<WaveFunctionT> *Ostar_samples,
-    const WaveFunctionT *Ostar_mean) {
+    const WaveFunctionT *Ostar_mean,
+    const std::vector<TenElemT> *energy_samples) {
 
   OptimizationResult result;
   result.optimized_state = initial_state;
@@ -128,6 +130,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   const auto &spike_cfg = params_.spike_recovery_params;
   const auto &ckpt_cfg = params_.checkpoint_params;
   const bool is_sr = params_.IsAlgorithm<StochasticReconfigurationParams>();
+  const bool is_minsr = params_.IsAlgorithm<MinSRParams>();
   const bool is_sgd = params_.IsAlgorithm<SGDParams>();
   const bool is_lbfgs = params_.IsAlgorithm<LBFGSParams>();
   const auto &initial_selector_cfg = params_.base_params.initial_step_selector;
@@ -533,6 +536,20 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         else if constexpr (std::is_same_v<T, AdamParams>) {
           updated_state = AdamUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
         }
+        else if constexpr (std::is_same_v<T, MinSRParams>) {
+          if (Ostar_samples == nullptr || energy_samples == nullptr || !Ostar_mean) {
+            throw std::invalid_argument(
+                "MinSR requires Ostar_samples, energy_samples, and Ostar_mean");
+          }
+          auto [minsr_state, ngrad_norm] = MinSRUpdate(
+              current_state, current_gradient,
+              *Ostar_samples,
+              *Ostar_mean,
+              *energy_samples, current_energy,
+              learning_rate, algo_params);
+          updated_state = std::move(minsr_state);
+          sr_natural_grad_norm = ngrad_norm;
+        }
         else if constexpr (std::is_same_v<T, LBFGSParams>) {
           WaveFunctionT search_direction = ComputeLBFGSSearchDirection_(current_gradient, algo_params);
 
@@ -597,19 +614,22 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       double update_time = update_timer.Elapsed();
 
-      // === D: S3 detection (SR-only, after CG solve) ===
+      // === D: S3 detection (SR/MinSR, after linear solve) ===
       // Known limitation: if this were extended to non-SR algorithms (AdaGrad/Adam),
       // a RESAMPLE here would cause the algorithm's accumulator state (e.g., AdaGrad's
       // sum-of-squared-gradients, Adam's moment estimates) to be double-updated, since
       // algorithm dispatch (section C) already ran. Currently safe because S3 is gated
-      // on is_sr, and SR's CG solver has no persistent accumulator state.
+      // on is_sr/is_minsr, and neither has persistent accumulator state.
       // See RFC 2025-09-01 "Known Limitations" section.
       // Guard uses iter > 0 (not ema_.IsInitialized()) so ALL ranks enter together for MPI_Bcast.
-      if (is_sr && spike_cfg.enable_auto_recover && iter > 0) {
+      if ((is_sr || is_minsr) && spike_cfg.enable_auto_recover && iter > 0) {
         SpikeSignal signal = SpikeSignal::kNone;
         SpikeAction action = SpikeAction::kAccept;
         if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-          signal = DetectS3_(sr_natural_grad_norm, sr_iterations);
+          // MinSR uses eigensolve (no CG iterations), so pass a large sentinel
+          // to bypass the "suspiciously few CG iterations" sub-check in DetectS3_.
+          const size_t s3_iters = is_minsr ? std::numeric_limits<size_t>::max() : sr_iterations;
+          signal = DetectS3_(sr_natural_grad_norm, s3_iters);
           if (signal != SpikeSignal::kNone) {
             action = DecideAction_(signal, attempts, iter);
           }
@@ -681,7 +701,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         ema_energy_.Update(std::real(current_energy));
         ema_error_.Update(current_error);
         ema_grad_norm_.Update(grad_norm);
-        if (is_sr) {
+        if (is_sr || is_minsr) {
           ema_ngrad_norm_.Update(sr_natural_grad_norm);
         }
         prev_energy_ = std::real(current_energy);
@@ -990,6 +1010,110 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
   }
 
   return {updated_state, natural_grad_norm, cg_iterations, cg_residual_norm};
+}
+
+/**
+ * @brief MinSR update: construct T, eigensolve, back-substitute.
+ *
+ * Stages:
+ * 1. Build epsilon_bar from energy_samples.
+ * 2. Construct T via ring exchange + four-term centering (MinSRTMatrix).
+ * 3. Eigensolve T * y = epsilon_bar with pseudo-inverse cutoff.
+ * 4. Back-substitute: delta_theta = O_bar^dagger * y (distributed reduce).
+ */
+template<typename TenElemT, typename QNT>
+std::pair<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double>
+Optimizer<TenElemT, QNT>::MinSRUpdate(
+    const WaveFunctionT &current_state,
+    const WaveFunctionT &gradient,
+    const std::vector<WaveFunctionT> &Ostar_samples,
+    const WaveFunctionT &Ostar_mean,
+    const std::vector<TenElemT> &energy_samples,
+    TenElemT energy,
+    double learning_rate,
+    const MinSRParams &params) {
+
+  const size_t ns_local = Ostar_samples.size();
+  const size_t ns_global = ns_local * static_cast<size_t>(mpi_size_);
+
+  // --- Stage 1: Build epsilon_bar from per-sample E_loc values ---
+  // The gradient uses the Wirtinger convention:
+  //   g = (1/Ns) * sum_i conj(Delta_E_i) * O*_i
+  // For MinSR to be equivalent, epsilon_bar must use the conjugated Delta_E:
+  //   epsilon_bar_i = conj(E_loc,i - <E_loc>) / Ns
+  // For real TenElemT, conjugation is a no-op.
+  std::vector<TenElemT> epsilon_bar_local(ns_local);
+  const double ns_d = static_cast<double>(ns_global);
+  for (size_t i = 0; i < ns_local; ++i) {
+    epsilon_bar_local[i] = ComplexConjugate(energy_samples[i] - energy) / ns_d;
+  }
+
+  // Allgather epsilon_bar (all ranks need the full vector for the solve)
+  std::vector<TenElemT> epsilon_bar(ns_global);
+  MPI_Datatype mpi_type;
+  if constexpr (std::is_same_v<TenElemT, double>) {
+    mpi_type = MPI_DOUBLE;
+  } else {
+    mpi_type = MPI_CXX_DOUBLE_COMPLEX;
+  }
+  MPI_Allgather(epsilon_bar_local.data(), static_cast<int>(ns_local), mpi_type,
+                epsilon_bar.data(), static_cast<int>(ns_local), mpi_type, comm_);
+
+  // --- Stage 2: Construct T via ring exchange + four-term centering ---
+  MinSRTMatrix<TenElemT, QNT> tmatrix;
+  tmatrix.Construct(Ostar_samples, comm_);
+
+  // --- Stage 3: Eigensolve with pseudo-inverse cutoff ---
+  // Dispatches to Path A (ScaLAPACK) or Path B (replicated LAPACK) based on solver_mode.
+  auto y = MinSREigenSolveDispatch<TenElemT>(
+      tmatrix.RowBlockData(), tmatrix.LocalRows(), tmatrix.GlobalSize(),
+      epsilon_bar, comm_,
+      params.r_pinv, params.a_pinv, params.soft_cutoff,
+      params.solver_mode);
+
+  // --- Stage 4: Back-substitution ---
+  // delta_theta = O_bar^dagger * y = sum_i y_i * (O_i - O_mean)
+  //             = sum_i y_i * O_i  -  (sum_i y_i) * O_mean
+  //
+  // Each rank computes its local weighted sum, then gathers to master.
+  const size_t col_start = static_cast<size_t>(rank_) * ns_local;
+
+  // Local weighted sum: sum_{i in local} y_i * O_i
+  WaveFunctionT local_sum(current_state.rows(), current_state.cols(), current_state.PhysicalDim());
+  TenElemT local_y_sum(0);
+  for (size_t i = 0; i < ns_local; ++i) {
+    local_sum += y[col_start + i] * Ostar_samples[i];
+    local_y_sum += y[col_start + i];
+  }
+
+  // Reduce local_y_sum scalar to master
+  TenElemT global_y_sum(0);
+  MPI_Reduce(&local_y_sum, &global_y_sum, 1, mpi_type,
+             MPI_SUM, qlten::hp_numeric::kMPIMasterRank, comm_);
+
+  // Gather SITPS local_sum to master via Send/Recv (same pattern as MPIMeanTensor)
+  WaveFunctionT delta_theta;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    delta_theta = std::move(local_sum);
+    for (int src = 1; src < mpi_size_; ++src) {
+      WaveFunctionT remote_sum;
+      ::qlpeps::MPI_Recv(remote_sum, src, comm_);
+      delta_theta += remote_sum;
+    }
+    // Subtract (sum_i y_i) * O_mean
+    delta_theta += (-global_y_sum) * Ostar_mean;
+  } else {
+    ::qlpeps::MPI_Send(local_sum, qlten::hp_numeric::kMPIMasterRank, comm_);
+  }
+
+  double natural_grad_norm = 0.0;
+  WaveFunctionT updated_state = current_state;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    natural_grad_norm = std::sqrt(delta_theta.NormSquare());
+    updated_state += (-learning_rate) * delta_theta;
+  }
+
+  return {updated_state, natural_grad_norm};
 }
 
 template<typename TenElemT, typename QNT>

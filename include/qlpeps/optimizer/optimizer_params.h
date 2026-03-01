@@ -197,6 +197,40 @@ struct AdaGradParams {
       : epsilon(epsilon), initial_accumulator_value(initial_accumulator_value) {}
 };
 
+/**
+ * @enum MinSRSolverMode
+ * @brief Solver path selection for MinSR eigendecomposition.
+ */
+enum class MinSRSolverMode {
+  kAuto,         ///< Path B if Ns <= threshold; Path A if ScaLAPACK available, else Path B
+  kReplicated,   ///< Force Path B (LAPACK, all ranks replicate T)
+  kDistributed   ///< Force Path A (ScaLAPACK); error if not available
+};
+
+/**
+ * @struct MinSRParams
+ * @brief Parameters for Minimum-Step Stochastic Reconfiguration (MinSR).
+ *
+ * MinSR solves T * y = epsilon_bar where T = O_bar O_bar^dagger (Ns x Ns),
+ * then delta_theta = O_bar^dagger y. Equivalent to traditional SR but
+ * operates on the smaller Ns x Ns system when Np >> Ns.
+ *
+ * Reference: Chen & Heyl, Nature Physics 20, 1476 (2024).
+ */
+struct MinSRParams {
+  double r_pinv = 1e-12;                           ///< Relative pseudo-inverse cutoff
+  double a_pinv = 0.0;                             ///< Absolute pseudo-inverse cutoff
+  bool soft_cutoff = true;                         ///< Soft cutoff (Eq. 23) vs hard
+  MinSRSolverMode solver_mode = MinSRSolverMode::kAuto;
+
+  MinSRParams() = default;
+  MinSRParams(double r_pinv, double a_pinv = 0.0,
+              bool soft_cutoff = true,
+              MinSRSolverMode solver_mode = MinSRSolverMode::kAuto)
+      : r_pinv(r_pinv), a_pinv(a_pinv),
+        soft_cutoff(soft_cutoff), solver_mode(solver_mode) {}
+};
+
 // =============================================================================
 // CHECKPOINT PARAMETERS
 // =============================================================================
@@ -260,7 +294,8 @@ using AlgorithmParams = std::variant<
   AdamParams,
   StochasticReconfigurationParams,
   LBFGSParams,
-  AdaGradParams
+  AdaGradParams,
+  MinSRParams
 >;
 
 // =============================================================================
@@ -709,6 +744,14 @@ public:
   OptimizerParamsBuilder& WithAdaGrad(double epsilon = 1e-8, double initial_accumulator = 0.0) {
     AdaGradParams adagrad_params(epsilon, initial_accumulator);
     algorithm_params_ = adagrad_params;
+    return *this;
+  }
+
+  /**
+   * @brief Configure for MinSR algorithm
+   */
+  OptimizerParamsBuilder& WithMinSR(const MinSRParams& params = MinSRParams{}) {
+    algorithm_params_ = params;
     return *this;
   }
 

@@ -210,7 +210,11 @@ class VMCPEPSOptimizer : public qlten::Executor {
    * @brief Per-sample O^*(S) tensors for SR S-matrix construction
    */
   std::vector<SITPST> Ostar_samples_;
-  bool stochastic_reconfiguration_update_class_;
+  /**
+   * @brief Per-rank raw E_loc values for MinSR (and potential future use)
+   */
+  std::vector<TenElemT> energy_samples_;
+  bool needs_sr_buffers_;  ///< True when algorithm needs O* samples (SR, MinSR)
 
   // Spike stats cached from OptimizationResult (optimizer clears its copy in ClearUp)
   SpikeStatistics spike_stats_;

@@ -34,6 +34,21 @@ if (QLPEPS_TIMING_MODE)
     add_definitions(-DQLPEPS_TIMING_MODE)
 endif ()
 
+option(QLPEPS_USE_SCALAPACK "Enable ScaLAPACK for distributed MinSR eigensolve" OFF)
+if (QLPEPS_USE_SCALAPACK)
+    list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
+    find_package(ScaLAPACK)
+    if (SCALAPACK_FOUND)
+        add_definitions(-DQLPEPS_HAS_SCALAPACK)
+        # Propagate ScaLAPACK link flags to all targets in this project.
+        # Downstream users of this header-only library must link ScaLAPACK themselves.
+        link_libraries(ScaLAPACK::ScaLAPACK)
+        message(STATUS "ScaLAPACK found — MinSR Path A enabled")
+    else ()
+        message(WARNING "ScaLAPACK not found — MinSR Path B only")
+    endif ()
+endif ()
+
 option(TEST_BUILD_USE_EXTERNAL_HPTT_LIB "Use external hptt library when building unittests for QuantumLiquids/PEPS." ON)
 option(TEST_BUILD_USE_EXTERNAL_QLTEN "Use external qlten library when building unittests for QuantumLiquids/PEPS." ON)
 option(TEST_BUILD_USE_EXTERNAL_QLMPS "Use external qlmps library when building unittests for QuantumLiquids/PEPS." ON)

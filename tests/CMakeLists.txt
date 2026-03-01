@@ -538,6 +538,15 @@ add_two_type_mpi_unittest(test_fermion_mc_sr_golden_mpi
         "2" " "
 )
 
+# SR-vs-MinSR equivalence: both methods should produce the same natural gradient
+add_two_type_unittest(test_sr_vs_minsr_equivalence
+        "test_algorithm/test_sr_vs_minsr_equivalence.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        " "
+)
+add_mpi_unittest_run(test_sr_vs_minsr_equivalence_double "4" " ")
+add_mpi_unittest_run(test_sr_vs_minsr_equivalence_complex "4" " ")
+
 # MonteCarloEngine tests (configuration rescue, etc.)
 # Tests require 4 MPI ranks to test all configuration rescue scenarios
 add_mpi_unittest(test_monte_carlo_engine
