@@ -14,6 +14,7 @@
 #include <memory>
 #include <functional>
 #include <deque>
+#include <fstream>
 #include <utility>
 #include "qlpeps/two_dim_tn/tps/split_index_tps.h"
 #include "qlpeps/optimizer/optimizer_params.h"
@@ -306,6 +307,16 @@ class Optimizer {
   const std::vector<double> &GetCurrentAcceptRates() const { return current_accept_rates_; }
 
   /**
+   * @brief Set the JSONL structured log path on the optimizer's internal params.
+   *
+   * Use this when the path must be configured after construction (e.g., VMC
+   * executor auto-configures the path from tps_dump_base_name).
+   */
+  void SetJsonlLogPath(const std::string &path) {
+    params_.base_params.jsonl_log_path = path;
+  }
+
+  /**
    * @brief Check if optimization should stop based on convergence criteria
    * 
    * @param current_energy Current energy value
@@ -432,6 +443,8 @@ class Optimizer {
       double dphi0);
 
   // Helper methods
+  void WriteJsonlRecord_(std::ofstream& ofs, const IterationRecord& rec);
+
   void LogOptimizationStep(size_t iteration,
                           double energy,
                           double energy_error,
@@ -442,6 +455,7 @@ class Optimizer {
                           double sr_natural_grad_norm = 0.0,
                           double sr_residual_norm = 0.0,
                           double energy_eval_time = 0.0,
+                          double selector_time = 0.0,
                           double update_time = 0.0);
   
   // Algorithm-specific update methods

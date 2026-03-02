@@ -232,6 +232,37 @@ struct MinSRParams {
 };
 
 // =============================================================================
+// PER-ITERATION STRUCTURED LOGGING
+// =============================================================================
+
+/**
+ * @struct IterationRecord
+ * @brief Per-iteration structured record for JSONL logging.
+ *
+ * Captures all diagnostics for a single optimization iteration in a
+ * machine-readable format. Written as one JSON line per iteration.
+ */
+struct IterationRecord {
+  size_t iteration = 0;
+  double energy = 0.0;
+  double energy_error = 0.0;
+  double gradient_norm = 0.0;
+  double learning_rate = 0.0;
+  std::vector<double> accept_rates;
+  // SR-specific (0 when not SR)
+  size_t sr_iterations = 0;
+  double sr_natural_grad_norm = 0.0;
+  double sr_residual_norm = 0.0;
+  // Timing
+  double eval_time = 0.0;
+  double selector_time = 0.0;
+  double update_time = 0.0;
+  // Step selector
+  bool selector_triggered = false;
+  double selected_eta = 0.0;
+};
+
+// =============================================================================
 // CHECKPOINT PARAMETERS
 // =============================================================================
 
@@ -346,7 +377,9 @@ struct OptimizerParams {
     InitialStepSelectorParams initial_step_selector;
     /// Optional periodic step-size selector config (disabled by default)
     PeriodicStepSelectorParams periodic_step_selector;
-    
+    /// Per-iteration JSONL log path (empty = disabled)
+    std::string jsonl_log_path;
+
     // No default constructor - force explicit specification
     BaseParams(size_t max_iter, double energy_tol, double grad_tol,
                size_t patience, double learning_rate,
@@ -354,7 +387,7 @@ struct OptimizerParams {
       : max_iterations(max_iter), energy_tolerance(energy_tol), gradient_tolerance(grad_tol),
         plateau_patience(patience), learning_rate(learning_rate), lr_scheduler(std::move(scheduler)),
         clip_value(std::nullopt), clip_norm(std::nullopt),
-        initial_step_selector(), periodic_step_selector() {}
+        initial_step_selector(), periodic_step_selector(), jsonl_log_path() {}
         
     // Copy constructor
     BaseParams(const BaseParams& other)
@@ -364,7 +397,8 @@ struct OptimizerParams {
         lr_scheduler(other.lr_scheduler ? other.lr_scheduler->Clone() : nullptr),
         clip_value(other.clip_value), clip_norm(other.clip_norm),
         initial_step_selector(other.initial_step_selector),
-        periodic_step_selector(other.periodic_step_selector) {}
+        periodic_step_selector(other.periodic_step_selector),
+        jsonl_log_path(other.jsonl_log_path) {}
         
     // Copy assignment operator
     BaseParams& operator=(const BaseParams& other) {
@@ -379,6 +413,7 @@ struct OptimizerParams {
         clip_norm = other.clip_norm;
         initial_step_selector = other.initial_step_selector;
         periodic_step_selector = other.periodic_step_selector;
+        jsonl_log_path = other.jsonl_log_path;
       }
       return *this;
     }

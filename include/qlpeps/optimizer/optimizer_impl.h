@@ -174,6 +174,27 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     ResetLBFGSState_();
   }
 
+  // Open JSONL structured log (append mode, master rank only)
+  std::ofstream jsonl_ofs;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank &&
+      !params_.base_params.jsonl_log_path.empty()) {
+    try {
+      const auto jsonl_parent = std::filesystem::path(params_.base_params.jsonl_log_path).parent_path();
+      if (!jsonl_parent.empty()) {
+        std::filesystem::create_directories(jsonl_parent);
+      }
+      jsonl_ofs.open(params_.base_params.jsonl_log_path, std::ios::app);
+    } catch (const std::filesystem::filesystem_error &e) {
+      std::cerr << "[Optimizer][WARN] Cannot create JSONL log directory: "
+                << e.what() << std::endl;
+    }
+    if (!jsonl_ofs.is_open()) {
+      std::cerr << "[Optimizer][WARN] Failed to open JSONL log: "
+                << params_.base_params.jsonl_log_path
+                << " — per-iteration structured logging disabled." << std::endl;
+    }
+  }
+
   size_t total_iterations_performed = 0;
   bool done = false;
   for (size_t iter = 0; iter < params_.base_params.max_iterations && !done; ++iter) {
@@ -293,6 +314,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       const bool initial_selector_triggered = initial_selector_enabled && (iter == 0);
       const bool periodic_selector_triggered =
           periodic_selector_enabled &&
+          iter > 0 &&
           (iter % periodic_selector_cfg.every_n_steps == 0) &&
           !initial_selector_triggered;
       const bool selector_triggered = initial_selector_triggered || periodic_selector_triggered;
@@ -302,7 +324,9 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       double sr_precomputed_natural_grad_norm = 0.0;
       double sr_precomputed_residual_norm = 0.0;
 
+      double selector_time = 0.0;
       if (selector_triggered) {
+        Timer selector_timer("step_selector");
         int deterministic_error_missing = 0;
         if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
           const bool require_error_bar =
@@ -483,6 +507,7 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         }
         learning_rate = selector_base_lr;
         effective_learning_rate = learning_rate;
+        selector_time = selector_timer.Elapsed();
       }
 
       WaveFunctionT updated_state;
@@ -738,7 +763,25 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
             LogOptimizationStep(iter, current_energy_real, current_error, grad_norm,
                                effective_learning_rate, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
-                               sr_residual_norm, energy_eval_time, update_time);
+                               sr_residual_norm, energy_eval_time, selector_time, update_time);
+            if (jsonl_ofs.is_open()) {
+              IterationRecord rec;
+              rec.iteration = iter;
+              rec.energy = current_energy_real;
+              rec.energy_error = current_error;
+              rec.gradient_norm = grad_norm;
+              rec.learning_rate = effective_learning_rate;
+              rec.accept_rates = current_accept_rates_;
+              rec.sr_iterations = sr_iterations;
+              rec.sr_natural_grad_norm = sr_natural_grad_norm;
+              rec.sr_residual_norm = sr_residual_norm;
+              rec.eval_time = energy_eval_time;
+              rec.selector_time = selector_time;
+              rec.update_time = update_time;
+              rec.selector_triggered = selector_triggered;
+              rec.selected_eta = selector_triggered ? effective_learning_rate : 0.0;
+              WriteJsonlRecord_(jsonl_ofs, rec);
+            }
             result.converged = true;
           }
           step_accepted = true;
@@ -774,7 +817,27 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
       // Log progress
       LogOptimizationStep(iter, std::real(current_energy), current_error, grad_norm,
                           effective_learning_rate, current_accept_rates_, sr_iterations, sr_natural_grad_norm,
-                          sr_residual_norm, energy_eval_time, update_time);
+                          sr_residual_norm, energy_eval_time, selector_time, update_time);
+
+      // Write per-iteration JSONL record (master rank only)
+      if (jsonl_ofs.is_open()) {
+        IterationRecord rec;
+        rec.iteration = iter;
+        rec.energy = std::real(current_energy);
+        rec.energy_error = current_error;
+        rec.gradient_norm = grad_norm;
+        rec.learning_rate = effective_learning_rate;
+        rec.accept_rates = current_accept_rates_;
+        rec.sr_iterations = sr_iterations;
+        rec.sr_natural_grad_norm = sr_natural_grad_norm;
+        rec.sr_residual_norm = sr_residual_norm;
+        rec.eval_time = energy_eval_time;
+        rec.selector_time = selector_time;
+        rec.update_time = update_time;
+        rec.selector_triggered = selector_triggered;
+        rec.selected_eta = selector_triggered ? effective_learning_rate : 0.0;
+        WriteJsonlRecord_(jsonl_ofs, rec);
+      }
 
       if (callback.on_iteration) {
         callback.on_iteration(iter, std::real(current_energy), current_error, grad_norm);
@@ -1545,6 +1608,7 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
                                                    double sr_natural_grad_norm,
                                                    double sr_residual_norm,
                                                    double energy_eval_time,
+                                                   double selector_time,
                                                    double update_time) {
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     std::cout << "Iter " << std::setw(4) << iteration;
@@ -1575,14 +1639,57 @@ void Optimizer<TenElemT, QNT>::LogOptimizationStep(size_t iteration,
       }
     }
 
-    // Print timing information
-    double total_time = energy_eval_time + update_time;
+    // Print timing information: separate SelectorT from UpdateT
+    const double pure_update_time = update_time - selector_time;
+    const double total_time = energy_eval_time + update_time;
     std::cout << " EvalT = " << std::setw(8) << std::fixed << std::setprecision(2) << energy_eval_time << "s";
-    std::cout << " UpdateT = " << std::setw(8) << std::fixed << std::setprecision(2) << update_time << "s";
+    if (selector_time > 0.0) {
+      std::cout << " SelectorT = " << std::setw(8) << std::fixed << std::setprecision(2) << selector_time << "s";
+    }
+    std::cout << " UpdateT = " << std::setw(8) << std::fixed << std::setprecision(2) << pure_update_time << "s";
     std::cout << " TotT = " << std::setw(8) << std::fixed << std::setprecision(2) << total_time << "s";
 
     std::cout << std::endl;
   }
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::WriteJsonlRecord_(std::ofstream &ofs, const IterationRecord &rec) {
+  if (!ofs.is_open()) return;
+
+  // Manual JSON formatting — no external library dependency.
+  // Use full double precision for energy/error, reasonable precision elsewhere.
+  ofs << "{\"iter\":" << rec.iteration
+      << ",\"energy\":" << std::setprecision(17) << rec.energy
+      << ",\"energy_error\":" << std::setprecision(6) << rec.energy_error
+      << ",\"grad_norm\":" << std::setprecision(6) << rec.gradient_norm
+      << ",\"lr\":" << std::setprecision(6) << rec.learning_rate;
+
+  // Accept rates array
+  ofs << ",\"accept_rates\":[";
+  for (size_t i = 0; i < rec.accept_rates.size(); ++i) {
+    if (i > 0) ofs << ",";
+    ofs << std::setprecision(4) << rec.accept_rates[i];
+  }
+  ofs << "]";
+
+  // SR fields
+  ofs << ",\"sr_iters\":" << rec.sr_iterations
+      << ",\"sr_ngrad_norm\":" << std::setprecision(6) << rec.sr_natural_grad_norm
+      << ",\"sr_residual\":" << std::setprecision(6) << rec.sr_residual_norm;
+
+  // Timing
+  ofs << ",\"eval_t\":" << std::setprecision(2) << std::fixed << rec.eval_time
+      << ",\"selector_t\":" << rec.selector_time
+      << ",\"update_t\":" << (rec.update_time - rec.selector_time)
+      << ",\"total_t\":" << (rec.eval_time + rec.update_time);
+
+  // Step selector metadata
+  ofs << ",\"selector_triggered\":" << (rec.selector_triggered ? "true" : "false")
+      << ",\"selected_eta\":" << std::setprecision(6) << std::defaultfloat << rec.selected_eta;
+
+  ofs << "}\n";
+  ofs.flush();
 }
 
 template<typename TenElemT, typename QNT>

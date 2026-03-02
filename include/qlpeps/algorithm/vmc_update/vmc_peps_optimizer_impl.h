@@ -135,6 +135,20 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
     }
   };
 
+  // Auto-configure JSONL structured log alongside existing energy CSV.
+  // Must use SetJsonlLogPath on the optimizer directly — optimizer_ holds its
+  // own copy of params, so mutating params_ here would not propagate.
+  if (params_.optimizer_params.base_params.jsonl_log_path.empty() &&
+      !params_.tps_dump_base_name.empty()) {
+    const std::string auto_path = "./energy/optimization_log.jsonl";
+    params_.optimizer_params.base_params.jsonl_log_path = auto_path;
+    optimizer_.SetJsonlLogPath(auto_path);
+  } else if (!params_.optimizer_params.base_params.jsonl_log_path.empty()) {
+    // User explicitly set a path before construction — ensure optimizer_ has it too,
+    // in case the constructor copy didn't capture a later assignment.
+    optimizer_.SetJsonlLogPath(params_.optimizer_params.base_params.jsonl_log_path);
+  }
+
   // Perform optimization based on scheme
   typename OptimizerT::OptimizationResult result;
 

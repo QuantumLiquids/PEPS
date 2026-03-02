@@ -29,7 +29,9 @@ SITPST CreateScalarState(double value) {
   return state;
 }
 
-TEST(AutoStepSelectorPolicyTest, EarlyPhaseChoosesLowerMeanEnergyIgnoringErrorbar) {
+TEST(AutoStepSelectorPolicyTest, PeriodicSelectorSkipsIter0) {
+  // Verify that the periodic step selector does NOT trigger at iter 0.
+  // At iter 0 there is no prior energy baseline, so triggering is wasteful.
   OptimizerParams::BaseParams base_params(/*max_iter=*/4, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/4, /*learning_rate=*/3.0);
   base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
@@ -45,13 +47,18 @@ TEST(AutoStepSelectorPolicyTest, EarlyPhaseChoosesLowerMeanEnergyIgnoringErrorba
   };
 
   auto result = optimizer.IterativeOptimize(CreateScalarState(1.0), evaluator);
-  ASSERT_FALSE(result.learning_rate_trajectory.empty());
-  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory.front(), 1.5);
+  ASSERT_GE(result.learning_rate_trajectory.size(), 2u);
+  // Iter 0: no selector → base lr
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[0], 3.0);
+  // Iter 1: selector fires (early phase) → halves to 1.5
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], 1.5);
 }
 
 TEST(AutoStepSelectorPolicyTest, LatePhaseRequiresSignificantImprovementToHalve) {
-  OptimizerParams::BaseParams base_params(/*max_iter=*/1, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
-                                          /*patience=*/1, /*learning_rate=*/0.2);
+  // Verify late-phase selector does NOT halve when energy improvement < error bar.
+  // max_iter=2 so the selector triggers at iter 1 (iter 0 is always skipped).
+  OptimizerParams::BaseParams base_params(/*max_iter=*/2, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/2, /*learning_rate=*/0.2);
   base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
                                                           /*phase_switch_ratio=*/0.0,
                                                           /*enable_in_deterministic=*/true};
@@ -63,12 +70,14 @@ TEST(AutoStepSelectorPolicyTest, LatePhaseRequiresSignificantImprovementToHalve)
     const double x = state({0, 0})[0].GetMaxAbs();
     const double target = 0.88;
     const double energy = (x - target) * (x - target);
-    return {energy, std::move(grad), /*error=*/0.01};
+    // Large error bar ensures improvement < threshold so selector keeps lr unchanged
+    return {energy, std::move(grad), /*error=*/0.05};
   };
 
   auto result = optimizer.IterativeOptimize(CreateScalarState(1.0), evaluator);
-  ASSERT_FALSE(result.learning_rate_trajectory.empty());
-  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory.front(), 0.2);
+  ASSERT_GE(result.learning_rate_trajectory.size(), 2u);
+  // Iter 1: late phase selector fires but improvement (0.032) < error threshold (0.05) → no halving
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], 0.2);
 }
 
 } // namespace
