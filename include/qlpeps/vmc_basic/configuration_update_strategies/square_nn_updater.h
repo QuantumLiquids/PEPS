@@ -252,6 +252,7 @@ class MCUpdateSquareNNExchangePBC : public MCUpdateSquareNNUpdateBasePBC<MCUpdat
  */
 class MCUpdateSquareNNFullSpaceUpdateOBC : public MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNFullSpaceUpdateOBC> {
  public:
+  using MCUpdateSquareNNUpdateBaseOBC<MCUpdateSquareNNFullSpaceUpdateOBC>::MCUpdateSquareNNUpdateBaseOBC;
   template<typename TenElemT, typename QNT>
   bool TwoSiteNNUpdateLocalImpl(const SiteIdx &site1, const SiteIdx &site2, BondOrientation bond_dir,
                                 const SplitIndexTPS<TenElemT, QNT> &sitps,

@@ -195,72 +195,97 @@ endmacro()
 ## Test basis for tensor networks
 # Test DuoVMatrix class
 add_unittest(test_duomatrix test_2d_tn/test_duomatrix.cpp "" "" "" "")
+set_tests_properties(test_duomatrix PROPERTIES LABELS "tn-core;fast")
 # Test TenMatrix class
 add_unittest(test_ten_mat
         "test_2d_tn/test_ten_matrix.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_ten_mat PROPERTIES LABELS "tn-core;fast")
 # Test Configuration class
 add_unittest(test_configuration
         "test_2d_tn/test_configuration.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_configuration PROPERTIES LABELS "tn-core;fast")
 ## Test 2D tensor networks.
 add_unittest(test_peps
         "test_2d_tn/test_peps.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_peps PROPERTIES LABELS "tn-core;fast")
 add_unittest(test_tps
         "test_2d_tn/test_tps.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_tps PROPERTIES LABELS "tn-core;fast")
 add_unittest(test_split_index_tps
         "test_2d_tn/test_split_index_tps.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_split_index_tps PROPERTIES LABELS "tn-core;fast")
 
 # MPI functionality tests for SplitIndexTPS
 add_mpi_unittest(test_split_index_tps_mpi
         "test_2d_tn/test_split_index_tps_mpi.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 3)
+    set_tests_properties(test_split_index_tps_mpi_mpi PROPERTIES LABELS "tn-core;medium")
+endif()
 add_unittest(test_tn2d
         "test_2d_tn/test_tensornetwork2d.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "/Users/wanghaoxin/GitHub/PEPS/tests/test_data/"
 )
+set_tests_properties(test_tn2d PROPERTIES LABELS "tn-core;fast")
 add_unittest(test_bmps_contractor
         "test_2d_tn/test_bmps_contractor.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_bmps_contractor PROPERTIES LABELS "contractor;medium")
 add_unittest(test_trg_contractor
         "test_2d_tn/test_trg_contractor.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_trg_contractor PROPERTIES LABELS "contractor;medium")
 
 # TRG PBC performance benchmark (for profiling VMC bottlenecks)
 add_unittest(test_trg_pbc_benchmark
         "test_2d_tn/test_trg_pbc_benchmark.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_trg_pbc_benchmark PROPERTIES LABELS "contractor;medium")
 add_unittest(test_arnoldi
         "test_2d_tn/test_arnoldi.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_arnoldi PROPERTIES LABELS "tn-core;fast")
 
 ## Test monte carlo tools
 add_unittest(test_statistics
         "test_monte_carlo_tools/test_statistics.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_statistics PROPERTIES LABELS "mc-tools;fast")
 add_mpi_unittest(test_statistics_mpi
         "test_monte_carlo_tools/test_statistics_mpi.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3" ""
 )
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 3)
+    set_tests_properties(test_statistics_mpi_mpi PROPERTIES LABELS "mc-tools;fast")
+endif()
 add_unittest(test_suwa_todo_update
         "test_monte_carlo_tools/test_suwa_todo_update.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_suwa_todo_update PROPERTIES LABELS "mc-tools;fast")
+add_two_type_unittest(test_mc_updater_conservation
+        "test_monte_carlo_tools/test_mc_updater_conservation.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
+)
+set_tests_properties(test_mc_updater_conservation_double test_mc_updater_conservation_complex
+    PROPERTIES LABELS "mc-tools;fast")
 
 ## Test model solvers
 add_unittest(test_tJ_model_solver
@@ -268,29 +293,36 @@ add_unittest(test_tJ_model_solver
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_tJ_model_solver PROPERTIES LABELS "model-solver;fast")
 
 add_unittest(test_square_xxz_measurer
         "test_model_solvers/test_square_xxz_measurer.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_square_xxz_measurer PROPERTIES LABELS "model-solver;fast")
 
 add_unittest(test_hubbard_u1u1_updater
         "test_model_solvers/test_hubbard_u1u1_updater.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_hubbard_u1u1_updater PROPERTIES LABELS "model-solver;fast")
 
 # PBC/TRG exact-sum smoke tests (single-rank, no MPI required)
 add_unittest(test_tfim_pbc_trg_exact_sum
         "test_optimizer/test_tfim_pbc_trg_exact_sum.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_tfim_pbc_trg_exact_sum PROPERTIES LABELS "mc-evaluator;fast")
 
 add_two_type_unittest(test_optimizer_adagrad_exact_sum_tfim_pbc_trg
         "test_optimizer/test_optimizer_adagrad_exact_sum_tfim_pbc_trg.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" ""
 )
+set_tests_properties(test_optimizer_adagrad_exact_sum_tfim_pbc_trg_double
+    test_optimizer_adagrad_exact_sum_tfim_pbc_trg_complex
+    PROPERTIES LABELS "optimizer;medium")
 
 ## Test algorithms
 # NOTE: Test files have been reorganized:
@@ -304,6 +336,8 @@ add_two_type_unittest(test_boson_simple_update
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_boson_simple_update_double test_boson_simple_update_complex
+    PROPERTIES LABELS "simple-update;medium")
 
 # Test fermion simple update
 add_two_type_unittest(test_fermion_simple_update
@@ -311,6 +345,8 @@ add_two_type_unittest(test_fermion_simple_update
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_fermion_simple_update_double test_fermion_simple_update_complex
+    PROPERTIES LABELS "simple-update;medium")
 
 # Test advanced stopping policy for simple update
 add_two_type_unittest(test_simple_update_advanced_stop
@@ -318,6 +354,8 @@ add_two_type_unittest(test_simple_update_advanced_stop
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_simple_update_advanced_stop_double test_simple_update_advanced_stop_complex
+    PROPERTIES LABELS "simple-update;medium")
 
 # Test observability APIs for simple update
 add_two_type_unittest(test_simple_update_observability
@@ -325,12 +363,16 @@ add_two_type_unittest(test_simple_update_observability
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_simple_update_observability_double test_simple_update_observability_complex
+    PROPERTIES LABELS "simple-update;medium")
 # Test loop update on 2x2 OBC systems (no MPI required)
 add_two_type_unittest(test_loop_update
         "test_algorithm/test_loop_update.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_loop_update_double test_loop_update_complex
+    PROPERTIES LABELS "loop-update;medium")
 
 # Test observability APIs and advanced stop for loop update
 add_two_type_unittest(test_loop_update_observability
@@ -338,6 +380,8 @@ add_two_type_unittest(test_loop_update_observability
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_loop_update_observability_double test_loop_update_observability_complex
+    PROPERTIES LABELS "loop-update;medium")
 
 # Legacy test_vmc_peps removed - use test_vmc_peps_optimizer instead
 
@@ -347,6 +391,8 @@ add_two_type_unittest(test_optimizer
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_optimizer_double test_optimizer_complex
+    PROPERTIES LABELS "optimizer;medium")
 
 # Test VMC PEPS optimizer executor
 add_two_type_unittest(test_vmc_peps_optimizer
@@ -354,9 +400,15 @@ add_two_type_unittest(test_vmc_peps_optimizer
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_vmc_peps_optimizer_double test_vmc_peps_optimizer_complex
+    PROPERTIES LABELS "vmc-pipeline;medium")
 
 add_mpi_unittest_run(test_vmc_peps_optimizer_double "4" " ")
 add_mpi_unittest_run(test_vmc_peps_optimizer_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_vmc_peps_optimizer_double_mpi test_vmc_peps_optimizer_complex_mpi
+        PROPERTIES LABELS "vmc-pipeline;medium")
+endif()
 
 
 ## Optimizer exact-sum AdaGrad test (pure optimizer, deterministic gradients)
@@ -364,20 +416,32 @@ add_two_type_unittest(test_optimizer_adagrad_exact_sum
         "test_optimizer/test_optimizer_adagrad_exact_sum.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_optimizer_adagrad_exact_sum_double test_optimizer_adagrad_exact_sum_complex
+    PROPERTIES LABELS "optimizer;mc-evaluator;medium")
 
 # Add MPI test runs for optimizer exact-sum AdaGrad to verify MPI-aware ExactSumEnergyEvaluator
 add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_adagrad_exact_sum_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_optimizer_adagrad_exact_sum_double_mpi test_optimizer_adagrad_exact_sum_complex_mpi
+        PROPERTIES LABELS "optimizer;mc-evaluator;medium")
+endif()
 
 # Test pure exact summation evaluator (separated from optimizer complexity)
 add_two_type_unittest(test_exact_summation_evaluator
         "test_algorithm/test_exact_summation_evaluator.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_exact_summation_evaluator_double test_exact_summation_evaluator_complex
+    PROPERTIES LABELS "mc-evaluator;medium")
 
 # Add MPI test runs for exact summation evaluator to verify MPI-aware computation
 add_mpi_unittest_run(test_exact_summation_evaluator_double "4" " ")
 add_mpi_unittest_run(test_exact_summation_evaluator_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_exact_summation_evaluator_double_mpi test_exact_summation_evaluator_complex_mpi
+        PROPERTIES LABELS "mc-evaluator;medium")
+endif()
 
 
 ## Optimizer exact-sum SGD test (pure optimizer, deterministic gradients)
@@ -385,30 +449,51 @@ add_two_type_unittest(test_optimizer_sgd_exact_sum
         "test_optimizer/test_optimizer_sgd_exact_sum.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_optimizer_sgd_exact_sum_double test_optimizer_sgd_exact_sum_complex
+    PROPERTIES LABELS "optimizer;mc-evaluator;medium")
 add_mpi_unittest_run(test_optimizer_sgd_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_sgd_exact_sum_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_optimizer_sgd_exact_sum_double_mpi test_optimizer_sgd_exact_sum_complex_mpi
+        PROPERTIES LABELS "optimizer;mc-evaluator;medium")
+endif()
 
 ## Optimizer exact-sum Adam test (pure optimizer, deterministic gradients)
 add_two_type_unittest(test_optimizer_adam_exact_sum
         "test_optimizer/test_optimizer_adam_exact_sum.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_optimizer_adam_exact_sum_double test_optimizer_adam_exact_sum_complex
+    PROPERTIES LABELS "optimizer;mc-evaluator;medium")
 add_mpi_unittest_run(test_optimizer_adam_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_adam_exact_sum_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_optimizer_adam_exact_sum_double_mpi test_optimizer_adam_exact_sum_complex_mpi
+        PROPERTIES LABELS "optimizer;mc-evaluator;medium")
+endif()
 
 ## Optimizer exact-sum L-BFGS strong-Wolfe test (pure optimizer, deterministic gradients)
 add_two_type_unittest(test_optimizer_lbfgs_exact_sum
         "test_optimizer/test_optimizer_lbfgs_exact_sum.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_optimizer_lbfgs_exact_sum_double test_optimizer_lbfgs_exact_sum_complex
+    PROPERTIES LABELS "optimizer;mc-evaluator;medium")
 add_mpi_unittest_run(test_optimizer_lbfgs_exact_sum_double "4" " ")
 add_mpi_unittest_run(test_optimizer_lbfgs_exact_sum_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_optimizer_lbfgs_exact_sum_double_mpi test_optimizer_lbfgs_exact_sum_complex_mpi
+        PROPERTIES LABELS "optimizer;mc-evaluator;medium")
+endif()
 
 # Golden regression (integration): fermionic exact-summation + optimizer signatures
 add_two_type_unittest(test_fermion_exact_optimizer_integration_golden
         "test_optimizer/test_fermion_exact_optimizer_integration_golden.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_fermion_exact_optimizer_integration_golden_double
+    test_fermion_exact_optimizer_integration_golden_complex
+    PROPERTIES LABELS "optimizer;golden;medium")
 
 
 # Learning rate scheduler unit tests (header-only, no extra libs)
@@ -417,6 +502,7 @@ add_unittest(test_lr_schedulers
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_lr_schedulers PROPERTIES LABELS "optimizer;fast")
 
 
 # Optimizer params utility tests
@@ -425,6 +511,7 @@ add_unittest(test_optimizer_params
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_optimizer_params PROPERTIES LABELS "optimizer;fast")
 
 # Auto step selector policy unit tests (single-rank)
 add_unittest(test_auto_step_selector_policy
@@ -432,6 +519,7 @@ add_unittest(test_auto_step_selector_policy
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_auto_step_selector_policy PROPERTIES LABELS "optimizer;fast")
 
 # Spike detection / EMA tracker unit tests (header-only, no extra libs)
 add_unittest(test_spike_detection
@@ -439,6 +527,7 @@ add_unittest(test_spike_detection
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_spike_detection PROPERTIES LABELS "optimizer;fast")
 
 # Optimizer gradient preprocessing integration (single-rank)
 add_unittest(test_optimizer_gradient_preprocessing
@@ -446,6 +535,7 @@ add_unittest(test_optimizer_gradient_preprocessing
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_optimizer_gradient_preprocessing PROPERTIES LABELS "optimizer;fast")
 
 # L-BFGS recovery policy unit tests (single-rank)
 add_unittest(test_optimizer_lbfgs_recovery_policy
@@ -453,12 +543,15 @@ add_unittest(test_optimizer_lbfgs_recovery_policy
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_optimizer_lbfgs_recovery_policy PROPERTIES LABELS "optimizer;fast")
 
 # L-BFGS fixed-step MC regression tests (boson + fermion, 2x2 systems)
 add_two_type_unittest(test_optimizer_lbfgs_mc_regression
         "test_optimizer/test_optimizer_lbfgs_mc_regression.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
 )
+set_tests_properties(test_optimizer_lbfgs_mc_regression_double test_optimizer_lbfgs_mc_regression_complex
+    PROPERTIES LABELS "optimizer;medium")
 
 # Fast tests (2x2 systems, quick execution)
 add_two_type_unittest(test_mc_peps_measure
@@ -466,6 +559,8 @@ add_two_type_unittest(test_mc_peps_measure
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "test_data/tps_square_heisenberg2x2D4Double"
 )
+set_tests_properties(test_mc_peps_measure_double test_mc_peps_measure_complex
+    PROPERTIES LABELS "mc-measure;medium")
 
 
 # Independent MC energy+gradient evaluator smoke test
@@ -474,6 +569,8 @@ add_two_type_unittest(test_mc_energy_grad_evaluator_smoke
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_mc_energy_grad_evaluator_smoke_double test_mc_energy_grad_evaluator_smoke_complex
+    PROPERTIES LABELS "mc-evaluator;fast")
 
 # Smoke: PBC TRG contractor + MC updater (trial/accept/reject)
 add_two_type_unittest(test_mc_updater_trg_smoke
@@ -481,6 +578,8 @@ add_two_type_unittest(test_mc_updater_trg_smoke
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_mc_updater_trg_smoke_double test_mc_updater_trg_smoke_complex
+    PROPERTIES LABELS "mc-measure;fast")
 
 # Deterministic MonteCarlo regression (classical Ising via TRG amplitude)
 add_two_type_unittest(test_mc_ising_trg_pbc
@@ -488,6 +587,8 @@ add_two_type_unittest(test_mc_ising_trg_pbc
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_mc_ising_trg_pbc_double test_mc_ising_trg_pbc_complex
+    PROPERTIES LABELS "mc-measure;medium")
 
 # 2x2 classical Ising (h=0) smoke test using MonteCarloMeasure
 add_two_type_unittest(test_api_smoke
@@ -495,10 +596,16 @@ add_two_type_unittest(test_api_smoke
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_api_smoke_double test_api_smoke_complex
+    PROPERTIES LABELS "vmc-pipeline;fast")
 
 # Add MPI runs for the API smoke test (lightweight)
 add_mpi_unittest_run(test_api_smoke_double "4" " ")
 add_mpi_unittest_run(test_api_smoke_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_api_smoke_double_mpi test_api_smoke_complex_mpi
+        PROPERTIES LABELS "vmc-pipeline;fast")
+endif()
 
 # 2x2 spinless fermion exact vs MC evaluator test
 add_two_type_unittest(test_mc_energy_grad_evaluator
@@ -506,9 +613,15 @@ add_two_type_unittest(test_mc_energy_grad_evaluator
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_mc_energy_grad_evaluator_double test_mc_energy_grad_evaluator_complex
+    PROPERTIES LABELS "mc-evaluator;medium")
 
 add_mpi_unittest_run(test_mc_energy_grad_evaluator_double "4" " ")
 add_mpi_unittest_run(test_mc_energy_grad_evaluator_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_mc_energy_grad_evaluator_double_mpi test_mc_energy_grad_evaluator_complex_mpi
+        PROPERTIES LABELS "mc-evaluator;medium")
+endif()
 
 # Golden regression: fermionic MC gradient + SR natural-gradient signatures
 add_two_type_unittest(test_fermion_mc_sr_golden
@@ -516,6 +629,8 @@ add_two_type_unittest(test_fermion_mc_sr_golden
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_fermion_mc_sr_golden_double test_fermion_mc_sr_golden_complex
+    PROPERTIES LABELS "golden;medium")
 
 # Golden regression: bosonic MC gradient + SR natural-gradient signatures
 add_two_type_unittest(test_boson_mc_sr_golden
@@ -523,6 +638,8 @@ add_two_type_unittest(test_boson_mc_sr_golden
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_boson_mc_sr_golden_double test_boson_mc_sr_golden_complex
+    PROPERTIES LABELS "golden;medium")
 
 # Golden regression (MPI): bosonic MC gradient + SR natural-gradient with multi-rank CG
 add_two_type_mpi_unittest(test_boson_mc_sr_golden_mpi
@@ -530,6 +647,10 @@ add_two_type_mpi_unittest(test_boson_mc_sr_golden_mpi
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "2" " "
 )
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
+    set_tests_properties(test_boson_mc_sr_golden_mpi_double_mpi test_boson_mc_sr_golden_mpi_complex_mpi
+        PROPERTIES LABELS "golden;medium")
+endif()
 
 # Golden regression (MPI): fermionic MC gradient + SR natural-gradient with multi-rank CG
 add_two_type_mpi_unittest(test_fermion_mc_sr_golden_mpi
@@ -537,6 +658,10 @@ add_two_type_mpi_unittest(test_fermion_mc_sr_golden_mpi
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         "2" " "
 )
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
+    set_tests_properties(test_fermion_mc_sr_golden_mpi_double_mpi test_fermion_mc_sr_golden_mpi_complex_mpi
+        PROPERTIES LABELS "golden;medium")
+endif()
 
 # SR-vs-MinSR equivalence: both methods should produce the same natural gradient
 add_two_type_unittest(test_sr_vs_minsr_equivalence
@@ -544,8 +669,14 @@ add_two_type_unittest(test_sr_vs_minsr_equivalence
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         " "
 )
+set_tests_properties(test_sr_vs_minsr_equivalence_double test_sr_vs_minsr_equivalence_complex
+    PROPERTIES LABELS "golden;optimizer;medium")
 add_mpi_unittest_run(test_sr_vs_minsr_equivalence_double "4" " ")
 add_mpi_unittest_run(test_sr_vs_minsr_equivalence_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_sr_vs_minsr_equivalence_double_mpi test_sr_vs_minsr_equivalence_complex_mpi
+        PROPERTIES LABELS "golden;optimizer;medium")
+endif()
 
 # MonteCarloEngine tests (configuration rescue, etc.)
 # Tests require 4 MPI ranks to test all configuration rescue scenarios
@@ -554,8 +685,14 @@ add_mpi_unittest(test_monte_carlo_engine
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "4"
         ""
 )
+# Guard with if(TEST) because add_mpi_unittest macro has a pre-existing
+# argument expansion issue with MATH_LIB_LINK_FLAGS (list of 2 targets).
+if (TEST test_monte_carlo_engine_mpi)
+    set_tests_properties(test_monte_carlo_engine_mpi
+        PROPERTIES LABELS "mc-engine;medium")
+endif()
 
-# MPI “death test” (ctest-level): verify MCPEPSMeasurer forwards config_rescue into MonteCarloEngine.
+# MPI "death test" (ctest-level): verify MCPEPSMeasurer forwards config_rescue into MonteCarloEngine.
 # Expected behavior: MPI_Abort (non-zero exit) AND prints the failure header.
 add_executable(test_mcpeps_measurer_config_rescue_wiring_death
         "test_algorithm/test_mcpeps_measurer_config_rescue_wiring_death_mpi.cpp")
@@ -587,6 +724,8 @@ if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
             WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
     set_tests_properties(test_mcpeps_measurer_config_rescue_wiring_death_mpi
             PROPERTIES TIMEOUT 20)
+    set_tests_properties(test_mcpeps_measurer_config_rescue_wiring_death_mpi
+            PROPERTIES LABELS "mc-engine;fast")
 else()
     message(STATUS "Skipping MPI death test test_mcpeps_measurer_config_rescue_wiring_death_mpi: requires 2 processes, but only ${MPIEXEC_MAX_NUMPROCS} available")
 endif()
@@ -598,18 +737,25 @@ add_unittest(test_conjugate_gradient_solver
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_conjugate_gradient_solver PROPERTIES LABELS "utility;medium")
 
 add_unittest(test_observable_matrix
         "test_utility/test_observable_matrix.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
         ""
 )
+set_tests_properties(test_observable_matrix PROPERTIES LABELS "utility;fast")
 
 add_mpi_unittest(test_conjugate_gradient_mpi_solver
         "test_utility/test_conjugate_gradient_mpi_solver.cpp"
         "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" "3"
         ""
 )
+# Guard with if(TEST) — same add_mpi_unittest expansion issue as test_monte_carlo_engine.
+if (TEST test_conjugate_gradient_mpi_solver_mpi)
+    set_tests_properties(test_conjugate_gradient_mpi_solver_mpi
+        PROPERTIES LABELS "utility;medium")
+endif()
 
 
 

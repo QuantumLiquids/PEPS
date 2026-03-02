@@ -15,7 +15,7 @@
 现有文档：
 - RFC：`rfc/2025-08-21-energy-evaluator-concept.md`、`rfc/2025-01-29-missing-sgd-variants.md`、`rfc/2025-08-27-rng-reproducibility-and-seeding.md`
 - 设计：`design/arch/overview_cn.md`、`design/arch/mpi-contracts.md`、`design/math/exact-summation.md`
-- 测试：`testing/optimizer-testing-strategy.md`、`testing/monte-carlo-testing-best-practices.md`
+- 测试：`testing/optimizer-testing-strategy.md`、`testing/monte-carlo-testing-best-practices.md`、`testing/test-suite-modularization.md`
 - 规范：`practices/coding-standards.md`、`practices/code-review-findings.md`
 - 指南：`guides/randomness-and-seeding.md`
 
