@@ -677,6 +677,17 @@ if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 2)
         PROPERTIES LABELS "golden;medium")
 endif()
 
+# MinSR MC integration test: 2x2 Heisenberg OBC with MinSR optimizer
+add_two_type_mpi_unittest(test_optimizer_minsr_mc_heisenberg
+        "test_algorithm/test_optimizer_minsr_mc_heisenberg.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}"
+        "4" " "
+)
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_optimizer_minsr_mc_heisenberg_double_mpi test_optimizer_minsr_mc_heisenberg_complex_mpi
+        PROPERTIES LABELS "vmc-pipeline;medium")
+endif()
+
 # SR-vs-MinSR equivalence: both methods should produce the same natural gradient
 add_two_type_unittest(test_sr_vs_minsr_equivalence
         "test_algorithm/test_sr_vs_minsr_equivalence.cpp"
