@@ -74,6 +74,12 @@ class MCEnergyGradEvaluator {
     std::vector<TenElemT> energy_samples; // Per-rank raw E_loc values (always populated)
   };
 
+  struct EnergyOnlyResult {
+    TenElemT energy;                      // Broadcast to all ranks
+    double energy_error;                  // Valid on master rank; 0 on others
+    std::vector<double> accept_rates_avg;
+  };
+
   /**
    * @param engine  Reference to MC engine (state holder and sampler)
    * @param solver  Reference to model energy solver
@@ -320,6 +326,68 @@ class MCEnergyGradEvaluator {
       res.Ostar_samples = std::move(Ostar_samples);
     }
     res.energy_samples = std::move(energy_samples);
+    return res;
+  }
+
+  /**
+   * @brief Energy-only evaluation for step selector trials.
+   *
+   * This is a stripped-down version of Evaluate() that skips O* computation,
+   * gradient accumulation, and gradient MPI reductions. It calls CalEnergy
+   * (with calchols=false) instead of CalEnergyAndHoles<true>, avoiding the
+   * per-sample hole, O*, and gradient tensor work.
+   *
+   * @param state The wavefunction state to evaluate
+   * @return EnergyOnlyResult with energy, error, and acceptance rates
+   */
+  EnergyOnlyResult EvaluateEnergyOnly(const SITPST &state) {
+    if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
+      if (&state != &engine_.State()) {
+        engine_.AssignState(state);
+      }
+    }
+
+    MPI_Bcast(engine_.State(), engine_.Comm());
+    engine_.RefreshWavefunctionComponent();
+
+    if (!engine_.WavefuncComp().IsAmplitudeSquareLegal()) {
+      std::cout << "Warning (rank " << engine_.Rank() << "): wavefunction amplitude magnitude "
+                << std::scientific << std::abs(engine_.WavefuncComp().GetAmplitude())
+                << " is outside sqrt(numeric_limits) bounds." << std::endl;
+    }
+
+    const size_t sample_num = engine_.SamplesPerRank();
+    std::vector<TenElemT> energy_samples;
+    energy_samples.reserve(std::max(sample_num, reserved_samples_));
+
+    std::vector<double> accept_rates_accum;
+    for (size_t sweep = 0; sweep < sample_num; sweep++) {
+      std::vector<double> accept_rates = engine_.StepSweep();
+      if (sweep == 0) {
+        accept_rates_accum = accept_rates;
+      } else {
+        for (size_t i = 0; i < accept_rates_accum.size(); i++) {
+          accept_rates_accum[i] += accept_rates[i];
+        }
+      }
+
+      TenElemT local_energy = solver_.template CalEnergy<TenElemT, QNT>(&engine_.State(),
+                                                                         &engine_.WavefuncComp());
+      energy_samples.push_back(local_energy);
+    }
+
+    std::vector<double> accept_rates_avg = accept_rates_accum;
+    for (double &rate : accept_rates_avg) { rate /= double(sample_num); }
+
+    AcceptanceRateCheck_(accept_rates_avg);
+
+    auto [energy, en_err] = MeanAndBinnedErrorSqrtNUniformBin(energy_samples, comm_);
+    qlten::hp_numeric::MPI_Bcast(&energy, 1, qlten::hp_numeric::kMPIMasterRank, comm_);
+
+    EnergyOnlyResult res;
+    res.energy = energy;
+    res.energy_error = (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) ? en_err : 0.0;
+    res.accept_rates_avg = std::move(accept_rates_avg);
     return res;
   }
 

@@ -149,6 +149,18 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
     optimizer_.SetJsonlLogPath(params_.optimizer_params.base_params.jsonl_log_path);
   }
 
+  // Build energy-only evaluator for step selector trials (skips gradient computation).
+  // Respect custom evaluator hook: when the user has called SetEnergyEvaluator(...),
+  // pass nullptr so the selector falls back to the full custom evaluator.
+  std::function<std::pair<double, double>(const SITPST &)> energy_only_evaluator = nullptr;
+  if (!custom_energy_evaluator_) {
+    energy_only_evaluator = [this](const SITPST &state) -> std::pair<double, double> {
+      auto result = energy_grad_evaluator_->EvaluateEnergyOnly(state);
+      optimizer_.SetCurrentAcceptRates(result.accept_rates_avg);
+      return {std::real(result.energy), result.energy_error};
+    };
+  }
+
   // Perform optimization based on scheme
   typename OptimizerT::OptimizationResult result;
 
@@ -156,9 +168,12 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
   // Line search support can be added as enhancement later
   if (needs_sr_buffers_) {
     result = optimizer_.IterativeOptimize(monte_carlo_engine_.State(), energy_evaluator, optimization_callback_,
-                                          &Ostar_samples_, &Ostar_mean_, &energy_samples_);
+                                          &Ostar_samples_, &Ostar_mean_, &energy_samples_,
+                                          energy_only_evaluator);
   } else {
-    result = optimizer_.IterativeOptimize(monte_carlo_engine_.State(), energy_evaluator, optimization_callback_);
+    result = optimizer_.IterativeOptimize(monte_carlo_engine_.State(), energy_evaluator, optimization_callback_,
+                                          nullptr, nullptr, nullptr,
+                                          energy_only_evaluator);
   }
 
   // Cache spike stats from the result before the optimizer's internal copy is cleared

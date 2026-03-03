@@ -105,7 +105,8 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     const OptimizationCallback &callback,
     const std::vector<WaveFunctionT> *Ostar_samples,
     const WaveFunctionT *Ostar_mean,
-    const std::vector<TenElemT> *energy_samples) {
+    const std::vector<TenElemT> *energy_samples,
+    std::function<std::pair<double, double>(const WaveFunctionT &)> energy_only_evaluator) {
 
   OptimizationResult result;
   result.optimized_state = initial_state;
@@ -367,14 +368,21 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         }
 
         auto evaluate_candidate = [&](const WaveFunctionT &trial_state) {
-          // v1 keeps the existing evaluator contract (energy, gradient, error).
-          // Gradient is intentionally ignored for selector trials; consider an
-          // energy-only evaluator path in v2 for expensive MC evaluations.
+          // Use energy-only evaluator when available to skip gradient computation.
           // Trial evaluations intentionally bypass spike detection and EMA/trajectory
           // updates. Only the accepted main-path step participates in S1-S4 logic.
-          auto [trial_energy, trial_gradient, trial_error] = energy_evaluator(trial_state);
-          (void)trial_gradient;
-          const double trial_energy_real = std::real(trial_energy);
+          double trial_energy_real;
+          double trial_error;
+          if (energy_only_evaluator) {
+            auto [eo_energy, eo_error] = energy_only_evaluator(trial_state);
+            trial_energy_real = eo_energy;
+            trial_error = eo_error;
+          } else {
+            auto [trial_energy, trial_gradient, te_error] = energy_evaluator(trial_state);
+            (void)trial_gradient;
+            trial_energy_real = std::real(trial_energy);
+            trial_error = te_error;
+          }
           int local_failure_flags = 0;
           if (!std::isfinite(trial_energy_real)) {
             local_failure_flags |= 0x1;

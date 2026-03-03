@@ -80,5 +80,69 @@ TEST(AutoStepSelectorPolicyTest, LatePhaseRequiresSignificantImprovementToHalve)
   EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], 0.2);
 }
 
+TEST(AutoStepSelectorPolicyTest, EnergyOnlyEvaluatorDispatchedBySelector) {
+  // Verify that when energy_only_evaluator is provided, selector trials use it
+  // instead of the full energy_evaluator.
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.1);
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+                                                          /*phase_switch_ratio=*/1.0,
+                                                          /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, SGDParams());
+  Optimizer<TenElemT, QNT> optimizer(params, MPI_COMM_SELF, /*rank=*/0, /*mpi_size=*/1);
+
+  size_t full_eval_count = 0;
+  size_t energy_only_count = 0;
+
+  auto full_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    ++full_eval_count;
+    SITPST grad = state;
+    const double energy = state.NormSquare();
+    return {energy, std::move(grad), /*error=*/10.0};
+  };
+
+  auto energy_only_eval = [&](const SITPST &state) -> std::pair<double, double> {
+    ++energy_only_count;
+    const double energy = state.NormSquare();
+    return {energy, 10.0};
+  };
+
+  auto result = optimizer.IterativeOptimize(
+      CreateScalarState(1.0), full_evaluator, {}, nullptr, nullptr, nullptr, energy_only_eval);
+
+  // Main path: 3 iterations → 3 full evaluations
+  EXPECT_EQ(full_eval_count, 3u);
+  // Selector fires at iter 1 and 2 (skipped at iter 0), each evaluates 2 candidates
+  EXPECT_GE(energy_only_count, 2u);
+}
+
+TEST(AutoStepSelectorPolicyTest, FallbackWhenEnergyOnlyEvaluatorIsNull) {
+  // Verify backward compatibility: when energy_only_evaluator is null,
+  // selector trials fall back to the full energy_evaluator.
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.1);
+  base_params.periodic_step_selector = PeriodicStepSelectorParams{/*enabled=*/true, /*every_n_steps=*/1,
+                                                          /*phase_switch_ratio=*/1.0,
+                                                          /*enable_in_deterministic=*/true};
+  OptimizerParams params(base_params, SGDParams());
+  Optimizer<TenElemT, QNT> optimizer(params, MPI_COMM_SELF, /*rank=*/0, /*mpi_size=*/1);
+
+  size_t full_eval_count = 0;
+
+  auto full_evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    ++full_eval_count;
+    SITPST grad = state;
+    const double energy = state.NormSquare();
+    return {energy, std::move(grad), /*error=*/10.0};
+  };
+
+  // Pass nullptr explicitly for energy_only_evaluator
+  auto result = optimizer.IterativeOptimize(
+      CreateScalarState(1.0), full_evaluator, {}, nullptr, nullptr, nullptr, nullptr);
+
+  // 3 main-path + at least 2 selector trials (iter 1 and 2) × 2 candidates each = 7+
+  EXPECT_GE(full_eval_count, 5u);
+}
+
 } // namespace
 } // namespace qlpeps

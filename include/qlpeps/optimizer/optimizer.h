@@ -161,7 +161,8 @@ class Optimizer {
       const OptimizationCallback& callback = OptimizationCallback{},
       const std::vector<WaveFunctionT>* Ostar_samples = nullptr,
       const WaveFunctionT* Ostar_mean = nullptr,
-      const std::vector<TenElemT>* energy_samples = nullptr);
+      const std::vector<TenElemT>* energy_samples = nullptr,
+      std::function<std::pair<double, double>(const WaveFunctionT&)> energy_only_evaluator = nullptr);
 
   /**
    * @brief Calculate natural gradient using stochastic reconfiguration
