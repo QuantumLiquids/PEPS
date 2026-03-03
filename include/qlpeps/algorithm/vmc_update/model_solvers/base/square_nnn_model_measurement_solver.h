@@ -140,8 +140,10 @@ class SquareNNNModelMeasurementSolver
                                      const TenElemT inv_psi_row, std::optional<TenElemT> &fermion_psi) {
       if constexpr (!has_nnn_interaction) { return; }
       auto& contractor = tps_sample->contractor;
-      // Reconstruct psi for fermions if needed
-      if constexpr (Index<QNT>::IsFermionic()) { fermion_psi = TenElemT(1.0) / inv_psi_row; }
+      // Do NOT pre-set fermion_psi here: EvaluateNNNEnergy must compute the correct
+      // psi via ReplaceNNNSiteTrace on the first call (LEFTUP_TO_RIGHTDOWN), then
+      // reuse it on the second call (LEFTDOWN_TO_RIGHTUP). Pre-setting fermion_psi
+      // to the 1-row trace psi bypasses this and produces incorrect NNN bond energies.
       TenElemT eb;
       if constexpr (Index<QNT>::IsFermionic()) {
         eb = derived->EvaluateNNNEnergy(site1, site2, config(site1), config(site2), dir, tn, contractor,

@@ -443,6 +443,20 @@ if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
         PROPERTIES LABELS "mc-evaluator;medium")
 endif()
 
+# Test exact summation measurer (observable golden regression)
+add_two_type_unittest(test_exact_summation_measurer
+        "test_algorithm/test_exact_summation_measurer.cpp"
+        "${BLAS_INCLUDE_DIRS}" "" "${MATH_LIB_LINK_FLAGS}" " "
+)
+set_tests_properties(test_exact_summation_measurer_double test_exact_summation_measurer_complex
+    PROPERTIES LABELS "mc-evaluator;medium")
+
+add_mpi_unittest_run(test_exact_summation_measurer_double "4" " ")
+add_mpi_unittest_run(test_exact_summation_measurer_complex "4" " ")
+if (MPIEXEC_MAX_NUMPROCS GREATER_EQUAL 4)
+    set_tests_properties(test_exact_summation_measurer_double_mpi test_exact_summation_measurer_complex_mpi
+        PROPERTIES LABELS "mc-evaluator;medium")
+endif()
 
 ## Optimizer exact-sum SGD test (pure optimizer, deterministic gradients)
 add_two_type_unittest(test_optimizer_sgd_exact_sum

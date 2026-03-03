@@ -78,9 +78,12 @@ Golden pattern: `kPrintGolden = true` → capture → hardcode as `constexpr` �
 - Spinless fermion PBC (TRG path)
 - t-J NNN variant
 
-**Layer 1B — ExactSummationMeasurer** (future)
+**Layer 1B — ExactSummationMeasurer** (implemented)
 
-Test-only utility analogous to `ExactSumEnergyEvaluatorMPI`, iterating over all configurations to produce deterministic measurement results. Enables golden regression for `EvaluateObservables()`, measurement mixins, observable aggregation.
+`ExactSumMeasurerMPI` free function in `exact_summation_measurer.h`, iterating over
+all configurations to produce deterministic measurement results. Golden regression
+for `EvaluateObservables()` across 4 OBC models (Spinless Fermion, Heisenberg, TFIM, t-J)
+with QuSpin ED benchmarks for physical validation.
 
 ### MC Configuration Updater Testing
 
