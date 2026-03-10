@@ -249,7 +249,8 @@ struct IterationRecord {
   double gradient_norm = 0.0;
   double learning_rate = 0.0;
   std::vector<double> accept_rates;
-  // SR-specific (0 when not SR)
+  // Natural-gradient diagnostics shared by SR and MinSR.
+  // For MinSR, sr_iterations/sr_residual_norm are 0 because the solver path is eigensolve-based.
   size_t sr_iterations = 0;
   double sr_natural_grad_norm = 0.0;
   double sr_residual_norm = 0.0;

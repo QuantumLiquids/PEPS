@@ -209,8 +209,9 @@ auto opt_params = qlpeps::OptimizerParamsBuilder()
 ```
 
 v1 behavior:
-- Supported algorithms: SGD and SR only.
+- Supported algorithms: SGD, SR, and MinSR.
 - Candidate set: `{eta, eta/2}`.
+- For SR and MinSR, each selector trigger computes one natural-gradient direction and reuses it across all candidate trial states.
 - Trigger policy: only at iteration indices divisible by `every_n_steps`; if the last iteration index is not divisible, no final trigger occurs.
 - Writeback: selected eta is written back and kept non-increasing.
 - Phase policy: early phase (`iter < ratio * max_iterations`) is mean-energy aggressive; late phase requires significant improvement over error bars.

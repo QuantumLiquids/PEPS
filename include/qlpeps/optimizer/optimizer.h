@@ -442,6 +442,15 @@ class Optimizer {
       const LBFGSParams& params,
       double phi0,
       double dphi0);
+  // Returns the MinSR natural-gradient direction on master rank only.
+  // Non-master ranks participate in the MPI collectives and return an empty placeholder.
+  std::pair<WaveFunctionT, double> CalculateMinSRDirection_(
+      const WaveFunctionT& current_state,
+      const std::vector<WaveFunctionT>& Ostar_samples,
+      const WaveFunctionT& Ostar_mean,
+      const std::vector<TenElemT>& energy_samples,
+      TenElemT energy,
+      const MinSRParams& params);
 
   // Helper methods
   void WriteJsonlRecord_(std::ofstream& ofs, const IterationRecord& rec);

@@ -142,9 +142,9 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
   constexpr double kSelectorLateSigma = 1.0;
 
   if (any_selector_enabled) {
-    if (!(is_sgd || is_sr)) {
+    if (!(is_sgd || is_sr || is_minsr)) {
       throw std::invalid_argument(
-          "Step selectors only support SGD and SR in IterativeOptimize");
+          "Step selectors only support SGD, SR, and MinSR in IterativeOptimize");
     }
     if (params_.base_params.lr_scheduler) {
       throw std::invalid_argument(
@@ -319,11 +319,11 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           (iter % periodic_selector_cfg.every_n_steps == 0) &&
           !initial_selector_triggered;
       const bool selector_triggered = initial_selector_triggered || periodic_selector_triggered;
-      bool use_precomputed_sr_direction = false;
-      WaveFunctionT sr_precomputed_direction;
-      size_t sr_precomputed_iters = 0;
-      double sr_precomputed_natural_grad_norm = 0.0;
-      double sr_precomputed_residual_norm = 0.0;
+      bool use_precomputed_natural_direction = false;
+      WaveFunctionT precomputed_natural_direction;
+      size_t precomputed_sr_iters = 0;
+      double precomputed_natural_grad_norm = 0.0;
+      double precomputed_sr_residual_norm = 0.0;
 
       double selector_time = 0.0;
       if (selector_triggered) {
@@ -422,6 +422,18 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         std::vector<CandidateEvalResult> candidate_results;
         candidate_results.reserve(candidate_etas.size());
 
+        auto make_precomputed_trial = [&](double eta, bool normalize_update) {
+          WaveFunctionT trial_state = current_state;
+          double applied_eta = eta;
+          if (normalize_update && precomputed_natural_grad_norm > 0.0) {
+            applied_eta /= precomputed_natural_grad_norm;
+          }
+          if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+            trial_state += (-applied_eta) * precomputed_natural_direction;
+          }
+          return trial_state;
+        };
+
         if (is_sgd) {
           const auto &sgd_params = params_.GetAlgorithmParams<SGDParams>();
           for (const double eta : candidate_etas) {
@@ -438,26 +450,32 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           }
           auto [natural_grad, cg_iters, cg_resid] = CalculateNaturalGradient(
               current_gradient, *Ostar_samples, *Ostar_mean, sr_init_guess);
-          sr_precomputed_direction = std::move(natural_grad);
-          sr_precomputed_iters = cg_iters;
-          sr_precomputed_residual_norm = cg_resid;
-          sr_precomputed_natural_grad_norm = std::sqrt(sr_precomputed_direction.NormSquare());
-          use_precomputed_sr_direction = true;
-
-          auto make_sr_trial = [&](double eta) {
-            WaveFunctionT trial_state = current_state;
-            double applied_eta = eta;
-            if (sr_params.normalize_update && sr_precomputed_natural_grad_norm > 0.0) {
-              applied_eta /= sr_precomputed_natural_grad_norm;
-            }
-            if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-              trial_state += (-applied_eta) * sr_precomputed_direction;
-            }
-            return trial_state;
-          };
+          precomputed_natural_direction = std::move(natural_grad);
+          precomputed_sr_iters = cg_iters;
+          precomputed_sr_residual_norm = cg_resid;
+          precomputed_natural_grad_norm = std::sqrt(precomputed_natural_direction.NormSquare());
+          use_precomputed_natural_direction = true;
 
           for (const double eta : candidate_etas) {
-            WaveFunctionT trial_state = make_sr_trial(eta);
+            WaveFunctionT trial_state = make_precomputed_trial(eta, sr_params.normalize_update);
+            auto [trial_energy, trial_error] = evaluate_candidate(trial_state);
+            candidate_results.push_back(CandidateEvalResult{eta, trial_energy, trial_error});
+          }
+        } else if (is_minsr) {
+          const auto &minsr_params = params_.GetAlgorithmParams<MinSRParams>();
+          if (Ostar_samples == nullptr || energy_samples == nullptr || Ostar_mean == nullptr) {
+            throw std::invalid_argument(
+                "Auto step selector for MinSR requires Ostar_samples, energy_samples, and Ostar_mean");
+          }
+          auto [natural_grad, natural_grad_norm] = CalculateMinSRDirection_(
+              current_state, *Ostar_samples, *Ostar_mean, *energy_samples,
+              current_energy, minsr_params);
+          precomputed_natural_direction = std::move(natural_grad);
+          precomputed_natural_grad_norm = natural_grad_norm;
+          use_precomputed_natural_direction = true;
+
+          for (const double eta : candidate_etas) {
+            WaveFunctionT trial_state = make_precomputed_trial(eta, /*normalize_update=*/false);
             auto [trial_energy, trial_error] = evaluate_candidate(trial_state);
             candidate_results.push_back(CandidateEvalResult{eta, trial_energy, trial_error});
           }
@@ -531,18 +549,18 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
           updated_state = SGDUpdate(current_state, preprocessed_gradient, learning_rate, algo_params);
         }
         else if constexpr (std::is_same_v<T, StochasticReconfigurationParams>) {
-          if (selector_triggered && use_precomputed_sr_direction) {
+          if (selector_triggered && use_precomputed_natural_direction) {
             double applied_step = learning_rate;
-            if (algo_params.normalize_update && sr_precomputed_natural_grad_norm > 0.0) {
-              applied_step /= sr_precomputed_natural_grad_norm;
+            if (algo_params.normalize_update && precomputed_natural_grad_norm > 0.0) {
+              applied_step /= precomputed_natural_grad_norm;
             }
             updated_state = current_state;
             if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-              updated_state += (-applied_step) * sr_precomputed_direction;
+              updated_state += (-applied_step) * precomputed_natural_direction;
             }
-            sr_natural_grad_norm = sr_precomputed_natural_grad_norm;
-            sr_iterations = sr_precomputed_iters;
-            sr_residual_norm = sr_precomputed_residual_norm;
+            sr_natural_grad_norm = precomputed_natural_grad_norm;
+            sr_iterations = precomputed_sr_iters;
+            sr_residual_norm = precomputed_sr_residual_norm;
             // Keep alignment with existing SR path: updated_state is meaningful
             // on master rank only at this point; this assignment intentionally
             // follows that same rank-local convention.
@@ -574,14 +592,24 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
             throw std::invalid_argument(
                 "MinSR requires Ostar_samples, energy_samples, and Ostar_mean");
           }
-          auto [minsr_state, ngrad_norm] = MinSRUpdate(
-              current_state, current_gradient,
-              *Ostar_samples,
-              *Ostar_mean,
-              *energy_samples, current_energy,
-              learning_rate, algo_params);
-          updated_state = std::move(minsr_state);
-          sr_natural_grad_norm = ngrad_norm;
+          if (selector_triggered && use_precomputed_natural_direction) {
+            updated_state = current_state;
+            if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+              updated_state += (-learning_rate) * precomputed_natural_direction;
+            }
+            // MinSR uses an eigensolve instead of CG, so the shared
+            // sr_iterations/sr_residual_norm diagnostics intentionally stay 0.
+            sr_natural_grad_norm = precomputed_natural_grad_norm;
+          } else {
+            auto [minsr_state, ngrad_norm] = MinSRUpdate(
+                current_state, current_gradient,
+                *Ostar_samples,
+                *Ostar_mean,
+                *energy_samples, current_energy,
+                learning_rate, algo_params);
+            updated_state = std::move(minsr_state);
+            sr_natural_grad_norm = ngrad_norm;
+          }
         }
         else if constexpr (std::is_same_v<T, LBFGSParams>) {
           WaveFunctionT search_direction = ComputeLBFGSSearchDirection_(current_gradient, algo_params);
@@ -1084,24 +1112,16 @@ Optimizer<TenElemT, QNT>::StochasticReconfigurationUpdate(
 }
 
 /**
- * @brief MinSR update: construct T, eigensolve, back-substitute.
- *
- * Stages:
- * 1. Build epsilon_bar from energy_samples.
- * 2. Construct T via ring exchange + four-term centering (MinSRTMatrix).
- * 3. Eigensolve T * y = epsilon_bar with pseudo-inverse cutoff.
- * 4. Back-substitute: delta_theta = O_bar^dagger * y (distributed reduce).
+ * @brief Compute the MinSR natural-gradient direction without applying a step.
  */
 template<typename TenElemT, typename QNT>
 std::pair<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double>
-Optimizer<TenElemT, QNT>::MinSRUpdate(
+Optimizer<TenElemT, QNT>::CalculateMinSRDirection_(
     const WaveFunctionT &current_state,
-    const WaveFunctionT &gradient,
     const std::vector<WaveFunctionT> &Ostar_samples,
     const WaveFunctionT &Ostar_mean,
     const std::vector<TenElemT> &energy_samples,
     TenElemT energy,
-    double learning_rate,
     const MinSRParams &params) {
 
   const size_t ns_local = Ostar_samples.size();
@@ -1162,7 +1182,8 @@ Optimizer<TenElemT, QNT>::MinSRUpdate(
   MPI_Reduce(&local_y_sum, &global_y_sum, 1, mpi_type,
              MPI_SUM, qlten::hp_numeric::kMPIMasterRank, comm_);
 
-  // Gather SITPS local_sum to master via Send/Recv (same pattern as MPIMeanTensor)
+  // Gather SITPS local_sum to master via Send/Recv (same pattern as MPIMeanTensor).
+  // The assembled direction is meaningful only on master rank.
   WaveFunctionT delta_theta;
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     delta_theta = std::move(local_sum);
@@ -1178,9 +1199,40 @@ Optimizer<TenElemT, QNT>::MinSRUpdate(
   }
 
   double natural_grad_norm = 0.0;
-  WaveFunctionT updated_state = current_state;
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     natural_grad_norm = std::sqrt(delta_theta.NormSquare());
+  }
+
+  return {std::move(delta_theta), natural_grad_norm};
+}
+
+/**
+ * @brief MinSR update: construct T, eigensolve, back-substitute.
+ *
+ * Stages:
+ * 1. Build epsilon_bar from energy_samples.
+ * 2. Construct T via ring exchange + four-term centering (MinSRTMatrix).
+ * 3. Eigensolve T * y = epsilon_bar with pseudo-inverse cutoff.
+ * 4. Back-substitute: delta_theta = O_bar^dagger * y (distributed reduce).
+ */
+template<typename TenElemT, typename QNT>
+std::pair<typename Optimizer<TenElemT, QNT>::WaveFunctionT, double>
+Optimizer<TenElemT, QNT>::MinSRUpdate(
+    const WaveFunctionT &current_state,
+    const WaveFunctionT &gradient,
+    const std::vector<WaveFunctionT> &Ostar_samples,
+    const WaveFunctionT &Ostar_mean,
+    const std::vector<TenElemT> &energy_samples,
+    TenElemT energy,
+    double learning_rate,
+    const MinSRParams &params) {
+  (void)gradient;
+
+  auto [delta_theta, natural_grad_norm] = CalculateMinSRDirection_(
+      current_state, Ostar_samples, Ostar_mean, energy_samples, energy, params);
+
+  WaveFunctionT updated_state = current_state;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
     updated_state += (-learning_rate) * delta_theta;
   }
 

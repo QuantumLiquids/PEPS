@@ -257,8 +257,9 @@ This repository also provides an optional auto step-size selector in
 `Optimizer::IterativeOptimize` for MC-noisy runs.
 
 Current v1 scope:
-- Algorithms: SGD and SR only.
+- Algorithms: SGD, SR, and MinSR.
 - Candidate set: `{eta, eta/2}`.
+- For SR and MinSR, each selector trigger computes one natural-gradient direction and reuses it across all candidate trial states.
 - Trigger: only when the iteration index is divisible by `every_n_steps` (no trigger on non-divisible final iterations).
 - Writeback: selected `eta` is persisted and forced to be non-increasing.
 - Two-phase policy:

@@ -209,8 +209,9 @@ auto opt_params = qlpeps::OptimizerParamsBuilder()
 ```
 
 v1 行为：
-- 支持算法：仅 SGD 与 SR。
+- 支持算法：SGD、SR 与 MinSR。
 - 候选集合：`{eta, eta/2}`。
+- 对于 SR 与 MinSR，每次选择器触发都会先计算一次自然梯度方向，并在所有候选试算状态间复用。
 - 触发频率：仅在迭代号可被 `every_n_steps` 整除时触发；若最后一步不整除，则该步不会触发选择器。
 - 写回策略：选中步长会写回，且保持单调不增。
 - 相位策略：前期（`iter < ratio * max_iterations`）偏激进按均值选；后期要求相对误差条有显著改进才降步长。
