@@ -238,7 +238,7 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   // MPS local operations. Only tensors near the target site are needed in memory.
   void LeftCanonicalizeTen(const size_t);
 
-  qlten::QLTensor<RealT, QNT> RightCanonicalizeTen(const size_t);
+  void RightCanonicalizeTen(const size_t);
 
   //return (D, trunc_err)
   std::pair<size_t, RealT> RightCanonicalizeTruncate(const size_t, const size_t, const size_t, const RealT);
@@ -339,6 +339,9 @@ class BMPS : public TenVec<QLTensor<TenElemT, QNT>> {
   BMPS MultiplyMPO1SiteVariationalCompress_(const TransferMPO &, const size_t, const size_t, const RealT,
                                             const RealT variational_converge_tol, const size_t max_iter) const;
   BMPS MakeVariationalInitGuess_(const TransferMPO &, const size_t, const size_t, const RealT) const;
+
+  /// SVD-based right-canonicalization that returns singular values (for entanglement entropy).
+  qlten::QLTensor<RealT, QNT> RightCanonicalizeTenSVD_(const size_t);
 
   // TODO(wanghaoxin): validate fermionic case and add unit test coverage
   RealT RightCanonicalizeTruncateWithPhyIdx_(const size_t, const size_t, const size_t, const RealT);

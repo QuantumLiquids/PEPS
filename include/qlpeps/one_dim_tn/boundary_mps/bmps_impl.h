@@ -174,8 +174,29 @@ void BMPS<TenElemT, QNT>::LeftCanonicalizeTen(const size_t site_idx) {
 }
 
 template<typename TenElemT, typename QNT>
-qlten::QLTensor<typename BMPS<TenElemT, QNT>::RealT, QNT> BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
-  ///< TODO: replace SVD with LQ decomposition (available since TensorToolkit 2042b5a)
+void BMPS<TenElemT, QNT>::RightCanonicalizeTen(const size_t site_idx) {
+  assert(site_idx > 0);
+  size_t rdims = (*this)(site_idx)->Rank() - 1;
+  Tensor l;
+  auto pq = new Tensor;
+  qlten::LQ((*this)(site_idx), rdims, Div((*this)[site_idx]), &l, pq);
+  delete (*this)(site_idx);
+  (*this)(site_idx) = pq;
+
+  auto pprev_ten = new Tensor;
+  Contract((*this)(site_idx - 1), &l, {{2}, {0}}, pprev_ten);
+  delete (*this)(site_idx - 1);
+  (*this)(site_idx - 1) = pprev_ten;
+  if constexpr (Tensor::IsFermionic()) {
+    (*this)(site_idx)->Transpose({0, 1, 3, 2});
+  }
+  tens_cano_type_[site_idx] = MPSTenCanoType::RIGHT;
+  tens_cano_type_[site_idx - 1] = MPSTenCanoType::NONE;
+}
+
+template<typename TenElemT, typename QNT>
+qlten::QLTensor<typename BMPS<TenElemT, QNT>::RealT, QNT>
+BMPS<TenElemT, QNT>::RightCanonicalizeTenSVD_(const size_t site_idx) {
   assert(site_idx > 0);
   size_t ldims = 1;
   Tensor u;
@@ -250,7 +271,7 @@ std::vector<typename qlten::RealTypeTrait<TenElemT>::type> BMPS<TenElemT, QNT>::
   (*this)[N - 1].Normalize();
 
   for (size_t i = N - 1; i >= 1; --i) { // site
-    auto s = RightCanonicalizeTen(i);
+    auto s = RightCanonicalizeTenSVD_(i);
     typename qlten::RealTypeTrait<TenElemT>::type ee = 0;
     typename qlten::RealTypeTrait<TenElemT>::type sum_of_p2n = 0.0;
     for (size_t k = 0; k < s.GetShape()[0]; ++k) { // indices of singular value matrix
