@@ -865,12 +865,15 @@ TEST_F(OptimizerTest, PeriodicStepSelectorMCIntervalAndMonotonicWriteback) {
   auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
   ASSERT_EQ(result.total_iterations, 6u);
   ASSERT_EQ(result.learning_rate_trajectory.size(), result.total_iterations);
-  // iter=0 is a trigger step (every_n_steps=2). For a quadratic objective,
-  // eta=1.5 reaches lower trial energy than eta=3.0, so first writeback is 1.5.
-  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[0], 1.5);
-  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], result.learning_rate_trajectory[0]);
-  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[2], 0.75);
-  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[3], result.learning_rate_trajectory[2]);
+  // Periodic selector requires iter > 0, so iter=0 and iter=1 use the base LR.
+  // First trigger at iter=2 (2%2==0): halves 3.0 -> 1.5.
+  // Second trigger at iter=4 (4%2==0): halves 1.5 -> 0.75.
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[0], 3.0);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[1], 3.0);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[2], 1.5);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[3], 1.5);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[4], 0.75);
+  EXPECT_DOUBLE_EQ(result.learning_rate_trajectory[5], 0.75);
   for (size_t i = 1; i < result.learning_rate_trajectory.size(); ++i) {
     EXPECT_LE(result.learning_rate_trajectory[i], result.learning_rate_trajectory[i - 1]);
   }
