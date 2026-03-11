@@ -13,6 +13,7 @@
 #ifndef QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
 #define QLPEPS_ALGORITHM_SIMPLE_UPDATE_SQUARE_LATTICE_NN_SIMPLE_UPDATE_H
 
+#include <stdexcept>
 #include "qlpeps/algorithm/simple_update/simple_update.h"
 
 namespace qlpeps {
@@ -66,6 +67,44 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
     assert(ham_on_site_terms_.rows() == this->ly_);
     assert(ham_on_site_terms_.cols() == this->lx_);
   }
+  /**
+   * Non-uniform bond Hamiltonians (e.g. checkerboard hopping, random coupling).
+   * @param horizontal_nn_hams  Per-bond horizontal Hamiltonians, dims (Ly, Lx-1) for OBC
+   * @param vertical_nn_hams    Per-bond vertical Hamiltonians, dims (Ly-1, Lx) for OBC
+   */
+  SquareLatticeNNSimpleUpdateExecutor(const SimpleUpdatePara &update_para,
+                                      const PEPST &peps_initial,
+                                      const TenMatrix<Tensor> &horizontal_nn_hams,
+                                      const TenMatrix<Tensor> &vertical_nn_hams,
+                                      const Tensor &ham_onsite = Tensor()) :
+      SimpleUpdateExecutor<TenElemT, QNT>(update_para, peps_initial), ham_two_site_term_(),
+      ham_on_site_terms_(this->ly_, this->lx_),
+      horizontal_nn_input_hams_(horizontal_nn_hams),
+      vertical_nn_input_hams_(vertical_nn_hams),
+      non_uniform_bond_hams_(true),
+      horizontal_nn_ham_set_(this->ly_, peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      vertical_nn_ham_set_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, this->lx_),
+      horizontal_nn_evolve_gate_set_(this->ly_, peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->lx_ : this->lx_ - 1),
+      vertical_nn_evolve_gate_set_(peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic ? this->ly_ : this->ly_ - 1, this->lx_) {
+    const bool is_pbc = (peps_initial.GetBoundaryCondition() == BoundaryCondition::Periodic);
+    const size_t expected_hor_cols = is_pbc ? this->lx_ : this->lx_ - 1;
+    const size_t expected_ver_rows = is_pbc ? this->ly_ : this->ly_ - 1;
+    if (horizontal_nn_hams.rows() != this->ly_ || horizontal_nn_hams.cols() != expected_hor_cols) {
+      throw std::invalid_argument("horizontal_nn_hams dimension mismatch: expected ("
+          + std::to_string(this->ly_) + ", " + std::to_string(expected_hor_cols)
+          + "), got (" + std::to_string(horizontal_nn_hams.rows()) + ", "
+          + std::to_string(horizontal_nn_hams.cols()) + ")");
+    }
+    if (vertical_nn_hams.rows() != expected_ver_rows || vertical_nn_hams.cols() != this->lx_) {
+      throw std::invalid_argument("vertical_nn_hams dimension mismatch: expected ("
+          + std::to_string(expected_ver_rows) + ", " + std::to_string(this->lx_)
+          + "), got (" + std::to_string(vertical_nn_hams.rows()) + ", "
+          + std::to_string(vertical_nn_hams.cols()) + ")");
+    }
+    if (!ham_onsite.IsDefault())
+      for (auto &ten : ham_on_site_terms_)
+        ten = ham_onsite;
+  }
  private:
   void SetEvolveGate_(void) override;
 
@@ -75,12 +114,19 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
   Tensor ConstructBondHamiltonian(const TenElemT h1, const Tensor &on_site_term1,
                                   const TenElemT h2, const Tensor &on_site_term2,
                                   const Tensor &id) const {
+    return ConstructBondHamiltonian(ham_two_site_term_, h1, on_site_term1, h2, on_site_term2, id);
+  }
+
+  Tensor ConstructBondHamiltonian(const Tensor &bond_ham,
+                                  const TenElemT h1, const Tensor &on_site_term1,
+                                  const TenElemT h2, const Tensor &on_site_term2,
+                                  const Tensor &id) const {
     Tensor term1, term2;
     Contract(&on_site_term1, {}, &id, {}, &term1);
     term1 *= h1;
     Contract(&id, {}, &on_site_term2, {}, &term2);
     term2 *= h2;
-    return ham_two_site_term_ + term1 + term2;
+    return bond_ham + term1 + term2;
   }
 
   Tensor ConstructEvolveOperator(const TenElemT h1, const Tensor &on_site_term1,
@@ -90,11 +136,23 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
                            ConstructBondHamiltonian(h1, on_site_term1, h2, on_site_term2, id));
   }
 
+  Tensor ConstructEvolveOperator(const Tensor &bond_ham,
+                                 const TenElemT h1, const Tensor &on_site_term1,
+                                 const TenElemT h2, const Tensor &on_site_term2,
+                                 const Tensor &id) const {
+    return TaylorExpMatrix(RealT(this->update_para.tau),
+                           ConstructBondHamiltonian(bond_ham, h1, on_site_term1, h2, on_site_term2, id));
+  }
+
   typename SimpleUpdateExecutor<TenElemT, QNT>::SweepResult SimpleUpdateSweep_(void) override;
 
   Tensor ham_two_site_term_; //uniform bond term
 
   TenMatrix<Tensor> ham_on_site_terms_;  // on-site terms
+
+  TenMatrix<Tensor> horizontal_nn_input_hams_;  // per-bond input (non-uniform case)
+  TenMatrix<Tensor> vertical_nn_input_hams_;
+  bool non_uniform_bond_hams_ = false;
 
   TenMatrix<Tensor> horizontal_nn_ham_set_;
   TenMatrix<Tensor> vertical_nn_ham_set_;
@@ -105,7 +163,10 @@ class SquareLatticeNNSimpleUpdateExecutor : public SimpleUpdateExecutor<TenElemT
 
 template<typename TenElemT, typename QNT>
 void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
-  if (ham_on_site_terms_(0, 0) == nullptr || ham_on_site_terms_(0, 0)->IsDefault()) {
+  const bool has_onsite = !(ham_on_site_terms_(0, 0) == nullptr || ham_on_site_terms_(0, 0)->IsDefault());
+
+  // Case 1: uniform bond ham, no on-site terms (fast path)
+  if (!has_onsite && !non_uniform_bond_hams_) {
     Tensor evolve_gate_nn = TaylorExpMatrix(RealT(this->update_para.tau), ham_two_site_term_);
     for (auto &ten : horizontal_nn_ham_set_) {
       ten = ham_two_site_term_;
@@ -119,75 +180,103 @@ void SquareLatticeNNSimpleUpdateExecutor<TenElemT, QNT>::SetEvolveGate_() {
     for (auto &ten : vertical_nn_evolve_gate_set_) {
       ten = evolve_gate_nn;
     }
-  } else {// transverse-field Ising, Hubbard model, t-J + chemical potential
-    //construct the on-site identity operator
-    Tensor id(ham_on_site_terms_(0, 0)->GetIndexes()); // assume uniform hilbert space.
-    if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() != OUT) {
-      std::cerr << "Index direction of on-site hamiltonian is unexpected." << std::endl;
-    }
-    for (size_t i = 0; i < id.GetShape()[0]; i++) {
-      id({i, i}) = RealT(1.0);
-    }
-    if (Tensor::IsFermionic()) {
-      id.ActFermionPOps();
-    }
+    return;
+  }
 
-    const bool is_pbc = (this->peps_.GetBoundaryCondition() == BoundaryCondition::Periodic);
-    const size_t hor_bond_limit = is_pbc ? this->lx_ : this->lx_ - 1;
-    const size_t ver_bond_limit = is_pbc ? this->ly_ : this->ly_ - 1;
+  // Case 2: non-uniform bonds, no on-site terms
+  const bool is_pbc = (this->peps_.GetBoundaryCondition() == BoundaryCondition::Periodic);
+  const size_t hor_bond_limit = is_pbc ? this->lx_ : this->lx_ - 1;
+  const size_t ver_bond_limit = is_pbc ? this->ly_ : this->ly_ - 1;
 
+  if (!has_onsite && non_uniform_bond_hams_) {
     for (size_t col = 0; col < hor_bond_limit; col++) {
       for (size_t row = 0; row < this->ly_; row++) {
-        size_t coord_num1 = 4; // Coordination number of site_1
-        size_t coord_num2 = 4; // Coordination number of site_2
-        if (!is_pbc) {
-          if (row == 0 || row == this->ly_ - 1) {
-            coord_num1 -= 1;
-            coord_num2 -= 1;
-          }
-          if (col == 0) coord_num1 -= 1;
-          if (col == this->lx_ - 2) coord_num2 -= 1;
-        }
-
-        const size_t col2 = (col + 1) % this->lx_;
-        horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1) / RealT(coord_num1),
-                                                                      ham_on_site_terms_({row, col}),
-                                                                      RealT(1) / RealT(coord_num2),
-                                                                      ham_on_site_terms_({row, col2}),
-                                                                      id);
-        horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1) / RealT(coord_num1),
-                                                                             ham_on_site_terms_({row, col}),
-                                                                             RealT(1) / RealT(coord_num2),
-                                                                             ham_on_site_terms_({row, col2}),
-                                                                             id);
+        horizontal_nn_ham_set_({row, col}) = horizontal_nn_input_hams_({row, col});
+        horizontal_nn_evolve_gate_set_({row, col}) = TaylorExpMatrix(
+            RealT(this->update_para.tau), horizontal_nn_input_hams_({row, col}));
       }
     }
-
     for (size_t col = 0; col < this->lx_; col++) {
       for (size_t row = 0; row < ver_bond_limit; row++) {
-        size_t coord_num1 = 4; // Coordination number of site_1
-        size_t coord_num2 = 4; // Coordination number of site_2
-        if (!is_pbc) {
-          if (col == 0 || col == this->lx_ - 1) {
-            coord_num1 -= 1;
-            coord_num2 -= 1;
-          }
-          if (row == 0) coord_num1 -= 1;
-          if (row == this->ly_ - 2) coord_num2 -= 1;
-        }
+        vertical_nn_ham_set_({row, col}) = vertical_nn_input_hams_({row, col});
+        vertical_nn_evolve_gate_set_({row, col}) = TaylorExpMatrix(
+            RealT(this->update_para.tau), vertical_nn_input_hams_({row, col}));
+      }
+    }
+    return;
+  }
 
-        const size_t row2 = (row + 1) % this->ly_;
-        vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(RealT(1) / RealT(coord_num1),
+  // Case 3 & 4: has on-site terms (possibly also non-uniform bonds)
+  Tensor id(ham_on_site_terms_(0, 0)->GetIndexes()); // assume uniform hilbert space.
+  if (Tensor::IsFermionic() && id.GetIndex(0).GetDir() != OUT) {
+    std::cerr << "Index direction of on-site hamiltonian is unexpected." << std::endl;
+  }
+  for (size_t i = 0; i < id.GetShape()[0]; i++) {
+    id({i, i}) = RealT(1.0);
+  }
+  if (Tensor::IsFermionic()) {
+    id.ActFermionPOps();
+  }
+
+  for (size_t col = 0; col < hor_bond_limit; col++) {
+    for (size_t row = 0; row < this->ly_; row++) {
+      size_t coord_num1 = 4;
+      size_t coord_num2 = 4;
+      if (!is_pbc) {
+        if (row == 0 || row == this->ly_ - 1) {
+          coord_num1 -= 1;
+          coord_num2 -= 1;
+        }
+        if (col == 0) coord_num1 -= 1;
+        if (col == this->lx_ - 2) coord_num2 -= 1;
+      }
+
+      const size_t col2 = (col + 1) % this->lx_;
+      const Tensor &base_ham = non_uniform_bond_hams_
+          ? horizontal_nn_input_hams_({row, col}) : ham_two_site_term_;
+      horizontal_nn_ham_set_({row, col}) = ConstructBondHamiltonian(base_ham,
+                                                                    RealT(1) / RealT(coord_num1),
                                                                     ham_on_site_terms_({row, col}),
                                                                     RealT(1) / RealT(coord_num2),
-                                                                    ham_on_site_terms_({row2, col}),
+                                                                    ham_on_site_terms_({row, col2}),
                                                                     id);
-        vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(RealT(1) / RealT(coord_num1),
+      horizontal_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(base_ham,
+                                                                           RealT(1) / RealT(coord_num1),
                                                                            ham_on_site_terms_({row, col}),
                                                                            RealT(1) / RealT(coord_num2),
-                                                                           ham_on_site_terms_({row2, col}),
+                                                                           ham_on_site_terms_({row, col2}),
                                                                            id);
+    }
+  }
+
+  for (size_t col = 0; col < this->lx_; col++) {
+    for (size_t row = 0; row < ver_bond_limit; row++) {
+      size_t coord_num1 = 4;
+      size_t coord_num2 = 4;
+      if (!is_pbc) {
+        if (col == 0 || col == this->lx_ - 1) {
+          coord_num1 -= 1;
+          coord_num2 -= 1;
+        }
+        if (row == 0) coord_num1 -= 1;
+        if (row == this->ly_ - 2) coord_num2 -= 1;
       }
+
+      const size_t row2 = (row + 1) % this->ly_;
+      const Tensor &base_ham = non_uniform_bond_hams_
+          ? vertical_nn_input_hams_({row, col}) : ham_two_site_term_;
+      vertical_nn_ham_set_({row, col}) = ConstructBondHamiltonian(base_ham,
+                                                                  RealT(1) / RealT(coord_num1),
+                                                                  ham_on_site_terms_({row, col}),
+                                                                  RealT(1) / RealT(coord_num2),
+                                                                  ham_on_site_terms_({row2, col}),
+                                                                  id);
+      vertical_nn_evolve_gate_set_({row, col}) = ConstructEvolveOperator(base_ham,
+                                                                         RealT(1) / RealT(coord_num1),
+                                                                         ham_on_site_terms_({row, col}),
+                                                                         RealT(1) / RealT(coord_num2),
+                                                                         ham_on_site_terms_({row2, col}),
+                                                                         id);
     }
   }
 }
