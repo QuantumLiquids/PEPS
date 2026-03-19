@@ -104,6 +104,62 @@ protected:
     return ToSplitIndexTPS<QLTEN_Complex, U1QN>(tps);
   }
 
+  template<typename ElemT>
+  SplitIndexTPS<ElemT, U1QN> CreateDeterministicSplitIndexTPSWithDefaults(
+      const BoundaryCondition bc = BoundaryCondition::Periodic) {
+    using Tensor = QLTensor<ElemT, U1QN>;
+
+    size_t d_sec = D / 3;
+    IndexT virt_out_idx = IndexT({QNSctT(U1QN({QNCard("Sz", U1QNVal(1))}), d_sec),
+                                  QNSctT(U1QN({QNCard("Sz", U1QNVal(0))}), d_sec),
+                                  QNSctT(U1QN({QNCard("Sz", U1QNVal(-1))}), D - 2 * d_sec)},
+                                 TenIndexDirType::OUT);
+    IndexT virt_in_idx = InverseIndex(virt_out_idx);
+
+    SplitIndexTPS<ElemT, U1QN> sitps(Ly, Lx, 2, bc);
+    for (size_t row = 0; row < Ly; ++row) {
+      for (size_t col = 0; col < Lx; ++col) {
+        auto &site_tensors = sitps({row, col});
+        if ((row + col) % 2 == 0) {
+          site_tensors[0] = Tensor({virt_in_idx, virt_out_idx, virt_out_idx, virt_in_idx});
+          qlten::SetRandomSeed(1000ULL + row * 17ULL + col * 31ULL);
+          site_tensors[0].Random(qn0);
+        }
+        if ((row + 2 * col) % 3 != 0) {
+          site_tensors[1] = Tensor({virt_in_idx, virt_out_idx, virt_out_idx, virt_in_idx});
+          qlten::SetRandomSeed(2000ULL + row * 19ULL + col * 37ULL);
+          site_tensors[1].Random(qn0);
+        }
+      }
+    }
+    return sitps;
+  }
+
+  template<typename ElemT>
+  void ExpectSplitIndexTPSEqual(
+      const SplitIndexTPS<ElemT, U1QN> &actual,
+      const SplitIndexTPS<ElemT, U1QN> &expected) {
+    ASSERT_EQ(actual.rows(), expected.rows());
+    ASSERT_EQ(actual.cols(), expected.cols());
+    EXPECT_EQ(actual.GetBoundaryCondition(), expected.GetBoundaryCondition());
+
+    for (size_t row = 0; row < expected.rows(); ++row) {
+      for (size_t col = 0; col < expected.cols(); ++col) {
+        const auto &actual_site = actual({row, col});
+        const auto &expected_site = expected({row, col});
+        ASSERT_EQ(actual_site.size(), expected_site.size()) << "site=(" << row << "," << col << ")";
+        for (size_t i = 0; i < expected_site.size(); ++i) {
+          EXPECT_EQ(actual_site[i].IsDefault(), expected_site[i].IsDefault())
+              << "site=(" << row << "," << col << "), component=" << i;
+          if (!expected_site[i].IsDefault()) {
+            EXPECT_EQ(actual_site[i], expected_site[i])
+                << "site=(" << row << "," << col << "), component=" << i;
+          }
+        }
+      }
+    }
+  }
+
   int rank_, size_;
   U1QN qn0;
   IndexT pb_out, pb_in;
@@ -185,6 +241,30 @@ TEST_F(SplitIndexTPSMPITest, TestMPIBroadcastComplex) {
       }
     }
   }
+}
+
+TEST_F(SplitIndexTPSMPITest, TestMPIBroadcastDoublePreservesPackedDefaultComponents) {
+  DSITPS sitps;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    sitps = CreateDeterministicSplitIndexTPSWithDefaults<QLTEN_Double>();
+  }
+
+  qlpeps::MPI_Bcast(sitps, MPI_COMM_WORLD, 0);
+
+  const auto expected = CreateDeterministicSplitIndexTPSWithDefaults<QLTEN_Double>();
+  ExpectSplitIndexTPSEqual(sitps, expected);
+}
+
+TEST_F(SplitIndexTPSMPITest, TestMPIBroadcastComplexPreservesPackedDefaultComponents) {
+  CSITPS sitps;
+  if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
+    sitps = CreateDeterministicSplitIndexTPSWithDefaults<QLTEN_Complex>();
+  }
+
+  qlpeps::MPI_Bcast(sitps, MPI_COMM_WORLD, 0);
+
+  const auto expected = CreateDeterministicSplitIndexTPSWithDefaults<QLTEN_Complex>();
+  ExpectSplitIndexTPSEqual(sitps, expected);
 }
 
 /**

@@ -8,6 +8,9 @@
 #ifndef QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 #define QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 
+#include <cstring>    // memcpy
+#include <cstdint>    // uint64_t
+#include <stdexcept>  // runtime_error
 #include "qlpeps/utility/filesystem_utils.h"
 
 namespace qlpeps {
@@ -759,11 +762,13 @@ SplitIndexTPS<TenElemT, QNT>::FromTPS(const TPST &tps) {
 }
 
 /**
- * @brief Broadcast SplitIndexTPS tensor to all MPI ranks
- * 
- * This function provides unified broadcasting for SplitIndexTPS objects.
- * All ranks must call this function with the same root rank.
- * 
+ * @brief Broadcast SplitIndexTPS tensor to all MPI ranks.
+ *
+ * Two-phase implementation:
+ *   Phase 1 — Pack all tensor shells into one buffer, broadcast (2 MPI calls).
+ *   Phase 2 — Broadcast raw data per tensor directly from/to tensor memory
+ *             (up to rows*cols*phys_dim MPI calls, zero extra memcpy).
+ *
  * @param v Tensor to broadcast (input on root, output on others)
  * @param comm MPI communicator
  * @param root Root rank that provides the data (default: 0)
@@ -775,34 +780,98 @@ void MPI_Bcast(
     int root = 0
 ) {
   using Tensor = QLTensor<TenElemT, QNT>;
-  
+
+  auto append_u64 = [](std::vector<char> &buf, uint64_t value) {
+    const char *ptr = reinterpret_cast<const char *>(&value);
+    buf.insert(buf.end(), ptr, ptr + sizeof(uint64_t));
+  };
+  auto read_u64 = [](const char *&cur, const char *end, const char *what) {
+    if (static_cast<size_t>(end - cur) < sizeof(uint64_t)) {
+      throw std::runtime_error(
+          std::string("SplitIndexTPS MPI_Bcast: truncated field ") + what);
+    }
+    uint64_t value;
+    std::memcpy(&value, cur, sizeof(uint64_t));
+    cur += sizeof(uint64_t);
+    return value;
+  };
+
   int rank;
   MPI_Comm_rank(comm, &rank);
-  
-  // Broadcast dimensions first
-  size_t peps_size[4];
+
+  // ============================================================
+  // Phase 1: Pack and broadcast shells (2 MPI calls)
+  // ============================================================
+  std::vector<char> shell_buffer;
+  uint64_t shell_buffer_size = 0;
+
   if (rank == root) {
-    peps_size[0] = v.rows();
-    peps_size[1] = v.cols();
-    peps_size[2] = v.PhysicalDim();
-    peps_size[3] = static_cast<size_t>(v.GetBoundaryCondition());
-  }
-  HANDLE_MPI_ERROR(::MPI_Bcast(peps_size, 4, MPI_UNSIGNED_LONG_LONG, root, comm));
-  
-  auto [rows, cols, phy_dim, bc_int] = peps_size;
-  
-  // Initialize tensor structure on non-root ranks
-  if (rank != root) {
-    v = SplitIndexTPS<TenElemT, QNT>(rows, cols, static_cast<BoundaryCondition>(bc_int));
+    const size_t num_tensors = v.rows() * v.cols() * v.PhysicalDim();
+    shell_buffer.reserve(32 + num_tensors * 400);  // shells are small
+
+    append_u64(shell_buffer, v.rows());
+    append_u64(shell_buffer, v.cols());
+    append_u64(shell_buffer, v.PhysicalDim());
+    append_u64(shell_buffer, static_cast<uint64_t>(v.GetBoundaryCondition()));
+
     for (auto &tens : v) {
-      tens = std::vector<Tensor>(phy_dim);
+      for (Tensor &ten : tens) {
+        ten.PackShellForMPI(shell_buffer);
+      }
+    }
+    shell_buffer_size = shell_buffer.size();
+  }
+
+  // Bcast 1: shell buffer size
+  HANDLE_MPI_ERROR(::MPI_Bcast(&shell_buffer_size, 1, MPI_UINT64_T, root, comm));
+
+  // Bcast 2: shell buffer
+  if (rank != root) {
+    shell_buffer.resize(shell_buffer_size);
+  }
+  qlten::hp_numeric::MPI_Bcast(shell_buffer.data(), shell_buffer_size, root, comm);
+
+  // Receivers: reconstruct tensor shells and allocate memory
+  if (rank != root) {
+    if (shell_buffer_size < 32) {
+      throw std::runtime_error("SplitIndexTPS MPI_Bcast: truncated header");
+    }
+
+    const char *cur = shell_buffer.data();
+    const char *end = cur + shell_buffer_size;
+
+    const size_t rows = read_u64(cur, end, "rows");
+    const size_t cols = read_u64(cur, end, "cols");
+    const size_t phys_dim = read_u64(cur, end, "phys_dim");
+    const uint64_t bc_raw = read_u64(cur, end, "bc");
+
+    if (bc_raw > static_cast<uint64_t>(BoundaryCondition::Periodic)) {
+      throw std::runtime_error("SplitIndexTPS MPI_Bcast: invalid boundary condition");
+    }
+    const auto bc = static_cast<BoundaryCondition>(bc_raw);
+
+    v = SplitIndexTPS<TenElemT, QNT>(rows, cols, bc);
+    for (auto &tens : v) {
+      tens = std::vector<Tensor>(phys_dim);
+      for (Tensor &ten : tens) {
+        ten.UnpackShellForMPI(cur, end);
+      }
+    }
+
+    if (cur != end) {
+      throw std::runtime_error(
+          "SplitIndexTPS MPI_Bcast: trailing bytes in shell buffer");
     }
   }
-  
-  // Broadcast all tensors
+
+  // ============================================================
+  // Phase 2: Broadcast raw data per tensor (zero copy)
+  // ============================================================
   for (auto &tens : v) {
     for (Tensor &ten : tens) {
-      ten.MPI_Bcast(root, comm);
+      if (!ten.IsDefault()) {
+        ten.GetBlkSparDataTen().RawDataMPIBcast(comm, root);
+      }
     }
   }
 }
