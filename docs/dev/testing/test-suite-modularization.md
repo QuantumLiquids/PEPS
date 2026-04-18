@@ -108,7 +108,7 @@ MC sampling with fixed RNG seed, sufficient statistics, compare energy to exact 
 
 ---
 
-## Integration Test Redesign (Future)
+## Integration Test Redesign
 
 ### Tier 1 — Algorithm pipeline tests (label: `integration-local`)
 
@@ -122,7 +122,15 @@ MC sampling with fixed RNG seed, sufficient statistics, compare energy to exact 
 - One test per model on 4x4+ systems
 - Energy convergence to within tolerance of ED/DMRG references
 - Requires cluster resources (many MPI ranks, long runtime)
-- AI agent-driven: documented via skill/prompt templates for automated parameter tuning
+- AI agent-driven: documented via prompt templates for automated parameter tuning
+
+**Current candidate:**
+
+| Model | Lattice | Optimizers | ED Reference | Status |
+|-------|---------|-----------|-------------|--------|
+| Square Heisenberg OBC | 4x4 | SR, MinSR | E=-9.189207065192962 (QuSpin) | ED reference committed; cluster tuning and final assertions still pending |
+
+**Workflow:** Parameters are tuned via HeisenbergVMCPEPS on cluster (AI/Codex), then upstreamed into a minimal PEPS integration test only after the final assertions and thresholds are stable. See `tests/test_data/ed_reference/` for QuSpin scripts and ED values.
 
 ---
 
