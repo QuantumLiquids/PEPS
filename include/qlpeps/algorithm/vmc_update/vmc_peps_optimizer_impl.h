@@ -12,7 +12,10 @@
 
 #include <iomanip>
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include "qlpeps/algorithm/vmc_update/vmc_peps_optimizer.h"
@@ -115,6 +118,11 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
           if (energy < en_min_) {
             en_min_ = energy;
             tps_lowest_ = monte_carlo_engine_.State();
+          }
+
+          const auto &ckpt = params_.optimizer_params.checkpoint_params;
+          if (ckpt.IsEnabled() && iteration > 0 && (iteration % ckpt.every_n_steps == 0)) {
+            WriteEnergyTrajectoryCsv_("./energy/energy_trajectory.csv");
           }
         }
       };
@@ -463,6 +471,36 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
  */
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
          template<typename, typename> class ContractorT>
+void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::WriteEnergyTrajectoryCsv_(
+    const std::string &csv_path) const {
+  try {
+    const auto parent = std::filesystem::path(csv_path).parent_path();
+    if (!parent.empty() && !EnsureDirectoryExists(parent.string())) {
+      throw std::runtime_error("Cannot create trajectory CSV directory: " + parent.string());
+    }
+
+    std::ofstream csv;
+    csv.exceptions(std::ios::failbit | std::ios::badbit);
+    csv.open(csv_path);
+    csv << "iteration,energy,energy_error,gradient_norm\n";
+    const size_t n = energy_trajectory_.size();
+    for (size_t i = 0; i < n; ++i) {
+      const double e = std::real(energy_trajectory_[i]);
+      const double err = (i < energy_error_traj_.size() ? energy_error_traj_[i] : 0.0);
+      const double gnorm = (i < grad_norm_.size() ? grad_norm_[i] : 0.0);
+      csv << i << "," << std::setprecision(17) << e << "," << err << "," << gnorm << "\n";
+    }
+    csv.close();
+  } catch (const std::exception &e) {
+    std::cerr << "[VMCPEPSOptimizer][ERROR] Failed to write trajectory CSV file "
+              << csv_path << ": " << e.what() << std::endl;
+    ::MPI_Abort(monte_carlo_engine_.Comm(), EXIT_FAILURE);
+    throw;
+  }
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename EnergySolver,
+         template<typename, typename> class ContractorT>
 void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, ContractorT>::DumpData(const bool release_mem) {
   DumpData(params_.tps_dump_base_name, release_mem);  // Use base name from parameters
 }
@@ -498,34 +536,7 @@ void VMCPEPSOptimizer<TenElemT,
   }
   // Note: legacy energy_sample<rank> dump is temporarily disabled during refactor
   if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
-    // Temporary deprecation notice for legacy binary dumps; keep behavior unchanged
-    static bool deprec_once = false;
-    if (!deprec_once) {
-      std::cout << "[VMCPEPSOptimizer] Notice: binary trajectory dumps (energy_trajectory,"
-                   " energy_err_trajectory) are deprecated and will be removed in a future release."
-                   " Use energy/energy_trajectory.csv instead.\n";
-      deprec_once = true;
-    }
-    DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
-    DumpVecDataDouble_(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
-    // Also dump a human-friendly CSV of the trajectory, in append mode for multi-run continuity
-    const std::string csv_path = energy_data_path + "/energy_trajectory.csv";
-    const bool csv_exists = std::filesystem::exists(csv_path);
-    std::ofstream csv(csv_path, std::ios::app);
-    if (csv) {
-      // Write header if file newly created
-      if (!csv_exists) {
-        csv << "iteration,energy,energy_error,gradient_norm\n";
-      }
-      const size_t n = energy_trajectory_.size();
-      for (size_t i = 0; i < n; ++i) {
-        const double e = std::real(energy_trajectory_[i]);
-        const double err = (i < energy_error_traj_.size() ? energy_error_traj_[i] : 0.0);
-        const double gnorm = (i < grad_norm_.size() ? grad_norm_[i] : 0.0);
-        csv << i << "," << std::setprecision(17) << e << "," << err << "," << gnorm << "\n";
-      }
-      csv.close();
-    }
+    WriteEnergyTrajectoryCsv_(energy_data_path + "/energy_trajectory.csv");
   }
 }
 

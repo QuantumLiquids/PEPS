@@ -274,6 +274,7 @@ MCPEPSMeasurer<TenElemT,
   const std::string base_dir = (measurement_data_path.empty() ? std::string("./") : (measurement_data_path + "/"));
   const std::string stats_dir = base_dir + "stats/";
   engine_.EnsureDirectoryExists(stats_dir + "dummy");
+  DumpMetadata_(base_dir);
 
   if (engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
     if (!registry_stats_.empty()) {
@@ -371,6 +372,72 @@ DumpParticleNumberSamples_(const std::string &dir) const {
   ofs << "sample_id,particle_number\n";
   for (size_t i = 0; i < particle_number_samples_.size(); ++i) {
     ofs << i << "," << particle_number_samples_[i] << "\n";
+  }
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::DumpMetadata_(
+    const std::string &dir) const {
+  const unsigned long long local_samples = static_cast<unsigned long long>(psi_samples_.size());
+  unsigned long long total_samples = 0;
+  HANDLE_MPI_ERROR(::MPI_Reduce(&local_samples,
+                                &total_samples,
+                                1,
+                                MPI_UNSIGNED_LONG_LONG,
+                                MPI_SUM,
+                                qlten::hp_numeric::kMPIMasterRank,
+                                engine_.Comm()));
+
+  if (engine_.Rank() != qlten::hp_numeric::kMPIMasterRank) {
+    return;
+  }
+
+  const std::string metadata_path = dir + "metadata.txt";
+  std::ofstream ofs(metadata_path);
+  if (!ofs.is_open()) {
+    throw std::runtime_error("Cannot open metadata file: " + metadata_path);
+  }
+
+  const std::string boundary_condition =
+      (engine_.State().GetBoundaryCondition() == BoundaryCondition::Periodic) ? "Periodic" : "Open";
+  const size_t samples_scheduled_total =
+      engine_.SamplesPerRank() * static_cast<size_t>(engine_.MpiSize());
+
+  ofs << "format_version 1\n";
+  ofs << "total_samples_requested " << engine_.TotalSamples() << "\n";
+  ofs << "samples_per_rank " << engine_.SamplesPerRank() << "\n";
+  ofs << "samples_scheduled_total " << samples_scheduled_total << "\n";
+  ofs << "samples_collected_master " << local_samples << "\n";
+  ofs << "samples_collected_total " << total_samples << "\n";
+  ofs << "mpi_size " << engine_.MpiSize() << "\n";
+  ofs << "warmup_sweeps " << mc_measure_params.mc_params.num_warmup_sweeps << "\n";
+  ofs << "sweeps_between_samples " << mc_measure_params.mc_params.sweeps_between_samples << "\n";
+  ofs << "initial_config_warmed_up " << (mc_measure_params.mc_params.is_warmed_up ? "true" : "false") << "\n";
+  ofs << "lx " << engine_.Lx() << "\n";
+  ofs << "ly " << engine_.Ly() << "\n";
+  ofs << "boundary_condition " << boundary_condition << "\n";
+  ofs << "peps_bond_dimension " << engine_.State().GetMaxBondDimension() << "\n";
+  ofs << "registered_observables " << observables_meta_.size() << "\n";
+  ofs << "measurement_dump_path " << (mc_measure_params.measurement_data_dump_path.empty()
+                                      ? std::string("./")
+                                      : mc_measure_params.measurement_data_dump_path) << "\n";
+  ofs << "stats_path " << dir << "stats\n";
+  ofs << "samples_path " << dir << "samples\n";
+  ofs << "config_dump_path " << (mc_measure_params.mc_params.config_dump_path.empty()
+                                 ? std::string("<none>")
+                                 : mc_measure_params.mc_params.config_dump_path) << "\n";
+  const auto &particle_params = mc_measure_params.particle_number_distribution;
+  ofs << "particle_number_distribution_enabled " << (particle_params.enabled ? "true" : "false") << "\n";
+  if (particle_params.enabled) {
+    ofs << "particle_number_particles_per_state ";
+    for (size_t i = 0; i < particle_params.particles_per_state.size(); ++i) {
+      if (i != 0) {
+        ofs << ",";
+      }
+      ofs << particle_params.particles_per_state[i];
+    }
+    ofs << "\n";
   }
 }
 

@@ -42,15 +42,21 @@ struct MCMeasurementParams {
 - 目录结构：
 ```
 {path}/
-├── energy_sample_data/
-├── wave_function_amplitudes/
-├── one_point_function_samples/
-└── two_point_function_samples/
+├── metadata.txt              # 运行元数据、样本数、MPI size、晶格尺寸
+├── stats/                    # 聚合后的 observable 统计
+│   ├── energy.csv
+│   ├── <flat_observable>.csv
+│   ├── <matrix_observable>_mean.csv
+│   └── <matrix_observable>_stderr.csv
+└── samples/
+    └── psi.csv               # master rank 上的逐样本 psi 一致性摘要
 ```
 
 ## 优化器落盘
 - TPS：输出末态与最低能量两份
-- 能量轨迹：固定写入 `./energy/`
+- 能量轨迹：固定写入 `./energy/energy_trajectory.csv`
+- Checkpoint：每次 checkpoint 额外刷新 `{checkpoint_base_path}/energy_trajectory.csv`，并在
+  `{checkpoint_base_path}/step_<k>/trajectory_snapshot.csv` 保存该步快照
 - 配置快照：由 `mc_params.config_dump_path` 控制
 
 典型配置：

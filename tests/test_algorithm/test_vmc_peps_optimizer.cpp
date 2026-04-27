@@ -482,8 +482,24 @@ TEST_F(VMCPEPSOptimizerUnitTest, DataDumping) {
   auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdater, Model>(
       *optimize_para, valid_test_tps, comm, model);
 
+  const auto energy_dir = std::filesystem::path("energy");
+  const auto trajectory_csv = energy_dir / "energy_trajectory.csv";
+  const auto legacy_energy = energy_dir / "energy_trajectory";
+  const auto legacy_error = energy_dir / "energy_err_trajectory";
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+    std::filesystem::remove(trajectory_csv);
+    std::filesystem::remove(legacy_energy);
+    std::filesystem::remove(legacy_error);
+  }
+  MPI_Barrier(comm);
+
   // Test DumpData without path
   EXPECT_NO_THROW(executor->DumpData(false));
+  if (rank == qlten::hp_numeric::kMPIMasterRank) {
+    EXPECT_TRUE(std::filesystem::exists(trajectory_csv));
+    EXPECT_FALSE(std::filesystem::exists(legacy_energy));
+    EXPECT_FALSE(std::filesystem::exists(legacy_error));
+  }
 
   // Test DumpData with path
   EXPECT_NO_THROW(executor->DumpData("test_vmc_optimizer_dump", false));

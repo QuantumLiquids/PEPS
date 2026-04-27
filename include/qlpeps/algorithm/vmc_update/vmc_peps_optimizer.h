@@ -13,6 +13,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <string>
 #include "qlten/qlten.h"
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
@@ -159,16 +160,16 @@ class VMCPEPSOptimizer : public qlten::Executor {
   // Monte Carlo sampling helpers have been migrated into MCEnergyGradEvaluator
 
   // Data dumping helpers
+  void WriteEnergyTrajectoryCsv_(const std::string &csv_path) const;
+
   /**
-   * @deprecated Legacy binary dump of energy trajectory.
-   *             Will be removed in a future release. Prefer CSV output at
-   *             `energy/energy_trajectory.csv`.
+   * @deprecated Legacy binary dump of energy trajectory. Retained only for
+   *             source compatibility; DumpData writes CSV output instead.
    */
   void DumpVecData_(const std::string &path, const std::vector<TenElemT> &data);
   /**
-   * @deprecated Legacy binary dump of double vectors (e.g., energy errors).
-   *             Will be removed in a future release. Prefer CSV output at
-   *             `energy/energy_trajectory.csv`.
+   * @deprecated Legacy binary dump of double vectors. Retained only for source
+   *             compatibility; DumpData writes CSV output instead.
    */
   void DumpVecDataDouble_(const std::string &path, const std::vector<double> &data);
 

@@ -331,6 +331,7 @@ class MCPEPSMeasurer : public qlten::Executor {
                                    const std::string &key,
                                    size_t packed_len) const;
   void DumpParticleNumberSamples_(const std::string &dir) const;
+  void DumpMetadata_(const std::string &dir) const;
 
   // Compute psi(S) consistency: return pair (psi_mean, psi_rel_err)
   std::pair<TenElemT, double> ComputePsiConsistencyRelErr_(const std::vector<TenElemT> &psi_list) const;

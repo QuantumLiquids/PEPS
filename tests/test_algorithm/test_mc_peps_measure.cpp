@@ -56,6 +56,7 @@ std::string GetTPSDataPath(const std::string &base_name) {
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -161,6 +162,10 @@ TEST(MCParticleNumberDistribution, RejectsUnmappedConfigurationState) {
 
 std::filesystem::path StatsDirPath(const std::string &output_dir) {
   return std::filesystem::path(output_dir) / "measurement_data" / "stats";
+}
+
+std::filesystem::path MetadataPath(const std::string &output_dir) {
+  return std::filesystem::path(output_dir) / "measurement_data" / "metadata.txt";
 }
 
 struct FlatCSVStats {
@@ -270,6 +275,29 @@ std::vector<std::vector<double>> LoadMatrixCSV(const std::filesystem::path &path
     matrix.push_back(std::move(row));
   }
   return matrix;
+}
+
+std::unordered_map<std::string, std::string> LoadKeyValueMetadata(const std::filesystem::path &path) {
+  std::ifstream ifs(path);
+  if (!ifs.is_open()) {
+    throw std::runtime_error("Failed to open metadata file: " + path.string());
+  }
+
+  std::unordered_map<std::string, std::string> metadata;
+  std::string line;
+  while (std::getline(ifs, line)) {
+    line = Trim(line);
+    if (line.empty() || line.front() == '#') {
+      continue;
+    }
+    std::istringstream iss(line);
+    std::string key;
+    iss >> key;
+    std::string value;
+    std::getline(iss, value);
+    metadata.emplace(std::move(key), Trim(value));
+  }
+  return metadata;
 }
 
 double SumMatrix(const std::vector<std::vector<double>> &matrix) {
@@ -524,6 +552,20 @@ TEST_F(Test2x2MCPEPSBoson, HeisenbergModel) {
     const auto stats_dir = StatsDirPath(output_dir);
     ASSERT_TRUE(std::filesystem::exists(stats_dir));
     ASSERT_TRUE(std::filesystem::is_directory(stats_dir));
+
+    const auto metadata = LoadKeyValueMetadata(MetadataPath(output_dir));
+    const size_t samples_per_rank = (50 + static_cast<size_t>(mpi_size) - 1) / static_cast<size_t>(mpi_size);
+    EXPECT_EQ(metadata.at("format_version"), "1");
+    EXPECT_EQ(metadata.at("total_samples_requested"), "50");
+    EXPECT_EQ(metadata.at("samples_per_rank"), std::to_string(samples_per_rank));
+    EXPECT_EQ(metadata.at("samples_scheduled_total"),
+              std::to_string(samples_per_rank * static_cast<size_t>(mpi_size)));
+    EXPECT_EQ(metadata.at("samples_collected_total"),
+              std::to_string(samples_per_rank * static_cast<size_t>(mpi_size)));
+    EXPECT_EQ(metadata.at("mpi_size"), std::to_string(mpi_size));
+    EXPECT_EQ(metadata.at("ly"), "2");
+    EXPECT_EQ(metadata.at("lx"), "2");
+    EXPECT_GT(std::stoull(metadata.at("registered_observables")), 0u);
 
     // Energy stats (scalar CSV)
     FlatCSVStats energy_stats = LoadFlatStats(stats_dir / "energy.csv");

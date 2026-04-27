@@ -13,8 +13,10 @@
 #include "qlpeps/optimizer/optimizer.h"
 #include "qlpeps/optimizer/optimizer_params.h"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 
 using namespace qlpeps;
@@ -37,6 +39,22 @@ std::tuple<TenElemT, SplitIndexTPS<TenElemT, QNT>, double> QuadraticEval(
   SplitIndexTPS<TenElemT, QNT> grad = state;
   grad({0, 0})[0].Fill(QNT(), 1.0);
   return {TenElemT(1.0), std::move(grad), 0.0};
+}
+
+size_t CountNonEmptyLines(const std::filesystem::path &path) {
+  std::ifstream ifs(path);
+  if (!ifs.is_open()) {
+    throw std::runtime_error("Failed to open file: " + path.string());
+  }
+
+  size_t lines = 0;
+  std::string line;
+  while (std::getline(ifs, line)) {
+    if (!line.empty()) {
+      ++lines;
+    }
+  }
+  return lines;
 }
 
 }  // namespace
@@ -108,6 +126,35 @@ TEST(CheckpointParamsTest, DisabledWithZeroSteps) {
 TEST(CheckpointParamsTest, DisabledWithEmptyPath) {
   CheckpointParams ckpt{10, ""};
   EXPECT_FALSE(ckpt.IsEnabled());
+}
+
+TEST(CheckpointParamsTest, CheckpointWritesCurrentTrajectoryCsv) {
+  using TenElemT = qlten::QLTEN_Double;
+  using QNT = qlten::special_qn::TrivialRepQN;
+  using SITPST = SplitIndexTPS<TenElemT, QNT>;
+
+  const auto unique_suffix =
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+  const std::filesystem::path ckpt_dir =
+      std::filesystem::temp_directory_path() / ("qlpeps_checkpoint_csv_test_" + unique_suffix);
+  std::filesystem::remove_all(ckpt_dir);
+
+  OptimizerParams::BaseParams base_params(/*max_iter=*/3, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/3, /*learning_rate=*/0.1);
+  OptimizerParams params(base_params, SGDParams(), CheckpointParams{1, ckpt_dir.string()}, SpikeRecoveryParams{});
+  Optimizer<TenElemT, QNT> opt(params, MPI_COMM_SELF, 0, 1);
+
+  SITPST init = CreateScalarState<TenElemT, QNT>(1.0);
+  auto result = opt.IterativeOptimize(init, QuadraticEval<TenElemT, QNT>);
+
+  const auto live_csv = ckpt_dir / "energy_trajectory.csv";
+  const auto step_csv = ckpt_dir / "step_1" / "trajectory_snapshot.csv";
+  ASSERT_TRUE(std::filesystem::exists(live_csv));
+  ASSERT_TRUE(std::filesystem::exists(step_csv));
+  EXPECT_EQ(CountNonEmptyLines(live_csv), result.energy_trajectory.size() + 1);
+  EXPECT_EQ(CountNonEmptyLines(step_csv), 3u);
+
+  std::filesystem::remove_all(ckpt_dir);
 }
 
 // --- SpikeRecoveryParams tests ---

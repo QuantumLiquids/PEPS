@@ -35,6 +35,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <complex>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -1979,40 +1980,64 @@ void Optimizer<TenElemT, QNT>::SaveCheckpoint_(
   std::string dir = cfg.base_path + "/step_" + std::to_string(step);
 
   if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
-    EnsureDirectoryExists(dir);
-    // Save TPS (Dump is non-const due to optional release_mem; const_cast is safe here)
-    const_cast<WaveFunctionT &>(state).Dump(dir);
+    try {
+      EnsureDirectoryExists(dir);
+      // Save TPS (Dump is non-const due to optional release_mem; const_cast is safe here)
+      const_cast<WaveFunctionT &>(state).Dump(dir);
 
-    // Write metadata
-    std::string meta_path = dir + "/checkpoint_meta.txt";
-    std::ofstream meta(meta_path);
-    if (meta) {
-      meta << "step " << step << "\n";
-      if (!energy_traj.empty()) {
-        meta << "energy " << std::setprecision(17) << std::real(energy_traj.back()) << "\n";
+      // Write metadata
+      std::string meta_path = dir + "/checkpoint_meta.txt";
+      std::ofstream meta(meta_path);
+      if (meta) {
+        meta << "step " << step << "\n";
+        if (!energy_traj.empty()) {
+          meta << "energy " << std::setprecision(17) << std::real(energy_traj.back()) << "\n";
+        }
+        if (!error_traj.empty()) {
+          meta << "error " << std::setprecision(17) << error_traj.back() << "\n";
+        }
       }
-      if (!error_traj.empty()) {
-        meta << "error " << std::setprecision(17) << error_traj.back() << "\n";
-      }
+
+      WriteTrajectoryCsv_(dir + "/trajectory_snapshot.csv", energy_traj, error_traj);
+      WriteTrajectoryCsv_(cfg.base_path + "/energy_trajectory.csv", energy_traj, error_traj);
+
+      std::cout << "[CHECKPOINT] Saved step " << step << " to " << dir << std::endl;
+    } catch (const std::exception &e) {
+      std::cerr << "[CHECKPOINT][ERROR] Failed to save step " << step
+                << " to " << dir << ": " << e.what() << std::endl;
+      ::MPI_Abort(comm_, EXIT_FAILURE);
+      throw;
     }
-
-    // Snapshot trajectory CSV
-    std::string csv_path = dir + "/trajectory_snapshot.csv";
-    std::ofstream csv(csv_path);
-    if (csv) {
-      csv << "iteration,energy,energy_error\n";
-      for (size_t i = 0; i < energy_traj.size(); ++i) {
-        csv << i << "," << std::setprecision(17) << std::real(energy_traj[i]) << ","
-            << (i < error_traj.size() ? error_traj[i] : 0.0) << "\n";
-      }
-    }
-
-    std::cout << "[CHECKPOINT] Saved step " << step << " to " << dir << std::endl;
   }
 
   // All ranks wait for master I/O to complete
   if (mpi_size_ > 1) {
     HANDLE_MPI_ERROR(::MPI_Barrier(comm_));
+  }
+}
+
+template<typename TenElemT, typename QNT>
+void Optimizer<TenElemT, QNT>::WriteTrajectoryCsv_(
+    const std::string &path,
+    const std::vector<TenElemT> &energy_traj,
+    const std::vector<double> &error_traj) const {
+  try {
+    const auto parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) {
+      std::filesystem::create_directories(parent);
+    }
+
+    std::ofstream csv;
+    csv.exceptions(std::ios::failbit | std::ios::badbit);
+    csv.open(path);
+    csv << "iteration,energy,energy_error\n";
+    for (size_t i = 0; i < energy_traj.size(); ++i) {
+      csv << i << "," << std::setprecision(17) << std::real(energy_traj[i]) << ","
+          << (i < error_traj.size() ? error_traj[i] : 0.0) << "\n";
+    }
+    csv.close();
+  } catch (const std::exception &e) {
+    throw std::runtime_error("Failed to write trajectory CSV file '" + path + "': " + e.what());
   }
 }
 

@@ -420,6 +420,9 @@ class Optimizer {
   void SaveCheckpoint_(const WaveFunctionT& state, size_t step,
                        const std::vector<TenElemT>& energy_traj,
                        const std::vector<double>& error_traj);
+  void WriteTrajectoryCsv_(const std::string& path,
+                           const std::vector<TenElemT>& energy_traj,
+                           const std::vector<double>& error_traj) const;
 
   // L-BFGS helpers
   double RealInnerProduct_(const WaveFunctionT& lhs, const WaveFunctionT& rhs) const;

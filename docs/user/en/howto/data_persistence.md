@@ -21,7 +21,7 @@ This guide explains the **unified data persistence system** for VMC (Variational
 - **Configuration dumps**: Empty by default (opt-in)
 - **TPS dumps**: Use `kTpsPathBase` constant ("tps") from `consts.h` by default
 - **Measurement data**: Use `"./"`  by default (current directory)
-- **Energy trajectory**: Always dumped to `"./energy/"` directory during optimization
+- **Energy trajectory**: CSV dumped to `./energy/energy_trajectory.csv` during optimization
 
 ## Architecture by Component
 
@@ -109,11 +109,14 @@ struct MCMeasurementParams {
 **Generated Structure:**
 ```
 {measurement_data_dump_path}/
-├── energy_sample_data/
-├── wave_function_amplitudes/  
-├── one_point_function_samples/
-├── two_point_function_samples/
-└── ... (other measurement data)
+├── metadata.txt              # run metadata, sample counts, MPI size, lattice size
+├── stats/                    # aggregated observable statistics
+│   ├── energy.csv
+│   ├── <flat_observable>.csv
+│   ├── <matrix_observable>_mean.csv
+│   └── <matrix_observable>_stderr.csv
+└── samples/
+    └── psi.csv               # per-sample psi consistency summary on master rank
 ```
 
 ## Implementation Details
@@ -159,12 +162,8 @@ void VMCPEPSOptimizer::DumpData(const std::string& tps_base_name, bool release_m
     tps_sample_.config.Dump(params_.mc_params.config_dump_path, rank_);
   }
   
-  // Per-process energy samples
-  DumpVecData_(energy_data_path + "/energy_sample" + std::to_string(rank_), energy_samples_);
-  
   if (rank_ == kMPIMasterRank) {
-    DumpVecData_(energy_data_path + "/energy_trajectory", energy_trajectory_);
-    DumpVecDataDouble(energy_data_path + "/energy_err_trajectory", energy_error_traj_);
+    WriteEnergyTrajectoryCsv_(energy_data_path + "/energy_trajectory.csv");
   }
 }
 ```
@@ -185,10 +184,10 @@ The optimizer dumps multiple types of data with different control mechanisms:
 - **Control**: Via `MonteCarloParams.config_dump_path`
 
 #### Optimization Trajectory
-- **Energy samples per process**: `./energy/energy_sample{rank}`
-- **Global energy trajectory**: `./energy/energy_trajectory`
-- **Energy error trajectory**: `./energy/energy_err_trajectory`
-- **Control**: Always dumped, hardcoded to `./energy/` directory
+- **Global energy trajectory**: `./energy/energy_trajectory.csv`
+- **Checkpoint live trajectory**: `{checkpoint_base_path}/energy_trajectory.csv`
+- **Checkpoint step snapshot**: `{checkpoint_base_path}/step_<k>/trajectory_snapshot.csv`
+- **Control**: global VMC trajectory is always dumped to `./energy/`; checkpoint CSVs are written only when `checkpoint_params` is enabled and use its `base_path`
 
 #### Parameter Setup Example
 ```cpp
@@ -218,9 +217,7 @@ void MCPEPSMeasurer::DumpData(const std::string &measurement_data_path) {
 
   // Dump measurement results to organized subdirectories
   const std::string base_path = measurement_data_path.empty() ? "./" : measurement_data_path + "/";
-  const std::string energy_raw_path = base_path + "energy_sample_data/";
-  const std::string wf_amplitude_path = base_path + "wave_function_amplitudes/";
-  // ... create subdirectories and dump data
+  // Dumps metadata.txt, stats/*.csv, and samples/psi.csv
 }
 ```
 
@@ -287,7 +284,7 @@ params.mc_params.config_dump_path = "configs/heisenberg_run01";
 // - heisenberg_D8_L4x4_sweep1000final/   (final TPS)  
 // - heisenberg_D8_L4x4_sweep1000lowest/  (best energy TPS)
 // - configs/heisenberg_run01{rank}       (final configurations)
-// - energy/energy_trajectory             (optimization data)
+// - energy/energy_trajectory.csv         (optimization data)
 ```
 
 ### 2. Optimize Storage Usage
