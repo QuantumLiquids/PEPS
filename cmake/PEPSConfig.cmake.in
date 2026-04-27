@@ -1,0 +1,15 @@
+if (CMAKE_VERSION VERSION_LESS 3.27)
+  message(FATAL_ERROR "PEPS requires CMake 3.27 or newer.")
+endif ()
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/PEPSDependencies.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/PEPSTargets.cmake")
+
+set_and_check(QLPEPS_HEADER_PATH "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+set(QLPEPS_USE_SCALAPACK @QLPEPS_USE_SCALAPACK@)
+set(QLPEPS_TIMING_MODE @QLPEPS_TIMING_MODE@)
+
+check_required_components(PEPS)

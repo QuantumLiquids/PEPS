@@ -1,0 +1,71 @@
+find_dependency(UltraDMRG @QLPEPS_MIN_QLMPS_VERSION@ CONFIG REQUIRED)
+
+if (@QLPEPS_USE_SCALAPACK@)
+  if (NOT TARGET ScaLAPACK::ScaLAPACK)
+    block(SCOPE_FOR VARIABLES)
+      set(_qlpeps_scalapack_modules_dir "${CMAKE_CURRENT_LIST_DIR}/modules")
+      if (NOT EXISTS "${_qlpeps_scalapack_modules_dir}/FindScaLAPACK.cmake")
+        message(FATAL_ERROR
+          "PEPS was built with ScaLAPACK, but its installed FindScaLAPACK.cmake is missing.")
+      endif ()
+
+      set(_qlpeps_scalapack_backend "@QLPEPS_SCALAPACK_BACKEND@")
+      set(_qlpeps_scalapack_bla_vendor "@QLPEPS_SCALAPACK_BLA_VENDOR@")
+      set(_qlpeps_recorded_scalapack_library "@QLPEPS_SCALAPACK_LIBRARY@")
+      set(_qlpeps_recorded_blacs_library "@QLPEPS_BLACS_LIBRARY@")
+
+      if (_qlpeps_scalapack_bla_vendor)
+        if (DEFINED BLA_VENDOR
+            AND NOT "${BLA_VENDOR}" STREQUAL ""
+            AND NOT "${BLA_VENDOR}" STREQUAL "${_qlpeps_scalapack_bla_vendor}")
+          message(FATAL_ERROR
+            "PEPS was built with BLA_VENDOR='${_qlpeps_scalapack_bla_vendor}', "
+            "but the consumer requested BLA_VENDOR='${BLA_VENDOR}'.")
+        endif ()
+        set(BLA_VENDOR "${_qlpeps_scalapack_bla_vendor}")
+      endif ()
+
+      if (_qlpeps_scalapack_backend)
+        set(QLPEPS_SCALAPACK_BACKEND "${_qlpeps_scalapack_backend}")
+      endif ()
+
+      if (_qlpeps_scalapack_backend STREQUAL "mkl")
+        set(HP_NUMERIC_USE_MKL ON)
+      elseif (_qlpeps_scalapack_backend STREQUAL "aocl")
+        set(HP_NUMERIC_USE_AOCL ON)
+      elseif (_qlpeps_scalapack_backend STREQUAL "openblas")
+        set(HP_NUMERIC_USE_OPENBLAS ON)
+      endif ()
+
+      foreach(_qlpeps_recorded_library IN ITEMS
+          "${_qlpeps_recorded_scalapack_library}"
+          "${_qlpeps_recorded_blacs_library}")
+        if (_qlpeps_recorded_library AND EXISTS "${_qlpeps_recorded_library}")
+          get_filename_component(_qlpeps_recorded_library_dir
+            "${_qlpeps_recorded_library}" DIRECTORY)
+          list(APPEND CMAKE_LIBRARY_PATH "${_qlpeps_recorded_library_dir}")
+        endif ()
+      endforeach ()
+
+      if (_qlpeps_recorded_scalapack_library
+          AND EXISTS "${_qlpeps_recorded_scalapack_library}")
+        set(SCALAPACK_LIBRARY "${_qlpeps_recorded_scalapack_library}")
+      endif ()
+      if (_qlpeps_recorded_blacs_library
+          AND EXISTS "${_qlpeps_recorded_blacs_library}")
+        set(BLACS_LIBRARY "${_qlpeps_recorded_blacs_library}")
+      endif ()
+
+      if (_qlpeps_scalapack_backend STREQUAL "mkl"
+          AND _qlpeps_recorded_blacs_library
+          AND NOT EXISTS "${_qlpeps_recorded_blacs_library}")
+        message(FATAL_ERROR
+          "PEPS was built with MKL ScaLAPACK, but the recorded BLACS library "
+          "does not exist: ${_qlpeps_recorded_blacs_library}")
+      endif ()
+
+      list(PREPEND CMAKE_MODULE_PATH "${_qlpeps_scalapack_modules_dir}")
+      find_dependency(ScaLAPACK REQUIRED)
+    endblock ()
+  endif ()
+endif ()

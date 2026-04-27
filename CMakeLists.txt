@@ -5,14 +5,15 @@
 #
 #  Description: QuantumLiquids/PEPS project. Main CMake file.
 #
-cmake_minimum_required(VERSION 3.12)
-
+cmake_minimum_required(VERSION 3.27)
 
 project("QuantumLiquids/PEPS"
         VERSION 0.1.0
         DESCRIPTION "A finite-size PEPS algorithms library"
         LANGUAGES CXX)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 # Build type control.
 if (NOT CMAKE_BUILD_TYPE)
@@ -20,133 +21,169 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 # Build output control.
-if (${CMAKE_BUILD_TYPE} MATCHES Debug)
+if (CMAKE_BUILD_TYPE MATCHES "Debug")
     set(CMAKE_VERBOSE_MAKEFILE ON)
 endif ()
 
 option(QLPEPS_BUILD_UNITTEST "Build unittests for QuantumLiquids/PEPS." OFF)
-option(QLPEPS_BUILD_PROFILER "Build profiler test cases for QuantumLiquids/PEPS." OFF)
 option(QLPEPS_BUILD_EXAMPLES "Build examples for QuantumLiquids/PEPS." OFF)
 
 # Advanced options.
 option(QLPEPS_TIMING_MODE "Timing mode." OFF)
-if (QLPEPS_TIMING_MODE)
-    add_definitions(-DQLPEPS_TIMING_MODE)
-endif ()
-
 option(QLPEPS_USE_SCALAPACK "Enable ScaLAPACK for distributed MinSR eigensolve" OFF)
-if (QLPEPS_USE_SCALAPACK)
-    list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
-    find_package(ScaLAPACK)
-    if (SCALAPACK_FOUND)
-        add_definitions(-DQLPEPS_HAS_SCALAPACK)
-        # Propagate ScaLAPACK link flags to all targets in this project.
-        # Downstream users of this header-only library must link ScaLAPACK themselves.
-        link_libraries(ScaLAPACK::ScaLAPACK)
-        message(STATUS "ScaLAPACK found — MinSR Path A enabled")
-    else ()
-        message(WARNING "ScaLAPACK not found — MinSR Path B only")
-    endif ()
-endif ()
 
-option(TEST_BUILD_USE_EXTERNAL_HPTT_LIB "Use external hptt library when building unittests for QuantumLiquids/PEPS." ON)
-option(TEST_BUILD_USE_EXTERNAL_QLTEN "Use external qlten library when building unittests for QuantumLiquids/PEPS." ON)
-option(TEST_BUILD_USE_EXTERNAL_QLMPS "Use external qlmps library when building unittests for QuantumLiquids/PEPS." ON)
-
-
-# Compilation and linking control.
-set(CMAKE_CXX_STANDARD 20) #keyword "requires"
+set(CMAKE_CXX_STANDARD 20) # keyword "requires"
 add_definitions(-g)
 
+set(QLPEPS_MIN_QLMPS_VERSION "0.2.0")
+set(QLPEPS_PACKAGE_CONFIG_DIR "${CMAKE_INSTALL_LIBDIR}/cmake/PEPS")
 
-# Installation path
-set(QLPEPS_TOOL_SCRIPT_DEST "${CMAKE_INSTALL_PREFIX}/bin")
-set(QLPEPS_INCLUDE_DEST "${CMAKE_INSTALL_PREFIX}/include")
-
+find_package(UltraDMRG ${QLPEPS_MIN_QLMPS_VERSION} CONFIG REQUIRED)
 
 # Build(Install) library.
 set(QLPEPS_HEADER_PATH "${PROJECT_SOURCE_DIR}/include")
-message("${QLPEPS_HEADER_PATH}")
 set(QLPEPS_HEADER_DIR "${QLPEPS_HEADER_PATH}/qlpeps")
-install(
-        DIRECTORY ${QLPEPS_HEADER_DIR}
-        DESTINATION ${QLPEPS_INCLUDE_DEST})
+
+add_library(PEPS INTERFACE)
+add_library(PEPS::PEPS ALIAS PEPS)
+target_compile_features(PEPS INTERFACE cxx_std_20)
+target_compile_definitions(PEPS
+        INTERFACE
+        $<$<BOOL:${QLPEPS_TIMING_MODE}>:QLPEPS_TIMING_MODE>)
+target_include_directories(PEPS
+        INTERFACE
+        $<BUILD_INTERFACE:${QLPEPS_HEADER_PATH}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(PEPS
+        INTERFACE
+        UltraDMRG::UltraDMRG)
+
+set(QLPEPS_SCALAPACK_BACKEND "")
+set(QLPEPS_SCALAPACK_BLA_VENDOR "")
+set(QLPEPS_SCALAPACK_LIBRARY "")
+set(QLPEPS_BLACS_LIBRARY "")
+
+if (QLPEPS_USE_SCALAPACK)
+    block(SCOPE_FOR VARIABLES
+            PROPAGATE
+            QLPEPS_SCALAPACK_BACKEND
+            QLPEPS_SCALAPACK_BLA_VENDOR
+            QLPEPS_SCALAPACK_LIBRARY
+            QLPEPS_BLACS_LIBRARY)
+        list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
+        if (NOT TARGET ScaLAPACK::ScaLAPACK)
+            find_package(ScaLAPACK REQUIRED)
+        endif ()
+
+        if (DEFINED _scalapack_backend)
+            set(QLPEPS_SCALAPACK_BACKEND "${_scalapack_backend}")
+        elseif (HP_NUMERIC_USE_MKL)
+            set(QLPEPS_SCALAPACK_BACKEND "mkl")
+        elseif (HP_NUMERIC_USE_AOCL)
+            set(QLPEPS_SCALAPACK_BACKEND "aocl")
+        elseif (HP_NUMERIC_USE_OPENBLAS)
+            set(QLPEPS_SCALAPACK_BACKEND "openblas")
+        endif ()
+
+        if (DEFINED BLA_VENDOR)
+            set(QLPEPS_SCALAPACK_BLA_VENDOR "${BLA_VENDOR}")
+        endif ()
+        if (DEFINED SCALAPACK_LIBRARY)
+            set(QLPEPS_SCALAPACK_LIBRARY "${SCALAPACK_LIBRARY}")
+        endif ()
+        if (DEFINED BLACS_LIBRARY)
+            set(QLPEPS_BLACS_LIBRARY "${BLACS_LIBRARY}")
+        endif ()
+
+        if (QLPEPS_SCALAPACK_BACKEND STREQUAL "mkl" AND NOT QLPEPS_BLACS_LIBRARY)
+            message(FATAL_ERROR "QLPEPS_USE_SCALAPACK=ON with MKL requires BLACS_LIBRARY.")
+        endif ()
+    endblock ()
+
+    target_compile_definitions(PEPS INTERFACE QLPEPS_HAS_SCALAPACK)
+    target_link_libraries(PEPS INTERFACE ScaLAPACK::ScaLAPACK)
+endif ()
+
+install(DIRECTORY ${QLPEPS_HEADER_DIR}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+configure_package_config_file(
+        cmake/PEPSConfig.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/PEPSConfig.cmake"
+        INSTALL_DESTINATION "${QLPEPS_PACKAGE_CONFIG_DIR}"
+        PATH_VARS CMAKE_INSTALL_INCLUDEDIR)
+
+configure_file(
+        cmake/PEPSDependencies.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/PEPSDependencies.cmake"
+        @ONLY)
+
+write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/PEPSConfigVersion.cmake"
+        VERSION "${PROJECT_VERSION}"
+        COMPATIBILITY SameMajorVersion)
+
+install(TARGETS PEPS
+        EXPORT PEPSTargets
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(EXPORT PEPSTargets
+        FILE PEPSTargets.cmake
+        NAMESPACE PEPS::
+        DESTINATION "${QLPEPS_PACKAGE_CONFIG_DIR}")
+
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/PEPSConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/PEPSConfigVersion.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/PEPSDependencies.cmake"
+        DESTINATION "${QLPEPS_PACKAGE_CONFIG_DIR}")
+
+install(FILES cmake/Modules/FindScaLAPACK.cmake
+        DESTINATION "${QLPEPS_PACKAGE_CONFIG_DIR}/modules")
+
+set(QLPEPS_VERIFY_EXPECT_OPENMP OFF)
+if (TARGET OpenMP::OpenMP_CXX)
+    set(QLPEPS_VERIFY_EXPECT_OPENMP ON)
+endif ()
+
+set(QLPEPS_VERIFY_EXPECT_SCALAPACK OFF)
+if (QLPEPS_USE_SCALAPACK)
+    set(QLPEPS_VERIFY_EXPECT_SCALAPACK ON)
+endif ()
+
+add_custom_target(verify-package
+        COMMAND ${CMAKE_COMMAND}
+        -DQLPEPS_VERIFY_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DQLPEPS_VERIFY_CXX_COMPILER:FILEPATH=${CMAKE_CXX_COMPILER}
+        -DQLPEPS_VERIFY_UltraDMRG_DIR:PATH=${UltraDMRG_DIR}
+        -DQLPEPS_VERIFY_TensorToolkit_DIR:PATH=${TensorToolkit_DIR}
+        -DQLPEPS_VERIFY_INSTALL_LIBDIR:STRING=${CMAKE_INSTALL_LIBDIR}
+        -DQLPEPS_VERIFY_USE_SCALAPACK:BOOL=${QLPEPS_USE_SCALAPACK}
+        -DQLPEPS_VERIFY_TIMING_MODE:BOOL=${QLPEPS_TIMING_MODE}
+        -DQLPEPS_VERIFY_EXPECT_OPENMP:BOOL=${QLPEPS_VERIFY_EXPECT_OPENMP}
+        -DQLPEPS_VERIFY_EXPECT_SCALAPACK:BOOL=${QLPEPS_VERIFY_EXPECT_SCALAPACK}
+        -P ${PROJECT_SOURCE_DIR}/tests/package_consumer/verify_install.cmake
+        USES_TERMINAL)
 
 # Doxygen documentation (optional)
 option(QLPEPS_BUILD_DOCS "Build Doxygen documentation." OFF)
 if (QLPEPS_BUILD_DOCS)
     find_package(Doxygen)
     if (DOXYGEN_FOUND)
-        # Add docs subdirectory for documentation building
         add_subdirectory(docs)
-    else()
+    else ()
         message(WARNING "Doxygen not found. Skipping documentation build.")
-    endif()
-endif()
+    endif ()
+endif ()
 
 # Build tool scripts
 #add_subdirectory(script)
 
-
 # Build unittests.
 if (QLPEPS_BUILD_UNITTEST)
-    if (NOT TEST_BUILD_USE_EXTERNAL_HPTT_LIB)
-        set(hptt_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/external/qlten/external/hptt/include")
-        set(hptt_LIBRARY "${CMAKE_BINARY_DIR}/external/qlten/external/hptt/libhptt.a")
-    else ()
-        find_path(hptt_INCLUDE_DIR "hptt.h")
-        find_library(hptt_LIBRARY "libhptt.a")
-    endif ()
-
-
-    if (NOT TEST_BUILD_USE_EXTERNAL_QLTEN)
-        add_subdirectory(external)
-        set(QLTENSOR_HEADER_PATH "${PROJECT_SOURCE_DIR}/external/qlten/include")
-    else ()
-        find_path(QLTENSOR_HEADER_PATH "qlten")
-    endif ()
-
-    if (NOT TEST_BUILD_USE_EXTERNAL_QLMPS)
-        add_subdirectory(external)
-        set(QLMPS_HEADER_PATH "${PROJECT_SOURCE_DIR}/external/qlten/include")
-    else ()
-        find_path(QLMPS_HEADER_PATH "qlmps")
-    endif ()
-
-
     enable_testing()
     find_package(GTest REQUIRED)
     add_subdirectory(tests tests)
-endif ()
-
-if (QLPEPS_BUILD_PROFILER)
-    if (NOT TEST_BUILD_USE_EXTERNAL_HPTT_LIB)
-        set(hptt_INCLUDE_DIR "${PROJECT_SOURCE_DIR}/external/qlten/external/hptt/include")
-        set(hptt_LIBRARY "${CMAKE_BINARY_DIR}/external/qlten/external/hptt/libhptt.a")
-    else ()
-        find_path(hptt_INCLUDE_DIR "hptt.h")
-        find_library(hptt_LIBRARY "libhptt.a")
-    endif ()
-
-    if (NOT TEST_BUILD_USE_EXTERNAL_QLTEN)
-        add_subdirectory(external)
-        set(QLPEPS_TENSOR_LIB_HEADER_PATH "${PROJECT_SOURCE_DIR}/external/qlten/include")
-    else ()
-        find_path(QLPEPS_TENSOR_LIB_HEADER_PATH "qlten")
-    endif ()
-
-    if (NOT TEST_BUILD_USE_EXTERNAL_QLMPS)
-        add_subdirectory(external)
-        set(QLPEPS_MPS_LIB_HEADER_PATH "${PROJECT_SOURCE_DIR}/external/qlten/include")
-    else ()
-        find_path(QLPEPS_MPS_LIB_HEADER_PATH "qlmps")
-    endif ()
-
-
-    enable_testing()
-    find_path(PROFILER_INCLUDE_DIR "gperftools")
-    find_library(LIBPROFILER_LIBRARY "libprofiler.a")
-    add_subdirectory(profiler profiler)
 endif ()
 
 # Build examples.
