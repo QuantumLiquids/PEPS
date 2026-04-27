@@ -13,6 +13,7 @@
 #include <string>                                    // std::string
 #include <stdexcept>                                // std::runtime_error
 #include <variant>                                  // std::variant
+#include <vector>                                   // std::vector
 #include "qlpeps/vmc_basic/configuration.h"       // Configuration
 #include "qlpeps/one_dim_tn/boundary_mps/bmps.h"  // BMPSTruncateParams
 #include "qlpeps/two_dim_tn/tensor_network_2d/trg/trg_contractor.h"  // TRGTruncateParams
@@ -143,6 +144,20 @@ struct PEPSParams {
 // Legacy VMCOptimizePara removed - use VMCPEPSOptimizerParams instead
 
 /**
+ * @brief Optional MC measurement diagnostic for total particle-number distribution.
+ *
+ * `particles_per_state[state]` maps each local configuration label to its particle count.
+ * Examples:
+ * - t-J: `{1, 1, 0}` for `{up, down, empty}`
+ * - spinless fermion: `{1, 0}` for `{occupied, empty}`
+ * - Hubbard: `{2, 1, 1, 0}` for `{double, up, down, empty}`
+ */
+struct ParticleNumberDistributionParams {
+  bool enabled = false;
+  std::vector<size_t> particles_per_state;
+};
+
+/**
  * @struct MCMeasurementParams
  * @brief Unified parameters for Monte Carlo measurement.
  * 
@@ -154,6 +169,7 @@ struct MCMeasurementParams {
   PEPSParams peps_params;
   std::string measurement_data_dump_path;  ///< Path for dumping measurement results (empty = current dir)
   RuntimeParams runtime_params; ///< Applied by MCPEPSMeasurer
+  ParticleNumberDistributionParams particle_number_distribution; ///< Measurement-only diagnostic output.
 
   MCMeasurementParams() = delete;
 

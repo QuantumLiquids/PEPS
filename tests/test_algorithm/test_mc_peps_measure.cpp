@@ -132,6 +132,33 @@ inline double CombineTol(const std::vector<std::vector<double>> &stderr_mat, dou
   return std::max(floor, 5.0 * acc);
 }
 
+TEST(MCParticleNumberDistribution, BuildsOneHotDistributionForConfiguredStateWeights) {
+  ParticleNumberDistributionParams params;
+  params.enabled = true;
+  params.particles_per_state = {1, 1, 0};
+
+  const Configuration config({{0, 2}, {1, 0}});
+  auto sample = qlpeps::detail::MakeParticleNumberDistributionSample<TEN_ELEM_TYPE>(config, params);
+
+  EXPECT_EQ(sample.particle_number, 3U);
+  ASSERT_EQ(sample.one_hot_distribution.size(), 5U);
+  EXPECT_EQ(sample.one_hot_distribution[0], TEN_ELEM_TYPE(0));
+  EXPECT_EQ(sample.one_hot_distribution[1], TEN_ELEM_TYPE(0));
+  EXPECT_EQ(sample.one_hot_distribution[2], TEN_ELEM_TYPE(0));
+  EXPECT_EQ(sample.one_hot_distribution[3], TEN_ELEM_TYPE(1));
+  EXPECT_EQ(sample.one_hot_distribution[4], TEN_ELEM_TYPE(0));
+}
+
+TEST(MCParticleNumberDistribution, RejectsUnmappedConfigurationState) {
+  ParticleNumberDistributionParams params;
+  params.enabled = true;
+  params.particles_per_state = {1, 0};
+
+  const Configuration config({{0, 2}});
+  EXPECT_THROW((void)qlpeps::detail::MakeParticleNumberDistributionSample<TEN_ELEM_TYPE>(config, params),
+               std::invalid_argument);
+}
+
 std::filesystem::path StatsDirPath(const std::string &output_dir) {
   return std::filesystem::path(output_dir) / "measurement_data" / "stats";
 }
@@ -842,6 +869,8 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
   MonteCarloParams mc_params(10, 100, 1, compatible_config, false, output_dir + "/final_config");  // explicit config dump path
   PEPSParams peps_params = PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>::SVD(Dpeps, 2 * Dpeps, 1e-15));
   MCMeasurementParams para(mc_params, peps_params, output_dir + "/measurement_data");  // explicit measurement dump path
+  para.particle_number_distribution.enabled = true;
+  para.particle_number_distribution.particles_per_state = {1, 1, 0};
 
   Model tj_model(t, 0, J, J / 4, mu);
 
@@ -899,6 +928,18 @@ TEST_F(Test2x2MCPEPSFermion, TJModel) {
     double entry_tol = std::max(SigmaWithFallback(bond_all_err, 5e-2), 0.5); // todo: remove the artificial tolerance after we have a mature std error system.
     ExpectMatrixNear(bond_h_mean, bond_h_err, expected_h, entry_tol);
     ExpectMatrixNear(bond_v_mean, bond_v_err, expected_v, entry_tol);
+
+    auto particle_stats = LoadFlatStats(stats_dir / "particle_number_distribution.csv");
+    ASSERT_EQ(particle_stats.means.size(), 5);
+    EXPECT_DOUBLE_EQ(particle_stats.means[0], 0.0);
+    EXPECT_DOUBLE_EQ(particle_stats.means[1], 0.0);
+    EXPECT_DOUBLE_EQ(particle_stats.means[2], 1.0);
+    EXPECT_DOUBLE_EQ(particle_stats.means[3], 0.0);
+    EXPECT_DOUBLE_EQ(particle_stats.means[4], 0.0);
+
+    const auto particle_samples =
+        std::filesystem::path(output_dir) / "measurement_data" / "samples" / "particle_number_rank0.csv";
+    ASSERT_TRUE(std::filesystem::exists(particle_samples));
   }
 
   delete executor;

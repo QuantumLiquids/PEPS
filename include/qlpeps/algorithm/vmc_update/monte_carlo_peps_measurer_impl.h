@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 
 namespace qlpeps {
 inline void ConfigureStreamForHighPrecision(std::ofstream &ofs) {
@@ -58,6 +59,21 @@ MCPEPSMeasurer<TenElemT,
   qlpeps::MPISignalGuard::Register();
   // Load observable metadata from solver
   observables_meta_ = measurement_solver_.DescribeObservables(engine_.Ly(), engine_.Lx());
+  const auto &particle_params = mc_measure_params.particle_number_distribution;
+  if (particle_params.enabled) {
+    const size_t physical_dim = engine_.State().PhysicalDim();
+    if (particle_params.particles_per_state.size() < physical_dim) {
+      throw std::invalid_argument("Particle-number distribution requires particles_per_state to cover all "
+                                  "local physical states: physical_dim=" + std::to_string(physical_dim)
+                                  + ", entries=" + std::to_string(particle_params.particles_per_state.size()) + ".");
+    }
+    const size_t num_bins =
+        detail::ParticleNumberDistributionBinCount(engine_.WavefuncComp().config, particle_params);
+    observables_meta_.push_back({"particle_number_distribution",
+                                 "Total particle-number probability distribution P(N)",
+                                 {num_bins},
+                                 {"particle_number"}});
+  }
   PrintExecutorInfo_();
   this->SetStatus(ExecutorStatus::INITED);
 }
@@ -182,6 +198,13 @@ void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, Co
   auto registry_map = measurement_solver_.template EvaluateObservables<TenElemT, QNT>(
     &engine_.State(),
     &engine_.WavefuncComp());
+  const auto &particle_params = mc_measure_params.particle_number_distribution;
+  if (particle_params.enabled) {
+    auto particle_sample =
+        detail::MakeParticleNumberDistributionSample<TenElemT>(engine_.WavefuncComp().config, particle_params);
+    particle_number_samples_.push_back(particle_sample.particle_number);
+    registry_map["particle_number_distribution"] = std::move(particle_sample.one_hot_distribution);
+  }
   sample_data_.PushBackRegistry(engine_.WavefuncComp().amplitude, registry_map);
   // Psi summary via dedicated API (no registry involvement)
   {
@@ -291,7 +314,7 @@ MCPEPSMeasurer<TenElemT,
         }
 
         if (!dumped) {
-          if (key == "psi_rel_err") {
+          if (key == "psi_rel_err" || key == "particle_number_distribution") {
             std::vector<double> vals_real;
             vals_real.reserve(vals.size());
             for (const auto &v : vals) { vals_real.push_back(static_cast<double>(std::real(v))); }
@@ -326,7 +349,29 @@ MCPEPSMeasurer<TenElemT,
   }
   // Dump psi samples separately (samples/psi.csv)
   DumpPsiSamples_(base_dir);
+  DumpParticleNumberSamples_(base_dir);
   // raw samples dump removed in registry-only mode
+}
+
+template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,
+         template<typename, typename> class ContractorT>
+void MCPEPSMeasurer<TenElemT, QNT, MonteCarloSweepUpdater, MeasurementSolver, ContractorT>::
+DumpParticleNumberSamples_(const std::string &dir) const {
+  if (!mc_measure_params.particle_number_distribution.enabled) {
+    return;
+  }
+
+  const std::string samples_dir = dir + "samples/";
+  engine_.EnsureDirectoryExists(samples_dir + "dummy");
+  const std::string path = samples_dir + "particle_number_rank" + std::to_string(engine_.Rank()) + ".csv";
+  std::ofstream ofs(path);
+  if (!ofs.is_open()) {
+    throw std::runtime_error("Cannot open particle-number sample file: " + path);
+  }
+  ofs << "sample_id,particle_number\n";
+  for (size_t i = 0; i < particle_number_samples_.size(); ++i) {
+    ofs << i << "," << particle_number_samples_[i] << "\n";
+  }
 }
 
 template<typename TenElemT, typename QNT, typename MonteCarloSweepUpdater, typename MeasurementSolver,

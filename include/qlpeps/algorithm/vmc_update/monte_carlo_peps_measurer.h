@@ -17,9 +17,11 @@
 #include "qlten/qlten.h"
 #include "qlpeps/algorithm/vmc_update/monte_carlo_engine.h"
 #include "qlpeps/base/mpi_signal_guard.h"
+#include <algorithm>
 #include <complex>
 #include <unordered_map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 
@@ -110,6 +112,58 @@ std::vector<ElemT> ComputeSiteAveragedAutocorrelation(
   }
   return result;
 }
+
+namespace detail {
+
+template<typename ElemT>
+struct ParticleNumberDistributionSample {
+  size_t particle_number = 0;
+  std::vector<ElemT> one_hot_distribution;
+};
+
+inline size_t ParticleNumberDistributionBinCount(
+    const Configuration &config,
+    const ParticleNumberDistributionParams &params
+) {
+  if (params.particles_per_state.empty()) {
+    throw std::invalid_argument("Particle-number distribution requires particles_per_state to be non-empty.");
+  }
+  const size_t max_particles_per_site =
+      *std::max_element(params.particles_per_state.begin(), params.particles_per_state.end());
+  return config.size() * max_particles_per_site + 1;
+}
+
+inline size_t CountConfiguredParticles(
+    const Configuration &config,
+    const ParticleNumberDistributionParams &params
+) {
+  if (params.particles_per_state.empty()) {
+    throw std::invalid_argument("Particle-number distribution requires particles_per_state to be non-empty.");
+  }
+  size_t particle_number = 0;
+  for (size_t state : config) {
+    if (state >= params.particles_per_state.size()) {
+      throw std::invalid_argument(
+          "Particle-number distribution has no particles_per_state entry for configuration state "
+              + std::to_string(state) + ".");
+    }
+    particle_number += params.particles_per_state[state];
+  }
+  return particle_number;
+}
+
+template<typename ElemT>
+ParticleNumberDistributionSample<ElemT> MakeParticleNumberDistributionSample(
+    const Configuration &config,
+    const ParticleNumberDistributionParams &params
+) {
+  const size_t particle_number = CountConfiguredParticles(config, params);
+  std::vector<ElemT> one_hot(ParticleNumberDistributionBinCount(config, params), ElemT(0));
+  one_hot.at(particle_number) = ElemT(1);
+  return {particle_number, std::move(one_hot)};
+}
+
+}  // namespace detail
 
 void PrintProgressBar(size_t progress, size_t total) {
   size_t bar_width = 70; // width of the progress bar
@@ -276,6 +330,7 @@ class MCPEPSMeasurer : public qlten::Executor {
   void DumpPackedUpperTriIndexMap_(const std::string &dir,
                                    const std::string &key,
                                    size_t packed_len) const;
+  void DumpParticleNumberSamples_(const std::string &dir) const;
 
   // Compute psi(S) consistency: return pair (psi_mean, psi_rel_err)
   std::pair<TenElemT, double> ComputePsiConsistencyRelErr_(const std::vector<TenElemT> &psi_list) const;
@@ -342,6 +397,7 @@ class MCPEPSMeasurer : public qlten::Executor {
 
   // Psi sample tuple: (psi_mean, psi_rel_err)
   std::vector<std::pair<TenElemT, double>> psi_samples_;
+  std::vector<size_t> particle_number_samples_;
 
   std::optional<EnergyEstimate> QueryEnergyEstimate_() const;
 
