@@ -864,6 +864,38 @@ struct Z2tJTest : public MPITest {
       all_configs.push_back(Vec2Config(config_vec, Lx, Ly));
     } while (std::next_permutation(config_vec.begin(), config_vec.end()));
   }
+
+  TEN_ELEM_TYPE CalNNModelEnergy(SquaretJNNModel &model, const Configuration &config) {
+    using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+    auto trun_para = BMPSTruncateParams<RealT>::SVD(Db, Db, 0);
+    TPSWaveFunctionComponent<TEN_ELEM_TYPE, fZ2QN> sample(split_index_tps_simple_update, config, trun_para);
+    return model.template CalEnergy<TEN_ELEM_TYPE, fZ2QN>(&split_index_tps_simple_update, &sample);
+  }
+
+  TEN_ELEM_TYPE CalPinnedBondPairSource(const Configuration &config, double delta) {
+    using RealT = typename qlten::RealTypeTrait<TEN_ELEM_TYPE>::type;
+    auto trun_para = BMPSTruncateParams<RealT>::SVD(Db, Db, 0);
+    TPSWaveFunctionComponent<TEN_ELEM_TYPE, fZ2QN> sample(split_index_tps_simple_update, config, trun_para);
+    auto &contractor = sample.contractor;
+    contractor.SetTruncateParams(trun_para);
+    contractor.GenerateBMPSApproach(sample.tn, UP);
+    contractor.InitBTen(sample.tn, LEFT, 0);
+    contractor.GrowFullBTen(sample.tn, RIGHT, 0, 1, true);
+
+    const SiteIdx site1{0, 0};
+    const SiteIdx site2{0, 1};
+    auto pair_source = EvaluateBondSingletPairFortJModel(
+        site1,
+        site2,
+        tJSingleSiteState(config(site1)),
+        tJSingleSiteState(config(site2)),
+        HORIZONTAL,
+        sample.tn,
+        contractor,
+        split_index_tps_simple_update(site1),
+        split_index_tps_simple_update(site2));
+    return TEN_ELEM_TYPE(delta) * (pair_source.first + pair_source.second);
+  }
 };
 
 TEST_F(Z2tJTest, LowestState) {
@@ -956,6 +988,37 @@ TEST_F(Z2tJTest, SimpleUpdateState) {
       mpi_size);
 
   EXPECT_TRUE(result.passed) << "Exact summation test failed for t-J simple_update model";
+}
+
+TEST_F(Z2tJTest, SingletPairPinningFieldAddsPinnedBondSource) {
+  constexpr double delta = 0.07;
+  const SiteIdx pin_site1{0, 0};
+  const SiteIdx pin_site2{0, 1};
+
+  const std::vector<Configuration> configs = {
+      Configuration({{2, 2}, {0, 1}}),
+      Configuration({{0, 1}, {2, 2}}),
+      Configuration({{1, 0}, {2, 2}})
+  };
+
+  for (const auto &config : configs) {
+    SquaretJNNModel base_model(t, J, mu);
+    SquaretJNNModel pinned_model(t, J, mu);
+    pinned_model.SetSingletPairPinningField(pin_site2, pin_site1, delta);
+
+    const auto base_energy = CalNNModelEnergy(base_model, config);
+    const auto pinned_energy = CalNNModelEnergy(pinned_model, config);
+    const auto expected_source = CalPinnedBondPairSource(config, delta);
+    EXPECT_LT(std::abs((pinned_energy - base_energy) - expected_source), 1e-10);
+
+    pinned_model.ClearSingletPairPinningField();
+    const auto cleared_energy = CalNNModelEnergy(pinned_model, config);
+    EXPECT_LT(std::abs(cleared_energy - base_energy), 1e-10);
+  }
+
+  SquaretJNNModel out_of_lattice_model(t, J, mu);
+  out_of_lattice_model.SetSingletPairPinningField({2, 0}, {2, 1}, delta);
+  EXPECT_THROW({ (void)CalNNModelEnergy(out_of_lattice_model, configs.front()); }, std::runtime_error);
 }
 
 int main(int argc, char* argv[]) {

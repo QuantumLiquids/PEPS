@@ -14,6 +14,11 @@
 #ifndef QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 #define QLPEPS_ALGORITHM_VMC_UPDATE_MODEL_SOLVERS_SQUARE_TJ_MODEL_H
 
+#include <cmath>
+#include <optional>
+#include <stdexcept>
+#include <utility>
+
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nnn_energy_solver.h"
 #include "qlpeps/algorithm/vmc_update/model_solvers/base/square_nn_model_measurement_solver.h"
@@ -25,6 +30,21 @@
 namespace qlpeps {
 using namespace qlten;
 
+namespace detail {
+template<typename TenElemT, typename QNT>
+std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModelWithPsi(
+    const SiteIdx site1,
+    const SiteIdx site2,
+    const tJSingleSiteState config1,
+    const tJSingleSiteState config2,
+    const BondOrientation orient,
+    const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+    std::optional<TenElemT> &psi);
+}  // namespace detail
+
 /**
  * t-J Model on Square Lattice with Extensions
  * 
@@ -33,6 +53,9 @@ using namespace qlten;
  * $$   -t_2\sum_{\langle\langle i,j\rangle\rangle,\sigma} (c_{i,\sigma}^\dagger c_{j,\sigma} + c_{j,\sigma}^\dagger c_{i,\sigma})$$  
  * $$   + J \sum_{\langle i,j\rangle} (\vec{S}_i \cdot \vec{S}_j - \frac{1}{4} n_i n_j)$$
  * $$   + V \sum_{\langle i,j\rangle} n_i n_j - \mu \sum_{i,\sigma} n_{i,\sigma}$$
+ * An optional single-bond singlet pair pinning term
+ * \f$\Delta(\hat{\Delta}_{ij}^{\dagger}+\hat{\Delta}_{ij})\f$ can be enabled
+ * with SetSingletPairPinningField().
  * 
  * where:
  * - t: nearest-neighbor hopping amplitude
@@ -60,6 +83,13 @@ using namespace qlten;
  * interaction in J term, yielding pure spin exchange for occupied sites.
  */
 class SquaretJModelMixIn {
+  struct SingletPairPinningField {
+    SiteIdx site1;
+    SiteIdx site2;
+    BondOrientation orient;
+    double delta;
+  };
+
  public:
   static constexpr bool requires_density_measurement = true;
   static constexpr bool requires_spin_sz_measurement = true;
@@ -68,6 +98,43 @@ class SquaretJModelMixIn {
 
   explicit SquaretJModelMixIn(double t, double t2, double J, double V, double mu)
       : t_(t), t2_(t2), J_(J), V_(V), mu_(mu) {}
+
+  /**
+   * Add a single NN-bond singlet pair source term to the Hamiltonian.
+   *
+   * This term breaks particle-number conservation, while preserving fermion
+   * parity. Callers must avoid particle-number U(1) tensor symmetries and
+   * number-conserving MC updaters at the application layer.
+   */
+  void SetSingletPairPinningField(SiteIdx site1, SiteIdx site2, double delta) {
+    if (!std::isfinite(delta)) {
+      throw std::invalid_argument("Singlet pair pinning delta must be finite.");
+    }
+    const auto dist = [](size_t a, size_t b) { return (a > b) ? (a - b) : (b - a); };
+    const size_t row_dist = dist(site1.row(), site2.row());
+    const size_t col_dist = dist(site1.col(), site2.col());
+    if (row_dist + col_dist != 1) {
+      throw std::invalid_argument("Singlet pair pinning field requires a nearest-neighbor bond.");
+    }
+
+    BondOrientation orient;
+    if (row_dist == 0) {
+      orient = HORIZONTAL;
+      if (site2.col() < site1.col()) {
+        std::swap(site1, site2);
+      }
+    } else {
+      orient = VERTICAL;
+      if (site2.row() < site1.row()) {
+        std::swap(site1, site2);
+      }
+    }
+    singlet_pair_pinning_ = SingletPairPinningField{site1, site2, orient, delta};
+  }
+
+  void ClearSingletPairPinningField() { singlet_pair_pinning_.reset(); }
+
+  bool HasSingletPairPinningField() const { return singlet_pair_pinning_.has_value(); }
 
   ///< requirement from SquareNNNModelEnergySolver and SquareNNModelEnergySolver
   template<typename TenElemT, typename QNT>
@@ -135,14 +202,18 @@ class SquaretJModelMixIn {
       const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
       std::optional<TenElemT> &psi
   ) {
-    return EvaluateBondSingletPairFortJModel(site1, site2,
-                                             tJSingleSiteState(config1),
-                                             tJSingleSiteState(config2),
-                                             orient, tn, contractor, split_index_tps_on_site1, split_index_tps_on_site2);
+    return detail::EvaluateBondSingletPairFortJModelWithPsi(site1, site2,
+                                                            tJSingleSiteState(config1),
+                                                            tJSingleSiteState(config2),
+                                                            orient, tn, contractor,
+                                                            split_index_tps_on_site1,
+                                                            split_index_tps_on_site2,
+                                                            psi);
   }
 
   ///< requirement from SquareNNNModelEnergySolver
   double EvaluateTotalOnsiteEnergy(const Configuration &config) {
+    ValidateSingletPairPinningBondInLattice_(config.rows(), config.cols());
     double energy = 0;
     if (mu_ != 0) {
       size_t ele_num(0);
@@ -166,11 +237,60 @@ class SquaretJModelMixIn {
   }
 
  private:
+  void ValidateSingletPairPinningBondInLattice_(const size_t rows, const size_t cols) const {
+    if (!singlet_pair_pinning_.has_value()) {
+      return;
+    }
+    const auto in_lattice = [rows, cols](const SiteIdx site) {
+      return site.row() < rows && site.col() < cols;
+    };
+    if (!in_lattice(singlet_pair_pinning_->site1) || !in_lattice(singlet_pair_pinning_->site2)) {
+      throw std::runtime_error("Singlet pair pinning bond is outside the evaluated lattice.");
+    }
+  }
+
+  bool IsPinnedSingletPairBond_(const SiteIdx site1, const SiteIdx site2, const BondOrientation orient) const {
+    return singlet_pair_pinning_.has_value()
+        && singlet_pair_pinning_->orient == orient
+        && singlet_pair_pinning_->site1 == site1
+        && singlet_pair_pinning_->site2 == site2;
+  }
+
+  template<typename TenElemT, typename QNT>
+  TenElemT EvaluateSingletPairPinningEnergy_(
+      const SiteIdx site1, const SiteIdx site2,
+      const size_t config1, const size_t config2,
+      const BondOrientation orient,
+      const TensorNetwork2D<TenElemT, QNT> &tn,
+      BMPSContractor<TenElemT, QNT> &contractor,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+      const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+      std::optional<TenElemT> &psi
+  ) const {
+    ValidateSingletPairPinningBondInLattice_(tn.rows(), tn.cols());
+    if (!IsPinnedSingletPairBond_(site1, site2, orient)) {
+      return TenElemT(0);
+    }
+    if constexpr (!Index<QNT>::IsFermionic()) {
+      throw std::runtime_error("Singlet pair pinning field requires a fermionic tensor network.");
+    } else {
+      auto pair_source = detail::EvaluateBondSingletPairFortJModelWithPsi(site1, site2,
+                                                                          tJSingleSiteState(config1),
+                                                                          tJSingleSiteState(config2),
+                                                                          orient, tn, contractor,
+                                                                          split_index_tps_on_site1,
+                                                                          split_index_tps_on_site2,
+                                                                          psi);
+      return TenElemT(singlet_pair_pinning_->delta) * (pair_source.first + pair_source.second);
+    }
+  }
+
   double t_;
   double t2_;
   double J_;
   double V_;
   double mu_;
+  std::optional<SingletPairPinningField> singlet_pair_pinning_;
 };
 
 /**
@@ -188,12 +308,13 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
     std::optional<TenElemT> &psi // return value, used for check the accuracy
 ) {
+  TenElemT energy;
   if (config1 == config2) {
     psi.reset();
     if (tJSingleSiteState(config1) == tJSingleSiteState::Empty) {
-      return 0.0;
+      energy = 0.0;
     } else { // both spin up or spin down,
-      return V_; // sz * sz - 1/4 * n * n = 0 , n*n = 1
+      energy = V_; // sz * sz - 1/4 * n * n = 0 , n*n = 1
     }
   } else {
     psi = contractor.Trace(tn, site1, site2, orient);
@@ -214,13 +335,19 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
         || tJSingleSiteState(config2) == tJSingleSiteState::Empty) {
       // one site empty, the other site filled
       // only hopping energy contribution
-      return (-t_) * ratio;
+      energy = (-t_) * ratio;
     } else {
       // spin antiparallel
       // only spin interaction energy contribution
-      return (-0.5 + ratio * 0.5) * J_ + V_; // J * (Sz * Sz - n * n /4) + J/2 * (S^+ * S^- * S^- * S^+) + V * n * n
+      energy = (-0.5 + ratio * 0.5) * J_ + V_; // J * (Sz * Sz - n * n /4) + J/2 * (S^+ * S^- * S^- * S^+) + V * n * n
     }
   }
+  return energy + EvaluateSingletPairPinningEnergy_(site1, site2,
+                                                    config1, config2,
+                                                    orient, tn, contractor,
+                                                    split_index_tps_on_site1,
+                                                    split_index_tps_on_site2,
+                                                    psi);
 }
 
 template<typename TenElemT, typename QNT>
@@ -235,6 +362,10 @@ TenElemT SquaretJModelMixIn::EvaluateBondEnergy(
     std::optional<TenElemT> &psi, // return value, used for check the accuracy
     const JastrowDress &jastrow_dress
 ) {
+  if (IsPinnedSingletPairBond_(site1, site2, orient)) {
+    throw std::runtime_error(
+        "Singlet pair pinning field is not implemented for Jastrow-dressed t-J wave functions.");
+  }
   if (config1 == config2) {
     psi.reset();
     if (tJSingleSiteState(config1) == tJSingleSiteState::Empty) {
@@ -405,42 +536,72 @@ std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModel(const SiteIdx si
                                                                 const std::vector<QLTensor<TenElemT,
                                                                                            QNT>> &split_index_tps_on_site2
 ) {
+  std::optional<TenElemT> psi;
+  return detail::EvaluateBondSingletPairFortJModelWithPsi(site1, site2, config1, config2, orient, tn, contractor,
+                                                          split_index_tps_on_site1, split_index_tps_on_site2, psi);
+}
+
+namespace detail {
+template<typename TenElemT, typename QNT>
+std::pair<TenElemT, TenElemT> EvaluateBondSingletPairFortJModelWithPsi(
+    const SiteIdx site1,
+    const SiteIdx site2,
+    const tJSingleSiteState config1,
+    const tJSingleSiteState config2,
+    const BondOrientation orient,
+    const TensorNetwork2D<TenElemT, QNT> &tn,
+    BMPSContractor<TenElemT, QNT> &contractor,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site1,
+    const std::vector<QLTensor<TenElemT, QNT>> &split_index_tps_on_site2,
+    std::optional<TenElemT> &psi
+) {
   TenElemT delta_dag, delta;
+  auto trace = [&]() -> TenElemT {
+    if (!psi.has_value()) {
+      psi = contractor.Trace(tn, site1, site2, orient);
+    }
+    if (psi == TenElemT(0)) [[unlikely]] {
+      throw std::runtime_error("EvaluateBondSingletPairFortJModel: psi is zero.");
+    }
+    return psi.value();
+  };
+
   if (config1 == tJSingleSiteState::Empty && config2 == tJSingleSiteState::Empty) {
-    TenElemT psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_val = trace();
     TenElemT psi_ex1 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                              split_index_tps_on_site1[size_t(tJSingleSiteState::SpinUp)],
                                              split_index_tps_on_site2[size_t(tJSingleSiteState::SpinDown)]);
     TenElemT psi_ex2 = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                              split_index_tps_on_site1[size_t(tJSingleSiteState::SpinDown)],
                                              split_index_tps_on_site2[size_t(tJSingleSiteState::SpinUp)]);
-    TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi);
-    TenElemT ratio2 = ComplexConjugate(psi_ex2 / psi);
+    TenElemT ratio1 = ComplexConjugate(psi_ex1 / psi_val);
+    TenElemT ratio2 = ComplexConjugate(psi_ex2 / psi_val);
     delta_dag = (ratio1 - ratio2) / std::sqrt(2);
     delta = 0;
     return std::make_pair(delta_dag, delta);
   } else if (config1 == tJSingleSiteState::SpinUp && config2 == tJSingleSiteState::SpinDown) {
     delta_dag = 0;
-    TenElemT psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_val = trace();
     TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
                                             split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
-    TenElemT ratio = ComplexConjugate(psi_ex / psi);
+    TenElemT ratio = ComplexConjugate(psi_ex / psi_val);
     delta = ratio / std::sqrt(2);
     return std::make_pair(delta_dag, delta);
   } else if (config1 == tJSingleSiteState::SpinDown && config2 == tJSingleSiteState::SpinUp) {
     delta_dag = 0;
-    TenElemT psi = contractor.Trace(tn, site1, site2, orient);
+    TenElemT psi_val = trace();
     TenElemT psi_ex = contractor.ReplaceNNSiteTrace(tn, site1, site2, orient,
                                             split_index_tps_on_site1[size_t(tJSingleSiteState::Empty)],
                                             split_index_tps_on_site2[size_t(tJSingleSiteState::Empty)]);
-    TenElemT ratio = ComplexConjugate(psi_ex / psi);
+    TenElemT ratio = ComplexConjugate(psi_ex / psi_val);
     delta = -ratio / std::sqrt(2);
     return std::make_pair(delta_dag, delta);
   } else {
     return std::make_pair(TenElemT(0), TenElemT(0));
   }
 }
+}  // namespace detail
 
 /*
  * Hamiltonian :
