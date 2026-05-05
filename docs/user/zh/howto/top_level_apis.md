@@ -17,7 +17,9 @@ Simple Update 作为一组 executor，位于：
 
 - `VmcOptimize(...)` 与 `MonteCarloMeasure(...)` 面向内存中的 `SplitIndexTPS`。
 - 它们**不会**替你从磁盘加载 TPS。加载是状态类型自己的方法（`SplitIndexTPS::Load`）。
-- 输出路径由参数显式控制（`tps_dump_path`、`measurement_data_dump_path`、`config_dump_path`）。
+- 输出路径由参数显式控制。优化器的 `final`/`lowest` TPS 自动落盘由
+  `tps_dump_base_name` 控制；手动导出单个 TPS 可使用 `tps_dump_path`；
+  测量数据和最终配置分别由 `measurement_data_dump_path` 与 `config_dump_path` 控制。
 
 ## 后端（OBC/BMPS 与 PBC/TRG）
 
@@ -67,11 +69,15 @@ StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 
 auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
     /*max_iterations=*/40, sr_params, /*learning_rate=*/0.1);
 
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+params.tps_dump_base_name = "optimized_tps_"; // 保存 optimized_tps_final 和 optimized_tps_lowest
 
 auto result = qlpeps::VmcOptimize(params, sitps, MPI_COMM_WORLD, solver,
                                  MCUpdateSquareNNFullSpaceUpdate{});
 ```
+
+`result.state` 是优化结束时的 tail 态。`result.lowest_state`
+是运行中 MC 能量估计最低的快照；这个估计可能受采样 spike 影响，所以单独暴露。
 
 ## 蒙特卡洛测量：`MonteCarloMeasure(...)`
 

@@ -36,7 +36,7 @@ auto params = qlpeps::OptimizerParamsBuilder()
     .Build();
 
 qlpeps::VMCPEPSOptimizerParams vmc_params(
-    params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");
+    params, mc_params, peps_params);
 
 auto result = qlpeps::VmcOptimize(vmc_params, sitps, MPI_COMM_WORLD, solver,
                                  MCUpdateSquareNNFullSpaceUpdate{});

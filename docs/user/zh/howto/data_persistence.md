@@ -30,6 +30,7 @@ struct VMCPEPSOptimizerParams {
 ```
 - 行为：若非空，生成 `base+"final"` 与 `base+"lowest"`；为空则不导出
 - 示例：`"expA" → "expAfinal", "expAlowest"`
+- 语义：`final` 是优化结束时的 tail 态；`lowest` 是运行中 MC 能量估计最低的快照，不等价于物理上更可靠的态
 
 ### MCMeasurementParams — 测量数据路径
 ```cpp
@@ -53,7 +54,7 @@ struct MCMeasurementParams {
 ```
 
 ## 优化器落盘
-- TPS：输出末态与最低能量两份
+- TPS：输出 tail 末态与 MC 估计最低能量快照两份
 - 能量轨迹：固定写入 `./energy/energy_trajectory.csv`
 - Checkpoint：每次 checkpoint 额外刷新 `{checkpoint_base_path}/energy_trajectory.csv`，并在
   `{checkpoint_base_path}/step_<k>/trajectory_snapshot.csv` 保存该步快照

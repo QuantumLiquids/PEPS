@@ -263,8 +263,7 @@ auto opt_params = qlpeps::OptimizerParamsBuilder()
 qlpeps::VMCPEPSOptimizerParams vmc_params(
     opt_params,
     mc_params,
-    peps_params,
-    /*tps_dump_path=*/"./optimized_tps");
+    peps_params);
 ```
 
 实现路径说明：

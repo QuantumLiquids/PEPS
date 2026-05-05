@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
     const double h = 0.5;
     const std::string sitps_path = (argc >= 2) ? std::string(argv[1]) : std::string("./optimized_tps");
 
-    // 1) Load optimized state dumped by the VMC example.
+    // 1) Load final tail state dumped by the VMC example.
     SITPST sitps;
     if (!sitps.Load(sitps_path)) {
       if (rank == 0) {

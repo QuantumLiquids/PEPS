@@ -163,14 +163,14 @@ TEST_F(SquareTFIMPBCSystem, StochasticReconfigurationOpt) {
   double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
   std::cout << "VMC Gflops = " << Gflops << std::endl;
 
-  // Get the best energy achieved during optimization
-  double best_energy = executor->GetMinEnergy();
-  std::cout << "Best energy during VMC: " << best_energy << std::endl;
+  // Get the lowest MC energy estimate observed during optimization
+  double lowest_energy = executor->GetMinEnergy();
+  std::cout << "Lowest MC energy during VMC: " << lowest_energy << std::endl;
   std::cout << "ED energy: " << energy_ed << std::endl;
 
   // Validate energy is approaching ED result
   // Using a tolerance since VMC may not fully converge to ED
-  EXPECT_NEAR(best_energy, energy_ed, 1.0);
+  EXPECT_NEAR(lowest_energy, energy_ed, 1.0);
 
   tps = executor->GetState();
   delete executor;

@@ -118,9 +118,10 @@ class Optimizer {
   using WaveFunctionT = SITPST;
   
   struct OptimizationResult {
-    WaveFunctionT optimized_state;
-    double final_energy;
-    double min_energy;
+    WaveFunctionT optimized_state;  ///< Tail state after the final accepted update.
+    WaveFunctionT lowest_state;     ///< State with the lowest observed energy estimate.
+    double final_energy;            ///< Last accepted energy estimate in the trajectory.
+    double min_energy;              ///< Lowest observed energy estimate in the trajectory.
     std::vector<TenElemT> energy_trajectory;
     std::vector<double> energy_error_trajectory;
     std::vector<double> gradient_norms;
@@ -134,7 +135,7 @@ class Optimizer {
     std::function<void(size_t iteration, double energy, double energy_error, double gradient_norm)> 
         on_iteration;
     std::function<void(const WaveFunctionT& state, double energy)> 
-        on_best_state_found;
+        on_lowest_state_found;
     std::function<bool(size_t iteration, double energy, double energy_error)> 
         should_stop;
   };

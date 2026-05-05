@@ -50,7 +50,7 @@ FakeEnergyEvaluator(const SplitIndexTPS<TenElemT, QNT>& state) {
       }
     }
   }
-  // Reward larger |state| so the best-state tracker captures the updated state.
+  // Reward larger |state| so the lowest-state tracker captures the updated state.
   TenElemT energy = TenElemT(-state_max_abs);
   double err = 0.0;
   return {energy, grad, err};

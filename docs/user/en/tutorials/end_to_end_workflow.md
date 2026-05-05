@@ -5,7 +5,7 @@ This page describes the recommended **end-to-end workflow** in this repo:
 1. Use **Simple Update** to get a reasonable initial PEPS (fast, no MPI).
 2. Convert to `SplitIndexTPS` (the representation used for Monte Carlo sampling).
 3. Run **VMC optimization** (MPI-parallel sampling, SR/first-order optimizers).
-4. Run **Monte Carlo measurement** on the optimized state.
+4. Run **Monte Carlo measurement** on the final tail state.
 
 ## Scope
 

@@ -448,17 +448,17 @@ TEST(OptimizerLBFGSStrongWolfeBehavior, SatisfiesStrongWolfeOnConvexQuadratic) {
     return {TenElemT(e), std::move(grad), 0.0};
   };
 
-  std::vector<double> best_x;
+  std::vector<double> lowest_x;
   typename Optimizer<TenElemT, QNT>::OptimizationCallback cb;
-  cb.on_best_state_found = [&best_x](const SITPST& state, double) {
-    best_x.push_back(ExtractScalarValue<TenElemT, QNT>(state));
+  cb.on_lowest_state_found = [&lowest_x](const SITPST& state, double) {
+    lowest_x.push_back(ExtractScalarValue<TenElemT, QNT>(state));
   };
 
   (void)opt.IterativeOptimize(init, evaluator, cb);
 
-  ASSERT_GE(best_x.size(), 2u);
-  const double x0 = best_x[0];
-  const double x1 = best_x[1];
+  ASSERT_GE(lowest_x.size(), 2u);
+  const double x0 = lowest_x[0];
+  const double x1 = lowest_x[1];
   const double g0 = x0 - 2.0;
   const double d0 = -g0;
   ASSERT_NEAR(d0, 1.0, 1e-12);  // first L-BFGS step is steepest descent

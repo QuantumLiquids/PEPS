@@ -542,7 +542,7 @@ TEST_F(VMCPEPSOptimizerUnitTest, InterfaceCompatibility) {
   // Test that all interface methods exist and work
   EXPECT_NO_THROW(executor->GetState());
   EXPECT_NO_THROW(executor->GetOptimizedState());
-  EXPECT_NO_THROW(executor->GetBestState());
+  EXPECT_NO_THROW(executor->GetLowestState());
   EXPECT_NO_THROW(executor->GetMinEnergy());
   EXPECT_NO_THROW(executor->GetMinEnergy());
   EXPECT_NO_THROW(executor->GetCurrentEnergy());

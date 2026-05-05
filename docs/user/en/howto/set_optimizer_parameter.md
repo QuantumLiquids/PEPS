@@ -263,8 +263,7 @@ See:
 qlpeps::VMCPEPSOptimizerParams vmc_params(
     opt_params,
     mc_params,
-    peps_params,
-    /*tps_dump_path=*/"./optimized_tps");
+    peps_params);
 ```
 
 Implementation path note:

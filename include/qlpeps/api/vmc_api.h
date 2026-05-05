@@ -35,9 +35,9 @@ namespace qlpeps {
 
 template <typename TenElemT, typename QNT>
 struct VmcOptimizeResult {
-  SplitIndexTPS<TenElemT, QNT> state;
-  SplitIndexTPS<TenElemT, QNT> best_state;
-  double min_energy = 0.0;
+  SplitIndexTPS<TenElemT, QNT> state;         ///< Tail state after the VMC optimizer finishes.
+  SplitIndexTPS<TenElemT, QNT> lowest_state;  ///< Snapshot with the lowest observed MC energy estimate.
+  double min_energy = 0.0;                    ///< Lowest observed MC energy estimate.
   std::vector<TenElemT> energy_trajectory;
   std::vector<double> energy_error_trajectory;
   std::vector<double> gradient_norms;
@@ -97,7 +97,7 @@ VmcOptimize(const VMCPEPSOptimizerParams &params,
       executor->Execute();
       VmcOptimizeResult<TenElemT, QNT> out;
       out.state = executor->GetState();
-      out.best_state = executor->GetBestState();
+      out.lowest_state = executor->GetLowestState();
       out.min_energy = executor->GetMinEnergy();
       out.energy_trajectory = executor->GetEnergyTrajectory();
       out.energy_error_trajectory = executor->GetEnergyErrorTrajectory();
@@ -114,7 +114,7 @@ VmcOptimize(const VMCPEPSOptimizerParams &params,
       executor->Execute();
       VmcOptimizeResult<TenElemT, QNT> out;
       out.state = executor->GetState();
-      out.best_state = executor->GetBestState();
+      out.lowest_state = executor->GetLowestState();
       out.min_energy = executor->GetMinEnergy();
       out.energy_trajectory = executor->GetEnergyTrajectory();
       out.energy_error_trajectory = executor->GetEnergyErrorTrajectory();

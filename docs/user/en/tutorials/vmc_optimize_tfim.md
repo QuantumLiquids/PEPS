@@ -55,7 +55,7 @@ The TFIM VMC example follows this sequence:
    - `OptimizerParams` (SR/SGD/Adam/etc; the TFIM example uses SR)
 4. Bundle them into `VMCPEPSOptimizerParams` and run the one-call wrapper:
    - `auto result = VmcOptimize(params, sitps, MPI_COMM_WORLD, model, MCUpdateSquareNNFullSpaceUpdate{});`
-5. Dump the optimized state:
+5. Dump the optimized tail state:
    - `result.state.Dump(params.tps_dump_path);`
 
 Note on performance hygiene:

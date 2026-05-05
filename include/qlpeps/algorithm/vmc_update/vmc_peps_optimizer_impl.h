@@ -127,7 +127,7 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
         }
       };
 
-  optimization_callback_.on_best_state_found = [this](const SITPST &state, double energy) {
+  optimization_callback_.on_lowest_state_found = [this](const SITPST &state, double energy) {
     if (monte_carlo_engine_.Rank() == qlten::hp_numeric::kMPIMasterRank) {
       tps_lowest_ = state;
       en_min_ = energy;
@@ -194,8 +194,9 @@ void VMCPEPSOptimizer<TenElemT, QNT, MonteCarloSweepUpdater, EnergySolver, Contr
     monte_carlo_engine_.AssignState(result.optimized_state);
   }
 
-  // Broadcast the final optimized state to all ranks
+  // Broadcast the final tail state to all ranks
   MPI_Bcast(monte_carlo_engine_.State(), monte_carlo_engine_.Comm());
+  MPI_Bcast(tps_lowest_, monte_carlo_engine_.Comm());
 
   // Refresh wavefunction component and normalize after final state update
   monte_carlo_engine_.RefreshWavefunctionComponent();

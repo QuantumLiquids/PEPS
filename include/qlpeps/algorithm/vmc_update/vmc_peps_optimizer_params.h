@@ -23,8 +23,8 @@ struct VMCPEPSOptimizerParams {
   OptimizerParams optimizer_params;
   MonteCarloParams mc_params;
   PEPSParams peps_params;
-  std::string tps_dump_base_name;  ///< Base name for TPS dump files
-  std::string tps_dump_path;  ///< Path for dumping optimized TPS (empty = no dump)
+  std::string tps_dump_base_name;  ///< Base name for automatic final/lowest TPS dumps.
+  std::string tps_dump_path;  ///< Path for explicitly dumping the final tail TPS (empty = no dump)
 
   // psi(S) consistency warning controls (per-rank). Applied by the optimizer/evaluator.
   RuntimeParams runtime_params;

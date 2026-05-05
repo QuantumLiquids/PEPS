@@ -74,7 +74,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
    *        construction, because warm-up and internal initialization happen
    *        immediately on each rank. The state will be broadcast later inside
    *        the energy/gradient evaluator per evaluation, and the final
-   *        optimized state is broadcast at the end of `Execute()`.
+   *        final tail state is broadcast at the end of `Execute()`.
    * @param comm MPI communicator
    * @param solver Energy solver for optimization
    */
@@ -116,7 +116,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
   // Data access methods - matching VMCPEPSExecutor interface
   const SITPST &GetState() const noexcept { return monte_carlo_engine_.State(); }
   const SITPST &GetOptimizedState() const { return monte_carlo_engine_.State(); }
-  const SITPST &GetBestState() const { return tps_lowest_; }
+  const SITPST &GetLowestState() const { return tps_lowest_; }
   double GetMinEnergy() const noexcept { return en_min_; }
   double GetCurrentEnergy() const noexcept {
     return energy_trajectory_.empty() ? std::numeric_limits<double>::max() :
@@ -202,7 +202,7 @@ class VMCPEPSOptimizer : public qlten::Executor {
    */
   SITPST Ostar_mean_;
 
-  // Best state tracking
+  // Lowest observed MC energy state tracking
   double en_min_;
   SITPST tps_lowest_;
 

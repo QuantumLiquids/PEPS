@@ -56,35 +56,39 @@ MonteCarloParams mc_params(1000, 100, 5, config, false, "");  // or omit last pa
 ```cpp
 struct VMCPEPSOptimizerParams {
   // ... other params ...
-  std::string tps_dump_base_name;  ///< Base name for TPS dumps (postfixes: _final, _lowest). Empty = no dump
+  std::string tps_dump_base_name;  ///< Base name for TPS dumps (postfixes: final, lowest). Empty = no dump
 
-  VMCPEPSOptimizerParams(/*...*/, const std::string &tps_dump_base_name = kTpsPath)
-    : /*...*/, tps_dump_base_name(tps_dump_base_name) {}
+  VMCPEPSOptimizerParams(const OptimizerParams &opt_params,
+                         const MonteCarloParams &mc_params,
+                         const PEPSParams &peps_params,
+                         const std::string &tps_dump_path = "./");
 };
 ```
 
 **TPS Dump Strategy:**
 VMC optimization generates **two important TPS states**:
-1. **Final TPS**: Result after optimization completion → `base_name + "_final"`
-2. **Lowest Energy TPS**: Best state found during optimization → `base_name + "_lowest"`
+1. **Final TPS**: Tail state held by the optimizer when the run finishes → `base_name + "final"`
+2. **Lowest Energy TPS**: Snapshot with the lowest observed MC energy estimate → `base_name + "lowest"`
 
 **Default Behavior:**
 - Uses `kTpsPath` constant (`"tps"`) as default base name
-- Generates: `"tps_final"` and `"tps_lowest"`
+- Generates: `"tpsfinal"` and `"tpslowest"`
 - Empty base name disables all TPS dumping
 
 **Example:**
 ```cpp
 // Standard case - use default base name
 VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
-// → Will dump to "tps_final" and "tps_lowest"
+// → Will dump to "tpsfinal" and "tpslowest"
 
 // Custom base name  
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "experiment_A");
-// → Will dump to "experiment_A_final" and "experiment_A_lowest"
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+params.tps_dump_base_name = "experiment_A";
+// → Will dump to "experiment_Afinal" and "experiment_Alowest"
 
 // No TPS dumping
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "");
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+params.tps_dump_base_name = "";
 // → No TPS dumps created
 ```
 
@@ -140,14 +144,14 @@ if (tps_base_name.empty()) {
 ```cpp
 void VMCPEPSOptimizer::DumpData(const std::string& tps_base_name, bool release_mem) {
   // Generate paths with consistent naming
-  std::string final_tps_path = tps_base_name + "final";   // Final optimization state
-  std::string lowest_tps_path = tps_base_name + "lowest"; // Best energy state found
+  std::string final_tps_path = tps_base_name + "final";   // Final tail state
+  std::string lowest_tps_path = tps_base_name + "lowest"; // Lowest observed MC energy estimate
   std::string energy_data_path = "./energy";             // Optimization trajectory
   
   if (rank_ == kMPIMasterRank) {
     // Dump TPS states if base name provided
     if (!tps_base_name.empty()) {
-      split_index_tps_.Dump(final_tps_path, release_mem);
+      monte_carlo_engine_.State().Dump(final_tps_path, release_mem);
       tps_lowest_.Dump(lowest_tps_path, release_mem);
     }
     
@@ -175,8 +179,8 @@ void VMCPEPSOptimizer::DumpData(const std::string& tps_base_name, bool release_m
 The optimizer dumps multiple types of data with different control mechanisms:
 
 #### TPS States
-- **Final TPS**: `tps_dump_base_name + "final"` (final optimization state)
-- **Lowest Energy TPS**: `tps_dump_base_name + "lowest"` (best energy found)
+- **Final TPS**: `tps_dump_base_name + "final"` (final tail state)
+- **Lowest Energy TPS**: `tps_dump_base_name + "lowest"` (lowest observed MC energy estimate)
 - **Control**: Via `VMCPEPSOptimizerParams.tps_dump_base_name`
 
 #### Configuration Snapshots  
@@ -191,7 +195,7 @@ The optimizer dumps multiple types of data with different control mechanisms:
 
 #### Parameter Setup Example
 ```cpp
-VMCPEPSOptimizerParams params;
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
 
 // TPS dumping control
 params.tps_dump_base_name = "experiment_01";  // → "experiment_01final", "experiment_01lowest"
@@ -245,7 +249,7 @@ VMCPEPSOptimizerParams opt_params(
   optimizer_params,
   mc_params, 
   peps_params,
-  "production_run_tps"            // will create production_run_tps_final & production_run_tps_lowest
+  "production_run_tps"            // explicit single-path dump for result.state if used
 );
 ```
 
@@ -267,9 +271,9 @@ MonteCarloParams mc_params(
 VMCPEPSOptimizerParams opt_params(
   optimizer_params,
   mc_params,
-  peps_params, 
-  ""                              // no TPS dumps
+  peps_params
 );
+opt_params.tps_dump_base_name = "";        // no final/lowest TPS dumps
 ```
 
 ## Best Practices for VMC Data Management
@@ -281,8 +285,8 @@ params.tps_dump_base_name = "heisenberg_D8_L4x4_sweep1000";
 params.mc_params.config_dump_path = "configs/heisenberg_run01";
 
 // Outputs:
-// - heisenberg_D8_L4x4_sweep1000final/   (final TPS)  
-// - heisenberg_D8_L4x4_sweep1000lowest/  (best energy TPS)
+// - heisenberg_D8_L4x4_sweep1000final/   (final tail TPS)
+// - heisenberg_D8_L4x4_sweep1000lowest/  (lowest observed MC energy TPS)
 // - configs/heisenberg_run01{rank}       (final configurations)
 // - energy/energy_trajectory.csv         (optimization data)
 ```
@@ -315,7 +319,8 @@ const std::string kTpsPath = "tps";         // For single TPS dumps
 const std::string kTpsPathBase = "tps";     // For base name (appends "final"/"lowest")
 
 // Default usage:
-VMCPEPSOptimizerParams params;  // tps_dump_base_name defaults to kTpsPathBase
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+// params.tps_dump_base_name defaults to kTpsPathBase
 ```
 
 ## Summary
@@ -373,8 +378,9 @@ VMCOptimizePara para(truncate_para, samples, warmup, sweeps,
 ```cpp
 // New: Crystal clear control
 MonteCarloParams mc_params(samples, warmup, sweeps, config, false, "final_config");
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, "experiment_tps");
-// → final_config, experiment_tps_final, experiment_tps_lowest
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+params.tps_dump_base_name = "experiment_tps";
+// → final_config, experiment_tpsfinal, experiment_tpslowest
 ```
 
 ## Best Practices

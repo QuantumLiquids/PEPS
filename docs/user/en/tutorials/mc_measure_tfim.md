@@ -1,6 +1,6 @@
 # Monte Carlo Measurement (TFIM) — measure the TPS produced by VMC
 
-This tutorial shows how to **measure observables** for the transverse-field Ising model (TFIM) using Monte Carlo sampling, starting from the optimized state produced by:
+This tutorial shows how to **measure observables** for the transverse-field Ising model (TFIM) using Monte Carlo sampling, starting from the final tail state produced by:
 
 - `examples/transverse_field_ising_vmc_optimize.cpp`
 
@@ -62,7 +62,7 @@ mpirun -n 4 ./transverse_field_ising_mc_measure
 
 ### Choosing which state to measure
 
-If you also saved the “best state” during VMC (e.g. via optimizer `DumpData()`), measure that directory first.
+If VMC saved both `final` and `lowest` states (e.g. via optimizer `DumpData()`), measure `final` first. `lowest` is only the snapshot with the lowest observed MC energy estimate and can be affected by sampling spikes.
 
 For the provided VMC example, the default output directory is:
 

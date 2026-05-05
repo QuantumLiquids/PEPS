@@ -17,7 +17,10 @@ Simple Update is implemented as executors under:
 
 - `VmcOptimize(...)` and `MonteCarloMeasure(...)` operate on an in-memory `SplitIndexTPS`.
 - They **do not** load TPS from disk for you. Loading is a method on the state type (`SplitIndexTPS::Load`).
-- Output dumping is explicit via params (`tps_dump_path`, `measurement_data_dump_path`, `config_dump_path`).
+- Output dumping is explicit via params. Optimizer `final`/`lowest` TPS dumps use
+  `tps_dump_base_name`; manual single-state TPS dumps can use `tps_dump_path`;
+  measurement data and final configurations use `measurement_data_dump_path` and
+  `config_dump_path`.
 
 ## Backend (OBC/BMPS vs PBC/TRG)
 
@@ -67,11 +70,16 @@ StochasticReconfigurationParams sr_params{.cg_params = cg_params, .diag_shift = 
 auto opt_params = OptimizerFactory::CreateStochasticReconfiguration(
     /*max_iterations=*/40, sr_params, /*learning_rate=*/0.1);
 
-VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params, /*tps_dump_path=*/"./optimized_tps");
+VMCPEPSOptimizerParams params(opt_params, mc_params, peps_params);
+params.tps_dump_base_name = "optimized_tps_"; // dumps optimized_tps_final and optimized_tps_lowest
 
 auto result = qlpeps::VmcOptimize(params, sitps, MPI_COMM_WORLD, solver,
                                  MCUpdateSquareNNFullSpaceUpdate{});
 ```
+
+`result.state` is the final tail state after the optimizer finishes. `result.lowest_state`
+is the snapshot with the lowest observed MC energy estimate, exposed separately because
+that estimate can be affected by sampling spikes.
 
 ## Monte Carlo measurement: `MonteCarloMeasure(...)`
 

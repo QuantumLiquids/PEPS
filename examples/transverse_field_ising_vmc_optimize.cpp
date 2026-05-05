@@ -103,14 +103,14 @@ int main(int argc, char* argv[]) {
                 << std::endl;
     }
 
-    // 5) One-call optimization (type-deduced): returns executor pointer, already executed
+    // 5) One-call optimization (type-deduced): returns final and lowest-MC-energy snapshots
     auto result = VmcOptimize(
         params, sitps, MPI_COMM_WORLD, model, MCUpdateSquareNNFullSpaceUpdate{});
 
     if (rank == 0) {
-      std::cout << "[TFI-VMC] Finished. Dumping optimized TPS..." << std::endl;
+      std::cout << "[TFI-VMC] Finished. Dumping final tail TPS..." << std::endl;
     }
-    // Dump optimized state (energy trajectories can be dumped manually if needed).
+    // Dump final tail state (energy trajectories can be dumped manually if needed).
     result.state.Dump(params.tps_dump_path);
 
     if (rank == 0) {

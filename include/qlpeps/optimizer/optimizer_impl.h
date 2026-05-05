@@ -111,12 +111,16 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
   OptimizationResult result;
   result.optimized_state = initial_state;
+  result.lowest_state = initial_state;
+  result.final_energy = std::numeric_limits<double>::max();
+  result.min_energy = std::numeric_limits<double>::max();
   result.converged = false;
   result.total_iterations = 0;
 
   WaveFunctionT current_state = initial_state;
-  WaveFunctionT best_state = initial_state;
-  double best_energy = std::numeric_limits<double>::max();
+  WaveFunctionT lowest_state = initial_state;
+  double lowest_energy = std::numeric_limits<double>::max();
+  double last_accepted_energy = std::numeric_limits<double>::max();
 
   // Initialize for stochastic reconfiguration if needed
   WaveFunctionT sr_init_guess;
@@ -769,9 +773,10 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
         prev_energy_ = std::real(current_energy);
       }
 
-      // === F: Trajectories, best-state, stopping, state update, log, callback ===
+      // === F: Trajectories, lowest-state, stopping, state update, log, callback ===
       result.energy_trajectory.push_back(current_energy);
       result.learning_rate_trajectory.push_back(effective_learning_rate);
+      last_accepted_energy = std::real(current_energy);
       if (rank_ == qlten::hp_numeric::kMPIMasterRank) {
         result.energy_error_trajectory.push_back(current_error);
         result.gradient_norms.push_back(grad_norm);
@@ -779,14 +784,14 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
 
       total_iterations_performed = iter + 1;
 
-      // Update best state
-      if (std::real(current_energy) < best_energy) {
-        best_energy = std::real(current_energy);
-        best_state = current_state;
-        result.min_energy = best_energy;
+      // Track the lowest MC-estimated energy state separately from the final tail state.
+      if (std::real(current_energy) < lowest_energy) {
+        lowest_energy = std::real(current_energy);
+        lowest_state = current_state;
+        result.min_energy = lowest_energy;
         iterations_without_improvement = 0;
-        if (callback.on_best_state_found) {
-          callback.on_best_state_found(best_state, best_energy);
+        if (callback.on_lowest_state_found) {
+          callback.on_lowest_state_found(lowest_state, lowest_energy);
         }
       } else {
         iterations_without_improvement++;
@@ -895,8 +900,10 @@ Optimizer<TenElemT, QNT>::IterativeOptimize(
     } // end while (!step_accepted)
   } // end for
 
-  result.optimized_state = best_state;
-  result.final_energy = best_energy;
+  result.optimized_state = current_state;
+  result.lowest_state = lowest_state;
+  result.final_energy = last_accepted_energy;
+  result.min_energy = lowest_energy;
   result.total_iterations = total_iterations_performed;
   result.spike_stats = spike_stats_;
 

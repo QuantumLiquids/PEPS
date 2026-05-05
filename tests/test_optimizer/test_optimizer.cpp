@@ -25,7 +25,7 @@ using namespace qlten;
 
 class OptimizerTest : public ::testing::Test {
   protected:
-    using TenElemT = double;
+    using TenElemT = TEN_ELEM_TYPE;
     using QNT = qlten::special_qn::U1QN;
     using SITPST = SplitIndexTPS<TenElemT, QNT>;
     using OptimizerT = Optimizer<TenElemT, QNT>;
@@ -220,6 +220,34 @@ TEST_F(OptimizerTest, BasicOptimizationFunctionality) {
   EXPECT_TRUE(true); // If we reach here, the inlined update logic works correctly
 }
 
+TEST_F(OptimizerTest, IterativeOptimizeReturnsTailStateAndLowestEnergySeparately) {
+  OptimizerParams::BaseParams base_params(/*max_iter=*/2, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
+                                          /*patience=*/10, /*learning_rate=*/0.1);
+  OptimizerParams params(base_params, SGDParams(/*momentum=*/0.0, /*nesterov=*/false));
+  OptimizerT optimizer(params, comm_, rank_, mpi_size_);
+
+  size_t call_count = 0;
+  auto evaluator = [&](const SITPST &state) -> std::tuple<TenElemT, SITPST, double> {
+    const double energy = (call_count == 0) ? 0.0 : 1.0;
+    ++call_count;
+    return {energy, state, /*error=*/0.0};
+  };
+
+  auto result = optimizer.IterativeOptimize(test_tps_, evaluator);
+
+  SITPST expected_tail = test_tps_;
+  expected_tail *= 0.81;  // Two accepted SGD updates with gradient = state and lr = 0.1.
+
+  EXPECT_EQ(result.total_iterations, 2u);
+  EXPECT_NEAR(result.min_energy, 0.0, 1e-12);
+  ASSERT_FALSE(result.energy_trajectory.empty());
+  EXPECT_NEAR(result.final_energy, std::real(result.energy_trajectory.back()), 1e-12);
+  EXPECT_NEAR((result.lowest_state - test_tps_).NormSquare(), 0.0, 1e-20);
+  EXPECT_GT((result.lowest_state - expected_tail).NormSquare(), 1e-20);
+  EXPECT_NEAR((result.optimized_state - expected_tail).NormSquare(), 0.0, 1e-20);
+  EXPECT_GT((result.optimized_state - test_tps_).NormSquare(), 1e-20);
+}
+
 TEST_F(OptimizerTest, InitialStepSelectorChoosesBestCumulativeStepAtIterZero) {
   OptimizerParams::BaseParams base_params(/*max_iter=*/1, /*energy_tol=*/0.0, /*grad_tol=*/0.0,
                                           /*patience=*/1, /*learning_rate=*/0.3);
@@ -301,8 +329,8 @@ TEST_F(OptimizerTest, OptimizationWithCallbacks) {
     callback_energies.push_back(energy);
   };
 
-  callback.on_best_state_found = [](const SITPST &state, double energy) {
-    // This should be called when a better state is found
+  callback.on_lowest_state_found = [](const SITPST &state, double energy) {
+    // This should be called when a lower energy estimate is found.
   };
 
   auto result = optimizer.IterativeOptimize(test_tps_,

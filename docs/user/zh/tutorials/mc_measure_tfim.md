@@ -62,7 +62,7 @@ mpirun -n 4 ./transverse_field_ising_mc_measure
 
 ### 测量哪一个态？
 
-如果你的 VMC 同时保存了 “best state”（比如用优化器的 `DumpData()` 导出 `*_lowest`），建议先测量 best state。
+如果你的 VMC 同时保存了 `final` 与 `lowest`（比如用优化器的 `DumpData()` 导出 `*final`/`*lowest`），通常建议先测量 `final`。`lowest` 只是运行中 MC 能量估计最低的快照，可能受采样 spike 影响。
 
 对仓库自带的 VMC 示例，默认导出目录是：
 
