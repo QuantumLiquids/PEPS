@@ -8,6 +8,7 @@
 #ifndef QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 #define QLPEPS_VMC_PEPS_SPLIT_INDEX_TPS_IMPL_H
 
+#include <complex>    // real
 #include <cstring>    // memcpy
 #include <cstdint>    // uint64_t
 #include <stdexcept>  // runtime_error
@@ -162,15 +163,15 @@ bool SplitIndexTPS<TenElemT, QNT>::IsBondDimensionEven(void) const {
  * 
  * @return Sum of squared quasi-2-norms: \f$\sum_{r,c,i} \|T_{r,c}^{(i)}\|_{2,\mathrm{quasi}}^2\f$
  * 
- * @note Uses `GetQuasi2Norm()` which is always well-defined for fermionic tensors
+ * @note Uses `qlten::QuasiInnerProduct()` to avoid taking a square root and
+ *       squaring it again.
  * @see TensorToolkit documentation on fermionic tensor norms
  */
 template<typename TenElemT, typename QNT>
 double SplitIndexTPS<TenElemT, QNT>::NormSquare() const {
   double norm_square = 0;
   ForEachValidTensor_([&norm_square](size_t, size_t, size_t, const Tensor& ten) {
-    double norm_local = ten.GetQuasi2Norm();
-    norm_square += norm_local * norm_local;
+    norm_square += static_cast<double>(std::real(qlten::QuasiInnerProduct(ten, ten)));
   });
   return norm_square;
 }

@@ -48,9 +48,10 @@ inline std::string GenSplitIndexTPSTenName(const std::string &tps_path,
  * 
  * Bosonic vs. fermionic conventions:
  * - Bosonic tensors have 4 virtual indices; contractions typically use index set {0,1,2,3}.
- * - Fermionic tensors carry an extra 1-dim parity index (as the last index). When contracting
- *   or forming inner products, use index set {0,1,2,3,4} and apply `ActFermionPOps()`
- *   to ensure correct graded algebra.
+ * - Fermionic tensors carry an extra 1-dim parity index (as the last index).
+ *   Parameter-space inner products use `qlten::QuasiInnerProduct()` for the
+ *   positive-definite flattened pairing; explicit tensor contractions still
+ *   need the usual fermionic parity handling.
  * - When converting from a regular TPS, fermionic components are projected by matching
  *   quantum number sectors, while bosonic components use a simple Kronecker projection.
  *
@@ -350,14 +351,9 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
    * i.e. the Euclidean inner product of all stored tensor entries after
    * flattening them into a single vector.
    *
-   * - Bosonic case: the scalar is obtained by fully contracting \f$A^\dagger\f$
-   *   with \f$B\f$ over all virtual indices.
-   * - Fermionic case: `qlten::Contract` follows graded algebra, and the naive
-   *   scalar `Contract(Dag(A), B)` corresponds to an indefinite graded pairing
-   *   with block-dependent signs determined by index directions. To obtain a
-   *   conventional positive-definite inner product, we apply `ActFermionPOps()`
-   *   to the daggered tensor before contraction, which cancels the additional
-   *   \f$(-1)\f$ factors associated with contracting IN legs.
+   * The local contraction uses `qlten::QuasiInnerProduct()`, avoiding explicit
+   * dagger tensors and scalar contraction temporaries while preserving the same
+   * flattened positive-definite pairing.
    *
    * Consequently, for `A == B` the result reduces to
    * \f$\sum_{r,c,i}\|A^{(i)}_{r,c}\|_{2,\mathrm{quasi}}^2 = \sum |a|^2\f$,
@@ -375,16 +371,7 @@ class SplitIndexTPS : public TenMatrix<std::vector<QLTensor<TenElemT, QNT>>> {
     TenElemT res(0);
     ForEachValidTensor_([&res, &right](size_t row, size_t col, size_t i, const Tensor& ten) {
       if (right({row, col})[i].IsDefault()) return;
-      
-      Tensor ten_dag = Dag(ten);
-      Tensor scalar;
-      if constexpr (Tensor::IsFermionic()) {
-        ten_dag.ActFermionPOps();
-        Contract(&ten_dag, {0, 1, 2, 3, 4}, &right({row, col})[i], {0, 1, 2, 3, 4}, &scalar);
-      } else {
-        Contract(&ten_dag, {0, 1, 2, 3}, &right({row, col})[i], {0, 1, 2, 3}, &scalar);
-      }
-      res += TenElemT(scalar());
+      res += qlten::QuasiInnerProduct(ten, right({row, col})[i]);
     });
     return res;
   }
