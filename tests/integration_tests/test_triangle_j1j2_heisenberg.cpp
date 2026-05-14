@@ -95,7 +95,7 @@ class TriangleJ1J2HeisenbergSystem
 
     void SetUpParameters() override {
       model_name = "triangle_j1j2_heisenberg";
-      energy_ed = -8.5; // Approximate expected energy for triangle J1-J2 lattice
+      energy_ed = -5.4837150685; // Approximate expected energy for triangle J1-J2 lattice
 
       optimize_para.emplace(
           OptimizerFactory::CreateStochasticReconfiguration(40,
@@ -106,7 +106,7 @@ class TriangleJ1J2HeisenbergSystem
                            Configuration(Ly, Lx,
                                          OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
                            false), // Sz = 0, not warmed up initially
-          PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>(6, 12, 1e-15,
+          PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                       CompressMPSScheme::SVD_COMPRESS,
                                       std::make_optional<double>(1e-14),
                                       std::make_optional<size_t>(10))));

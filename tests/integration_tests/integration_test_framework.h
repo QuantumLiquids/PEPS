@@ -104,7 +104,10 @@ protected:
     MPI_Barrier(comm);
     
     SplitIndexTPST tps(Ly, Lx);
-    tps.Load(tps_path);
+    if (rank == hp_numeric::kMPIMasterRank) {
+      ASSERT_TRUE(tps.Load(tps_path));
+    }
+    qlpeps::MPI_Bcast(tps, comm);
 
 	    auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(
 	        *optimize_para, tps, comm, model);
@@ -129,8 +132,13 @@ protected:
   // Common Monte Carlo measurement workflow
   template<typename ModelT, typename MCUpdaterT>
   void RunMCMeasurement(const ModelT& model) {
+    MPI_Barrier(comm);
+
     SplitIndexTPST tps(Ly, Lx);
-    tps.Load(tps_path);
+    if (rank == hp_numeric::kMPIMasterRank) {
+      ASSERT_TRUE(tps.Load(tps_path));
+    }
+    qlpeps::MPI_Bcast(tps, comm);
 
     auto measure_exe = new MCPEPSMeasurer<TenElemT, QNT, MCUpdaterT, ModelT>(
         tps, *measure_para, comm, model);
@@ -145,7 +153,7 @@ protected:
     double Gflops = (end_flop - start_flop) * 1.e-9 / elapsed_time;
     std::cout << "Measurement Gflops = " << Gflops / elapsed_time << std::endl;
 
-    if (EnableFrameworkEnergyCheck()) {
+    if (EnableFrameworkEnergyCheck() && rank == hp_numeric::kMPIMasterRank) {
       auto [energy, en_err] = measure_exe->OutputEnergy();
       (void)en_err;
       EXPECT_NEAR(std::real(energy), energy_ed, FrameworkEnergyTolerance());
@@ -163,7 +171,11 @@ protected:
     optimize_para->optimizer_params.base_params.learning_rate = 0.0;
     
     SplitIndexTPST tps(Ly, Lx);
-    tps.Load(tps_path);
+    if (rank == hp_numeric::kMPIMasterRank) {
+      ASSERT_TRUE(tps.Load(tps_path));
+    }
+    qlpeps::MPI_Bcast(tps, comm);
+
     auto init_tps = tps;
     
     auto executor = new VMCPEPSOptimizer<TenElemT, QNT, MCUpdaterT, ModelT>(

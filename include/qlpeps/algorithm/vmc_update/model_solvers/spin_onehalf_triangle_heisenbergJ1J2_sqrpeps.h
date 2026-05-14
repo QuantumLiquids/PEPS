@@ -166,12 +166,12 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
       }
 
       if (row + 1 < ly) {
-        // Triangular J1 diagonal (↘)
+        // Triangular J1 diagonal (↘) + J2 contribution on the same row window (left-up to right-down)
+        // + J2 contribution (↘ with sqrt(5) separation)
         contractor.InitBTen2(tn, LEFT, row);
         contractor.GrowFullBTen2(tn, RIGHT, row, 2, true);
-        auto psi2 = contractor.Trace(tn, {row, 0}, HORIZONTAL);
-        auto inv_psi2 = TenElemT(1.0) / psi2;
         for (size_t col = 0; col + 1 < lx; ++col) {
+          //Calculate diagonal J1 energy contribution
           const SiteIdx ld{row + 1, col};
           const SiteIdx ru{row, col + 1};
           TenElemT eb;
@@ -181,27 +181,39 @@ class SpinOneHalfTriJ1J2HeisenbergSqrPEPS : public ModelEnergySolver<SpinOneHalf
             TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, {row, col}, LEFTDOWN_TO_RIGHTUP, HORIZONTAL,
                                                      (*split_index_tps)(ld)[config(ru)],
                                                      (*split_index_tps)(ru)[config(ld)]);
-            eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
+            eb = (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
           if (e_ur.size() != 0) {
             e_ur(row, col) = eb;
           }
           energy_total += eb;
-          if (col + 2 < lx) contractor.ShiftBTen2Window(tn, RIGHT, row);
-        }
 
-        // J2 contribution on the same row window (left-up to right-down)
-        for (size_t col = 0; col + 1 < lx; ++col) {
-          SiteIdx s1{row, col};
-          SiteIdx s2{row + 1, col + 1};
+          //Calculate J2 contribution on the same row window (left-up to right-down)
+          SiteIdx s1{row, col}; //left-top
+          SiteIdx s2{row + 1, col + 1}; //right-bottom
           if (config(s1) == config(s2)) {
             energy_j2_total += TenElemT(0.25);
           } else {
             TenElemT psi_ex = contractor.ReplaceNNNSiteTrace(tn, {row, col}, LEFTUP_TO_RIGHTDOWN, HORIZONTAL,
                                                      (*split_index_tps)(s1)[config(s2)],
                                                      (*split_index_tps)(s2)[config(s1)]);
-            energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi2) * 0.5);
+            energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
           }
+
+          //Calculate J2 contribution (↘ with sqrt(5) separation)
+          if (col + 2 < lx) {
+            s1 = {row + 1, col}; //left-bottom
+            s2 = {row, col + 2}; //right-top
+            if (config(s1) == config(s2)) {
+              energy_j2_total += TenElemT(0.25);
+            } else {
+              TenElemT psi_ex = contractor.ReplaceSqrt5DistTwoSiteTrace(tn, {row, col}, LEFTDOWN_TO_RIGHTUP, HORIZONTAL,
+                                                      (*split_index_tps)(s1)[config(s2)],
+                                                      (*split_index_tps)(s2)[config(s1)]);
+              energy_j2_total += (-0.25 + ComplexConjugate(psi_ex * inv_psi) * 0.5);
+            }
+          }
+          if (col + 2 < lx) contractor.ShiftBTen2Window(tn, RIGHT, row);
         }
         contractor.ShiftBMPSWindow(tn, DOWN);
       }

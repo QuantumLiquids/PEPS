@@ -93,7 +93,7 @@ protected:
   
   void SetUpParameters() override {
     model_name = "triangle_heisenberg";
-    energy_ed = -8.0; // Approximate expected energy for triangle lattice
+    energy_ed = -5.6726617339; // Approximate expected energy for triangle lattice
     
     optimize_para.emplace(
         OptimizerFactory::CreateStochasticReconfiguration(40,
@@ -104,7 +104,7 @@ protected:
                          Configuration(Ly, Lx,
                                        OccupancyNum({Lx * Ly / 2, Lx * Ly / 2})),
                          false), // Sz = 0, not warmed up initially
-        PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>(6, 12, 1e-15,
+        PEPSParams(BMPSTruncateParams<qlten::QLTEN_Double>(Dpeps, 2 * Dpeps, 1e-15,
                                     CompressMPSScheme::SVD_COMPRESS,
                                     std::make_optional<double>(1e-14),
                                     std::make_optional<size_t>(10))));
